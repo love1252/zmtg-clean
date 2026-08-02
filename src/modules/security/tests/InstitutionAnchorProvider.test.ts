@@ -1,14 +1,49 @@
 import { describe, expect, it, vi } from 'vitest';
 
+const scopeReaderProvenance = vi.hoisted(() => new WeakSet<object>());
+const referenceCodecProvenance = vi.hoisted(() => new WeakSet<object>());
+
+vi.mock(
+  '@/modules/tenancy/application/authoritative-institution-scope-reader',
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import('@/modules/tenancy/application/authoritative-institution-scope-reader')
+    >();
+    return {
+      ...actual,
+      isAuthoritativeInstitutionScopeFactReaderV1(value: unknown) {
+        return value !== null && typeof value === 'object' && scopeReaderProvenance.has(value);
+      },
+    };
+  },
+);
+
+vi.mock(
+  '@/modules/security/server/institution-guard-reference',
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import('@/modules/security/server/institution-guard-reference')
+    >();
+    return {
+      ...actual,
+      isInstitutionGuardReferenceCodecV1(value: unknown) {
+        return (
+          actual.isInstitutionGuardReferenceCodecV1(value) ||
+          (value !== null &&
+            typeof value === 'object' &&
+            referenceCodecProvenance.has(value))
+        );
+      },
+    };
+  },
+);
+
 import * as anchorProviderModule from '@/modules/security/server/institution-anchor-provider';
 import {
   createActiveInstitutionAnchorProviderV1,
-  createAuthoritativeInstitutionAnchorFactReaderV1,
   isActiveInstitutionAnchorProviderV1,
-  type AuthoritativeInstitutionAnchorFactReaderV1,
-  type InstitutionAnchorFactRepositoryV1,
 } from '@/modules/security/server/institution-anchor-provider';
-import type { CurrentInstitutionAnchorFactRowV1 } from '@/modules/security/server/institution-anchor-repository';
+import type { AuthoritativeInstitutionScopeFactReaderV1 } from '@/modules/tenancy/ports/authoritative-institution-scope-reader';
 import {
   createInstitutionGuardReferenceCodecV1,
   isInstitutionGuardReferenceCodecV1,
@@ -20,230 +55,7 @@ const requestedAnchor = Object.freeze({
   tenantId: 'tenant-zhengpu',
   institutionId: 'institution-zhengpu',
 });
-const currentAnchorRow: CurrentInstitutionAnchorFactRowV1 = {
-  tenantId: 'tenant-zhengpu',
-  institutionId: 'institution-zhengpu',
-  status: 'active',
-  revision: 7,
-};
 const REFERENCE_KEY = new Uint8Array(32).fill(0x5a);
-
-function createReader(input: {
-  rows?: readonly CurrentInstitutionAnchorFactRowV1[];
-  error?: Error;
-  now?: () => Date;
-} = {}) {
-  const findCurrentInstitutionAnchorFacts = input.error
-    ? vi.fn(async () => {
-        throw input.error;
-      })
-    : vi.fn(async () => input.rows ?? [currentAnchorRow]);
-  const repository: InstitutionAnchorFactRepositoryV1 = {
-    findCurrentInstitutionAnchorFacts,
-  };
-
-  return {
-    findCurrentInstitutionAnchorFacts,
-    reader: createAuthoritativeInstitutionAnchorFactReaderV1({
-      repository,
-      now: input.now ?? (() => NOW),
-    }),
-  };
-}
-
-describe('机构锚点权威事实读取器', () => {
-  it('一次重验后只返回低敏、不可变且不授予权限的 active 锚点事实', async () => {
-    const { reader, findCurrentInstitutionAnchorFacts } = createReader();
-
-    const result = await reader.resolve(requestedAnchor);
-
-    expect(findCurrentInstitutionAnchorFacts).toHaveBeenCalledTimes(1);
-    expect(findCurrentInstitutionAnchorFacts).toHaveBeenCalledWith(requestedAnchor);
-    expect(result).toEqual({
-      kind: 'current_anchor_fact',
-      tenantId: 'tenant-zhengpu',
-      institutionId: 'institution-zhengpu',
-      revision: 7,
-      observedAt: '2026-07-22T05:00:00.000Z',
-    });
-    expect(Object.isFrozen(result)).toBe(true);
-    expect(Object.keys(result)).not.toEqual(
-      expect.arrayContaining([
-        'anchorReference',
-        'anchorRevision',
-        'approvedBy',
-        'provisioningReferenceDigest',
-        'provisioningSource',
-      ]),
-    );
-  });
-
-  it.each([
-    ['锚点不存在', []],
-    ['锚点已暂停', [{ ...currentAnchorRow, status: 'suspended' }]],
-  ] as const)('%s 时返回不枚举细节的 institution_anchor_denied', async (_label, rows) => {
-    const { reader } = createReader({
-      rows: rows as readonly CurrentInstitutionAnchorFactRowV1[],
-    });
-
-    await expect(reader.resolve(requestedAnchor)).resolves.toEqual({
-      kind: 'denied',
-      code: 'institution_anchor_denied',
-    });
-  });
-
-  it.each([
-    ['出现重复结果', [currentAnchorRow, { ...currentAnchorRow }]],
-    ['tenant 与请求不一致', [{ ...currentAnchorRow, tenantId: 'tenant-other' }]],
-    [
-      'institution 与请求不一致',
-      [{ ...currentAnchorRow, institutionId: 'institution-other' }],
-    ],
-    ['revision 为零', [{ ...currentAnchorRow, revision: 0 }]],
-    ['revision 不是安全整数', [{ ...currentAnchorRow, revision: Number.MAX_VALUE }]],
-    ['status 是未知值', [{ ...currentAnchorRow, status: 'unknown' }]],
-    [
-      '数据库结果夹带额外字段',
-      [{ ...currentAnchorRow, provisioningReferenceDigest: 'must-not-flow' }],
-    ],
-  ] as const)('%s 时保持 institution_anchor_unavailable', async (_label, rows) => {
-    const { reader } = createReader({
-      rows: rows as unknown as readonly CurrentInstitutionAnchorFactRowV1[],
-    });
-
-    await expect(reader.resolve(requestedAnchor)).resolves.toEqual({
-      kind: 'unavailable',
-      code: 'institution_anchor_unavailable',
-    });
-  });
-
-  it('输入非法或含额外声明时不访问 repository', async () => {
-    const { reader, findCurrentInstitutionAnchorFacts } = createReader();
-
-    for (const query of [
-      { ...requestedAnchor, tenantId: '../other' },
-      { ...requestedAnchor, status: 'active' },
-      Object.assign(Object.create({ inherited: true }), requestedAnchor),
-      new Proxy({ ...requestedAnchor }, {}),
-    ]) {
-      await expect(reader.resolve(query as never)).resolves.toEqual({
-        kind: 'unavailable',
-        code: 'institution_anchor_unavailable',
-      });
-    }
-    expect(findCurrentInstitutionAnchorFacts).not.toHaveBeenCalled();
-  });
-
-  it('拒绝 accessor、symbol、隐藏字段和 hostile Proxy，且不触发 getter', async () => {
-    let getterReads = 0;
-    const accessor = { ...requestedAnchor };
-    Object.defineProperty(accessor, 'tenantId', {
-      enumerable: true,
-      get() {
-        getterReads += 1;
-        return 'tenant-zhengpu';
-      },
-    });
-    const hidden = { ...requestedAnchor };
-    Object.defineProperty(hidden, 'secret', { value: 'hidden', enumerable: false });
-    const symbol = Object.assign({ ...requestedAnchor }, { [Symbol('scope')]: 'other' });
-    const hostile = new Proxy(
-      { ...requestedAnchor },
-      {
-        ownKeys() {
-          throw new Error('query trap');
-        },
-      },
-    );
-    const { reader, findCurrentInstitutionAnchorFacts } = createReader();
-
-    for (const query of [accessor, hidden, symbol, hostile]) {
-      await expect(reader.resolve(query as never)).resolves.toEqual({
-        kind: 'unavailable',
-        code: 'institution_anchor_unavailable',
-      });
-    }
-    expect(getterReads).toBe(0);
-    expect(findCurrentInstitutionAnchorFacts).not.toHaveBeenCalled();
-  });
-
-  it('拒绝恶意结果数组和结果行并保持失败关闭', async () => {
-    const sparseRows: unknown[] = [];
-    sparseRows.length = 1;
-    const extraRows = [currentAnchorRow] as unknown[] & { secret?: string };
-    extraRows.secret = 'hidden';
-    const accessorRow = { ...currentAnchorRow };
-    Object.defineProperty(accessorRow, 'revision', {
-      enumerable: true,
-      get: () => 7,
-    });
-
-    for (const rowsValue of [
-      new Proxy([currentAnchorRow], {}),
-      sparseRows,
-      extraRows,
-      [new Proxy({ ...currentAnchorRow }, {})],
-      [accessorRow],
-      [Object.assign(Object.create(null), currentAnchorRow)],
-    ]) {
-      const repository: InstitutionAnchorFactRepositoryV1 = {
-        async findCurrentInstitutionAnchorFacts() {
-          return rowsValue as CurrentInstitutionAnchorFactRowV1[];
-        },
-      };
-      const reader = createAuthoritativeInstitutionAnchorFactReaderV1({
-        repository,
-        now: () => NOW,
-      });
-
-      await expect(reader.resolve(requestedAnchor)).resolves.toEqual({
-        kind: 'unavailable',
-        code: 'institution_anchor_unavailable',
-      });
-    }
-  });
-
-  it('repository 或可信时钟不可用时返回 unavailable', async () => {
-    const databaseFailure = createReader({ error: new Error('database unavailable') });
-    const clockFailure = createReader({
-      now: () => {
-        throw new Error('clock unavailable');
-      },
-    });
-    const invalidClock = createReader({ now: () => new Date(Number.NaN) });
-
-    await expect(databaseFailure.reader.resolve(requestedAnchor)).resolves.toEqual({
-      kind: 'unavailable',
-      code: 'institution_anchor_unavailable',
-    });
-    await expect(clockFailure.reader.resolve(requestedAnchor)).resolves.toEqual({
-      kind: 'unavailable',
-      code: 'institution_anchor_unavailable',
-    });
-    await expect(invalidClock.reader.resolve(requestedAnchor)).resolves.toEqual({
-      kind: 'unavailable',
-      code: 'institution_anchor_unavailable',
-    });
-  });
-
-  it('先完成 repository 重验，再以之后取得的服务端时间形成 observedAt', async () => {
-    let clock = new Date('2026-07-22T05:00:00.000Z');
-    const repository: InstitutionAnchorFactRepositoryV1 = {
-      async findCurrentInstitutionAnchorFacts() {
-        clock = new Date('2026-07-22T05:00:01.000Z');
-        return [currentAnchorRow];
-      },
-    };
-    const reader = createAuthoritativeInstitutionAnchorFactReaderV1({
-      repository,
-      now: () => clock,
-    });
-
-    await expect(reader.resolve(requestedAnchor)).resolves.toMatchObject({
-      observedAt: '2026-07-22T05:00:01.000Z',
-    });
-  });
-});
 
 function currentFact(input: {
   revision?: number;
@@ -252,9 +64,10 @@ function currentFact(input: {
   institutionId?: string;
 } = {}) {
   return Object.freeze({
-    kind: 'current_anchor_fact' as const,
+    kind: 'current_scope_fact' as const,
     tenantId: input.tenantId ?? 'tenant-zhengpu',
     institutionId: input.institutionId ?? 'institution-zhengpu',
+    status: 'active' as const,
     revision: input.revision ?? 7,
     observedAt: input.observedAt ?? '2026-07-22T05:00:00.000Z',
   });
@@ -270,9 +83,31 @@ function referenceCodec() {
   });
 }
 
+function observableReferenceCodec(input: {
+  verifyResult?: (reference: string) => unknown;
+} = {}) {
+  const issue = vi.fn((value: { prefix: 'anc' | 'arv' }) =>
+    Object.freeze({
+      kind: 'issued' as const,
+      reference: `${value.prefix}_v1_k1_${'A'.repeat(43)}`,
+    }),
+  );
+  const verify = vi.fn((value: { reference: string }) =>
+    input.verifyResult
+      ? input.verifyResult(value.reference)
+      : Object.freeze({
+          kind: 'verified' as const,
+          reference: value.reference,
+        }),
+  );
+  const codec = Object.freeze({ issue, verify }) as unknown as InstitutionGuardReferenceCodecV1;
+  referenceCodecProvenance.add(codec);
+  return { codec, issue, verify };
+}
+
 function activeProvider(input: {
   resolutions?: readonly unknown[];
-  factReader?: AuthoritativeInstitutionAnchorFactReaderV1;
+  factReader?: AuthoritativeInstitutionScopeFactReaderV1;
   codec?: InstitutionGuardReferenceCodecV1;
   nowValues?: readonly Date[];
   now?: () => Date;
@@ -283,7 +118,8 @@ function activeProvider(input: {
   );
   const factReader =
     input.factReader ??
-    ({ resolve: resolveFact } as AuthoritativeInstitutionAnchorFactReaderV1);
+    ({ resolve: resolveFact } as AuthoritativeInstitutionScopeFactReaderV1);
+  if (!input.factReader) scopeReaderProvenance.add(factReader);
   const nowValues = [
     ...(input.nowValues ?? [
       new Date('2026-07-22T05:00:01.000Z'),
@@ -535,7 +371,6 @@ describe('机构锚点 owner-sealed provider', () => {
   it('模块不导出 handle 注册、集合、解析、rehydrate 或 promotion 能力', () => {
     expect(Object.keys(anchorProviderModule).sort()).toEqual([
       'createActiveInstitutionAnchorProviderV1',
-      'createAuthoritativeInstitutionAnchorFactReaderV1',
       'isActiveInstitutionAnchorProviderV1',
     ]);
   });
@@ -545,7 +380,7 @@ describe('机构锚点 owner-sealed provider', () => {
 
     const result = await provider.resolve(requestedAnchor);
 
-    expect(resolveFact).toHaveBeenCalledTimes(1);
+    expect(resolveFact).toHaveBeenCalledTimes(2);
     expect(resolveFact).toHaveBeenCalledWith(requestedAnchor);
     expect(now).toHaveBeenCalledTimes(2);
     expect(result).toEqual({
@@ -560,6 +395,59 @@ describe('机构锚点 owner-sealed provider', () => {
     expect(Object.isFrozen(result)).toBe(true);
     expect(JSON.stringify(result)).not.toContain('revision-7');
     expect(result).not.toHaveProperty('revision');
+  });
+
+  it('只有 anc 与 arv 均通过 owner codec 的显式 verify 才发布 active evidence', async () => {
+    const { codec, issue, verify } = observableReferenceCodec();
+    const { provider } = activeProvider({ codec });
+
+    const result = await provider.resolve(requestedAnchor);
+
+    expect(result.kind).toBe('active');
+    expect(issue).toHaveBeenCalledTimes(2);
+    expect(verify).toHaveBeenCalledTimes(2);
+    expect(verify.mock.calls.map(([value]) => value.reference)).toEqual([
+      `anc_v1_k1_${'A'.repeat(43)}`,
+      `arv_v1_k1_${'A'.repeat(43)}`,
+    ]);
+  });
+
+  it.each([
+    [
+      'rejected',
+      () => Object.freeze({ kind: 'rejected', code: 'guard_reference_invalid' }),
+    ],
+    [
+      'unavailable',
+      () => Object.freeze({ kind: 'unavailable', code: 'guard_reference_unavailable' }),
+    ],
+    [
+      'mismatch',
+      () =>
+        Object.freeze({
+          kind: 'verified',
+          reference: `anc_v1_k1_${'B'.repeat(43)}`,
+        }),
+    ],
+    [
+      'throw',
+      () => {
+        throw new Error('verify unavailable');
+      },
+    ],
+  ] as const)('verify 返回 %s 时失败关闭且不泄漏部分 evidence', async (_label, verifyResult) => {
+    const { codec, verify } = observableReferenceCodec({ verifyResult });
+    const { provider } = activeProvider({ codec });
+
+    const result = await provider.resolve(requestedAnchor);
+
+    expect(result).toEqual({
+      kind: 'unavailable',
+      code: 'institution_anchor_unavailable',
+    });
+    expect(result).not.toHaveProperty('anchorReference');
+    expect(result).not.toHaveProperty('anchorRevision');
+    expect(verify).toHaveBeenCalledTimes(1);
   });
 
   it('factory 对 accessor、symbol、额外字段、原型和 Proxy 依赖零读取且构造失败关闭 provider', async () => {
@@ -636,7 +524,12 @@ describe('机构锚点 owner-sealed provider', () => {
 
   it('每次 resolve 都重读事实且 anc 跨 revision 稳定、arv 随 revision 变化', async () => {
     const { provider, resolveFact } = activeProvider({
-      resolutions: [currentFact({ revision: 7 }), currentFact({ revision: 8 })],
+      resolutions: [
+        currentFact({ revision: 7 }),
+        currentFact({ revision: 7, observedAt: '2026-07-22T05:00:00.100Z' }),
+        currentFact({ revision: 8, observedAt: '2026-07-22T05:00:00.200Z' }),
+        currentFact({ revision: 8, observedAt: '2026-07-22T05:00:00.300Z' }),
+      ],
       nowValues: [
         new Date('2026-07-22T05:00:01.000Z'),
         new Date('2026-07-22T05:00:02.000Z'),
@@ -648,7 +541,7 @@ describe('机构锚点 owner-sealed provider', () => {
     const first = await provider.resolve(requestedAnchor);
     const second = await provider.resolve(requestedAnchor);
 
-    expect(resolveFact).toHaveBeenCalledTimes(2);
+    expect(resolveFact).toHaveBeenCalledTimes(4);
     expect(first.kind).toBe('active');
     expect(second.kind).toBe('active');
     if (first.kind === 'active' && second.kind === 'active') {
@@ -691,13 +584,13 @@ describe('机构锚点 owner-sealed provider', () => {
 
   it.each([
     [
-      'raw denied',
-      { kind: 'denied', code: 'institution_anchor_denied' },
+      'scope denied',
+      { kind: 'rejected', code: 'scope_denied' },
       { kind: 'denied', code: 'institution_anchor_denied' },
     ],
     [
-      'raw unavailable',
-      { kind: 'unavailable', code: 'institution_anchor_unavailable' },
+      'scope unavailable',
+      { kind: 'rejected', code: 'scope_unavailable' },
       { kind: 'unavailable', code: 'institution_anchor_unavailable' },
     ],
   ] as const)('%s 保持受控分类且不读取时钟', async (_label, resolution, expected) => {
@@ -705,6 +598,27 @@ describe('机构锚点 owner-sealed provider', () => {
 
     await expect(provider.resolve(requestedAnchor)).resolves.toEqual(expected);
     expect(now).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['revision 漂移', currentFact({ revision: 8 })],
+    ['Scope 暂停', { kind: 'rejected', code: 'scope_denied' }],
+    ['Scope 不可用', { kind: 'rejected', code: 'scope_unavailable' }],
+    [
+      'Scope 身份漂移',
+      currentFact({ institutionId: 'institution-other' }),
+    ],
+  ] as const)('签发后第二次 Scope 读取%s时不发布 evidence', async (_label, second) => {
+    const { provider, resolveFact } = activeProvider({
+      resolutions: [currentFact(), second],
+    });
+
+    const result = await provider.resolve(requestedAnchor);
+
+    expect(result.kind).not.toBe('active');
+    expect(result).not.toHaveProperty('anchorReference');
+    expect(result).not.toHaveProperty('anchorRevision');
+    expect(resolveFact).toHaveBeenCalledTimes(2);
   });
 
   it.each([

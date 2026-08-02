@@ -6,6 +6,26 @@ import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'v
 const serverRuntimeMocks = vi.hoisted(() => ({
   resolveInstitutionServerAuthorizationV1: vi.fn(),
 }));
+const readerProvenance = vi.hoisted(() => ({
+  identity: new WeakSet<object>(),
+  membership: new WeakSet<object>(),
+  scope: new WeakSet<object>(),
+}));
+
+vi.mock(
+  '@/modules/auth/application/authoritative-formal-session-identity-reader',
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import('@/modules/auth/application/authoritative-formal-session-identity-reader')
+    >();
+    return {
+      ...actual,
+      isAuthoritativeFormalSessionIdentityFactReaderV1(value: unknown) {
+        return value !== null && typeof value === 'object' && readerProvenance.identity.has(value);
+      },
+    };
+  },
+);
 
 vi.mock(
   '@/modules/institution/server/institution-server-runtime',
@@ -15,13 +35,47 @@ vi.mock(
   }),
 );
 
+vi.mock(
+  '@/modules/access-control/application/authoritative-membership-reader',
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import('@/modules/access-control/application/authoritative-membership-reader')
+    >();
+    return {
+      ...actual,
+      isAuthoritativeMembershipFactReaderV1(value: unknown) {
+        return value !== null && typeof value === 'object' && readerProvenance.membership.has(value);
+      },
+    };
+  },
+);
+
+vi.mock(
+  '@/modules/tenancy/application/authoritative-institution-scope-reader',
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import('@/modules/tenancy/application/authoritative-institution-scope-reader')
+    >();
+    return {
+      ...actual,
+      isAuthoritativeInstitutionScopeFactReaderV1(value: unknown) {
+        return value !== null && typeof value === 'object' && readerProvenance.scope.has(value);
+      },
+    };
+  },
+);
+
 import HospitalPage from '@/app/hospital/page';
-import type { CurrentInstitutionMembershipFactRow } from '@/modules/auth/server/auth-account-repository';
+import {
+  createAuthoritativeInstitutionMembershipFactReaderV1 as createUnbrandedMembershipFactReaderV1,
+  type CurrentInstitutionMembershipFactRow,
+} from '@/modules/access-control/server/authoritative-membership-reader';
 import {
   createFormalServerSessionRequestOwnerV1,
   FORMAL_SERVER_SESSION_COOKIE_V1,
   type FormalServerSessionKeyRingV1,
 } from '@/modules/auth/server/formal-server-session-provenance-owner';
+import type { AuthoritativeFormalSessionIdentityFactReaderV1 } from '@/modules/auth/ports/authoritative-formal-session-identity-reader';
 import {
   createControlledInstitutionWorkbenchEntryV1,
   createDisabledInstitutionWorkbenchEntryV1,
@@ -33,19 +87,49 @@ import {
 import { INSTITUTION_NAVIGATION_SECTION_IDS_V1 } from '@/modules/institution-contracts/v1/institution-navigation';
 import {
   createActiveInstitutionAnchorProviderV1,
-  createAuthoritativeInstitutionAnchorFactReaderV1,
 } from '@/modules/security/server/institution-anchor-provider';
-import type { CurrentInstitutionAnchorFactRowV1 } from '@/modules/security/server/institution-anchor-repository';
+import {
+  createAuthoritativeInstitutionScopeFactReaderV1 as createUnbrandedScopeFactReaderV1,
+  type CurrentInstitutionScopeFactRowV1,
+} from '@/modules/tenancy/server/authoritative-institution-scope-reader';
 import {
   createInstitutionGuardReferenceCodecV1,
 } from '@/modules/security/server/institution-guard-reference';
 import {
-  createAuthoritativeInstitutionMembershipFactReaderV1,
-} from '@/modules/security/server/institution-membership-provider';
-import {
   createInstitutionRequestAuthorizationV1,
   type InstitutionRequestAuthorizationV1,
 } from '@/modules/security/server/institution-request-authorization';
+
+function createAuthoritativeInstitutionMembershipFactReaderV1(
+  input: Parameters<typeof createUnbrandedMembershipFactReaderV1>[0],
+) {
+  const reader = createUnbrandedMembershipFactReaderV1(input);
+  readerProvenance.membership.add(reader);
+  return reader;
+}
+
+function createAuthoritativeInstitutionScopeFactReaderV1(
+  input: Parameters<typeof createUnbrandedScopeFactReaderV1>[0],
+) {
+  const reader = createUnbrandedScopeFactReaderV1(input);
+  readerProvenance.scope.add(reader);
+  return reader;
+}
+
+function genuineIdentityReader(): AuthoritativeFormalSessionIdentityFactReaderV1 {
+  const reader = Object.freeze({
+    resolve: vi.fn(async () => ({
+      kind: 'current_identity_fact' as const,
+      accountId: payload.accountId,
+      username: 'workbench_operator',
+      displayName: '工作台操作员',
+      status: 'active' as const,
+      observedAt: NOW.toISOString(),
+    })),
+  });
+  readerProvenance.identity.add(reader);
+  return reader;
+}
 
 const NOW = new Date('2026-07-22T08:02:00.000Z');
 const SESSION_KEY = new Uint8Array(32).fill(0x73);
@@ -77,14 +161,21 @@ const payload = Object.freeze({
 });
 const membershipRow: CurrentInstitutionMembershipFactRow = {
   accountId: payload.accountId,
-  accountStatus: 'active',
-  accountPasswordResetRequired: false,
-  accountLockedUntil: null,
   membershipId: 'membership-workbench-entry-001',
   membershipTenantId: payload.tenantId,
   membershipUserId: payload.accountId,
   membershipRole: 'tenant_admin',
-  membershipUpdatedAt: new Date('2026-07-22T08:01:00.000Z'),
+  membershipDisplayName: '机构管理员',
+  membershipRevision: 1,
+  membershipLifecycleStatus: 'active',
+  membershipProvenanceSource: 'legacy_calibration',
+  membershipProvenanceActorId: null,
+  membershipProvenanceReasonCode: 'legacy_unknown',
+  membershipProvenanceCommandId: `mcal1_${'b'.repeat(64)}`,
+  membershipProvenanceOccurredAt: null,
+  membershipProvenanceRecordedAt: new Date('2026-07-22T08:01:00.000Z'),
+  membershipRevokedAt: null,
+  membershipDeletedAt: null,
   bindingId: 'binding-workbench-entry-001',
   bindingAccountId: payload.accountId,
   bindingTenantId: payload.tenantId,
@@ -97,7 +188,7 @@ const membershipRow: CurrentInstitutionMembershipFactRow = {
   bindingVersion: 1,
 };
 
-const anchorRow: CurrentInstitutionAnchorFactRowV1 = {
+const anchorRow: CurrentInstitutionScopeFactRowV1 = {
   tenantId: payload.tenantId,
   institutionId: payload.institutionId,
   status: 'active',
@@ -140,13 +231,14 @@ function authorizationFixture(
   const owner = createFormalServerSessionRequestOwnerV1({
     cookieHeader: `${FORMAL_SERVER_SESSION_COOKIE_V1}=${signToken()}`,
     sessionKeyRing: sessionKeyRing(),
+    identityFactReader: genuineIdentityReader(),
     membershipFactReader,
     referenceCodec: codec,
     now: () => NOW,
   });
   const anchorRead = vi.fn(async () => [anchorRow]);
-  const anchorFactReader = createAuthoritativeInstitutionAnchorFactReaderV1({
-    repository: { findCurrentInstitutionAnchorFacts: anchorRead },
+  const anchorFactReader = createAuthoritativeInstitutionScopeFactReaderV1({
+    repository: { findCurrentInstitutionScopeFacts: anchorRead },
     now: () => NOW,
   });
   const anchorProvider = createActiveInstitutionAnchorProviderV1({
@@ -412,8 +504,8 @@ describe('WB-ENTRY-02A server-owned 工作台入口', () => {
     expect(decision).toEqual({ kind: 'allowed', view: 'capability_off' });
     expect(isInstitutionWorkbenchEntryDecisionV1(decision)).toBe(true);
     expect(Object.isFrozen(decision)).toBe(true);
-    expect(created.membershipRead).toHaveBeenCalledTimes(1);
-    expect(created.anchorRead).toHaveBeenCalledTimes(1);
+    expect(created.membershipRead).toHaveBeenCalledTimes(4);
+    expect(created.anchorRead).toHaveBeenCalledTimes(2);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(JSON.stringify(decision)).toBe('{"kind":"allowed","view":"capability_off"}');
     for (const forbidden of [
@@ -458,8 +550,8 @@ describe('BASE-WIRE-01 /hospital server navigation authorization', () => {
 
     expect(serverRuntimeMocks.resolveInstitutionServerAuthorizationV1).toHaveBeenCalledTimes(1);
     expect(serverRuntimeMocks.resolveInstitutionServerAuthorizationV1).toHaveBeenCalledWith();
-    expect(created.membershipRead).toHaveBeenCalledTimes(1);
-    expect(created.anchorRead).toHaveBeenCalledTimes(1);
+    expect(created.membershipRead).toHaveBeenCalledTimes(4);
+    expect(created.anchorRead).toHaveBeenCalledTimes(2);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(
       screen
@@ -540,8 +632,8 @@ describe('BASE-WIRE-01 /hospital server navigation authorization', () => {
       expect(
         within(mobileNavigation).queryByRole('button', { name: '更多' }),
       ).not.toBeInTheDocument();
-      expect(created.membershipRead).toHaveBeenCalledTimes(1);
-      expect(created.anchorRead).toHaveBeenCalledTimes(1);
+      expect(created.membershipRead).toHaveBeenCalledTimes(4);
+      expect(created.anchorRead).toHaveBeenCalledTimes(2);
     },
   );
 

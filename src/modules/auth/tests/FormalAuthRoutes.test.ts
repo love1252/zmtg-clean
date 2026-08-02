@@ -33,6 +33,8 @@ const routeMocks = vi.hoisted(() => {
     createdAt: new Date('2026-07-22T00:00:00.000Z'),
     updatedAt: new Date('2026-07-22T00:00:00.000Z'),
   });
+  const { passwordHash: _passwordHash, ...safeAccountValue } = account;
+  const safeAccount = Object.freeze(safeAccountValue);
   const membership = Object.freeze({
     id: 'membership-formal-001',
     tenantId: user.tenantId,
@@ -42,8 +44,34 @@ const routeMocks = vi.hoisted(() => {
     createdAt: new Date('2026-07-22T00:00:00.000Z'),
     updatedAt: new Date('2026-07-22T00:00:00.000Z'),
   });
+  const membershipFact = Object.freeze({
+    kind: 'current_membership_fact' as const,
+    accountId: user.id,
+    tenantId: user.tenantId,
+    institutionId: user.institutionId,
+    role: user.role,
+    membershipDisplayName: membership.displayName,
+    membershipId: membership.id,
+    membershipRevision: 1,
+    membershipLifecycleStatus: 'active' as const,
+    bindingId: 'binding-formal-001',
+    bindingRevision: 1,
+    bindingRevisionAt: '2026-07-22T00:00:00.000Z',
+    bindingExpiresAt: null,
+    observedAt: '2026-07-22T00:00:00.000Z',
+  });
   const sessionSnapshot = Object.freeze({ snapshot: 'formal-user' });
   const verifiedClaims = Object.freeze({ claims: 'formal' });
+  const identityReader = Object.freeze({ resolve: vi.fn() });
+  const membershipReader = Object.freeze({
+    resolve: vi.fn(),
+    resolveSingleForAccount: vi.fn(),
+  });
+  const scopeReader = Object.freeze({ kind: 'scope-reader' });
+  const contextResolver = Object.freeze({
+    resolveForLogin: vi.fn(),
+    resolveForSession: vi.fn(),
+  });
 
   return {
     account,
@@ -51,29 +79,36 @@ const routeMocks = vi.hoisted(() => {
     auditRepository: { record: vi.fn() },
     consumeClaims: vi.fn(),
     consumeSnapshot: vi.fn(),
+    contextResolver,
+    createAccessControlAuthoritativeMembershipFactReader: vi.fn(),
     createAuditEventRepository: vi.fn(),
     createAuthAccountRepository: vi.fn(),
     createAuthAccountService: vi.fn(),
     createDemoSession: vi.fn(),
+    createFormalInstitutionSessionContextResolver: vi.fn(),
+    createIdentityAuthoritativeFormalSessionIdentityFactReader: vi.fn(),
+    createTenancyAuthoritativeInstitutionScopeFactReader: vi.fn(),
     database: Object.freeze({ database: 'formal-auth-db' }),
     decodeDemoSession: vi.fn(),
     encodeDemoSession: vi.fn(),
     getDatabase: vi.fn(),
     isDemoAuthEnabled: vi.fn(),
     issueFormalCookie: vi.fn(),
+    identityReader,
     membership,
+    membershipFact,
+    membershipReader,
     repository: {
       createAccount: vi.fn(),
       findAccountByUsername: vi.fn(),
-      findCurrentFormalSessionUser: vi.fn(),
-      findPrimaryTenantMembershipByUserId: vi.fn(),
-      listActiveInstitutionBindingsByAccountAndTenant: vi.fn(),
       recordLoginFailure: vi.fn(),
       recordLoginSuccess: vi.fn(),
       updateAccountStatus: vi.fn(),
       updatePassword: vi.fn(),
     },
     resolveRuntimeConfig: vi.fn(),
+    safeAccount,
+    scopeReader,
     service: { authenticatePasswordAccount: vi.fn() },
     sessionSnapshot,
     user,
@@ -92,10 +127,70 @@ vi.mock('@/modules/auth/server/auth-account-repository', async (importOriginal) 
     await importOriginal<typeof import('@/modules/auth/server/auth-account-repository')>();
   return {
     ...actual,
-    consumeFormalServerSessionUserSnapshotV1: routeMocks.consumeSnapshot,
     createAuthAccountRepository: routeMocks.createAuthAccountRepository,
   };
 });
+
+vi.mock(
+  '@/modules/access-control/application/authoritative-membership-reader',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@/modules/access-control/application/authoritative-membership-reader')
+      >();
+    return {
+      ...actual,
+      createAccessControlAuthoritativeMembershipFactReaderV1:
+        routeMocks.createAccessControlAuthoritativeMembershipFactReader,
+    };
+  },
+);
+
+vi.mock(
+  '@/modules/tenancy/application/authoritative-institution-scope-reader',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@/modules/tenancy/application/authoritative-institution-scope-reader')
+      >();
+    return {
+      ...actual,
+      createTenancyAuthoritativeInstitutionScopeFactReaderV1:
+        routeMocks.createTenancyAuthoritativeInstitutionScopeFactReader,
+    };
+  },
+);
+
+vi.mock(
+  '@/modules/auth/application/authoritative-formal-session-identity-reader',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@/modules/auth/application/authoritative-formal-session-identity-reader')
+      >();
+    return {
+      ...actual,
+      createIdentityAuthoritativeFormalSessionIdentityFactReaderV1:
+        routeMocks.createIdentityAuthoritativeFormalSessionIdentityFactReader,
+    };
+  },
+);
+
+vi.mock(
+  '@/modules/auth/application/formal-institution-session-context',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@/modules/auth/application/formal-institution-session-context')
+      >();
+    return {
+      ...actual,
+      consumeFormalServerSessionUserSnapshotV1: routeMocks.consumeSnapshot,
+      createFormalInstitutionSessionContextResolverV1:
+        routeMocks.createFormalInstitutionSessionContextResolver,
+    };
+  },
+);
 
 vi.mock('@/modules/auth/server/auth-account-service', async (importOriginal) => {
   const actual =
@@ -202,6 +297,28 @@ beforeEach(() => {
   routeMocks.createAuthAccountRepository.mockReturnValue(routeMocks.repository);
   routeMocks.createAuthAccountService.mockReset();
   routeMocks.createAuthAccountService.mockReturnValue(routeMocks.service);
+  routeMocks.createAccessControlAuthoritativeMembershipFactReader.mockReset();
+  routeMocks.createAccessControlAuthoritativeMembershipFactReader.mockReturnValue(
+    routeMocks.membershipReader,
+  );
+  routeMocks.membershipReader.resolve.mockReset();
+  routeMocks.membershipReader.resolveSingleForAccount.mockReset();
+  routeMocks.membershipReader.resolveSingleForAccount.mockResolvedValue(
+    routeMocks.membershipFact,
+  );
+  routeMocks.createIdentityAuthoritativeFormalSessionIdentityFactReader.mockReset();
+  routeMocks.createIdentityAuthoritativeFormalSessionIdentityFactReader.mockReturnValue(
+    routeMocks.identityReader,
+  );
+  routeMocks.identityReader.resolve.mockReset();
+  routeMocks.createTenancyAuthoritativeInstitutionScopeFactReader.mockReset();
+  routeMocks.createTenancyAuthoritativeInstitutionScopeFactReader.mockReturnValue(
+    routeMocks.scopeReader,
+  );
+  routeMocks.createFormalInstitutionSessionContextResolver.mockReset();
+  routeMocks.createFormalInstitutionSessionContextResolver.mockReturnValue(
+    routeMocks.contextResolver,
+  );
   routeMocks.createAuditEventRepository.mockReset();
   routeMocks.createAuditEventRepository.mockReturnValue(routeMocks.auditRepository);
   routeMocks.resolveRuntimeConfig.mockReset();
@@ -223,6 +340,26 @@ beforeEach(() => {
     institutionId: routeMocks.user.institutionId,
   });
   routeMocks.consumeSnapshot.mockReturnValue(routeMocks.user);
+  routeMocks.contextResolver.resolveForLogin.mockReset();
+  routeMocks.contextResolver.resolveForLogin.mockResolvedValue({
+    kind: 'resolved',
+    snapshot: routeMocks.sessionSnapshot,
+    membershipAudit: {
+      id: routeMocks.membership.id,
+      tenantId: routeMocks.membership.tenantId,
+      role: routeMocks.membership.role,
+    },
+  });
+  routeMocks.contextResolver.resolveForSession.mockReset();
+  routeMocks.contextResolver.resolveForSession.mockResolvedValue({
+    kind: 'resolved',
+    snapshot: routeMocks.sessionSnapshot,
+    membershipAudit: {
+      id: routeMocks.membership.id,
+      tenantId: routeMocks.membership.tenantId,
+      role: routeMocks.membership.role,
+    },
+  });
   routeMocks.authenticateDemoUser.mockReset();
   routeMocks.createDemoSession.mockReset();
   routeMocks.encodeDemoSession.mockReset();
@@ -231,16 +368,11 @@ beforeEach(() => {
   routeMocks.isDemoAuthEnabled.mockReturnValue(true);
   Object.values(routeMocks.repository).forEach((mock) => mock.mockReset());
   routeMocks.repository.findAccountByUsername.mockResolvedValue(routeMocks.account);
-  routeMocks.repository.findPrimaryTenantMembershipByUserId.mockResolvedValue(routeMocks.membership);
-  routeMocks.repository.findCurrentFormalSessionUser.mockResolvedValue({
-    kind: 'resolved',
-    snapshot: routeMocks.sessionSnapshot,
-  });
   routeMocks.service.authenticatePasswordAccount.mockReset();
   routeMocks.service.authenticatePasswordAccount.mockResolvedValue({
     status: 'authenticated',
     passwordResetRequired: false,
-    user: routeMocks.user,
+    account: routeMocks.safeAccount,
   });
   routeMocks.auditRepository.record.mockReset();
 });
@@ -273,7 +405,7 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
     expect(routeMocks.authenticateDemoUser).not.toHaveBeenCalled();
   });
 
-  it('formal 登录经 snapshot issuer 写 formal cookie、清 demo 且 no-store', async () => {
+  it('formal 登录经正式上下文与 snapshot issuer 写 formal cookie、清 demo 且 no-store', async () => {
     const { POST } = await import('@/app/api/auth/login/route');
 
     const response = await POST(
@@ -284,10 +416,26 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
     expectNoStore(response);
     await expect(response.json()).resolves.toEqual({ code: 0, data: { user: routeMocks.user } });
     expect(routeMocks.resolveRuntimeConfig).toHaveBeenCalledTimes(1);
-    expect(routeMocks.repository.findCurrentFormalSessionUser).toHaveBeenCalledWith({
+    expect(
+      routeMocks.createAccessControlAuthoritativeMembershipFactReader,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      routeMocks.createIdentityAuthoritativeFormalSessionIdentityFactReader,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      routeMocks.createTenancyAuthoritativeInstitutionScopeFactReader,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      routeMocks.createFormalInstitutionSessionContextResolver,
+    ).toHaveBeenCalledWith(
+      {
+        identityReader: routeMocks.identityReader,
+        membershipReader: routeMocks.membershipReader,
+        scopeReader: routeMocks.scopeReader,
+      },
+    );
+    expect(routeMocks.contextResolver.resolveForLogin).toHaveBeenCalledWith({
       accountId: routeMocks.user.id,
-      tenantId: routeMocks.user.tenantId,
-      institutionId: routeMocks.user.institutionId,
     });
     expect(routeMocks.issueFormalCookie).toHaveBeenCalledTimes(1);
     expect(response.headers.get('set-cookie')).toContain(`${FORMAL_SERVER_SESSION_COOKIE_V1}=v1.k1.formal-payload.formal-tag`);
@@ -430,16 +578,20 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
     expect(response.status).toBe(401);
     expectNoStore(response);
     expect(routeMocks.resolveRuntimeConfig).not.toHaveBeenCalled();
-    expect(routeMocks.repository.findCurrentFormalSessionUser).not.toHaveBeenCalled();
+    expect(routeMocks.contextResolver.resolveForLogin).not.toHaveBeenCalled();
     expect(routeMocks.issueFormalCookie).not.toHaveBeenCalled();
     expect(routeMocks.authenticateDemoUser).not.toHaveBeenCalled();
+    expect(routeMocks.membershipReader.resolveSingleForAccount).toHaveBeenCalledWith({
+      accountId: routeMocks.user.id,
+    });
+    expect(routeMocks.auditRepository.record).toHaveBeenCalledTimes(1);
   });
 
   it('password reset required 返回低敏 403，零 snapshot/cookie/demo', async () => {
     routeMocks.service.authenticatePasswordAccount.mockResolvedValue({
       status: 'authenticated',
       passwordResetRequired: true,
-      user: routeMocks.user,
+      account: routeMocks.safeAccount,
     });
     const { POST } = await import('@/app/api/auth/login/route');
     const response = await POST(
@@ -453,18 +605,54 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
       message: '需要先完成密码重置',
     });
     expect(routeMocks.resolveRuntimeConfig).not.toHaveBeenCalled();
-    expect(routeMocks.repository.findCurrentFormalSessionUser).not.toHaveBeenCalled();
+    expect(routeMocks.contextResolver.resolveForLogin).not.toHaveBeenCalled();
     expect(routeMocks.issueFormalCookie).not.toHaveBeenCalled();
     expect(response.headers.get('set-cookie')).toBeNull();
     expect(routeMocks.authenticateDemoUser).not.toHaveBeenCalled();
   });
 
   it.each([
+    ['账号 id 漂移', { ...routeMocks.safeAccount, id: 'auth-user-formal-002' }],
+    ['账号 username 漂移', { ...routeMocks.safeAccount, username: 'other_user' }],
+    ['账号 Shape 缺失', { id: routeMocks.user.id }],
+    ['账号代理对象', hostileProxy()],
+  ])('credential 成功后%s时 fail-closed，零上下文与 cookie', async (_label, account) => {
+    routeMocks.service.authenticatePasswordAccount.mockResolvedValue({
+      status: 'authenticated',
+      passwordResetRequired: false,
+      account,
+    });
+    const { POST } = await import('@/app/api/auth/login/route');
+    const response = await POST(
+      loginRequest({
+        username: 'formal_user',
+        password: 'not-a-secret',
+        scope: 'institution',
+      }),
+    );
+
+    expect(response.status).toBe(503);
+    expectNoStore(response);
+    expect(
+      routeMocks.createAccessControlAuthoritativeMembershipFactReader,
+    ).not.toHaveBeenCalled();
+    expect(routeMocks.contextResolver.resolveForLogin).not.toHaveBeenCalled();
+    expect(routeMocks.issueFormalCookie).not.toHaveBeenCalled();
+    expect(routeMocks.auditRepository.record).not.toHaveBeenCalled();
+  });
+
+  it.each([
     ['keyring unavailable', () => routeMocks.resolveRuntimeConfig.mockReturnValue({ kind: 'unavailable' }), 503],
-    ['snapshot denied', () => routeMocks.repository.findCurrentFormalSessionUser.mockResolvedValue({ kind: 'denied' }), 401],
-    ['snapshot invalid', () => routeMocks.repository.findCurrentFormalSessionUser.mockResolvedValue({ kind: 'invalid' }), 503],
-    ['snapshot unavailable', () => routeMocks.repository.findCurrentFormalSessionUser.mockResolvedValue({ kind: 'unavailable' }), 503],
-    ['snapshot throws', () => routeMocks.repository.findCurrentFormalSessionUser.mockRejectedValue(new Error('database unavailable')), 503],
+    ['membership reader factory throws', () => routeMocks.createAccessControlAuthoritativeMembershipFactReader.mockImplementation(() => { throw new Error('unavailable'); }), 503],
+    ['identity reader factory throws', () => routeMocks.createIdentityAuthoritativeFormalSessionIdentityFactReader.mockImplementation(() => { throw new Error('unavailable'); }), 503],
+    ['scope reader factory throws', () => routeMocks.createTenancyAuthoritativeInstitutionScopeFactReader.mockImplementation(() => { throw new Error('unavailable'); }), 503],
+    ['context factory throws', () => routeMocks.createFormalInstitutionSessionContextResolver.mockImplementation(() => { throw new Error('unavailable'); }), 503],
+    ['context factory undefined', () => routeMocks.createFormalInstitutionSessionContextResolver.mockReturnValue(undefined), 503],
+    ['context denied', () => routeMocks.contextResolver.resolveForLogin.mockResolvedValue({ kind: 'denied' }), 401],
+    ['context stale', () => routeMocks.contextResolver.resolveForLogin.mockResolvedValue({ kind: 'stale' }), 401],
+    ['context invalid', () => routeMocks.contextResolver.resolveForLogin.mockResolvedValue({ kind: 'invalid' }), 503],
+    ['context unavailable', () => routeMocks.contextResolver.resolveForLogin.mockResolvedValue({ kind: 'unavailable' }), 503],
+    ['context throws', () => routeMocks.contextResolver.resolveForLogin.mockRejectedValue(new Error('database unavailable')), 503],
     ['issuer unavailable', () => routeMocks.issueFormalCookie.mockReturnValue({ kind: 'unavailable', code: 'formal_session_unavailable' }), 503],
   ])('%s fail-closes without demo fallback', async (label, arrange, status) => {
     arrange();
@@ -490,12 +678,12 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
     ['runtime object', () => routeMocks.resolveRuntimeConfig.mockReturnValue({ kind: 'available' })],
     ['runtime proxy', () => routeMocks.resolveRuntimeConfig.mockReturnValue(hostileProxy())],
     ['runtime unknown', () => routeMocks.resolveRuntimeConfig.mockReturnValue({ kind: 'unknown', formalServerSessionKeyRing: null, institutionGuardReferenceKeyRing: null })],
-    ['snapshot undefined', () => routeMocks.repository.findCurrentFormalSessionUser.mockResolvedValue(undefined)],
-    ['snapshot null', () => routeMocks.repository.findCurrentFormalSessionUser.mockResolvedValue(null)],
-    ['snapshot string', () => routeMocks.repository.findCurrentFormalSessionUser.mockResolvedValue('resolved')],
-    ['snapshot object', () => routeMocks.repository.findCurrentFormalSessionUser.mockResolvedValue({ kind: 'resolved' })],
-    ['snapshot unknown', () => routeMocks.repository.findCurrentFormalSessionUser.mockResolvedValue({ kind: 'unknown' })],
-    ['snapshot proxy', () => routeMocks.repository.findCurrentFormalSessionUser.mockResolvedValue(hostileProxy())],
+    ['context undefined', () => routeMocks.contextResolver.resolveForLogin.mockResolvedValue(undefined)],
+    ['context null', () => routeMocks.contextResolver.resolveForLogin.mockResolvedValue(null)],
+    ['context string', () => routeMocks.contextResolver.resolveForLogin.mockResolvedValue('resolved')],
+    ['context object', () => routeMocks.contextResolver.resolveForLogin.mockResolvedValue({ kind: 'resolved' })],
+    ['context unknown', () => routeMocks.contextResolver.resolveForLogin.mockResolvedValue({ kind: 'unknown' })],
+    ['context proxy', () => routeMocks.contextResolver.resolveForLogin.mockResolvedValue(hostileProxy())],
     ['issuer throws', () => routeMocks.issueFormalCookie.mockImplementation(() => { throw new Error('unavailable'); })],
     ['issuer undefined', () => routeMocks.issueFormalCookie.mockReturnValue(undefined)],
     ['issuer null', () => routeMocks.issueFormalCookie.mockReturnValue(null)],
@@ -577,7 +765,7 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
     expect(routeMocks.decodeDemoSession).not.toHaveBeenCalled();
   });
 
-  it('formal session verifier、consumer 与 repository snapshot 成功时返回低敏 user', async () => {
+  it('formal session verifier、consumer 与正式上下文成功时返回低敏 user', async () => {
     routeMocks.verifyFormalCookie.mockReturnValue({
       kind: 'verified',
       verifiedClaims: routeMocks.verifiedClaims,
@@ -589,7 +777,25 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
     expectNoStore(response);
     await expect(response.json()).resolves.toEqual({ authenticated: true, user: routeMocks.user });
     expect(routeMocks.consumeClaims).toHaveBeenCalledWith(routeMocks.verifiedClaims);
-    expect(routeMocks.repository.findCurrentFormalSessionUser).toHaveBeenCalledWith({
+    expect(
+      routeMocks.createAccessControlAuthoritativeMembershipFactReader,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      routeMocks.createIdentityAuthoritativeFormalSessionIdentityFactReader,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      routeMocks.createTenancyAuthoritativeInstitutionScopeFactReader,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      routeMocks.createFormalInstitutionSessionContextResolver,
+    ).toHaveBeenCalledWith(
+      {
+        identityReader: routeMocks.identityReader,
+        membershipReader: routeMocks.membershipReader,
+        scopeReader: routeMocks.scopeReader,
+      },
+    );
+    expect(routeMocks.contextResolver.resolveForSession).toHaveBeenCalledWith({
       accountId: routeMocks.user.id,
       tenantId: routeMocks.user.tenantId,
       institutionId: routeMocks.user.institutionId,
@@ -601,14 +807,15 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
   it.each([
     ['verifier rejected', () => routeMocks.verifyFormalCookie.mockReturnValue({ kind: 'rejected', code: 'provenance_invalid' }), 401],
     ['verifier unavailable', () => routeMocks.verifyFormalCookie.mockReturnValue({ kind: 'unavailable', code: 'provenance_unavailable' }), 503],
-    ['snapshot denied', () => routeMocks.verifyFormalCookie.mockReturnValue({ kind: 'verified', verifiedClaims: routeMocks.verifiedClaims }), 401],
-    ['snapshot invalid', () => routeMocks.verifyFormalCookie.mockReturnValue({ kind: 'verified', verifiedClaims: routeMocks.verifiedClaims }), 503],
-    ['snapshot unavailable', () => routeMocks.verifyFormalCookie.mockReturnValue({ kind: 'verified', verifiedClaims: routeMocks.verifiedClaims }), 503],
+    ['context denied', () => routeMocks.verifyFormalCookie.mockReturnValue({ kind: 'verified', verifiedClaims: routeMocks.verifiedClaims }), 401],
+    ['context stale', () => routeMocks.verifyFormalCookie.mockReturnValue({ kind: 'verified', verifiedClaims: routeMocks.verifiedClaims }), 401],
+    ['context invalid', () => routeMocks.verifyFormalCookie.mockReturnValue({ kind: 'verified', verifiedClaims: routeMocks.verifiedClaims }), 503],
+    ['context unavailable', () => routeMocks.verifyFormalCookie.mockReturnValue({ kind: 'verified', verifiedClaims: routeMocks.verifiedClaims }), 503],
   ])('formal session %s maps fail-closed without demo fallback', async (label, arrange, status) => {
     arrange();
-    if (label.startsWith('snapshot ')) {
-      routeMocks.repository.findCurrentFormalSessionUser.mockResolvedValue({
-        kind: label.slice('snapshot '.length),
+    if (label.startsWith('context ')) {
+      routeMocks.contextResolver.resolveForSession.mockResolvedValue({
+        kind: label.slice('context '.length),
       });
     }
     const { GET } = await import('@/app/api/auth/session/route');
@@ -632,9 +839,25 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
       routeMocks.verifyFormalCookie.mockReturnValue({ kind: 'verified', verifiedClaims: routeMocks.verifiedClaims });
       routeMocks.consumeClaims.mockReturnValue(hostileProxy());
     }],
-    ['snapshot proxy', () => {
+    ['membership reader factory throws', () => {
       routeMocks.verifyFormalCookie.mockReturnValue({ kind: 'verified', verifiedClaims: routeMocks.verifiedClaims });
-      routeMocks.repository.findCurrentFormalSessionUser.mockResolvedValue(hostileProxy());
+      routeMocks.createAccessControlAuthoritativeMembershipFactReader.mockImplementation(() => { throw new Error('unavailable'); });
+    }],
+    ['identity reader factory throws', () => {
+      routeMocks.verifyFormalCookie.mockReturnValue({ kind: 'verified', verifiedClaims: routeMocks.verifiedClaims });
+      routeMocks.createIdentityAuthoritativeFormalSessionIdentityFactReader.mockImplementation(() => { throw new Error('unavailable'); });
+    }],
+    ['scope reader factory throws', () => {
+      routeMocks.verifyFormalCookie.mockReturnValue({ kind: 'verified', verifiedClaims: routeMocks.verifiedClaims });
+      routeMocks.createTenancyAuthoritativeInstitutionScopeFactReader.mockImplementation(() => { throw new Error('unavailable'); });
+    }],
+    ['context factory throws', () => {
+      routeMocks.verifyFormalCookie.mockReturnValue({ kind: 'verified', verifiedClaims: routeMocks.verifiedClaims });
+      routeMocks.createFormalInstitutionSessionContextResolver.mockImplementation(() => { throw new Error('unavailable'); });
+    }],
+    ['context proxy', () => {
+      routeMocks.verifyFormalCookie.mockReturnValue({ kind: 'verified', verifiedClaims: routeMocks.verifiedClaims });
+      routeMocks.contextResolver.resolveForSession.mockResolvedValue(hostileProxy());
     }],
     ['snapshot consumer throws', () => {
       routeMocks.verifyFormalCookie.mockReturnValue({ kind: 'verified', verifiedClaims: routeMocks.verifiedClaims });
@@ -655,13 +878,13 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
     expect(routeMocks.decodeDemoSession).not.toHaveBeenCalled();
   });
 
-  it('formal session DB throw 返回 503 而不混成 401', async () => {
+  it('formal session Identity Reader factory throw 返回 503 而不混成 401', async () => {
     routeMocks.verifyFormalCookie.mockReturnValue({
       kind: 'verified',
       verifiedClaims: routeMocks.verifiedClaims,
     });
-    routeMocks.getDatabase.mockImplementation(() => {
-      throw new Error('database unavailable');
+    routeMocks.createIdentityAuthoritativeFormalSessionIdentityFactReader.mockImplementation(() => {
+      throw new Error('identity unavailable');
     });
     const { GET } = await import('@/app/api/auth/session/route');
     const response = await GET(sessionRequest(`${FORMAL_SERVER_SESSION_COOKIE_V1}=formal`));

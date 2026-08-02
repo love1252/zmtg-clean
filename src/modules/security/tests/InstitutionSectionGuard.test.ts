@@ -2,17 +2,70 @@ import { createHash } from 'node:crypto';
 
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
-import type { CurrentInstitutionMembershipFactRow } from '@/modules/auth/server/auth-account-repository';
+const readerProvenance = vi.hoisted(() => ({
+  identity: new WeakSet<object>(),
+  membership: new WeakSet<object>(),
+  scope: new WeakSet<object>(),
+}));
+
+vi.mock(
+  '@/modules/auth/application/authoritative-formal-session-identity-reader',
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import('@/modules/auth/application/authoritative-formal-session-identity-reader')
+    >();
+    return {
+      ...actual,
+      isAuthoritativeFormalSessionIdentityFactReaderV1(value: unknown) {
+        return value !== null && typeof value === 'object' && readerProvenance.identity.has(value);
+      },
+    };
+  },
+);
+
+vi.mock(
+  '@/modules/access-control/application/authoritative-membership-reader',
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import('@/modules/access-control/application/authoritative-membership-reader')
+    >();
+    return {
+      ...actual,
+      isAuthoritativeMembershipFactReaderV1(value: unknown) {
+        return value !== null && typeof value === 'object' && readerProvenance.membership.has(value);
+      },
+    };
+  },
+);
+
+vi.mock(
+  '@/modules/tenancy/application/authoritative-institution-scope-reader',
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import('@/modules/tenancy/application/authoritative-institution-scope-reader')
+    >();
+    return {
+      ...actual,
+      isAuthoritativeInstitutionScopeFactReaderV1(value: unknown) {
+        return value !== null && typeof value === 'object' && readerProvenance.scope.has(value);
+      },
+    };
+  },
+);
+
+import {
+  createAuthoritativeInstitutionMembershipFactReaderV1 as createUnbrandedMembershipFactReaderV1,
+  type CurrentInstitutionMembershipFactRow,
+} from '@/modules/access-control/server/authoritative-membership-reader';
+import type { AuthoritativeFormalSessionIdentityFactReaderV1 } from '@/modules/auth/ports/authoritative-formal-session-identity-reader';
 import {
   INSTITUTION_NAVIGATION_SECTION_IDS_V1,
   INSTITUTION_ROLES_V1,
   type InstitutionNavigationSectionIdV1,
   type InstitutionRoleV1,
 } from '@/modules/institution-contracts/v1/institution-navigation';
-import {
-  createActiveInstitutionAnchorProviderV1,
-  type AuthoritativeInstitutionAnchorFactReaderV1,
-} from '@/modules/security/server/institution-anchor-provider';
+import { createActiveInstitutionAnchorProviderV1 } from '@/modules/security/server/institution-anchor-provider';
+import type { AuthoritativeInstitutionScopeFactReaderV1 } from '@/modules/tenancy/ports/authoritative-institution-scope-reader';
 import {
   createFormalRequestProvenanceResolverV1,
   type FormalRequestProvenanceOwnerInputV1,
@@ -25,7 +78,6 @@ import {
   type InstitutionGuardReferenceOwnerSubjectV1,
 } from '@/modules/security/server/institution-guard-reference';
 import {
-  createAuthoritativeInstitutionMembershipFactReaderV1,
   createRequestBoundFreshActiveMembershipProviderV1,
 } from '@/modules/security/server/institution-membership-provider';
 import {
@@ -44,6 +96,36 @@ import {
   type InstitutionSectionGuardInputV1,
   type InstitutionSectionGuardV1,
 } from '@/modules/security/server/institution-section-guard';
+
+function createAuthoritativeInstitutionMembershipFactReaderV1(
+  input: Parameters<typeof createUnbrandedMembershipFactReaderV1>[0],
+) {
+  const reader = createUnbrandedMembershipFactReaderV1(input);
+  readerProvenance.membership.add(reader);
+  return reader;
+}
+
+function genuineScopeFactReaderForTest<T extends object>(reader: T): T {
+  readerProvenance.scope.add(reader);
+  return reader;
+}
+
+function genuineIdentityFactReaderForTest(
+  accountId: string,
+): AuthoritativeFormalSessionIdentityFactReaderV1 {
+  const reader = Object.freeze({
+    resolve: vi.fn(async () => ({
+      kind: 'current_identity_fact' as const,
+      accountId,
+      username: 'section_operator',
+      displayName: '栏目操作员',
+      status: 'active' as const,
+      observedAt: SCOPE_NOW.toISOString(),
+    })),
+  });
+  readerProvenance.identity.add(reader);
+  return reader;
+}
 
 const SCOPE_NOW = new Date('2026-07-22T08:00:30.000Z');
 const SECTION_NOW = new Date('2026-07-22T08:00:31.000Z');
@@ -129,14 +211,21 @@ function genuineScopeComposition(
     timing.membershipObservedAt ?? '2026-07-22T08:00:00.000Z';
   const membershipRow: CurrentInstitutionMembershipFactRow = {
     accountId: 'account-a',
-    accountStatus: 'active',
-    accountPasswordResetRequired: false,
-    accountLockedUntil: null,
     membershipId: 'membership-a',
     membershipTenantId: 'tenant-a',
     membershipUserId: 'account-a',
     membershipRole: role,
-    membershipUpdatedAt: new Date('2026-07-22T07:58:00.000Z'),
+    membershipDisplayName: '机构成员',
+    membershipRevision: 1,
+    membershipLifecycleStatus: 'active',
+    membershipProvenanceSource: 'legacy_calibration',
+    membershipProvenanceActorId: null,
+    membershipProvenanceReasonCode: 'legacy_unknown',
+    membershipProvenanceCommandId: `mcal1_${'f'.repeat(64)}`,
+    membershipProvenanceOccurredAt: null,
+    membershipProvenanceRecordedAt: new Date('2026-07-22T07:58:00.000Z'),
+    membershipRevokedAt: null,
+    membershipDeletedAt: null,
     bindingId: 'binding-a',
     bindingAccountId: 'account-a',
     bindingTenantId: 'tenant-a',
@@ -158,24 +247,28 @@ function genuineScopeComposition(
     });
   const membershipProvider = createRequestBoundFreshActiveMembershipProviderV1({
     accountId: 'account-a',
+    identityFactReader: genuineIdentityFactReaderForTest('account-a'),
     factReader: membershipFactReader,
     referenceCodec: membershipCodec,
     now: () => SCOPE_NOW,
   });
   const resolveAnchorFact = vi.fn(async () =>
     Object.freeze({
-      kind: 'current_anchor_fact',
+      kind: 'current_scope_fact',
       tenantId: 'tenant-a',
       institutionId: 'institution-a',
+      status: 'active',
       revision: 7,
       observedAt:
         timing.anchorObservedAt ?? '2026-07-22T08:00:00.000Z',
     }),
   );
   const anchorProvider = createActiveInstitutionAnchorProviderV1({
-    factReader: Object.freeze({
-      resolve: resolveAnchorFact,
-    }) as AuthoritativeInstitutionAnchorFactReaderV1,
+    factReader: genuineScopeFactReaderForTest(
+      Object.freeze({
+        resolve: resolveAnchorFact,
+      }) as AuthoritativeInstitutionScopeFactReaderV1,
+    ),
     referenceCodec: anchorCodec,
     now: () => SCOPE_NOW,
   });
@@ -506,8 +599,8 @@ describe('WB-BASE-SECTION-GUARD-04A', () => {
 
     expect(result).toEqual({ kind: 'rejected', code: 'policy_unavailable' });
     expect(scope.downstream.provenanceNow).toHaveBeenCalledTimes(1);
-    expect(scope.downstream.resolveMembershipFact).toHaveBeenCalledTimes(1);
-    expect(scope.downstream.resolveAnchorFact).toHaveBeenCalledTimes(1);
+    expect(scope.downstream.resolveMembershipFact).toHaveBeenCalledTimes(4);
+    expect(scope.downstream.resolveAnchorFact).toHaveBeenCalledTimes(2);
     expect(secondNow).toHaveBeenCalledTimes(1);
     expect(result).not.toHaveProperty('scopeAllow');
     expect(result).not.toHaveProperty('tenantId');
@@ -955,8 +1048,8 @@ describe('BASE-NAV-01 canonical visible navigation authorization', () => {
       expect(new Set(decision.availableSectionIds).size).toBe(
         decision.availableSectionIds.length,
       );
-      expect(scope.downstream.resolveMembershipFact).toHaveBeenCalledTimes(1);
-      expect(scope.downstream.resolveAnchorFact).toHaveBeenCalledTimes(1);
+      expect(scope.downstream.resolveMembershipFact).toHaveBeenCalledTimes(4);
+      expect(scope.downstream.resolveAnchorFact).toHaveBeenCalledTimes(2);
       expect(Object.keys(decision)).toEqual([
         'kind',
         'targetSectionId',
@@ -1059,8 +1152,8 @@ describe('BASE-NAV-01 canonical visible navigation authorization', () => {
     await expect(
       guard.authorizeCurrentSection({ sectionId: 'workbench' }),
     ).resolves.toEqual({ kind: 'rejected', code: 'scope_unavailable' });
-    expect(scope.downstream.resolveMembershipFact).toHaveBeenCalledTimes(1);
-    expect(scope.downstream.resolveAnchorFact).toHaveBeenCalledTimes(1);
+    expect(scope.downstream.resolveMembershipFact).toHaveBeenCalledTimes(4);
+    expect(scope.downstream.resolveAnchorFact).toHaveBeenCalledTimes(2);
   });
 
   it('recognizes only genuine decisions without reading hostile values', async () => {

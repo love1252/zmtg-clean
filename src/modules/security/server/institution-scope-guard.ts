@@ -18,12 +18,14 @@ import {
   type ActiveInstitutionAnchorEvidenceV1,
   type ActiveInstitutionAnchorProviderV1,
   type AnchorRevisionReferenceV1,
+  type BindingReferenceV1,
   type BindingRevisionReferenceV1,
   type FormalRequestProvenanceEvidenceV1,
   type FormalProvenanceResolverV1,
   type FreshActiveMembershipEvidenceV1,
   type FreshActiveMembershipProviderV1,
   type MembershipRevisionReferenceV1,
+  type MembershipReferenceV1,
   type RequestReferenceV1,
   type UserReferenceV1,
 } from '@/modules/security/server/institution-guard-evidence';
@@ -157,7 +159,9 @@ type MembershipSnapshotV1 = Readonly<{
   role: InstitutionRoleV1;
   tenantId: string;
   institutionId: string;
+  membershipReference: MembershipReferenceV1;
   membershipRevision: MembershipRevisionReferenceV1;
+  bindingReference: BindingReferenceV1;
   bindingRevision: BindingRevisionReferenceV1;
   observedAt: CanonicalInstantV1;
   freshUntil: CanonicalInstantV1;
@@ -339,8 +343,11 @@ function parseMembership(value: unknown): MembershipSnapshotV1 | null {
     role: snapshot.role,
     tenantId: snapshot.tenantId,
     institutionId: snapshot.institutionId,
+    membershipReference:
+      snapshot.membershipReference as MembershipReferenceV1,
     membershipRevision:
       snapshot.membershipRevision as MembershipRevisionReferenceV1,
+    bindingReference: snapshot.bindingReference as BindingReferenceV1,
     bindingRevision: snapshot.bindingRevision as BindingRevisionReferenceV1,
     observedAt,
     freshUntil,
@@ -517,6 +524,65 @@ function isMembershipRejectionCode(
   return MEMBERSHIP_REJECTION_CODES_V1.some((code) => code === value);
 }
 
+type MembershipReadV1 =
+  | Readonly<{ kind: 'resolved'; membership: MembershipSnapshotV1 }>
+  | Readonly<{
+      kind: 'rejected';
+      code:
+        | 'membership_denied'
+        | 'membership_invalid'
+        | 'membership_unavailable'
+        | 'membership_stale';
+    }>;
+
+async function readCurrentMembership(
+  dependencies: ScopeGuardDependenciesV1,
+  request: Parameters<FreshActiveMembershipProviderV1['resolve']>[0],
+): Promise<MembershipReadV1> {
+  if (!dependencies.resolveMembership) {
+    return Object.freeze({ kind: 'rejected', code: 'membership_unavailable' });
+  }
+  let rawResolution: unknown;
+  try {
+    rawResolution = await dependencies.resolveMembership(request);
+  } catch {
+    return Object.freeze({ kind: 'rejected', code: 'membership_unavailable' });
+  }
+  const failedResolution = snapshotExactPlainRecord(rawResolution, [
+    'kind',
+    'code',
+  ]);
+  if (
+    failedResolution?.kind === 'rejected' &&
+    isMembershipRejectionCode(failedResolution.code)
+  ) {
+    return Object.freeze({
+      kind: 'rejected',
+      code: failedResolution.code,
+    });
+  }
+  const membership = parseMembership(rawResolution);
+  return membership
+    ? Object.freeze({ kind: 'resolved', membership })
+    : Object.freeze({ kind: 'rejected', code: 'membership_invalid' });
+}
+
+function isSameMembershipAuthorizationFact(
+  expected: MembershipSnapshotV1,
+  current: MembershipSnapshotV1,
+): boolean {
+  return (
+    current.userReference === expected.userReference &&
+    current.role === expected.role &&
+    current.tenantId === expected.tenantId &&
+    current.institutionId === expected.institutionId &&
+    current.membershipReference === expected.membershipReference &&
+    current.membershipRevision === expected.membershipRevision &&
+    current.bindingReference === expected.bindingReference &&
+    current.bindingRevision === expected.bindingRevision
+  );
+}
+
 async function authorizeCurrentRequest(
   dependencies: ScopeGuardDependenciesV1,
 ): Promise<InstitutionScopeGuardResolutionV1> {
@@ -566,19 +632,16 @@ async function authorizeCurrentRequest(
   const provenance = parseProvenance(verifiedProvenanceResolution.evidence);
   if (!provenance) return reject('invalid_context_shape');
 
-  const decisionTime = trustedNow(dependencies.now);
-  if (!decisionTime) return reject('provenance_unavailable');
+  const provenanceCheckedAt = trustedNow(dependencies.now);
+  if (!provenanceCheckedAt) return reject('provenance_unavailable');
   if (
-    provenance.issuedAt.epochMs > decisionTime.epochMs ||
-    provenance.verifiedAt.epochMs > decisionTime.epochMs
+    provenance.issuedAt.epochMs > provenanceCheckedAt.epochMs ||
+    provenance.verifiedAt.epochMs > provenanceCheckedAt.epochMs
   ) {
     return reject('invalid_context_shape');
   }
-  if (decisionTime.epochMs >= provenance.validUntil.epochMs) {
+  if (provenanceCheckedAt.epochMs >= provenance.validUntil.epochMs) {
     return reject('provenance_expired');
-  }
-  if (!dependencies.resolveMembership) {
-    return reject('membership_unavailable');
   }
 
   const requestedScope = Object.freeze({
@@ -590,35 +653,33 @@ async function authorizeCurrentRequest(
       verifiedProvenanceResolution.evidence as FormalRequestProvenanceEvidenceV1,
     requestedScope,
   });
-  let rawMembershipResolution: unknown;
-  try {
-    rawMembershipResolution =
-      await dependencies.resolveMembership(membershipRequest);
-  } catch {
+  const expectedMembershipRead = await readCurrentMembership(
+    dependencies,
+    membershipRequest,
+  );
+  if (expectedMembershipRead.kind === 'rejected') {
+    return reject(expectedMembershipRead.code);
+  }
+  const expectedMembership = expectedMembershipRead.membership;
+  const membershipCheckedAt = trustedNow(dependencies.now);
+  if (
+    !membershipCheckedAt ||
+    membershipCheckedAt.epochMs < provenanceCheckedAt.epochMs
+  ) {
     return reject('membership_unavailable');
   }
-
-  const failedMembershipResolution = snapshotExactPlainRecord(
-    rawMembershipResolution,
-    ['kind', 'code'],
-  );
-  if (
-    failedMembershipResolution?.kind === 'rejected' &&
-    isMembershipRejectionCode(failedMembershipResolution.code)
-  ) {
-    return reject(failedMembershipResolution.code);
+  if (membershipCheckedAt.epochMs >= provenance.validUntil.epochMs) {
+    return reject('provenance_expired');
   }
-  const membership = parseMembership(rawMembershipResolution);
-  if (!membership) return reject('membership_invalid');
   if (
-    membership.userReference !== provenance.userReference ||
-    membership.tenantId !== provenance.tenantId ||
-    membership.institutionId !== provenance.institutionId ||
-    membership.observedAt.epochMs > decisionTime.epochMs
+    expectedMembership.userReference !== provenance.userReference ||
+    expectedMembership.tenantId !== provenance.tenantId ||
+    expectedMembership.institutionId !== provenance.institutionId ||
+    expectedMembership.observedAt.epochMs > membershipCheckedAt.epochMs
   ) {
     return reject('membership_invalid');
   }
-  if (decisionTime.epochMs >= membership.freshUntil.epochMs) {
+  if (membershipCheckedAt.epochMs >= expectedMembership.freshUntil.epochMs) {
     return reject('membership_stale');
   }
   if (!dependencies.resolveAnchor) {
@@ -649,6 +710,37 @@ async function authorizeCurrentRequest(
   }
   const anchor = parseAnchor(rawAnchorResolution);
   if (!anchor) return reject('institution_anchor_unavailable');
+
+  const currentMembershipRead = await readCurrentMembership(
+    dependencies,
+    membershipRequest,
+  );
+  if (currentMembershipRead.kind === 'rejected') {
+    return reject(currentMembershipRead.code);
+  }
+  const membership = currentMembershipRead.membership;
+  const decisionTime = trustedNow(dependencies.now);
+  if (!decisionTime || decisionTime.epochMs < membershipCheckedAt.epochMs) {
+    return reject('institution_anchor_unavailable');
+  }
+  if (decisionTime.epochMs >= provenance.validUntil.epochMs) {
+    return reject('provenance_expired');
+  }
+  if (
+    membership.userReference !== provenance.userReference ||
+    membership.tenantId !== provenance.tenantId ||
+    membership.institutionId !== provenance.institutionId ||
+    membership.observedAt.epochMs > decisionTime.epochMs
+  ) {
+    return reject('membership_invalid');
+  }
+  if (
+    decisionTime.epochMs >= expectedMembership.freshUntil.epochMs ||
+    decisionTime.epochMs >= membership.freshUntil.epochMs ||
+    !isSameMembershipAuthorizationFact(expectedMembership, membership)
+  ) {
+    return reject('membership_stale');
+  }
   if (
     anchor.tenantId !== provenance.tenantId ||
     anchor.institutionId !== provenance.institutionId ||

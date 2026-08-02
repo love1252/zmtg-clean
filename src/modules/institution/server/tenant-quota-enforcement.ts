@@ -210,6 +210,7 @@ export function createTenantQuotaEnforcementRepository(database: TenantDatabase)
           and(
             eq(tenantMembers.tenantId, tenantId),
             eq(tenantMembers.role, 'tenant_admin'),
+            eq(tenantMembers.lifecycleStatus, 'active'),
             eq(authUsers.status, 'active'),
           ),
         );

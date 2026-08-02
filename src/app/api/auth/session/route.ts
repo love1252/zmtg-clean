@@ -2,11 +2,13 @@ import { isProxy } from 'node:util/types';
 
 import { NextResponse } from 'next/server';
 
-import { isAuthRole, type AuthSessionUser } from '@/modules/auth/domain/session';
+import { createAccessControlAuthoritativeMembershipFactReaderV1 } from '@/modules/access-control/application/authoritative-membership-reader';
 import {
   consumeFormalServerSessionUserSnapshotV1,
-  createAuthAccountRepository,
-} from '@/modules/auth/server/auth-account-repository';
+  createFormalInstitutionSessionContextResolverV1,
+} from '@/modules/auth/application/formal-institution-session-context';
+import { createIdentityAuthoritativeFormalSessionIdentityFactReaderV1 } from '@/modules/auth/application/authoritative-formal-session-identity-reader';
+import { isAuthRole, type AuthSessionUser } from '@/modules/auth/domain/session';
 import {
   consumeFormalServerSessionVerifiedClaimsV1,
   FORMAL_SERVER_SESSION_COOKIE_V1,
@@ -18,7 +20,7 @@ import {
   isDemoAuthEnabled,
 } from '@/modules/auth/server/demo-session';
 import { resolveInstitutionGuardRuntimeConfigV1 } from '@/modules/security/server/institution-guard-runtime-config';
-import { getDatabase } from '@/server/db/client';
+import { createTenancyAuthoritativeInstitutionScopeFactReaderV1 } from '@/modules/tenancy/application/authoritative-institution-scope-reader';
 
 const SESSION_USER_KEYS = Object.freeze([
   'id',
@@ -248,18 +250,25 @@ function snapshotClaims(value: unknown): Readonly<{
 
 function snapshotFormalSessionLookup(
   value: unknown,
-): Readonly<{ kind: 'denied' | 'invalid' | 'unavailable' }> | Readonly<{
+): Readonly<{ kind: 'denied' | 'invalid' | 'unavailable' | 'stale' }> | Readonly<{
   kind: 'resolved';
   snapshot: unknown;
 }> | null {
   const basic = snapshotExactPlainRecord(value, ['kind']);
   if (
     basic &&
-    (basic.kind === 'denied' || basic.kind === 'invalid' || basic.kind === 'unavailable')
+    (basic.kind === 'denied' ||
+      basic.kind === 'invalid' ||
+      basic.kind === 'unavailable' ||
+      basic.kind === 'stale')
   ) {
     return Object.freeze({ kind: basic.kind });
   }
-  const resolved = snapshotExactPlainRecord(value, ['kind', 'snapshot']);
+  const resolved = snapshotExactPlainRecord(value, [
+    'kind',
+    'snapshot',
+    'membershipAudit',
+  ]);
   if (!resolved || resolved.kind !== 'resolved') return null;
   return Object.freeze({ kind: 'resolved', snapshot: resolved.snapshot });
 }
@@ -344,9 +353,18 @@ export async function GET(request: Request) {
     }
     if (!claims) return unavailable();
 
-    let repository: ReturnType<typeof createAuthAccountRepository>;
+    let contextResolver: ReturnType<
+      typeof createFormalInstitutionSessionContextResolverV1
+    >;
     try {
-      repository = createAuthAccountRepository(getDatabase());
+      contextResolver = createFormalInstitutionSessionContextResolverV1({
+        identityReader:
+          createIdentityAuthoritativeFormalSessionIdentityFactReaderV1(),
+        membershipReader:
+          createAccessControlAuthoritativeMembershipFactReaderV1(),
+        scopeReader:
+          createTenancyAuthoritativeInstitutionScopeFactReaderV1(),
+      });
     } catch {
       return unavailable();
     }
@@ -354,13 +372,13 @@ export async function GET(request: Request) {
     let snapshot: ReturnType<typeof snapshotFormalSessionLookup>;
     try {
       snapshot = snapshotFormalSessionLookup(
-        await repository.findCurrentFormalSessionUser(claims),
+        await contextResolver.resolveForSession(claims),
       );
     } catch {
       return unavailable();
     }
     if (!snapshot) return unavailable();
-    if (snapshot.kind === 'denied') {
+    if (snapshot.kind === 'denied' || snapshot.kind === 'stale') {
       return unauthenticated([FORMAL_SERVER_SESSION_COOKIE_V1]);
     }
     if (snapshot.kind !== 'resolved') return unavailable();

@@ -2,11 +2,13 @@ import * as crypto from 'node:crypto';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { isProxy } from 'node:util/types';
 
-import type { AuthSessionUser } from '@/modules/auth/domain/session';
+import type { AuthoritativeMembershipFactReaderV1 } from '@/modules/access-control/ports/authoritative-membership-reader';
 import {
   consumeFormalServerSessionUserSnapshotV1,
   type FormalServerSessionUserSnapshotV1,
-} from '@/modules/auth/server/auth-account-repository';
+} from '@/modules/auth/application/formal-institution-session-context';
+import type { AuthSessionUser } from '@/modules/auth/domain/session';
+import type { AuthoritativeFormalSessionIdentityFactReaderV1 } from '@/modules/auth/ports/authoritative-formal-session-identity-reader';
 import { isInstitutionScopeIdV1 } from '@/modules/security/domain/institution-access';
 import {
   createFormalRequestProvenanceResolverFromOwnerResolutionV1,
@@ -22,7 +24,6 @@ import type { InstitutionGuardReferenceCodecV1 } from '@/modules/security/server
 import {
   createRequestBoundFreshActiveMembershipProviderV1,
   isFreshActiveMembershipProviderV1,
-  type AuthoritativeInstitutionMembershipFactReaderV1,
 } from '@/modules/security/server/institution-membership-provider';
 
 export const FORMAL_SERVER_SESSION_COOKIE_V1 =
@@ -62,6 +63,7 @@ const VERIFIED_CLAIMS_INPUT_KEYS = Object.freeze([
 const REQUEST_OWNER_FACTORY_INPUT_KEYS = Object.freeze([
   'cookieHeader',
   'sessionKeyRing',
+  'identityFactReader',
   'membershipFactReader',
   'referenceCodec',
   'now',
@@ -922,7 +924,8 @@ export function createFormalServerSessionProvenanceResolverV1(
 export function createFormalServerSessionRequestOwnerV1(input: Readonly<{
   cookieHeader: string | null;
   sessionKeyRing: FormalServerSessionKeyRingV1;
-  membershipFactReader: AuthoritativeInstitutionMembershipFactReaderV1;
+  identityFactReader: AuthoritativeFormalSessionIdentityFactReaderV1;
+  membershipFactReader: AuthoritativeMembershipFactReaderV1;
   referenceCodec: InstitutionGuardReferenceCodecV1;
   now: () => Date;
 }>): FormalServerSessionRequestOwnerV1 {
@@ -941,7 +944,9 @@ export function createFormalServerSessionRequestOwnerV1(input: Readonly<{
       : '';
   const membershipProvider = createRequestBoundFreshActiveMembershipProviderV1({
     accountId,
-    factReader: inputSnapshot?.membershipFactReader as AuthoritativeInstitutionMembershipFactReaderV1,
+    identityFactReader:
+      inputSnapshot?.identityFactReader as AuthoritativeFormalSessionIdentityFactReaderV1,
+    factReader: inputSnapshot?.membershipFactReader as AuthoritativeMembershipFactReaderV1,
     referenceCodec: composition.referenceCodec as InstitutionGuardReferenceCodecV1,
     now: composition.now as () => Date,
   });

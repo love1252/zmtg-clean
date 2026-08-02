@@ -1,25 +1,40 @@
 import { createHmac } from 'node:crypto';
+import { isProxy } from 'node:util/types';
 
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 
-import type { CurrentInstitutionMembershipFactRow } from '@/modules/auth/server/auth-account-repository';
+import {
+  createAuthoritativeInstitutionMembershipFactReaderV1,
+  type CurrentInstitutionMembershipFactRow,
+} from '@/modules/access-control/server/authoritative-membership-reader';
 import { FORMAL_SERVER_SESSION_COOKIE_V1 } from '@/modules/auth/server/formal-server-session-provenance-owner';
 import { resolveInstitutionServerAuthorizationV1 } from '@/modules/institution/server/institution-server-runtime';
-import type { CurrentInstitutionAnchorFactRowV1 } from '@/modules/security/server/institution-anchor-repository';
 import * as requestAuthorization from '@/modules/security/server/institution-request-authorization';
 import {
   isInstitutionRequestAuthorizationV1,
   type InstitutionRequestAuthorizationV1,
 } from '@/modules/security/server/institution-request-authorization';
 import { isInstitutionSectionAllowV1 } from '@/modules/security/server/institution-section-guard';
+import {
+  createAuthoritativeInstitutionScopeFactReaderV1,
+  type CurrentInstitutionScopeFactRowV1,
+} from '@/modules/tenancy/server/authoritative-institution-scope-reader';
+
+const readerProvenance = vi.hoisted(() => ({
+  identity: new WeakSet<object>(),
+  membership: new WeakSet<object>(),
+  scope: new WeakSet<object>(),
+}));
 
 const runtimeMocks = vi.hoisted(() => ({
   anchorRead: vi.fn(),
   cookieGet: vi.fn(),
   cookies: vi.fn(),
-  createAuthAccountRepository: vi.fn(),
-  createInstitutionAnchorFactRepositoryV1: vi.fn(),
+  createAccessControlAuthoritativeMembershipFactReaderV1: vi.fn(),
+  createIdentityAuthoritativeFormalSessionIdentityFactReaderV1: vi.fn(),
+  createTenancyAuthoritativeInstitutionScopeFactReaderV1: vi.fn(),
   getDatabase: vi.fn(),
+  identityRead: vi.fn(),
   membershipRead: vi.fn(),
   resolveInstitutionGuardRuntimeConfigV1: vi.fn(),
 }));
@@ -31,26 +46,50 @@ vi.mock('@/server/db/client', async (importOriginal) => {
   return { ...actual, getDatabase: runtimeMocks.getDatabase };
 });
 
-vi.mock('@/modules/auth/server/auth-account-repository', async (importOriginal) => {
+vi.mock('@/modules/access-control/application/authoritative-membership-reader', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@/modules/auth/server/auth-account-repository')>();
+    await importOriginal<typeof import('@/modules/access-control/application/authoritative-membership-reader')>();
   return {
     ...actual,
-    createAuthAccountRepository: runtimeMocks.createAuthAccountRepository,
+    createAccessControlAuthoritativeMembershipFactReaderV1:
+      runtimeMocks.createAccessControlAuthoritativeMembershipFactReaderV1,
+    isAuthoritativeMembershipFactReaderV1(value: unknown) {
+      return value !== null && typeof value === 'object' && readerProvenance.membership.has(value);
+    },
   };
 });
 
 vi.mock(
-  '@/modules/security/server/institution-anchor-repository',
+  '@/modules/auth/application/authoritative-formal-session-identity-reader',
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import('@/modules/auth/application/authoritative-formal-session-identity-reader')
+    >();
+    return {
+      ...actual,
+      createIdentityAuthoritativeFormalSessionIdentityFactReaderV1:
+        runtimeMocks.createIdentityAuthoritativeFormalSessionIdentityFactReaderV1,
+      isAuthoritativeFormalSessionIdentityFactReaderV1(value: unknown) {
+        return value !== null && typeof value === 'object' && readerProvenance.identity.has(value);
+      },
+    };
+  },
+);
+
+vi.mock(
+  '@/modules/tenancy/application/authoritative-institution-scope-reader',
   async (importOriginal) => {
     const actual =
       await importOriginal<
-        typeof import('@/modules/security/server/institution-anchor-repository')
+        typeof import('@/modules/tenancy/application/authoritative-institution-scope-reader')
       >();
     return {
       ...actual,
-      createInstitutionAnchorFactRepositoryV1:
-        runtimeMocks.createInstitutionAnchorFactRepositoryV1,
+      createTenancyAuthoritativeInstitutionScopeFactReaderV1:
+        runtimeMocks.createTenancyAuthoritativeInstitutionScopeFactReaderV1,
+      isAuthoritativeInstitutionScopeFactReaderV1(value: unknown) {
+        return value !== null && typeof value === 'object' && readerProvenance.scope.has(value);
+      },
     };
   },
 );
@@ -91,14 +130,21 @@ const payload = Object.freeze({
 
 const membershipRow: CurrentInstitutionMembershipFactRow = {
   accountId: payload.accountId,
-  accountStatus: 'active',
-  accountPasswordResetRequired: false,
-  accountLockedUntil: null,
   membershipId: 'membership-server-runtime-001',
   membershipTenantId: payload.tenantId,
   membershipUserId: payload.accountId,
   membershipRole: 'tenant_admin',
-  membershipUpdatedAt: new Date('2026-07-22T08:01:00.000Z'),
+  membershipDisplayName: '机构管理员',
+  membershipRevision: 1,
+  membershipLifecycleStatus: 'active',
+  membershipProvenanceSource: 'legacy_calibration',
+  membershipProvenanceActorId: null,
+  membershipProvenanceReasonCode: 'legacy_unknown',
+  membershipProvenanceCommandId: `mcal1_${'c'.repeat(64)}`,
+  membershipProvenanceOccurredAt: null,
+  membershipProvenanceRecordedAt: new Date('2026-07-22T08:01:00.000Z'),
+  membershipRevokedAt: null,
+  membershipDeletedAt: null,
   bindingId: 'binding-server-runtime-001',
   bindingAccountId: payload.accountId,
   bindingTenantId: payload.tenantId,
@@ -111,7 +157,7 @@ const membershipRow: CurrentInstitutionMembershipFactRow = {
   bindingVersion: 1,
 };
 
-const anchorRow: CurrentInstitutionAnchorFactRowV1 = {
+const anchorRow: CurrentInstitutionScopeFactRowV1 = {
   tenantId: payload.tenantId,
   institutionId: payload.institutionId,
   status: 'active',
@@ -180,9 +226,17 @@ function expectNoCookieOrPersistence() {
   expect(runtimeMocks.cookies).not.toHaveBeenCalled();
   expect(runtimeMocks.cookieGet).not.toHaveBeenCalled();
   expect(runtimeMocks.getDatabase).not.toHaveBeenCalled();
-  expect(runtimeMocks.createAuthAccountRepository).not.toHaveBeenCalled();
-  expect(runtimeMocks.createInstitutionAnchorFactRepositoryV1).not.toHaveBeenCalled();
+  expect(
+    runtimeMocks.createAccessControlAuthoritativeMembershipFactReaderV1,
+  ).not.toHaveBeenCalled();
+  expect(
+    runtimeMocks.createIdentityAuthoritativeFormalSessionIdentityFactReaderV1,
+  ).not.toHaveBeenCalled();
+  expect(
+    runtimeMocks.createTenancyAuthoritativeInstitutionScopeFactReaderV1,
+  ).not.toHaveBeenCalled();
   expect(runtimeMocks.membershipRead).not.toHaveBeenCalled();
+  expect(runtimeMocks.identityRead).not.toHaveBeenCalled();
   expect(runtimeMocks.anchorRead).not.toHaveBeenCalled();
 }
 
@@ -207,14 +261,110 @@ describe('BASE-RUNTIME-01 institution server authorization root', () => {
       value: signToken(),
     });
     runtimeMocks.getDatabase.mockReturnValue(database);
+    runtimeMocks.identityRead.mockImplementation(async (input) => ({
+      kind: 'current_identity_fact' as const,
+      accountId: input.accountId,
+      username: 'runtime_operator',
+      displayName: '运行时操作员',
+      status: 'active' as const,
+      observedAt: NOW.toISOString(),
+    }));
     runtimeMocks.membershipRead.mockResolvedValue([membershipRow]);
     runtimeMocks.anchorRead.mockResolvedValue([anchorRow]);
-    runtimeMocks.createAuthAccountRepository.mockReturnValue({
-      findCurrentInstitutionMembershipFacts: runtimeMocks.membershipRead,
-    });
-    runtimeMocks.createInstitutionAnchorFactRepositoryV1.mockReturnValue({
-      findCurrentInstitutionAnchorFacts: runtimeMocks.anchorRead,
-    });
+    runtimeMocks.createIdentityAuthoritativeFormalSessionIdentityFactReaderV1.mockImplementation(
+      () => {
+        let state: 'pending' | 'resolved' | 'failed' = 'pending';
+        const reader = Object.freeze({
+          async resolve(input: Readonly<{ accountId: string }>) {
+            if (state === 'failed') {
+              return Object.freeze({
+                kind: 'rejected' as const,
+                code: 'identity_unavailable' as const,
+              });
+            }
+            if (state === 'pending') {
+              state = 'failed';
+              const candidate: unknown = runtimeMocks.getDatabase();
+              if (
+                candidate === null ||
+                (typeof candidate !== 'object' && typeof candidate !== 'function') ||
+                isProxy(candidate)
+              ) {
+                return Object.freeze({
+                  kind: 'rejected' as const,
+                  code: 'identity_unavailable' as const,
+                });
+              }
+              state = 'resolved';
+            }
+            return runtimeMocks.identityRead(input);
+          },
+        });
+        readerProvenance.identity.add(reader);
+        return reader;
+      },
+    );
+    runtimeMocks.createAccessControlAuthoritativeMembershipFactReaderV1.mockImplementation(
+      () => {
+        let state: 'pending' | 'resolved' | 'failed' = 'pending';
+        const reader = createAuthoritativeInstitutionMembershipFactReaderV1({
+          repository: {
+            async findCurrentInstitutionMembershipFacts(input) {
+              if (state === 'failed') {
+                throw new Error('membership database unavailable');
+              }
+              if (state === 'pending') {
+                state = 'failed';
+                const candidate: unknown = runtimeMocks.getDatabase();
+                if (
+                  candidate === null ||
+                  (typeof candidate !== 'object' &&
+                    typeof candidate !== 'function') ||
+                  isProxy(candidate)
+                ) {
+                  throw new Error('membership database unavailable');
+                }
+                state = 'resolved';
+              }
+              return runtimeMocks.membershipRead(input);
+            },
+          },
+          now: () => new Date(Date.now()),
+        });
+        readerProvenance.membership.add(reader);
+        return reader;
+      },
+    );
+    runtimeMocks.createTenancyAuthoritativeInstitutionScopeFactReaderV1.mockImplementation(
+      () => {
+        let state: 'pending' | 'resolved' | 'failed' = 'pending';
+        const reader = createAuthoritativeInstitutionScopeFactReaderV1({
+          repository: {
+            async findCurrentInstitutionScopeFacts(input) {
+              if (state === 'failed') {
+                throw new Error('scope database unavailable');
+              }
+              if (state === 'pending') {
+                state = 'failed';
+                const candidate: unknown = runtimeMocks.getDatabase();
+                if (
+                  candidate === null ||
+                  (typeof candidate !== 'object' && typeof candidate !== 'function') ||
+                  isProxy(candidate)
+                ) {
+                  throw new Error('scope database unavailable');
+                }
+                state = 'resolved';
+              }
+              return runtimeMocks.anchorRead(input);
+            },
+          },
+          now: () => new Date(Date.now()),
+        });
+        readerProvenance.scope.add(reader);
+        return reader;
+      },
+    );
   });
 
   afterEach(() => {
@@ -249,11 +399,17 @@ describe('BASE-RUNTIME-01 institution server authorization root', () => {
     if (!authorization) throw new Error('expected genuine authorization');
     const result = await authorizeWorkbench(authorization);
     expect(isInstitutionSectionAllowV1(result)).toBe(true);
-    expect(runtimeMocks.getDatabase).toHaveBeenCalledTimes(1);
-    expect(runtimeMocks.createAuthAccountRepository).toHaveBeenCalledTimes(1);
-    expect(runtimeMocks.membershipRead).toHaveBeenCalledTimes(1);
-    expect(runtimeMocks.createInstitutionAnchorFactRepositoryV1).toHaveBeenCalledTimes(1);
-    expect(runtimeMocks.anchorRead).toHaveBeenCalledTimes(1);
+    expect(runtimeMocks.getDatabase).toHaveBeenCalledTimes(3);
+    expect(
+      runtimeMocks.createIdentityAuthoritativeFormalSessionIdentityFactReaderV1,
+    ).toHaveBeenCalledTimes(1);
+    expect(runtimeMocks.identityRead).toHaveBeenCalledTimes(4);
+    expect(
+      runtimeMocks.createAccessControlAuthoritativeMembershipFactReaderV1,
+    ).toHaveBeenCalledTimes(1);
+    expect(runtimeMocks.membershipRead).toHaveBeenCalledTimes(4);
+    expect(runtimeMocks.createTenancyAuthoritativeInstitutionScopeFactReaderV1).toHaveBeenCalledTimes(1);
+    expect(runtimeMocks.anchorRead).toHaveBeenCalledTimes(2);
   });
 
   it('keeps exact accepted key rotation config compatible', async () => {
@@ -573,8 +729,13 @@ describe('BASE-RUNTIME-01 institution server authorization root', () => {
         availableSectionIds: [],
       });
       expect(runtimeMocks.getDatabase).toHaveBeenCalledTimes(1);
-      expect(runtimeMocks.createAuthAccountRepository).not.toHaveBeenCalled();
-      expect(runtimeMocks.createInstitutionAnchorFactRepositoryV1).not.toHaveBeenCalled();
+      expect(
+        runtimeMocks.createAccessControlAuthoritativeMembershipFactReaderV1,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        runtimeMocks.createIdentityAuthoritativeFormalSessionIdentityFactReaderV1,
+      ).toHaveBeenCalledTimes(1);
+      expect(runtimeMocks.createTenancyAuthoritativeInstitutionScopeFactReaderV1).toHaveBeenCalledTimes(1);
     },
   );
 
@@ -592,22 +753,32 @@ describe('BASE-RUNTIME-01 institution server authorization root', () => {
           new Error('membership unavailable'),
         );
       } else {
-        runtimeMocks.createAuthAccountRepository.mockImplementationOnce(() => {
+        runtimeMocks.createAccessControlAuthoritativeMembershipFactReaderV1.mockImplementationOnce(() => {
           throw new Error('membership repository factory unavailable');
         });
       }
       const authorization = await resolveInstitutionServerAuthorizationV1();
+      if (membershipCase === 'factory throw') {
+        expect(authorization).toBeNull();
+        expect(runtimeMocks.getDatabase).not.toHaveBeenCalled();
+        expect(runtimeMocks.createTenancyAuthoritativeInstitutionScopeFactReaderV1).not.toHaveBeenCalled();
+        expect(runtimeMocks.anchorRead).not.toHaveBeenCalled();
+        return;
+      }
       if (!authorization) throw new Error('expected genuine authorization');
       await expect(authorizeWorkbench(authorization)).resolves.toEqual({
         kind: 'rejected',
         code: 'scope_unavailable',
       });
-      expect(runtimeMocks.getDatabase).toHaveBeenCalledTimes(1);
-      expect(runtimeMocks.createAuthAccountRepository).toHaveBeenCalledTimes(1);
+      expect(runtimeMocks.getDatabase).toHaveBeenCalledTimes(2);
+      expect(runtimeMocks.identityRead).toHaveBeenCalledTimes(1);
+      expect(
+        runtimeMocks.createAccessControlAuthoritativeMembershipFactReaderV1,
+      ).toHaveBeenCalledTimes(1);
       expect(runtimeMocks.membershipRead).toHaveBeenCalledTimes(
-        membershipCase === 'factory throw' ? 0 : 1,
+        1,
       );
-      expect(runtimeMocks.createInstitutionAnchorFactRepositoryV1).not.toHaveBeenCalled();
+      expect(runtimeMocks.createTenancyAuthoritativeInstitutionScopeFactReaderV1).toHaveBeenCalledTimes(1);
       expect(runtimeMocks.anchorRead).not.toHaveBeenCalled();
     },
   );
@@ -634,9 +805,10 @@ describe('BASE-RUNTIME-01 institution server authorization root', () => {
         kind: 'rejected',
         code: 'scope_unavailable',
       });
-      expect(runtimeMocks.getDatabase).toHaveBeenCalledTimes(1);
-      expect(runtimeMocks.membershipRead).toHaveBeenCalledTimes(1);
-      expect(runtimeMocks.createInstitutionAnchorFactRepositoryV1).toHaveBeenCalledTimes(1);
+      expect(runtimeMocks.getDatabase).toHaveBeenCalledTimes(3);
+      expect(runtimeMocks.identityRead).toHaveBeenCalledTimes(2);
+      expect(runtimeMocks.membershipRead).toHaveBeenCalledTimes(2);
+      expect(runtimeMocks.createTenancyAuthoritativeInstitutionScopeFactReaderV1).toHaveBeenCalledTimes(1);
       expect(runtimeMocks.anchorRead).toHaveBeenCalledTimes(1);
     },
   );

@@ -1,14 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   appointments,
+  authUsers,
   customers,
+  tenantMembers,
   tenantPlanAssignments,
   tenantPlans,
   tenantPlanVersions,
   tenantQuotaSnapshots,
 } from '@/server/db/schema';
 import type { TenantDatabase } from '@/server/db/client';
-import { checkTenantQuotaForCreate } from '@/modules/institution/server/tenant-quota-enforcement';
+import {
+  checkTenantQuotaForCreate,
+  createTenantQuotaEnforcementRepository,
+} from '@/modules/institution/server/tenant-quota-enforcement';
 
 const andMock = vi.hoisted(() =>
   vi.fn((...conditions: unknown[]) => ({
@@ -214,6 +219,35 @@ beforeEach(() => {
 });
 
 describe('租户套餐配额 enforcement helper', () => {
+  it('员工席位只统计 active Membership 与 active 账号', async () => {
+    const where = vi.fn(async () => [{ value: 2 }]);
+    const innerJoin = vi.fn(() => ({ where }));
+    const from = vi.fn(() => ({ innerJoin }));
+    const select = vi.fn(() => ({ from }));
+    const repository = createTenantQuotaEnforcementRepository({
+      select,
+    } as unknown as TenantDatabase);
+
+    await expect(
+      repository.countActiveStaffSeatsByTenant('demo-tenant-001'),
+    ).resolves.toBe(2);
+    expect(from).toHaveBeenCalledWith(tenantMembers);
+    expect(innerJoin).toHaveBeenCalledWith(authUsers, {
+      column: authUsers.id,
+      operator: 'eq',
+      value: tenantMembers.userId,
+    });
+    expect(where).toHaveBeenCalledWith({
+      conditions: [
+        { column: tenantMembers.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: tenantMembers.role, operator: 'eq', value: 'tenant_admin' },
+        { column: tenantMembers.lifecycleStatus, operator: 'eq', value: 'active' },
+        { column: authUsers.status, operator: 'eq', value: 'active' },
+      ],
+      operator: 'and',
+    });
+  });
+
   it('有 active plan 且未超客户上限时允许新增客户', async () => {
     const query = createQuotaEnforcementDatabase({
       quotaRows: [createQuotaRow({ maxCustomers: 5000, currentCustomers: 9999 })],

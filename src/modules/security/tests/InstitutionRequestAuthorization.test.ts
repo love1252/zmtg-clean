@@ -2,27 +2,112 @@ import { createHmac } from 'node:crypto';
 
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
-import type { CurrentInstitutionMembershipFactRow } from '@/modules/auth/server/auth-account-repository';
+const readerProvenance = vi.hoisted(() => ({
+  identity: new WeakSet<object>(),
+  membership: new WeakSet<object>(),
+  scope: new WeakSet<object>(),
+}));
+
+vi.mock(
+  '@/modules/auth/application/authoritative-formal-session-identity-reader',
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import('@/modules/auth/application/authoritative-formal-session-identity-reader')
+    >();
+    return {
+      ...actual,
+      isAuthoritativeFormalSessionIdentityFactReaderV1(value: unknown) {
+        return value !== null && typeof value === 'object' && readerProvenance.identity.has(value);
+      },
+    };
+  },
+);
+
+vi.mock(
+  '@/modules/access-control/application/authoritative-membership-reader',
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import('@/modules/access-control/application/authoritative-membership-reader')
+    >();
+    return {
+      ...actual,
+      isAuthoritativeMembershipFactReaderV1(value: unknown) {
+        return value !== null && typeof value === 'object' && readerProvenance.membership.has(value);
+      },
+    };
+  },
+);
+
+vi.mock(
+  '@/modules/tenancy/application/authoritative-institution-scope-reader',
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import('@/modules/tenancy/application/authoritative-institution-scope-reader')
+    >();
+    return {
+      ...actual,
+      isAuthoritativeInstitutionScopeFactReaderV1(value: unknown) {
+        return value !== null && typeof value === 'object' && readerProvenance.scope.has(value);
+      },
+    };
+  },
+);
+
+import {
+  createAuthoritativeInstitutionMembershipFactReaderV1 as createUnbrandedMembershipFactReaderV1,
+  type CurrentInstitutionMembershipFactRow,
+} from '@/modules/access-control/server/authoritative-membership-reader';
 import {
   createFormalServerSessionRequestOwnerV1,
   FORMAL_SERVER_SESSION_COOKIE_V1,
   type FormalServerSessionKeyRingV1,
   type FormalServerSessionRequestOwnerV1,
 } from '@/modules/auth/server/formal-server-session-provenance-owner';
+import type { AuthoritativeFormalSessionIdentityFactReaderV1 } from '@/modules/auth/ports/authoritative-formal-session-identity-reader';
 import type { InstitutionRoleV1 } from '@/modules/institution-contracts/v1/institution-navigation';
 import {
   createActiveInstitutionAnchorProviderV1,
-  createAuthoritativeInstitutionAnchorFactReaderV1,
 } from '@/modules/security/server/institution-anchor-provider';
-import type { CurrentInstitutionAnchorFactRowV1 } from '@/modules/security/server/institution-anchor-repository';
+import {
+  createAuthoritativeInstitutionScopeFactReaderV1 as createUnbrandedScopeFactReaderV1,
+  type CurrentInstitutionScopeFactRowV1,
+} from '@/modules/tenancy/server/authoritative-institution-scope-reader';
+
+function createAuthoritativeInstitutionMembershipFactReaderV1(
+  input: Parameters<typeof createUnbrandedMembershipFactReaderV1>[0],
+) {
+  const reader = createUnbrandedMembershipFactReaderV1(input);
+  readerProvenance.membership.add(reader);
+  return reader;
+}
+
+function createAuthoritativeInstitutionScopeFactReaderV1(
+  input: Parameters<typeof createUnbrandedScopeFactReaderV1>[0],
+) {
+  const reader = createUnbrandedScopeFactReaderV1(input);
+  readerProvenance.scope.add(reader);
+  return reader;
+}
+
+function genuineIdentityReader(): AuthoritativeFormalSessionIdentityFactReaderV1 {
+  const reader = Object.freeze({
+    resolve: vi.fn(async () => ({
+      kind: 'current_identity_fact' as const,
+      accountId: payload.accountId,
+      username: 'request_operator',
+      displayName: '请求操作员',
+      status: 'active' as const,
+      observedAt: NOW.toISOString(),
+    })),
+  });
+  readerProvenance.identity.add(reader);
+  return reader;
+}
 import type { ActiveInstitutionAnchorProviderV1 } from '@/modules/security/server/institution-guard-evidence';
 import {
   createInstitutionGuardReferenceCodecV1,
   type InstitutionGuardReferenceCodecV1,
 } from '@/modules/security/server/institution-guard-reference';
-import {
-  createAuthoritativeInstitutionMembershipFactReaderV1,
-} from '@/modules/security/server/institution-membership-provider';
 import {
   createInstitutionRequestAuthorizationV1,
   isInstitutionRequestAuthorizationV1,
@@ -87,14 +172,21 @@ function referenceCodec(keyMaterial: Uint8Array | null = REFERENCE_KEY) {
 
 const membershipRow: CurrentInstitutionMembershipFactRow = {
   accountId: payload.accountId,
-  accountStatus: 'active',
-  accountPasswordResetRequired: false,
-  accountLockedUntil: null,
   membershipId: 'membership-compose-001',
   membershipTenantId: payload.tenantId,
   membershipUserId: payload.accountId,
   membershipRole: 'tenant_admin',
-  membershipUpdatedAt: new Date('2026-07-22T08:01:00.000Z'),
+  membershipDisplayName: '机构管理员',
+  membershipRevision: 1,
+  membershipLifecycleStatus: 'active',
+  membershipProvenanceSource: 'legacy_calibration',
+  membershipProvenanceActorId: null,
+  membershipProvenanceReasonCode: 'legacy_unknown',
+  membershipProvenanceCommandId: `mcal1_${'d'.repeat(64)}`,
+  membershipProvenanceOccurredAt: null,
+  membershipProvenanceRecordedAt: new Date('2026-07-22T08:01:00.000Z'),
+  membershipRevokedAt: null,
+  membershipDeletedAt: null,
   bindingId: 'binding-compose-001',
   bindingAccountId: payload.accountId,
   bindingTenantId: payload.tenantId,
@@ -107,7 +199,7 @@ const membershipRow: CurrentInstitutionMembershipFactRow = {
   bindingVersion: 1,
 };
 
-const anchorRow: CurrentInstitutionAnchorFactRowV1 = {
+const anchorRow: CurrentInstitutionScopeFactRowV1 = {
   tenantId: payload.tenantId,
   institutionId: payload.institutionId,
   status: 'active',
@@ -140,13 +232,14 @@ function fixture(options: FixtureOptions = {}) {
         ? `${FORMAL_SERVER_SESSION_COOKIE_V1}=${signToken()}`
         : options.cookieHeader,
     sessionKeyRing: options.sessionKeyRing ?? sessionKeyRing(),
+    identityFactReader: genuineIdentityReader(),
     membershipFactReader,
     referenceCodec: codec,
     now: () => NOW,
   });
   const anchorRead = vi.fn(async () => [anchorRow]);
-  const anchorFactReader = createAuthoritativeInstitutionAnchorFactReaderV1({
-    repository: { findCurrentInstitutionAnchorFacts: anchorRead },
+  const anchorFactReader = createAuthoritativeInstitutionScopeFactReaderV1({
+    repository: { findCurrentInstitutionScopeFacts: anchorRead },
     now: () => NOW,
   });
   const anchorProvider = createActiveInstitutionAnchorProviderV1({
@@ -225,8 +318,8 @@ describe('AUTH-COMPOSE-01C institution request authorization', () => {
       validUntil: '2026-07-22T08:03:00.000Z',
     });
     expect(Object.isFrozen(result)).toBe(true);
-    expect(created.membershipRead).toHaveBeenCalledTimes(1);
-    expect(created.anchorRead).toHaveBeenCalledTimes(1);
+    expect(created.membershipRead).toHaveBeenCalledTimes(4);
+    expect(created.anchorRead).toHaveBeenCalledTimes(2);
     const serialized = JSON.stringify(result);
     for (const forbidden of [
       payload.accountId,
@@ -253,8 +346,8 @@ describe('AUTH-COMPOSE-01C institution request authorization', () => {
     await expect(
       authorization.authorizeCurrentInstitutionSectionV1(workbenchInput),
     ).resolves.toEqual({ kind: 'rejected', code: 'scope_unavailable' });
-    expect(created.membershipRead).toHaveBeenCalledTimes(1);
-    expect(created.anchorRead).toHaveBeenCalledTimes(1);
+    expect(created.membershipRead).toHaveBeenCalledTimes(4);
+    expect(created.anchorRead).toHaveBeenCalledTimes(2);
   });
 
   it('recognizes only the exact factory-issued authorization without property access', () => {
@@ -594,8 +687,8 @@ describe('AUTH-COMPOSE-01C institution request authorization', () => {
         referenceCodec: unavailableCodec,
       }).authorizeCurrentInstitutionSectionV1(workbenchInput),
     ).resolves.toEqual({ kind: 'rejected', code: 'policy_unavailable' });
-    expect(created.membershipRead).toHaveBeenCalledTimes(1);
-    expect(created.anchorRead).toHaveBeenCalledTimes(1);
+    expect(created.membershipRead).toHaveBeenCalledTimes(4);
+    expect(created.anchorRead).toHaveBeenCalledTimes(2);
   });
 
   it('rejects hostile section inputs before spending the request or touching downstream owners', async () => {
@@ -659,8 +752,8 @@ describe('AUTH-COMPOSE-01C institution request authorization', () => {
     await expect(
       authorization.authorizeCurrentInstitutionSectionV1(workbenchInput),
     ).resolves.toMatchObject({ kind: 'institution_section_allow' });
-    expect(created.membershipRead).toHaveBeenCalledTimes(1);
-    expect(created.anchorRead).toHaveBeenCalledTimes(1);
+    expect(created.membershipRead).toHaveBeenCalledTimes(4);
+    expect(created.anchorRead).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -695,8 +788,8 @@ describe('BASE-NAV-01 request navigation composition', () => {
     expect(isInstitutionNavigationAuthorizationV1(result)).toBe(true);
     expect(Object.isFrozen(result)).toBe(true);
     expect(Object.isFrozen(result.availableSectionIds)).toBe(true);
-    expect(created.membershipRead).toHaveBeenCalledTimes(1);
-    expect(created.anchorRead).toHaveBeenCalledTimes(1);
+    expect(created.membershipRead).toHaveBeenCalledTimes(4);
+    expect(created.anchorRead).toHaveBeenCalledTimes(2);
     expect(Object.keys(result)).toEqual([
       'kind',
       'targetSectionId',
@@ -792,8 +885,8 @@ describe('BASE-NAV-01 request navigation composition', () => {
       targetAccess: 'blocked',
       availableSectionIds: [],
     });
-    expect(created.membershipRead).toHaveBeenCalledTimes(1);
-    expect(created.anchorRead).toHaveBeenCalledTimes(1);
+    expect(created.membershipRead).toHaveBeenCalledTimes(4);
+    expect(created.anchorRead).toHaveBeenCalledTimes(2);
 
     const reverse = fixture();
     const reverseAuthorization = compose(reverse);
@@ -810,8 +903,8 @@ describe('BASE-NAV-01 request navigation composition', () => {
       targetAccess: 'blocked',
       availableSectionIds: [],
     });
-    expect(reverse.membershipRead).toHaveBeenCalledTimes(1);
-    expect(reverse.anchorRead).toHaveBeenCalledTimes(1);
+    expect(reverse.membershipRead).toHaveBeenCalledTimes(4);
+    expect(reverse.anchorRead).toHaveBeenCalledTimes(2);
   });
 
   it('allows at most one concurrent result across duplicate and cross-method calls', async () => {
@@ -828,8 +921,8 @@ describe('BASE-NAV-01 request navigation composition', () => {
     expect(
       duplicateResults.filter((result) => result.targetAccess === 'allowed'),
     ).toHaveLength(1);
-    expect(duplicateFixture.membershipRead).toHaveBeenCalledTimes(1);
-    expect(duplicateFixture.anchorRead).toHaveBeenCalledTimes(1);
+    expect(duplicateFixture.membershipRead).toHaveBeenCalledTimes(4);
+    expect(duplicateFixture.anchorRead).toHaveBeenCalledTimes(2);
 
     const crossFixture = fixture();
     const crossAuthorization = compose(crossFixture);
@@ -843,8 +936,8 @@ describe('BASE-NAV-01 request navigation composition', () => {
       Number(sectionResult.kind === 'institution_section_allow') +
       Number(navigationResult.targetAccess === 'allowed');
     expect(successes).toBe(1);
-    expect(crossFixture.membershipRead).toHaveBeenCalledTimes(1);
-    expect(crossFixture.anchorRead).toHaveBeenCalledTimes(1);
+    expect(crossFixture.membershipRead).toHaveBeenCalledTimes(4);
+    expect(crossFixture.anchorRead).toHaveBeenCalledTimes(2);
   });
 
   it('derives the target and navigation from the same low-privilege scope role', async () => {
@@ -866,8 +959,8 @@ describe('BASE-NAV-01 request navigation composition', () => {
         'care',
       ],
     });
-    expect(created.membershipRead).toHaveBeenCalledTimes(1);
-    expect(created.anchorRead).toHaveBeenCalledTimes(1);
+    expect(created.membershipRead).toHaveBeenCalledTimes(4);
+    expect(created.anchorRead).toHaveBeenCalledTimes(2);
   });
 
   it('maps unavailable scope and policy to sealed blocked empty navigation', async () => {

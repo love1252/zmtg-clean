@@ -1,10 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type {
-  AuthAccountInstitutionBindingRecord,
-  AuthAccountRecord,
-  AuthTenantMembershipRecord,
-} from '@/modules/auth/domain/auth-account';
-import { canAccessResource } from '@/modules/security/domain/access-control';
+import type { AuthAccountRecord } from '@/modules/auth/domain/auth-account';
 import {
   createAuthAccountService,
   type AuthAccountRepository,
@@ -147,43 +142,10 @@ const unexpectedLoginWriteResultCases: readonly UnexpectedLoginWriteResultCase[]
   },
 ];
 
-const tenantAdminMembership: AuthTenantMembershipRecord = {
-  id: 'tenant-member-chenlei',
-  tenantId: 'tenant-zhengpu',
-  userId: 'auth-user-chenlei',
-  role: 'tenant_admin',
-  displayName: '陈磊',
-  createdAt: new Date('2026-06-25T07:00:00.000Z'),
-  updatedAt: new Date('2026-06-25T07:00:00.000Z'),
-};
-
-function institutionBinding(
-  overrides: Partial<AuthAccountInstitutionBindingRecord> = {},
-): AuthAccountInstitutionBindingRecord {
-  return {
-    id: 'auth-binding-chenlei',
-    accountId: 'auth-user-chenlei',
-    tenantId: 'tenant-zhengpu',
-    institutionId: 'institution-zhengpu',
-    status: 'active',
-    source: 'manual_admin',
-    assignedBy: 'platform-admin',
-    assignedAt: new Date('2026-06-25T07:00:00.000Z'),
-    expiresAt: null,
-    revokedAt: null,
-    version: 1,
-    createdAt: new Date('2026-06-25T07:00:00.000Z'),
-    updatedAt: new Date('2026-06-25T07:00:00.000Z'),
-    ...overrides,
-  };
-}
-
 function createRepository(overrides: Partial<AuthAccountRepository> = {}): AuthAccountRepository {
   return {
     createAccount: vi.fn(async (record) => record),
     findAccountByUsername: vi.fn(async () => null),
-    findPrimaryTenantMembershipByUserId: vi.fn(async () => null),
-    listActiveInstitutionBindingsByAccountAndTenant: vi.fn(async () => []),
     recordLoginFailure: vi.fn(async () => 'recorded' as const),
     recordLoginSuccess: vi.fn(async () => 'recorded' as const),
     updateAccountStatus: vi.fn(async () => undefined),
@@ -269,17 +231,13 @@ describe('正式账号服务', () => {
     expect(repository.createAccount).not.toHaveBeenCalled();
   });
 
-  it('唯一 active 权威绑定会生成带机构的正式会话用户，并重置失败计数', async () => {
+  it('凭证验证成功只返回冻结 Identity 账号并重置失败计数', async () => {
     const account = createAccount({
       passwordResetRequired: true,
       status: 'password_reset_required',
     });
     const repository = createRepository({
       findAccountByUsername: vi.fn(async () => account),
-      findPrimaryTenantMembershipByUserId: vi.fn(async () => tenantAdminMembership),
-      listActiveInstitutionBindingsByAccountAndTenant: vi.fn(async () => [
-        institutionBinding(),
-      ]),
     });
     const passwordHasher = {
       hash: vi.fn(),
@@ -299,16 +257,6 @@ describe('正式账号服务', () => {
 
     expect(repository.findAccountByUsername).toHaveBeenCalledWith('chenlei_admin');
     expect(passwordHasher.verify).toHaveBeenCalledWith('Init#2026-Strong', account.passwordHash);
-    expect(repository.listActiveInstitutionBindingsByAccountAndTenant).toHaveBeenCalledWith({
-      accountId: 'auth-user-chenlei',
-      tenantId: 'tenant-zhengpu',
-    });
-    expect(
-      vi.mocked(repository.listActiveInstitutionBindingsByAccountAndTenant).mock
-        .invocationCallOrder[0],
-    ).toBeLessThan(
-      vi.mocked(repository.recordLoginSuccess).mock.invocationCallOrder[0] ?? 0,
-    );
     expect(repository.recordLoginSuccess).toHaveBeenCalledWith({
       accountId: 'auth-user-chenlei',
       expectedState: expectedLoginAccountState(account),
@@ -319,88 +267,24 @@ describe('正式账号服务', () => {
     expect(result).toEqual({
       status: 'authenticated',
       passwordResetRequired: true,
-      user: {
+      account: {
         id: 'auth-user-chenlei',
         username: 'chenlei_admin',
-        name: '陈磊',
-        role: 'tenant_admin',
-        tenantId: 'tenant-zhengpu',
-        institutionId: 'institution-zhengpu',
+        displayName: '陈磊',
+        phone: '13985162273',
+        email: 'chenlei@example.com',
+        passwordUpdatedAt: new Date('2026-06-25T07:00:00.000Z'),
+        passwordResetRequired: true,
+        status: 'password_reset_required',
+        lastLoginAt: null,
+        failedLoginCount: 0,
+        lockedUntil: null,
+        createdBy: 'platform-admin',
+        updatedBy: 'platform-admin',
+        createdAt: new Date('2026-06-25T07:00:00.000Z'),
+        updatedAt: new Date('2026-06-25T07:00:00.000Z'),
       },
     });
-    expect(canAccessResource({
-      context: {
-        userId: result.status === 'authenticated' ? result.user.id : '',
-        role: 'tenant_admin',
-        scope: 'tenant',
-        tenantId: 'tenant-zhengpu',
-        institutionId: result.status === 'authenticated' ? result.user.institutionId ?? null : null,
-        source: 'server_session',
-      },
-      resource: 'real_channel',
-      action: 'execute_once',
-      targetTenantId: 'tenant-zhengpu',
-    })).toEqual({ allowed: true, reason: 'allowed_by_policy' });
-  });
-
-  it.each([
-    ['无绑定', []],
-    ['多个 active 绑定', [
-      institutionBinding({ id: 'binding-a', institutionId: 'institution-a' }),
-      institutionBinding({ id: 'binding-b', institutionId: 'institution-b' }),
-    ]],
-    ['revoked 绑定', [institutionBinding({
-      status: 'revoked',
-      revokedAt: new Date('2026-06-25T07:30:00.000Z'),
-    })]],
-    ['过期绑定', [institutionBinding({
-      expiresAt: now,
-    })]],
-    ['未来生效绑定', [institutionBinding({
-      assignedAt: new Date('2026-06-25T08:01:00.000Z'),
-    })]],
-    ['migration placeholder 绑定', [institutionBinding({
-      source: 'migration_placeholder',
-    })]],
-    ['非法版本绑定', [institutionBinding({ version: 0 })]],
-  ] as const)('%s 时 institutionId=null 且 execute_once 失败关闭', async (_label, bindings) => {
-    const repository = createRepository({
-      findAccountByUsername: vi.fn(async () => createAccount()),
-      findPrimaryTenantMembershipByUserId: vi.fn(async () => tenantAdminMembership),
-      listActiveInstitutionBindingsByAccountAndTenant: vi.fn(async () => [...bindings]),
-    });
-    const service = createAuthAccountService({
-      repository,
-      passwordHasher: {
-        hash: vi.fn(),
-        verify: vi.fn(async () => true),
-      },
-      now: () => now,
-    });
-
-    const result = await service.authenticatePasswordAccount({
-      username: 'chenlei_admin',
-      plaintextPassword: 'Init#2026-Strong',
-      scope: 'institution',
-    });
-
-    expect(result).toMatchObject({
-      status: 'authenticated',
-      user: { institutionId: null },
-    });
-    expect(canAccessResource({
-      context: {
-        userId: 'auth-user-chenlei',
-        role: 'tenant_admin',
-        scope: 'tenant',
-        tenantId: 'tenant-zhengpu',
-        institutionId: null,
-        source: 'server_session',
-      },
-      resource: 'real_channel',
-      action: 'execute_once',
-      targetTenantId: 'tenant-zhengpu',
-    })).toEqual({ allowed: false, reason: 'role_denied' });
   });
 
   it('错误密码会累计失败次数，达到阈值时锁定账号但不暴露具体敏感信息', async () => {
@@ -445,10 +329,6 @@ describe('正式账号服务', () => {
     const account = createAccount();
     const repository = createRepository({
       findAccountByUsername: vi.fn(async () => account),
-      findPrimaryTenantMembershipByUserId: vi.fn(async () => tenantAdminMembership),
-      listActiveInstitutionBindingsByAccountAndTenant: vi.fn(async () => [
-        institutionBinding(),
-      ]),
       recordLoginSuccess: vi.fn(async () => 'state_changed' as const),
     });
     const service = createAuthAccountService({
@@ -494,7 +374,6 @@ describe('正式账号服务', () => {
     });
 
     expect(result).toEqual({ status: 'rejected', reason: 'state_changed' });
-    expect(repository.findPrimaryTenantMembershipByUserId).not.toHaveBeenCalled();
     expect(JSON.stringify(result)).not.toContain(account.id);
     expect(JSON.stringify(result)).not.toContain('scrypt$');
   });
@@ -506,10 +385,6 @@ describe('正式账号服务', () => {
       const account = createAccount();
       const repository = createRepository({
         findAccountByUsername: vi.fn(async () => account),
-        findPrimaryTenantMembershipByUserId: vi.fn(async () => tenantAdminMembership),
-        listActiveInstitutionBindingsByAccountAndTenant: vi.fn(async () => [
-          institutionBinding(),
-        ]),
         recordLoginSuccess: vi.fn(async () => runtimeResult.value as never),
       });
       const service = createAuthAccountService({
@@ -560,7 +435,6 @@ describe('正式账号服务', () => {
 
       expect(result).toEqual({ status: 'rejected', reason: 'state_changed' });
       expect(JSON.stringify(result)).toBe('{"status":"rejected","reason":"state_changed"}');
-      expect(repository.findPrimaryTenantMembershipByUserId).not.toHaveBeenCalled();
       runtimeResult.assertUntouched();
     },
   );
@@ -640,10 +514,6 @@ describe('正式账号服务', () => {
       const verify = vi.fn(() => verification.promise);
       const repository = createRepository({
         findAccountByUsername: vi.fn(async () => account),
-        findPrimaryTenantMembershipByUserId: vi.fn(async () => tenantAdminMembership),
-        listActiveInstitutionBindingsByAccountAndTenant: vi.fn(async () => [
-          institutionBinding(),
-        ]),
         recordLoginSuccess: vi.fn(async () => writeResult),
       });
       const service = createAuthAccountService({
@@ -662,7 +532,6 @@ describe('正式账号服务', () => {
       verification.resolve(true);
       const result = await resultPromise;
 
-      expect(repository.findPrimaryTenantMembershipByUserId).toHaveBeenCalledWith(accountId);
       expect(repository.recordLoginSuccess).toHaveBeenCalledWith({
         accountId,
         expectedState,
@@ -681,13 +550,22 @@ describe('正式账号服务', () => {
           ? {
               status: 'authenticated',
               passwordResetRequired: true,
-              user: {
+              account: {
                 id: accountId,
                 username,
-                name: '陈磊',
-                role: 'tenant_admin',
-                tenantId: 'tenant-zhengpu',
-                institutionId: 'institution-zhengpu',
+                displayName: '陈磊',
+                phone: '13985162273',
+                email: 'chenlei@example.com',
+                passwordUpdatedAt: new Date('2026-06-25T07:00:00.000Z'),
+                passwordResetRequired: true,
+                status: 'password_reset_required',
+                lastLoginAt: new Date('2026-06-25T06:30:00.000Z'),
+                failedLoginCount: 0,
+                lockedUntil: new Date('2026-06-25T07:30:00.000Z'),
+                createdBy: 'platform-admin',
+                updatedBy: 'platform-admin',
+                createdAt: new Date('2026-06-25T07:00:00.000Z'),
+                updatedAt: new Date('2026-06-25T07:00:00.000Z'),
               },
             }
           : { status: 'rejected', reason: 'state_changed' },

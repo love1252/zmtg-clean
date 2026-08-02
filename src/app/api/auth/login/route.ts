@@ -3,19 +3,28 @@ import { isProxy } from 'node:util/types';
 
 import { NextResponse } from 'next/server';
 
+import { createAccessControlAuthoritativeMembershipFactReaderV1 } from '@/modules/access-control/application/authoritative-membership-reader';
 import { createAuditEvent } from '@/modules/audit/domain/audit-events';
 import { createAuditEventRepository } from '@/modules/audit/server/audit-event-repository';
-import type {
-  AuthAccountRecord,
-  AuthTenantMembershipRecord,
+import {
+  createFormalInstitutionSessionContextResolverV1,
+  type FormalMembershipAuditSnapshotV1,
+  type FormalServerSessionUserSnapshotV1,
+} from '@/modules/auth/application/formal-institution-session-context';
+import { createIdentityAuthoritativeFormalSessionIdentityFactReaderV1 } from '@/modules/auth/application/authoritative-formal-session-identity-reader';
+import {
+  isAuthAccountStatus,
+  normalizeAuthUsername,
 } from '@/modules/auth/domain/auth-account';
-import { normalizeAuthUsername } from '@/modules/auth/domain/auth-account';
 import { isAuthRole, type AuthSessionUser } from '@/modules/auth/domain/session';
 import {
   createAuthAccountRepository,
-  type FormalServerSessionUserSnapshotV1,
 } from '@/modules/auth/server/auth-account-repository';
-import { createAuthAccountService } from '@/modules/auth/server/auth-account-service';
+import {
+  createAuthAccountService,
+} from '@/modules/auth/server/auth-account-service';
+import { isInstitutionRoleV1 } from '@/modules/institution-contracts/v1/institution-navigation';
+import { isInstitutionScopeIdV1 } from '@/modules/security/domain/institution-access';
 import {
   FORMAL_SERVER_SESSION_COOKIE_V1,
   issueFormalServerSessionCookieV1,
@@ -29,6 +38,7 @@ import {
   sessionMaxAgeSeconds,
 } from '@/modules/auth/server/demo-session';
 import { resolveInstitutionGuardRuntimeConfigV1 } from '@/modules/security/server/institution-guard-runtime-config';
+import { createTenancyAuthoritativeInstitutionScopeFactReaderV1 } from '@/modules/tenancy/application/authoritative-institution-scope-reader';
 import { getDatabase, type TenantDatabase } from '@/server/db/client';
 
 type LoginPayload = Readonly<{
@@ -41,14 +51,13 @@ type FormalLoginResult =
   | Readonly<{ kind: 'not_found' }>
   | Readonly<{ kind: 'rejected' }>
   | Readonly<{ kind: 'unavailable' }>
+  | Readonly<{ kind: 'password_reset_required' }>
   | Readonly<{
       kind: 'authenticated';
       database: TenantDatabase;
-      account: AuthAccountRecord;
-      membership: AuthTenantMembershipRecord | null;
-      repository: ReturnType<typeof createAuthAccountRepository>;
-      user: AuthSessionUser;
-      passwordResetRequired: boolean;
+      account: Readonly<{ id: string }>;
+      membership: FormalMembershipAuditSnapshotV1;
+      sessionUserSnapshot: FormalServerSessionUserSnapshotV1;
     }>;
 
 type FormalLoginAuditReason = 'tenant_login_succeeded' | 'tenant_login_failed';
@@ -61,6 +70,40 @@ const SESSION_USER_KEYS = Object.freeze([
   'role',
   'tenantId',
   'institutionId',
+] as const);
+const MEMBERSHIP_AUDIT_KEYS = Object.freeze(['id', 'tenantId', 'role'] as const);
+const MEMBERSHIP_FACT_KEYS = Object.freeze([
+  'kind',
+  'accountId',
+  'tenantId',
+  'institutionId',
+  'role',
+  'membershipDisplayName',
+  'membershipId',
+  'membershipRevision',
+  'membershipLifecycleStatus',
+  'bindingId',
+  'bindingRevision',
+  'bindingRevisionAt',
+  'bindingExpiresAt',
+  'observedAt',
+] as const);
+const SAFE_ACCOUNT_KEYS = Object.freeze([
+  'id',
+  'username',
+  'displayName',
+  'phone',
+  'email',
+  'passwordUpdatedAt',
+  'passwordResetRequired',
+  'status',
+  'lastLoginAt',
+  'failedLoginCount',
+  'lockedUntil',
+  'createdBy',
+  'updatedBy',
+  'createdAt',
+  'updatedAt',
 ] as const);
 const RUNTIME_CONFIG_KEYS = Object.freeze([
   'kind',
@@ -163,6 +206,73 @@ function snapshotSessionUser(value: unknown): AuthSessionUser | null {
   });
 }
 
+function snapshotMembershipAudit(
+  value: unknown,
+): FormalMembershipAuditSnapshotV1 | null {
+  const membership = snapshotExactPlainRecord(value, MEMBERSHIP_AUDIT_KEYS);
+  if (
+    !membership ||
+    !isInstitutionScopeIdV1(membership.id) ||
+    !isInstitutionScopeIdV1(membership.tenantId) ||
+    !isInstitutionRoleV1(membership.role)
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    id: membership.id,
+    tenantId: membership.tenantId,
+    role: membership.role,
+  });
+}
+
+function dateEpochMs(value: unknown): number | null {
+  try {
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      isProxy(value) ||
+      Object.getPrototypeOf(value) !== Date.prototype
+    ) {
+      return null;
+    }
+    const epochMs = Date.prototype.getTime.call(value);
+    return Number.isFinite(epochMs) ? epochMs : null;
+  } catch {
+    return null;
+  }
+}
+
+function snapshotAuthenticatedAccount(
+  value: unknown,
+  expected: Readonly<{ id: string; username: string }>,
+): Readonly<{ id: string }> | null {
+  const account = snapshotExactPlainRecord(value, SAFE_ACCOUNT_KEYS);
+  if (
+    !account ||
+    account.id !== expected.id ||
+    account.username !== expected.username ||
+    !isInstitutionScopeIdV1(account.id) ||
+    typeof account.username !== 'string' ||
+    typeof account.displayName !== 'string' ||
+    (account.phone !== null && typeof account.phone !== 'string') ||
+    (account.email !== null && typeof account.email !== 'string') ||
+    dateEpochMs(account.passwordUpdatedAt) === null ||
+    typeof account.passwordResetRequired !== 'boolean' ||
+    !isAuthAccountStatus(account.status) ||
+    (account.lastLoginAt !== null && dateEpochMs(account.lastLoginAt) === null) ||
+    !Number.isSafeInteger(account.failedLoginCount) ||
+    Number(account.failedLoginCount) < 0 ||
+    (account.lockedUntil !== null && dateEpochMs(account.lockedUntil) === null) ||
+    typeof account.createdBy !== 'string' ||
+    typeof account.updatedBy !== 'string' ||
+    dateEpochMs(account.createdAt) === null ||
+    dateEpochMs(account.updatedAt) === null
+  ) {
+    return null;
+  }
+  return Object.freeze({ id: account.id });
+}
+
 function noStore(response: NextResponse): NextResponse {
   response.headers.set('Cache-Control', 'no-store');
   return response;
@@ -183,8 +293,8 @@ function clearCookie(response: NextResponse, name: string): void {
 
 async function recordFormalLoginAudit(input: {
   database: TenantDatabase;
-  account: AuthAccountRecord;
-  membership: AuthTenantMembershipRecord | null;
+  account: Readonly<{ id: string }>;
+  membership: FormalMembershipAuditSnapshotV1 | null;
   result: 'allowed' | 'denied';
   reason: FormalLoginAuditReason;
 }) {
@@ -214,6 +324,33 @@ async function recordFormalLoginAudit(input: {
   }
 }
 
+async function resolveFormalLoginMembershipAudit(
+  accountId: string,
+): Promise<FormalMembershipAuditSnapshotV1 | null> {
+  try {
+    const value = await createAccessControlAuthoritativeMembershipFactReaderV1()
+      .resolveSingleForAccount({ accountId });
+    const fact = snapshotExactPlainRecord(value, MEMBERSHIP_FACT_KEYS);
+    if (
+      !fact ||
+      fact.kind !== 'current_membership_fact' ||
+      fact.accountId !== accountId ||
+      !isInstitutionScopeIdV1(fact.membershipId) ||
+      !isInstitutionScopeIdV1(fact.tenantId) ||
+      !isInstitutionRoleV1(fact.role)
+    ) {
+      return null;
+    }
+    return Object.freeze({
+      id: fact.membershipId,
+      tenantId: fact.tenantId,
+      role: fact.role,
+    });
+  } catch {
+    return null;
+  }
+}
+
 async function authenticateFormalAccount(input: LoginPayload): Promise<FormalLoginResult> {
   try {
     const database = getDatabase();
@@ -226,7 +363,6 @@ async function authenticateFormalAccount(input: LoginPayload): Promise<FormalLog
       return Object.freeze({ kind: 'unavailable' });
     }
 
-    const membership = await repository.findPrimaryTenantMembershipByUserId(account.id);
     const service = createAuthAccountService({ repository });
     const result = await service.authenticatePasswordAccount({
       username: input.username,
@@ -238,7 +374,7 @@ async function authenticateFormalAccount(input: LoginPayload): Promise<FormalLog
       await recordFormalLoginAudit({
         database,
         account,
-        membership,
+        membership: await resolveFormalLoginMembershipAudit(account.id),
         result: 'denied',
         reason: 'tenant_login_failed',
       });
@@ -248,26 +384,63 @@ async function authenticateFormalAccount(input: LoginPayload): Promise<FormalLog
     const authenticated = snapshotExactPlainRecord(result, [
       'status',
       'passwordResetRequired',
-      'user',
+      'account',
     ]);
-    const user = authenticated ? snapshotSessionUser(authenticated.user) : null;
     if (
       !authenticated ||
       authenticated.status !== 'authenticated' ||
-      typeof authenticated.passwordResetRequired !== 'boolean' ||
-      !user
+      typeof authenticated.passwordResetRequired !== 'boolean'
     ) {
+      return Object.freeze({ kind: 'unavailable' });
+    }
+    if (authenticated.passwordResetRequired) {
+      return Object.freeze({ kind: 'password_reset_required' });
+    }
+    const authenticatedAccount = snapshotAuthenticatedAccount(
+      authenticated.account,
+      { id: account.id, username: account.username },
+    );
+    if (!authenticatedAccount) {
+      return Object.freeze({ kind: 'unavailable' });
+    }
+
+    const membershipReader =
+      createAccessControlAuthoritativeMembershipFactReaderV1();
+    const identityReader =
+      createIdentityAuthoritativeFormalSessionIdentityFactReaderV1();
+    const scopeReader =
+      createTenancyAuthoritativeInstitutionScopeFactReaderV1();
+    const contextResolver = createFormalInstitutionSessionContextResolverV1({
+      identityReader,
+      membershipReader,
+      scopeReader,
+    });
+    const contextValue = await contextResolver.resolveForLogin({
+      accountId: authenticatedAccount.id,
+    });
+    const context = snapshotExactPlainRecord(contextValue, [
+      'kind',
+      'snapshot',
+      'membershipAudit',
+    ]);
+    if (!context || context.kind !== 'resolved') {
+      const rejectedContext = snapshotExactPlainRecord(contextValue, ['kind']);
+      return rejectedContext?.kind === 'denied' || rejectedContext?.kind === 'stale'
+        ? Object.freeze({ kind: 'rejected' })
+        : Object.freeze({ kind: 'unavailable' });
+    }
+    const membership = snapshotMembershipAudit(context.membershipAudit);
+    if (!membership || typeof context.snapshot !== 'object' || !context.snapshot) {
       return Object.freeze({ kind: 'unavailable' });
     }
 
     return Object.freeze({
       kind: 'authenticated',
       database,
-      account,
+      account: authenticatedAccount,
       membership,
-      repository,
-      user,
-      passwordResetRequired: authenticated.passwordResetRequired,
+      sessionUserSnapshot:
+        context.snapshot as FormalServerSessionUserSnapshotV1,
     });
   } catch {
     return Object.freeze({ kind: 'unavailable' });
@@ -301,24 +474,6 @@ function snapshotAvailableRuntimeConfig(value: unknown): Readonly<{
   const config = snapshotExactPlainRecord(value, RUNTIME_CONFIG_KEYS);
   if (!config || config.kind !== 'available') return null;
   return Object.freeze({ formalServerSessionKeyRing: config.formalServerSessionKeyRing });
-}
-
-function snapshotFormalSessionLookup(
-  value: unknown,
-): Readonly<{ kind: 'denied' | 'invalid' | 'unavailable'; snapshot?: never }> | Readonly<{
-  kind: 'resolved';
-  snapshot: unknown;
-}> | null {
-  const basic = snapshotExactPlainRecord(value, ['kind']);
-  if (
-    basic &&
-    (basic.kind === 'denied' || basic.kind === 'invalid' || basic.kind === 'unavailable')
-  ) {
-    return Object.freeze({ kind: basic.kind });
-  }
-  const resolved = snapshotExactPlainRecord(value, ['kind', 'snapshot']);
-  if (!resolved || resolved.kind !== 'resolved') return null;
-  return Object.freeze({ kind: 'resolved', snapshot: resolved.snapshot });
 }
 
 function snapshotIssuedCookie(value: unknown): Readonly<{
@@ -421,17 +576,11 @@ export async function POST(request: Request) {
   if (formalLogin.kind === 'rejected') {
     return json({ code: 401, message: '用户名或密码错误' }, 401);
   }
-  if (formalLogin.passwordResetRequired) {
+  if (formalLogin.kind === 'password_reset_required') {
     return json(
       { code: 'PASSWORD_RESET_REQUIRED', message: '需要先完成密码重置' },
       403,
     );
-  }
-  if (
-    typeof formalLogin.user.tenantId !== 'string' ||
-    typeof formalLogin.user.institutionId !== 'string'
-  ) {
-    return json({ code: 401, message: '用户名或密码错误' }, 401);
   }
 
   let runtimeConfig: Readonly<{ formalServerSessionKeyRing: unknown }> | null = null;
@@ -444,31 +593,11 @@ export async function POST(request: Request) {
   }
   if (!runtimeConfig) return json({ code: 503, message: '登录暂不可用' }, 503);
 
-  let snapshot: ReturnType<typeof snapshotFormalSessionLookup>;
-  try {
-    snapshot = snapshotFormalSessionLookup(
-      await formalLogin.repository.findCurrentFormalSessionUser({
-        accountId: formalLogin.user.id,
-        tenantId: formalLogin.user.tenantId,
-        institutionId: formalLogin.user.institutionId,
-      }),
-    );
-  } catch {
-    return json({ code: 503, message: '登录暂不可用' }, 503);
-  }
-  if (!snapshot) return json({ code: 503, message: '登录暂不可用' }, 503);
-  if (snapshot.kind === 'denied') {
-    return json({ code: 401, message: '用户名或密码错误' }, 401);
-  }
-  if (snapshot.kind !== 'resolved') {
-    return json({ code: 503, message: '登录暂不可用' }, 503);
-  }
-
   let issued: ReturnType<typeof snapshotIssuedCookie>;
   try {
     issued = snapshotIssuedCookie(
       issueFormalServerSessionCookieV1({
-        sessionUserSnapshot: snapshot.snapshot as FormalServerSessionUserSnapshotV1,
+        sessionUserSnapshot: formalLogin.sessionUserSnapshot,
         sessionKeyRing: runtimeConfig.formalServerSessionKeyRing as never,
         now: () => new Date(),
       }),
