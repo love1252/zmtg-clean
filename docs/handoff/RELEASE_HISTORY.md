@@ -929,3 +929,24 @@
 - 本次四文件 docs-only handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 `0`。
 - M4 完成并收口；唯一下一任务冻结为 `BASE-02 Membership Revision M5 高水位追赶与冲突清零`。M5 尚未启动，本 handoff 合并后按当前 ULTRA 授权和动态硬门继续。
 - M6～M7、BASE-B1～B6、orphan 修复、FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader 继续未启动或阻断；七线正式发布保持 `0/7`。
+
+## 2026-08-02：BASE-02 Membership Revision M5 高水位追赶与冲突清零收口
+
+- PR #893 完成 M5 `0042` 三文件实施，Head `43440e3f38c3c6ba3576dba1788b3fad586cfb5a`，Run `30727616873`／Job `91442118293`，Merge Commit `72c7568df3fd1078b813733eda472c01b0f8672d`。
+- PR #894 完成 M5 实施独立审查，Head `14c7e6e4419203dacd5d20b3bec2b3d8bc43c285`，Run `30728269902`／Job `91443866416`，Merge Commit `33c52ee41e20385e8541594fa92b4c5c6ce21cf9`；结论为 `base02_membership_revision_m5_implementation_review=passed`。
+- PR #895 完成 M5 执行低敏证据，Head `53e7f1c0ad257fdff935d3ce1234be0054a19b34`，Run `30729433131`／Job `91446923309`，Merge Commit `804444789d135903a737bc0721c452bcc74511b5`。
+- PR #896 完成 M5 执行独立审查，Head `a768ddac965d42c96e59f2a2881a66961d9f3cf7`，Run `30729838933`／Job `91448020103`，Merge Commit `ea4a59df15fa14e64d7b7c5ad8a18b80452cc0c0`；结论为 `base02_membership_revision_m5_execution_review=passed`。
+- 四个 PR 的环境核对、依赖安装、架构自测、增量检查、lint、typecheck、完整测试和 build 均在冻结 Head 上实际执行并成功。
+- `0042` 已在固定 localhost-only local_acceptance 完成一次且仅一次授权 guarded 目标调用；自动重试、直接 SQL 与第二次目标调用均为 `0`，执行结果已知。
+- 环境 journal 从 `42／0041` 推进到 `43／0042`，snapshot 保持 `0026`；`0042` 已消费且不得改写，后续问题只能使用独立 forward-fix。
+- 零候选结果为 `planned／created／reused／conflict／unexpected=0／0／0／0／0`；Membership total／all-null／partial／complete 保持 `1／0／0／1`，transition／exact current-head／M4 baseline 保持 `1／1／1`。
+- Membership identity、tenant／user 归属、role、display_name、created_at 与 updated_at 未变化；Binding／Scope／Context Version／Context Head 保持 `1／1／1／1`，八张关键业务表稳定，业务 DML 为 `0`。
+- active historical orphan／Scope relation orphan 保持 `1／1`；A2-P2 Scope FK 保持 `NOT VALID`／`convalidated=false`，未执行 `VALIDATE`、`SET NOT NULL` 或 orphan 修复。
+- 全新执行前／后恢复点各 `1／1` 并通过隔离恢复，原目标 Restore 为 `0`；Allocation Lease 未消费且已释放，Execution Lease claim／consume／renewal／release／active 为 `1／1／0／1／0`。
+- client、进程组、Lease／run lock、attempt marker、Helper、私有配置副本与隔离数据库活动残留均为 `0`；不可覆盖 terminal record 保留 `1`。
+- F01 已在窄范围内关闭：恢复点 round-trip 只接受单一公开 CHECK 去除一对冗余括号，token、validated 状态与其余 Catalog／Shape 保持精确一致；该规则不得泛化。
+- F02 已关闭：编排器首次因私有输入权限不满足门禁而在目标调用、数据库连接和 Lease claim 前拒绝，数据库变化为 `0`；从头重检后完成唯一目标调用，不构成 Migration attempt 或自动重试。
+- 当前主动私有参数披露、Secret、Token、密码、私钥、PII、真实凭证披露和非 localhost 连接均为 `0`。
+- 本次四文件 docs-only handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 `0`。
+- M5 完成并收口；唯一下一任务冻结为 `BASE-02 Membership Revision M6 Reader 从 updated_at 切换到显式 revision＋lifecycle`。M6 尚未启动，本 handoff 合并后按当前 ULTRA 授权和动态硬门继续。
+- M7、BASE-B1～B6、active historical orphan／Scope relation orphan 修复、A2-P2 FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader 继续未启动或阻断；七线正式发布保持 `0/7`。
