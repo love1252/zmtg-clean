@@ -354,7 +354,7 @@ describe('Access Control Membership Owner command service', () => {
     }
   });
 
-  it('refresh 与 reactivate 不读取或恢复 Binding', async () => {
+  it('refresh 不读取 Binding；reactivate 仅在没有 active Binding 时恢复 Membership', async () => {
     const refreshContext = unitOfWork();
     await executeMembershipCommandWithUnitOfWork({
       unitOfWork: refreshContext.uow,
@@ -371,7 +371,6 @@ describe('Access Control Membership Owner command service', () => {
         provenanceRecordedAt: '2026-08-01T07:30:01.000Z',
         revokedAt: '2026-08-01T07:30:00.000Z',
       }),
-      activeBinding: binding(),
     });
     const result = await executeMembershipCommandWithUnitOfWork({
       unitOfWork: reactivateContext.uow,
@@ -383,7 +382,44 @@ describe('Access Control Membership Owner command service', () => {
       lifecycleStatus: 'active',
       binding: { kind: 'unchanged' },
     });
-    expect(reactivateContext.uow.lockActiveBinding).not.toHaveBeenCalled();
+    expect(reactivateContext.operations).toEqual([
+      'lock_current_by_id',
+      'command_exists',
+      'lock_active_binding',
+      'update_membership_cas',
+      'append_transition',
+    ]);
+    expect(reactivateContext.uow.revokeActiveBindingByCas).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['未过期 active Binding', null],
+    ['已过期但 status 仍为 active 的 Binding', '2026-07-31T08:00:00.000Z'],
+  ])('reactivate 遇到%s时在 Membership CAS 前失败关闭', async (_label, expiresAt) => {
+    const context = unitOfWork({
+      current: current({
+        revision: 5,
+        lifecycleStatus: 'revoked',
+        provenanceOccurredAt: '2026-08-01T07:30:00.000Z',
+        provenanceRecordedAt: '2026-08-01T07:30:01.000Z',
+        revokedAt: '2026-08-01T07:30:00.000Z',
+      }),
+      activeBinding: binding({ expiresAt }),
+    });
+
+    expect(await executeMembershipCommandWithUnitOfWork({
+      unitOfWork: context.uow,
+      command: command('reactivate', { expectedRevision: 5 }),
+      ...dependencies,
+    })).toEqual({ status: 'blocked', code: 'binding_active_conflict' });
+    expect(context.operations).toEqual([
+      'lock_current_by_id',
+      'command_exists',
+      'lock_active_binding',
+    ]);
+    expect(context.uow.updateMembershipByCas).not.toHaveBeenCalled();
+    expect(context.uow.revokeActiveBindingByCas).not.toHaveBeenCalled();
+    expect(context.uow.appendTransition).not.toHaveBeenCalled();
   });
 
   it('纯观察 refresh 零写入、零 evidence，commandId 不虚报为已消费', async () => {

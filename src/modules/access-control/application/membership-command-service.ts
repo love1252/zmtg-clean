@@ -76,7 +76,11 @@ function requireOneAffected(value: number): void {
 }
 
 function requiresActiveBindingLock(command: MembershipOwnerCommand): boolean {
-  return command.kind === 'revoke' || command.kind === 'delete';
+  return (
+    command.kind === 'revoke' ||
+    command.kind === 'reactivate' ||
+    command.kind === 'delete'
+  );
 }
 
 function persistenceBlockCode(error: unknown): MembershipCommandBlockCode {
@@ -155,11 +159,7 @@ export async function executeMembershipCommandWithUnitOfWork(input: Readonly<{
       tenantId: decision.bindingAction.tenantId,
       accountId: decision.bindingAction.accountId,
     });
-  } else if (
-    decision.bindingAction.kind === 'revoke_active' &&
-    current !== null &&
-    requiresActiveBindingLock(input.command)
-  ) {
+  } else if (current !== null && requiresActiveBindingLock(input.command)) {
     activeBinding = await input.unitOfWork.lockActiveBinding({
       tenantId: current.tenantId,
       accountId: current.userId,
@@ -167,6 +167,9 @@ export async function executeMembershipCommandWithUnitOfWork(input: Readonly<{
   }
 
   if (decision.bindingAction.kind === 'create' && activeBinding !== null) {
+    return blocked('binding_active_conflict');
+  }
+  if (input.command.kind === 'reactivate' && activeBinding !== null) {
     return blocked('binding_active_conflict');
   }
   if (
