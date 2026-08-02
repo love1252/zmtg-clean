@@ -6,6 +6,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 import type {
+  CompleteMembershipCurrent,
   MembershipCurrent,
   MembershipTransition,
 } from '@/modules/access-control/domain/membership-lifecycle';
@@ -28,7 +29,9 @@ import {
 
 const NOW = '2026-08-01T08:00:01.000Z';
 
-function current(overrides: Partial<MembershipCurrent> = {}): MembershipCurrent {
+function current(
+  overrides: Partial<CompleteMembershipCurrent> = {},
+): CompleteMembershipCurrent {
   return {
     membershipId: 'member-001',
     tenantId: 'tenant-001',
@@ -73,6 +76,16 @@ function transition(): MembershipTransition {
 }
 
 describe('Access Control Membership transaction repository', () => {
+  it('Owner Writer 只接受完整 current，nullable 读取候选不能直接写入', () => {
+    type InsertCurrent = Parameters<MembershipCommandUnitOfWork['insertMembership']>[0];
+    type UpdateInput = Parameters<MembershipCommandUnitOfWork['updateMembershipByCas']>[0];
+
+    expectTypeOf<InsertCurrent>().toEqualTypeOf<CompleteMembershipCurrent>();
+    expectTypeOf<UpdateInput['previous']>().toEqualTypeOf<CompleteMembershipCurrent>();
+    expectTypeOf<UpdateInput['next']>().toEqualTypeOf<CompleteMembershipCurrent>();
+    expectTypeOf<MembershipCurrent>().not.toMatchTypeOf<CompleteMembershipCurrent>();
+  });
+
   it('普通 TenantDatabase 不能冒充 transaction-bound 品牌类型', () => {
     expectTypeOf<TenantDatabase>().not.toMatchTypeOf<MembershipCommandTransactionDatabase>();
   });
@@ -319,6 +332,33 @@ describe('Access Control Membership transaction repository', () => {
     expect(source).not.toMatch(/retry|setTimeout/iu);
     expect(source).not.toContain('DATABASE_URL');
     expect(source).toContain('.returning({ id: tenantMembershipTransitions.id })');
+  });
+
+  it('完整 current 写入契约不使用 cast、非空断言或 nullable recordedAt 分支', () => {
+    const domainSource = readFileSync(
+      join(process.cwd(), 'src/modules/access-control/domain/membership-lifecycle.ts'),
+      'utf8',
+    );
+    const serviceSource = readFileSync(
+      join(
+        process.cwd(),
+        'src/modules/access-control/application/membership-command-service.ts',
+      ),
+      'utf8',
+    );
+    const repositorySource = readFileSync(
+      join(
+        process.cwd(),
+        'src/modules/access-control/server/membership-command-repository.ts',
+      ),
+      'utf8',
+    );
+
+    expect(domainSource).not.toMatch(/\bas number\b|as MembershipLifecycleStatus/u);
+    expect(serviceSource).not.toContain('current!');
+    expect(serviceSource).not.toContain('as number');
+    expect(serviceSource).not.toMatch(/lifecycleStatus\s+as/u);
+    expect(repositorySource).not.toContain('provenanceRecordedAt === null');
   });
 
   it('active Binding 查询按 id 稳定排序且多行 fail-closed', async () => {

@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 
 import {
   decideMembershipLifecycle,
+  isCompleteMembershipCurrent,
   validateMembershipOwnerCommandIdentity,
   type MembershipLifecycleBlockCode,
   type MembershipOwnerCommand,
@@ -142,11 +143,8 @@ export async function executeMembershipCommandWithUnitOfWork(input: Readonly<{
       status: 'observed',
       commandId: input.command.commandId,
       membershipId: decision.current.membershipId,
-      revision: decision.current.revision as number,
-      lifecycleStatus: decision.current.lifecycleStatus as
-        | 'active'
-        | 'revoked'
-        | 'deleted',
+      revision: decision.current.revision,
+      lifecycleStatus: decision.current.lifecycleStatus,
       role: decision.current.role,
       commandPersisted: false,
     });
@@ -188,15 +186,15 @@ export async function executeMembershipCommandWithUnitOfWork(input: Readonly<{
       await input.unitOfWork.insertMembership(decision.nextCurrent),
     );
   } else {
+    if (current === null || !isCompleteMembershipCurrent(current)) {
+      return blocked('membership_current_envelope_invalid');
+    }
     requireOneAffected(
       await input.unitOfWork.updateMembershipByCas({
-        previous: current!,
+        previous: current,
         next: decision.nextCurrent,
         expectedRevision: input.command.expectedRevision,
-        expectedLifecycleStatus: current!.lifecycleStatus as
-          | 'active'
-          | 'revoked'
-          | 'deleted',
+        expectedLifecycleStatus: current.lifecycleStatus,
       }),
     );
   }
@@ -232,11 +230,8 @@ export async function executeMembershipCommandWithUnitOfWork(input: Readonly<{
     commandId: input.command.commandId,
     transitionId: decision.transition.transitionId,
     membershipId: decision.nextCurrent.membershipId,
-    revision: decision.nextCurrent.revision as number,
-    lifecycleStatus: decision.nextCurrent.lifecycleStatus as
-      | 'active'
-      | 'revoked'
-      | 'deleted',
+    revision: decision.nextCurrent.revision,
+    lifecycleStatus: decision.nextCurrent.lifecycleStatus,
     role: decision.nextCurrent.role,
     binding: Object.freeze(bindingResult),
   });

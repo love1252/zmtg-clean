@@ -12,7 +12,6 @@ import {
   followUpTasks,
   tenantAuthorizationSnapshots,
   tenantCommercialRecords,
-  tenantMembers,
   tenantPlanAssignments,
   tenantPlans,
   tenantPlanVersions,
@@ -609,7 +608,12 @@ const demoSeedAuthUserRecords: Array<typeof authUsers.$inferInsert> = demoSeedMe
   }),
 );
 
-const demoTenantMemberRecords: Array<typeof tenantMembers.$inferInsert> =
+type DemoTenantMemberPreviewRecord = Readonly<Pick<
+  (typeof demoSeedMemberProfiles)[number],
+  'id' | 'tenantId' | 'userId' | 'role' | 'displayName'
+>>;
+
+const demoTenantMemberRecords: readonly DemoTenantMemberPreviewRecord[] =
   demoSeedMemberProfiles.map((profile) => ({
     id: profile.id,
     tenantId: profile.tenantId,
@@ -617,7 +621,6 @@ const demoTenantMemberRecords: Array<typeof tenantMembers.$inferInsert> =
     role: profile.role,
     displayName: profile.displayName,
   }));
-
 
 const demoTenantCommercialRecordRecords: Array<typeof tenantCommercialRecords.$inferInsert> = [
   {
