@@ -2,12 +2,12 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-02 Membership Revision M7 Enforce 与旧路径退出完成状态
+## BASE-02 BASE-B1 Owner／Port／revision 契约闭环完成状态
 
 - 更新日期：2026-08-02
-- 本轮 handoff 基线：`1ecc84f4e3749adbd15822582d992352340a1d44`
+- 本轮 handoff 基线：`3a84c576f9c2a376c49964983d95cce9170164d6`
 - 当前任务：`BASE-02 ULTRA：Membership Revision M0～M7、BASE-B1～B6 全链实施与最终收口`
-- 当前切片：M7 写入契约、最终约束、固定本地验收执行、归因纠错、独立审查与 handoff
+- 当前切片：BASE-B1 Owner／Port／revision 契约关闭证据、独立审查与 handoff
 - 正式任务编号：无；本轮未新增 `V2-*` 编号
 - M6 实施：PR #898，Head `e1cc9e4e97c18a80d3bf8ce55ed588b259898f19`，Run `30734941015`／Job `91461924228`，Merge Commit `fe79267264f228cac217908365aa42f3f7408109`
 - M6 实施独立审查：PR #899，Head `b105d566416b7d8ad5d10a38388c666d244a2f21`，Run `30735331035`／Job `91462991272`，Merge Commit `005f1bfee5e1d94b003feb47c5f1f091463c483c`
@@ -15,7 +15,10 @@
 - M7 写入契约实施／审查：PR #902／#903，Head `0b09b329012100386b8bc7638eaf818fb89cf8c6`／`2e22955c77e0d086e1de38ffe66adba930f6960a`，Run `30737402318`／`30737726950`，Job `91468617520`／`91469473175`，Merge Commit `24aba48ced5eb1c0588de88b45757958222cc010`／`5de9dc694b0de072eb68d43f2fbccab49c5bcb37`
 - M7 Schema／Migration 实施／审查：PR #904／#905，Head `f43ce1b9ba554ca034441440c1a57781cbddc198`／`7f39cc27c7cbfd5f9587cc8881d725f767a8ac27`，Run `30739072657`／`30739700515`，Job `91473075000`／`91474768876`，Merge Commit `65d12f7e0f9a47df3279a9052b9b21fb54a8e3ad`／`ffafaa8ac0c70f74cbf9b73ed0e43bd5aa7e6e56`
 - M7 执行证据／归因纠错／执行独立审查：PR #906／#907／#908，Head `097a0e837c7afaf4a89c818cf5c6860aac0f08c9`／`571bbbdc8fe0a3b881edff25d1fbe10c27c81bd6`／`1fccdb4a45b9d588c46745a57e2436ca12ef2cbb`，Run `30741583818`／`30741960782`／`30742394742`，Job `91479870752`／`91480843159`／`91482000103`，Merge Commit `58521283d6c28f3b7b6b0b4254109bb1340c5066`／`ceb7f8c3f75c06c93a845c2769cd59b199a46ebe`／`1ecc84f4e3749adbd15822582d992352340a1d44`
-- PR #901～#908 的环境核对、依赖安装、架构自测、增量检查、lint、typecheck、完整测试与 build 均在各自冻结 Head 上实际执行并成功
+- M7 handoff：PR #909，Head `3d627c3c90cbd9da205bd2eeff80ffaed11b90ec`，Run `30742856457`／Job `91483266364`，Merge Commit `af58246675787536b6439404582d0b320ab4eba8`
+- BASE-B1 契约关闭证据：PR #910，Head `5fc7234daf6dd67fcaea72747a859aa081621b58`，Run `30743380150`／Job `91484669720`，Merge Commit `e01f62a2c413cb563c1ac3433f5cbac684147503`
+- BASE-B1 独立审查：PR #911，Head `8c440bc11e7c656e40146a1ca07ba34b996b7265`，Run `30743753276`／Job `91485660898`，Merge Commit `3a84c576f9c2a376c49964983d95cce9170164d6`
+- PR #901～#911 的环境核对、依赖安装、架构自测、增量检查、lint、typecheck、完整测试与 build 均在各自冻结 Head 上实际执行并成功
 - 本次四文件 docs-only handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package、lock 修改均为 `0`
 
 ### M6 current 终态
@@ -54,11 +57,15 @@
 - `m6_complete=true`、`m6_handoff_complete=true`
 - M7 写入契约与 Schema／Migration 独立审查均为 `passed`；执行证据归因和执行独立审查均为 `passed`
 - `m7_execution_complete=true`；本 handoff 合并后 `m7_handoff_complete=true`、`m7_complete=true`、`eligible_for_base_b1_after_handoff=true`
+- BASE-B1 关闭证据结论为 `base_b1_owner_port_revision_contract=all_exact`、`base_b1_runtime_change_required=false`
+- BASE-B1 独立审查结论为 `base_b1_independent_review=passed`；本 handoff 合并后 `base_b1_complete=true`、`base_b1_handoff_complete=true`、`eligible_for_base_b2_after_handoff=true`
+- Owner 外 direct Membership Writer／Deleter 为 `0／0`；授权 `tenant_members.updated_at` 读取与时间戳兼容映射为 `0／0`
+- `operating_context_in_authorization_combination=false`、`second_authorization_fact_source_count=0`、`multiple_membership_selection=explicit_or_fail_closed`
 
 ### 持续阻断
 
 - M7 已完成；`0043` 已消费且不得改写，后续问题只能使用独立 forward-fix
-- M7 前置阻断已关闭，BASE-B1 已具备启动资格但尚未由独立证据收口；BASE-B2～B6 均未启动
+- M7 与 BASE-B1 均已关闭；BASE-B2～B6 均未启动
 - active historical orphan 与 Scope relation orphan 保持 `1／1`，未修改、未授权修复
 - A2-P2 Scope FK 保持 `NOT VALID`／`convalidated=false`，未执行 `VALIDATE`
 - 项目级 Writer、Audit／模板、MIG-01B、MIG-01C 与业务 Reader 继续阻断
@@ -66,11 +73,11 @@
 
 ### 唯一下一任务
 
-- 任务名称：`BASE-B1 Owner／Port／revision 契约闭环`
+- 任务名称：`BASE-B2 Membership／Binding 生命周期`
 - 任务编号：仓库尚无正式编号，本 handoff 不自行创造
 - 当前状态：本 handoff 合并前尚未启动；合并后按当前 ULTRA 用户授权继续
-- 任务边界：重新冻结 Access Control／Identity／Tenancy／Security 的 Owner、Port 与 revision 契约，证明 Membership／Binding／Scope 三个版本域独立、Operating Context 未加入授权组合、第二事实源为 `0`
-- 若最新 main 仍为静态 `all_exact`，不得创建无意义 Runtime 改动；只形成 closure evidence、独立审查和 handoff。不得夹带 BASE-B2 Binding 生命周期、orphan、FK `VALIDATE` 或业务 Reader
+- 任务边界：在 Access Control 单一 Owner 与既有 transaction-bound UoW 内补齐 standalone Binding create／rebind／revoke／expire；Membership revoke 必须同事务撤销 active Binding，reactivate 不得恢复 Binding，rebind 只推进 Binding version，多 Membership 必须显式 tenant／institution 或失败关闭
+- 不得夹带 historical orphan 修复、Scope 创建、FK `VALIDATE`、对象 Guard／Action Policy、项目级 Writer／Audit／MIG-01B／C 或业务 Reader；若需要新的 Schema、Migration 或第二事实源，必须按硬停止条件如实处理
 
 ```text
 membership_revision_direction=A-full_same_table_lifecycle
@@ -211,9 +218,14 @@ m7_execution_complete=true
 m7_handoff_complete=true
 m7_complete=true
 eligible_for_base_b1_after_handoff=true
-base_b1_started=false
+base_b1_started=true
 base_b1_authorized_under_ultra=true
-base_b1_runtime=blocked
+base_b1_owner_port_revision_contract=all_exact
+base_b1_runtime_change_required=false
+base_b1_independent_review=passed
+base_b1_complete=true
+base_b1_handoff_complete=true
+eligible_for_base_b2_after_handoff=true
 base_b2_started=false
 base_b3_started=false
 base_b4_started=false
@@ -227,7 +239,7 @@ a2_p2_scope_fk_validated=false
 project_writer_started=false
 business_reader_started=false
 eligible_for_reader=false
-next_task=BASE-B1 Owner／Port／revision 契约闭环
+next_task=BASE-B2 Membership／Binding 生命周期
 next_task_started=false
 next_task_authorized_under_ultra=true
 ```

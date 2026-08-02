@@ -983,3 +983,16 @@
 - 执行前后恢复点均通过同集群空隔离数据库的选定 schema／data 恢复；该证明不覆盖 ACL、全局角色、异集群或完整灾备。
 - 自动本地运维元数据回显事件累计为 `2`；当前主动私有参数披露、Secret、Token、密码、私钥、PII 与真实凭证披露均为 `0`。
 - M7 完成并收口；唯一下一任务冻结为 `BASE-B1 Owner／Port／revision 契约闭环`。BASE-B1 尚未独立关闭，BASE-B2～B6、orphan 修复、FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader 继续未启动或阻断；七线正式发布保持 `0/7`。
+
+## 2026-08-02：BASE-B1 Owner／Port／revision 契约闭环收口
+
+- PR #909 完成 M7 handoff，Head `3d627c3c90cbd9da205bd2eeff80ffaed11b90ec`，Run `30742856457`／Job `91483266364`，Merge Commit `af58246675787536b6439404582d0b320ab4eba8`。
+- PR #910 完成 BASE-B1 单文件关闭证据，Head `5fc7234daf6dd67fcaea72747a859aa081621b58`，Run `30743380150`／Job `91484669720`，Merge Commit `e01f62a2c413cb563c1ac3433f5cbac684147503`。
+- PR #911 完成 BASE-B1 单文件独立审查，Head `8c440bc11e7c656e40146a1ca07ba34b996b7265`，Run `30743753276`／Job `91485660898`，Merge Commit `3a84c576f9c2a376c49964983d95cce9170164d6`；结论为 `base_b1_independent_review=passed`。
+- BASE-B1 结论为 `base_b1_owner_port_revision_contract=all_exact`、`base_b1_runtime_change_required=false`；Access Control、Identity、Tenancy 与 Security 的 Owner／Port 边界及 Membership revision／Binding version／Scope revision 三个独立版本域完整。
+- Owner 外 direct Membership Writer／Deleter、授权 `tenant_members.updated_at` 读取与时间戳兼容映射均为 `0／0`；Operating Context 未进入授权组合，第二授权事实源为 `0`，多 Membership 必须显式选择或失败关闭。
+- BASE-B1 定向测试为 10 个文件、`344／344`；两个 PR 的真实 Required Check 均完整执行环境核对、依赖安装、架构自测、增量检查、lint、typecheck、完整测试和 build并成功。
+- 本次四文件 docs-only handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 `0`。
+- 继承状态未变：环境 journal 为 `44／0043`、snapshot 为 `0026`、active historical orphan／Scope relation orphan 为 `1／1`，A2-P2 Scope FK 继续 `NOT VALID`／`convalidated=false`。
+- BASE-B1 完成并收口；唯一下一任务冻结为 `BASE-B2 Membership／Binding 生命周期`。BASE-B2 尚未启动，本 handoff 合并后按当前 ULTRA 授权和动态硬门继续。
+- BASE-B3～B6、orphan 修复、FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader 继续未启动或阻断；七线正式发布保持 `0/7`。
