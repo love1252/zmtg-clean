@@ -1,5 +1,10 @@
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 
+import {
+  isBindingCurrent,
+  type BindingCurrent,
+  type BindingTransitionEvidence,
+} from '@/modules/access-control/domain/binding-lifecycle';
 import type {
   MembershipCurrent,
   MembershipTransition,
@@ -12,9 +17,11 @@ import {
   type MembershipCommandTransactionPort,
   type MembershipCommandUnitOfWork,
 } from '@/modules/access-control/ports/membership-command-unit-of-work';
+import type { TransactionBoundInstitutionScopeAssertion } from '@/modules/tenancy/ports/transaction-bound-institution-scope';
 import type { TenantDatabase } from '@/server/db/client';
 import {
   authAccountInstitutionBindings,
+  authAccountInstitutionBindingTransitions,
   tenantMembers,
   tenantMembershipTransitions,
 } from '@/server/db/schema';
@@ -38,6 +45,11 @@ declare const membershipCommandTransactionDatabaseBrand: unique symbol;
 export type MembershipCommandTransactionDatabase = TenantDatabase & {
   readonly [membershipCommandTransactionDatabaseBrand]: true;
 };
+
+export type TransactionBoundScopeAssertionFactory = (
+  database: MembershipCommandTransactionDatabase,
+  isActive: () => boolean,
+) => TransactionBoundInstitutionScopeAssertion;
 
 const TIMEOUT_CODES = new Set(['25P03', '25P04', '55P03', '57014']);
 const CONCURRENCY_CODES = new Set(['40001', '40P01']);
@@ -80,20 +92,32 @@ function mapDatabaseError(error: unknown): MembershipCommandPersistenceError {
     );
   }
   if (code === '23505') {
-    if (constraint === 'tenant_membership_transitions_tenant_command_unique') {
+    if (
+      constraint === 'tenant_membership_transitions_tenant_command_unique' ||
+      constraint === 'auth_binding_transitions_tenant_command_unique'
+    ) {
       return new MembershipCommandPersistenceError('command_replay_rejected');
     }
     if (constraint === 'tenant_membership_transitions_membership_revision_unique') {
       return new MembershipCommandPersistenceError('membership_cas_conflict');
     }
+    if (constraint === 'auth_binding_transitions_binding_version_unique') {
+      return new MembershipCommandPersistenceError('binding_evidence_conflict');
+    }
     if (constraint === 'tenant_members_tenant_user_unique_idx') {
       return new MembershipCommandPersistenceError('membership_create_conflict');
     }
-    if (constraint === 'auth_account_institution_bindings_active_account_tenant_unique_idx') {
+    if (
+      constraint ===
+        'auth_account_institution_bindings_active_account_tenant_unique_idx' ||
+      constraint === 'auth_account_institution_bindings_pkey' ||
+      constraint ===
+        'auth_account_institution_bindings_tenant_id_id_unique'
+    ) {
       return new MembershipCommandPersistenceError('binding_conflict');
     }
   }
-  if (code?.startsWith('23')) {
+  if (code?.startsWith('23') || code === 'P0001') {
     return new MembershipCommandPersistenceError(
       'membership_command_constraint_conflict',
     );
@@ -149,31 +173,53 @@ function mapMembershipRow(row: MembershipRow): MembershipCurrent {
   });
 }
 
-function mapActiveBinding(row: BindingRow): ActiveMembershipBinding {
+function mapBindingRow(row: BindingRow): BindingCurrent {
   const assignedAt = toCanonicalInstant(row.assignedAt);
+  const expiresAt = toCanonicalInstant(row.expiresAt);
+  const revokedAt = toCanonicalInstant(row.revokedAt);
   const createdAt = toCanonicalInstant(row.createdAt);
   const updatedAt = toCanonicalInstant(row.updatedAt);
-  if (
-    row.status !== 'active' ||
-    row.revokedAt !== null ||
-    assignedAt === null ||
-    createdAt === null ||
-    updatedAt === null
-  ) {
+  const candidate: BindingCurrent | null =
+    assignedAt === null || createdAt === null || updatedAt === null
+      ? null
+      : {
+          bindingId: row.id,
+          accountId: row.accountId,
+          tenantId: row.tenantId,
+          institutionId: row.institutionId,
+          status: row.status,
+          source: row.source,
+          assignedBy: row.assignedBy,
+          assignedAt,
+          expiresAt,
+          revokedAt,
+          version: row.version,
+          createdAt,
+          updatedAt,
+        };
+  if (candidate === null || !isBindingCurrent(candidate)) {
+    fail('membership_command_repository_unavailable');
+  }
+  return Object.freeze(candidate);
+}
+
+function mapActiveBinding(row: BindingRow): ActiveMembershipBinding {
+  const current = mapBindingRow(row);
+  if (current.status !== 'active' || current.revokedAt !== null) {
     fail('membership_command_repository_unavailable');
   }
   return Object.freeze({
-    bindingId: row.id,
-    accountId: row.accountId,
-    tenantId: row.tenantId,
-    institutionId: row.institutionId,
-    source: row.source,
-    assignedBy: row.assignedBy,
-    assignedAt,
-    expiresAt: toCanonicalInstant(row.expiresAt),
-    version: row.version,
-    createdAt,
-    updatedAt,
+    bindingId: current.bindingId,
+    accountId: current.accountId,
+    tenantId: current.tenantId,
+    institutionId: current.institutionId,
+    source: current.source,
+    assignedBy: current.assignedBy,
+    assignedAt: current.assignedAt,
+    expiresAt: current.expiresAt,
+    version: current.version,
+    createdAt: current.createdAt,
+    updatedAt: current.updatedAt,
   });
 }
 
@@ -189,7 +235,7 @@ function affectedRows(rows: readonly unknown[]): number {
 
 /**
  * 为已经存在的外层事务创建 UoW。调用方负责事务、超时与回滚；本函数绝不
- * 开启嵌套事务。M3 composition root 必须使用该入口。
+ * 开启嵌套事务。
  */
 export function createTransactionBoundMembershipCommandUnitOfWork(
   database: MembershipCommandTransactionDatabase,
@@ -261,9 +307,25 @@ export function createTransactionBoundMembershipCommandUnitOfWork(
       const row = requireAtMostOne(rows);
       return row === null ? null : mapActiveBinding(row);
     },
-    commandExists: async (input): Promise<boolean> => {
+    lockBindingById: async (input): Promise<BindingCurrent | null> => {
       assertActive();
       const rows = await runDatabaseOperation(() =>
+        database
+          .select()
+          .from(authAccountInstitutionBindings)
+          .where(and(
+            eq(authAccountInstitutionBindings.tenantId, input.tenantId),
+            eq(authAccountInstitutionBindings.id, input.bindingId),
+          ))
+          .limit(2)
+          .for('update'),
+      );
+      const row = requireAtMostOne(rows);
+      return row === null ? null : mapBindingRow(row);
+    },
+    commandExists: async (input): Promise<boolean> => {
+      assertActive();
+      const membershipRows = await runDatabaseOperation(() =>
         database
           .select({ id: tenantMembershipTransitions.id })
           .from(tenantMembershipTransitions)
@@ -273,7 +335,18 @@ export function createTransactionBoundMembershipCommandUnitOfWork(
           ))
           .limit(2),
       );
-      return requireAtMostOne(rows) !== null;
+      if (requireAtMostOne(membershipRows) !== null) return true;
+      const bindingRows = await runDatabaseOperation(() =>
+        database
+          .select({ id: authAccountInstitutionBindingTransitions.id })
+          .from(authAccountInstitutionBindingTransitions)
+          .where(and(
+            eq(authAccountInstitutionBindingTransitions.tenantId, input.tenantId),
+            eq(authAccountInstitutionBindingTransitions.commandId, input.commandId),
+          ))
+          .limit(2),
+      );
+      return requireAtMostOne(bindingRows) !== null;
     },
     insertMembership: async (current): Promise<number> => {
       assertActive();
@@ -388,6 +461,39 @@ export function createTransactionBoundMembershipCommandUnitOfWork(
       );
       return affectedRows(rows);
     },
+    appendBindingTransition: async (
+      transition: BindingTransitionEvidence,
+    ): Promise<number> => {
+      assertActive();
+      const rows = await runDatabaseOperation(() =>
+        database
+          .insert(authAccountInstitutionBindingTransitions)
+          .values({
+            id: transition.transitionId,
+            tenantId: transition.tenantId,
+            bindingId: transition.bindingId,
+            replacementBindingId: transition.replacementBindingId,
+            commandId: transition.commandId,
+            transitionType: transition.transitionType,
+            provenanceSource: transition.provenanceSource,
+            assignmentSource: transition.assignmentSource,
+            actorId: transition.actorId,
+            reasonCode: transition.reasonCode,
+            fromStatus: transition.fromStatus,
+            toStatus: transition.toStatus,
+            fromVersion: transition.fromVersion,
+            toVersion: transition.toVersion,
+            membershipRevision: transition.membershipRevision,
+            scopeRevision: transition.scopeRevision,
+            occurredAt: transition.occurredAt === null
+              ? null
+              : new Date(transition.occurredAt),
+            recordedAt: new Date(transition.recordedAt),
+          })
+          .returning({ id: authAccountInstitutionBindingTransitions.id }),
+      );
+      return affectedRows(rows);
+    },
     appendTransition: async (transition: MembershipTransition): Promise<number> => {
       assertActive();
       const rows = await runDatabaseOperation(() =>
@@ -421,10 +527,16 @@ export function createTransactionBoundMembershipCommandUnitOfWork(
 
 export function createMembershipCommandTransactionPort(
   database: TenantDatabase,
+  dependencies: Readonly<{
+    createScopeAssertion?: TransactionBoundScopeAssertionFactory;
+  }> = {},
 ): MembershipCommandTransactionPort {
   return Object.freeze({
     run: async <T>(
-      work: (unitOfWork: MembershipCommandUnitOfWork) => Promise<T>,
+      work: (
+        unitOfWork: MembershipCommandUnitOfWork,
+        scopeAssertion?: TransactionBoundInstitutionScopeAssertion,
+      ) => Promise<T>,
     ): Promise<T> => {
       try {
         const result = await database.transaction(
@@ -442,12 +554,17 @@ export function createMembershipCommandTransactionPort(
             `));
 
             let active = true;
+            const isActive = (): boolean => active;
             const unitOfWork = createTransactionBoundMembershipCommandUnitOfWork(
               transaction,
-              () => active,
+              isActive,
+            );
+            const scopeAssertion = dependencies.createScopeAssertion?.(
+              transaction,
+              isActive,
             );
             try {
-              return { value: await work(unitOfWork) };
+              return { value: await work(unitOfWork, scopeAssertion) };
             } catch (error) {
               throw new MembershipCommandCallbackFailure(error);
             } finally {

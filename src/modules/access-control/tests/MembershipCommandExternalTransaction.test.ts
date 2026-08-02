@@ -145,6 +145,7 @@ describe('Access Control Membership 外部事务适配器', () => {
       expect.stringContaining('pg_catalog.pg_advisory_xact_lock'),
       'select:membership:for-update',
       'select:transition-command',
+      'select:transition-command',
       'insert:membership',
       'insert:transition',
     ]);

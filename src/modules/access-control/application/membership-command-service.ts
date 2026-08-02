@@ -1,5 +1,7 @@
 import { randomBytes } from 'node:crypto';
 
+import { createBindingTransitionId } from '@/modules/access-control/application/binding-command-service';
+import type { BindingTransitionEvidence } from '@/modules/access-control/domain/binding-lifecycle';
 import {
   decideMembershipLifecycle,
   isCompleteMembershipCurrent,
@@ -14,6 +16,10 @@ import {
   type MembershipCommandTransactionPort,
   type MembershipCommandUnitOfWork,
 } from '@/modules/access-control/ports/membership-command-unit-of-work';
+import type {
+  TransactionBoundInstitutionScopeAssertion,
+  TransactionBoundInstitutionScopeResolution,
+} from '@/modules/tenancy/ports/transaction-bound-institution-scope';
 
 export const AUTH_BINDING_MAX_VERSION = 2_147_483_647;
 
@@ -22,7 +28,10 @@ export type MembershipCommandBlockCode =
   | MembershipCommandPersistenceErrorCode
   | 'binding_version_exhausted'
   | 'binding_version_invalid'
-  | 'binding_active_conflict';
+  | 'binding_active_conflict'
+  | 'binding_scope_denied'
+  | 'binding_scope_invalid'
+  | 'binding_scope_unavailable';
 
 export type MembershipCommandResult =
   | Readonly<{
@@ -90,6 +99,17 @@ function persistenceBlockCode(error: unknown): MembershipCommandBlockCode {
   return 'membership_command_repository_unavailable';
 }
 
+function scopeBlockCode(
+  resolution: TransactionBoundInstitutionScopeResolution,
+): MembershipCommandBlockCode | null {
+  if (resolution.kind === 'active_scope') return null;
+  if (resolution.code === 'scope_missing' || resolution.code === 'scope_inactive') {
+    return 'binding_scope_denied';
+  }
+  if (resolution.code === 'scope_invalid') return 'binding_scope_invalid';
+  return 'binding_scope_unavailable';
+}
+
 /**
  * 在调用方已经开启的外层事务中执行 Owner command。
  *
@@ -98,8 +118,10 @@ function persistenceBlockCode(error: unknown): MembershipCommandBlockCode {
  */
 export async function executeMembershipCommandWithUnitOfWork(input: Readonly<{
   unitOfWork: MembershipCommandUnitOfWork;
+  scopeAssertion?: TransactionBoundInstitutionScopeAssertion;
   command: MembershipOwnerCommand;
   createTransitionId?: () => string;
+  createBindingTransitionId?: () => string;
   now?: () => Date;
 }>): Promise<MembershipCommandResult> {
   const commandError = validateMembershipOwnerCommandIdentity(input.command);
@@ -133,7 +155,12 @@ export async function executeMembershipCommandWithUnitOfWork(input: Readonly<{
     return blocked('command_replay_rejected');
   }
 
-  const recordedAt = (input.now ?? (() => new Date()))().toISOString();
+  let recordedAt: string;
+  try {
+    recordedAt = (input.now ?? (() => new Date()))().toISOString();
+  } catch {
+    return blocked('membership_command_time_invalid');
+  }
   const transitionId = (input.createTransitionId ?? createMembershipTransitionId)();
   const decision = decideMembershipLifecycle({
     current,
@@ -153,6 +180,8 @@ export async function executeMembershipCommandWithUnitOfWork(input: Readonly<{
       commandPersisted: false,
     });
   }
+
+  let scopeRevision: number | null = null;
 
   if (decision.bindingAction.kind === 'create') {
     activeBinding = await input.unitOfWork.lockActiveBinding({
@@ -184,6 +213,20 @@ export async function executeMembershipCommandWithUnitOfWork(input: Readonly<{
     }
   }
 
+  if (decision.bindingAction.kind === 'create') {
+    if (!input.scopeAssertion) return blocked('binding_scope_unavailable');
+    const resolution = await input.scopeAssertion.assertActive({
+      tenantId: decision.bindingAction.tenantId,
+      institutionId: decision.bindingAction.institutionId,
+    });
+    const scopeError = scopeBlockCode(resolution);
+    if (scopeError) return blocked(scopeError);
+    if (resolution.kind !== 'active_scope') {
+      return blocked('binding_scope_invalid');
+    }
+    scopeRevision = resolution.revision;
+  }
+
   if (input.command.kind === 'create') {
     requireOneAffected(
       await input.unitOfWork.insertMembership(decision.nextCurrent),
@@ -205,11 +248,35 @@ export async function executeMembershipCommandWithUnitOfWork(input: Readonly<{
   let bindingResult: Extract<MembershipCommandResult, { status: 'applied' }>['binding'] = {
     kind: 'unchanged',
   };
+  let bindingEvidence: BindingTransitionEvidence | null = null;
+
   if (decision.bindingAction.kind === 'create') {
     requireOneAffected(
       await input.unitOfWork.insertActiveBinding(decision.bindingAction),
     );
     bindingResult = { kind: 'created', version: 1 };
+    bindingEvidence = Object.freeze({
+      transitionId: (
+        input.createBindingTransitionId ?? createBindingTransitionId
+      )(),
+      tenantId: decision.bindingAction.tenantId,
+      bindingId: decision.bindingAction.bindingId,
+      replacementBindingId: null,
+      commandId: input.command.commandId,
+      transitionType: 'create',
+      provenanceSource: decision.transition.source,
+      assignmentSource: decision.bindingAction.source,
+      actorId: decision.transition.actorId,
+      reasonCode: decision.transition.reasonCode,
+      fromStatus: null,
+      toStatus: 'active',
+      fromVersion: null,
+      toVersion: 1,
+      membershipRevision: decision.nextCurrent.revision,
+      scopeRevision,
+      occurredAt: decision.bindingAction.assignedAt,
+      recordedAt: decision.bindingAction.recordedAt,
+    });
   } else if (
     decision.bindingAction.kind === 'revoke_active' &&
     activeBinding !== null
@@ -222,6 +289,34 @@ export async function executeMembershipCommandWithUnitOfWork(input: Readonly<{
       }),
     );
     bindingResult = { kind: 'revoked', version: activeBinding.version + 1 };
+    bindingEvidence = Object.freeze({
+      transitionId: (
+        input.createBindingTransitionId ?? createBindingTransitionId
+      )(),
+      tenantId: activeBinding.tenantId,
+      bindingId: activeBinding.bindingId,
+      replacementBindingId: null,
+      commandId: input.command.commandId,
+      transitionType: 'revoke',
+      provenanceSource: 'access_control_command',
+      assignmentSource: activeBinding.source,
+      actorId: input.command.actorId,
+      reasonCode: input.command.reasonCode,
+      fromStatus: 'active',
+      toStatus: 'revoked',
+      fromVersion: activeBinding.version,
+      toVersion: activeBinding.version + 1,
+      membershipRevision: decision.nextCurrent.revision,
+      scopeRevision: null,
+      occurredAt: input.command.occurredAt,
+      recordedAt,
+    });
+  }
+
+  if (bindingEvidence !== null) {
+    requireOneAffected(
+      await input.unitOfWork.appendBindingTransition(bindingEvidence),
+    );
   }
 
   requireOneAffected(
@@ -243,6 +338,7 @@ export async function executeMembershipCommandWithUnitOfWork(input: Readonly<{
 export function createMembershipCommandService(input: Readonly<{
   transactionPort: MembershipCommandTransactionPort;
   createTransitionId?: () => string;
+  createBindingTransitionId?: () => string;
   now?: () => Date;
 }>): Readonly<{
   execute(command: MembershipOwnerCommand): Promise<MembershipCommandResult>;
@@ -250,11 +346,13 @@ export function createMembershipCommandService(input: Readonly<{
   return Object.freeze({
     execute: async (command: MembershipOwnerCommand): Promise<MembershipCommandResult> => {
       try {
-        return await input.transactionPort.run((unitOfWork) =>
+        return await input.transactionPort.run((unitOfWork, scopeAssertion) =>
           executeMembershipCommandWithUnitOfWork({
             unitOfWork,
+            scopeAssertion,
             command,
             createTransitionId: input.createTransitionId,
+            createBindingTransitionId: input.createBindingTransitionId,
             now: input.now,
           }),
         );
