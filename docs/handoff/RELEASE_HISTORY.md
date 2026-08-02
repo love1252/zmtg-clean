@@ -965,3 +965,21 @@
 - 继承状态未变：环境 journal 为 `43／0042`、snapshot 为 `0026`、Membership complete／transition／exact current-head 为 `1／1／1`、active historical orphan／Scope relation orphan 为 `1／1`，A2-P2 Scope FK 继续 `NOT VALID`／`convalidated=false`。
 - M6 完成并收口；唯一下一任务冻结为 `BASE-02 Membership Revision M7 Enforce 与旧路径退出`。M7 尚未启动，本 handoff 合并后按当前 ULTRA 授权和动态硬门继续。
 - BASE-B1～B6、orphan 修复、FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader 继续未启动或阻断；七线正式发布保持 `0/7`。
+
+## 2026-08-02：BASE-02 Membership Revision M7 Enforce 与旧路径退出收口
+
+- PR #901 完成 M7 前置 handoff 校准，Head `7120e4d5f36e09b5b0121f4c2aafb58b8ddd2d3b`，Run `30736438955`／Job `91465972519`，Merge Commit `22a1e6cdba2b81fb8aa743c253cec1e66a28136b`。
+- PR #902 完成 M7 写入契约实施，Head `0b09b329012100386b8bc7638eaf818fb89cf8c6`，Run `30737402318`／Job `91468617520`，Merge Commit `24aba48ced5eb1c0588de88b45757958222cc010`；PR #903 完成独立审查，Head `2e22955c77e0d086e1de38ffe66adba930f6960a`，Run `30737726950`／Job `91469473175`，Merge Commit `5de9dc694b0de072eb68d43f2fbccab49c5bcb37`。
+- PR #904 完成 M7 `0043` Schema／Migration 实施，Head `f43ce1b9ba554ca034441440c1a57781cbddc198`，Run `30739072657`／Job `91473075000`，Merge Commit `65d12f7e0f9a47df3279a9052b9b21fb54a8e3ad`；PR #905 完成独立审查，Head `7f39cc27c7cbfd5f9587cc8881d725f767a8ac27`，Run `30739700515`／Job `91474768876`，Merge Commit `ffafaa8ac0c70f74cbf9b73ed0e43bd5aa7e6e56`。
+- PR #906 完成 M7 受控执行低敏证据，Head `097a0e837c7afaf4a89c818cf5c6860aac0f08c9`，Run `30741583818`／Job `91479870752`，Merge Commit `58521283d6c28f3b7b6b0b4254109bb1340c5066`。
+- PR #907 精确纠正六处 Git 证据归因，Head `571bbbdc8fe0a3b881edff25d1fbe10c27c81bd6`，Run `30741960782`／Job `91480843159`，Merge Commit `ceb7f8c3f75c06c93a845c2769cd59b199a46ebe`；没有重新连接数据库或重复 Migration。
+- PR #908 完成 M7 执行独立审查，Head `1fccdb4a45b9d588c46745a57e2436ca12ef2cbb`，Run `30742394742`／Job `91482000103`，Merge Commit `1ecc84f4e3749adbd15822582d992352340a1d44`；结论为 `base02_membership_revision_m7_execution_review=passed`、`m7_execution_evidence_attribution=passed`。
+- `0043` 已在固定 localhost-only local_acceptance 完成一次且仅一次授权 guarded 目标调用，自动重试与第二次目标调用均为 `0`；`planned／created／reused／conflict／unexpected=7／7／0／0／0`。
+- 环境 journal 从 `43／0042` 推进到 `44／0043`，snapshot 保持 `0026`；`0043` 已消费且不得改写，后续问题只能通过独立 forward-fix。
+- 六个无条件 current envelope 列均为 `NOT NULL`；Membership total／all-null／partial／complete 为 `1／0／0／1`，transition／exact current-head 为 `1／1`。
+- Binding／Scope／Context Version／Context Head 保持 `1／1／1／1`；全部 `public` 表数据和序列未变化，业务 DML 为 `0`。
+- active historical orphan／Scope relation orphan 保持 `1／1`；A2-P2 Scope FK 继续 `NOT VALID`／`convalidated=false`，未执行 orphan 修复或 `VALIDATE`。
+- Allocation Lease 和 Execution Lease 均已释放，Execution Lease claim／consume／renewal／release／active 为 `1／1／0／1／0`；client、进程、run lock、Helper、临时私有状态与隔离数据库残留为 `0`。
+- 执行前后恢复点均通过同集群空隔离数据库的选定 schema／data 恢复；该证明不覆盖 ACL、全局角色、异集群或完整灾备。
+- 自动本地运维元数据回显事件累计为 `2`；当前主动私有参数披露、Secret、Token、密码、私钥、PII 与真实凭证披露均为 `0`。
+- M7 完成并收口；唯一下一任务冻结为 `BASE-B1 Owner／Port／revision 契约闭环`。BASE-B1 尚未独立关闭，BASE-B2～B6、orphan 修复、FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader 继续未启动或阻断；七线正式发布保持 `0/7`。

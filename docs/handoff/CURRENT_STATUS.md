@@ -2,17 +2,21 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-02 Membership Revision M6 Reader 切换完成状态
+## BASE-02 Membership Revision M7 Enforce 与旧路径退出完成状态
 
 - 更新日期：2026-08-02
-- 本轮 handoff 基线：`005f1bfee5e1d94b003feb47c5f1f091463c483c`
+- 本轮 handoff 基线：`1ecc84f4e3749adbd15822582d992352340a1d44`
 - 当前任务：`BASE-02 ULTRA：Membership Revision M0～M7、BASE-B1～B6 全链实施与最终收口`
-- 当前切片：M6 authoritative Reader、Formal Session／Guard 切换、独立审查与 handoff
+- 当前切片：M7 写入契约、最终约束、固定本地验收执行、归因纠错、独立审查与 handoff
 - 正式任务编号：无；本轮未新增 `V2-*` 编号
 - M6 实施：PR #898，Head `e1cc9e4e97c18a80d3bf8ce55ed588b259898f19`，Run `30734941015`／Job `91461924228`，Merge Commit `fe79267264f228cac217908365aa42f3f7408109`
 - M6 实施独立审查：PR #899，Head `b105d566416b7d8ad5d10a38388c666d244a2f21`，Run `30735331035`／Job `91462991272`，Merge Commit `005f1bfee5e1d94b003feb47c5f1f091463c483c`
-- 两个 PR 的环境核对、依赖安装、架构自测、增量检查、lint、typecheck、完整测试与 build 均实际执行并成功
-- 本次 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package、lock 修改均为 `0`
+- M7 前置 handoff 修正：PR #901，Head `7120e4d5f36e09b5b0121f4c2aafb58b8ddd2d3b`，Run `30736438955`／Job `91465972519`，Merge Commit `22a1e6cdba2b81fb8aa743c253cec1e66a28136b`
+- M7 写入契约实施／审查：PR #902／#903，Head `0b09b329012100386b8bc7638eaf818fb89cf8c6`／`2e22955c77e0d086e1de38ffe66adba930f6960a`，Run `30737402318`／`30737726950`，Job `91468617520`／`91469473175`，Merge Commit `24aba48ced5eb1c0588de88b45757958222cc010`／`5de9dc694b0de072eb68d43f2fbccab49c5bcb37`
+- M7 Schema／Migration 实施／审查：PR #904／#905，Head `f43ce1b9ba554ca034441440c1a57781cbddc198`／`7f39cc27c7cbfd5f9587cc8881d725f767a8ac27`，Run `30739072657`／`30739700515`，Job `91473075000`／`91474768876`，Merge Commit `65d12f7e0f9a47df3279a9052b9b21fb54a8e3ad`／`ffafaa8ac0c70f74cbf9b73ed0e43bd5aa7e6e56`
+- M7 执行证据／归因纠错／执行独立审查：PR #906／#907／#908，Head `097a0e837c7afaf4a89c818cf5c6860aac0f08c9`／`571bbbdc8fe0a3b881edff25d1fbe10c27c81bd6`／`1fccdb4a45b9d588c46745a57e2436ca12ef2cbb`，Run `30741583818`／`30741960782`／`30742394742`，Job `91479870752`／`91480843159`／`91482000103`，Merge Commit `58521283d6c28f3b7b6b0b4254109bb1340c5066`／`ceb7f8c3f75c06c93a845c2769cd59b199a46ebe`／`1ecc84f4e3749adbd15822582d992352340a1d44`
+- PR #901～#908 的环境核对、依赖安装、架构自测、增量检查、lint、typecheck、完整测试与 build 均在各自冻结 Head 上实际执行并成功
+- 本次四文件 docs-only handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package、lock 修改均为 `0`
 
 ### M6 current 终态
 
@@ -28,18 +32,33 @@
 - active historical orphan／Scope relation orphan 保持 `1／1`；A2-P2 Scope FK 继续 `NOT VALID`／`convalidated=false`
 - M6 未连接数据库、未创建 Migration Lease、未执行 DDL／DML、Migration、Seed、orphan 修复或 FK `VALIDATE`
 
+### M7 current 终态
+
+- `0043_base02_membership_revision_enforce` 已在固定 localhost-only `local_acceptance` 通过唯一一次 guarded `pnpm db:migrate` 执行；自动重试与第二次调用为 `0`
+- `planned／created／reused／conflict／unexpected=7／7／0／0／0`，执行结果确定；环境 journal 从 `43／0042` 推进到 `44／0043`，snapshot 保持 `0026`
+- 六个无条件 current envelope 列已为 `NOT NULL`，最终同名 CHECK 精确；transition DDL、Binding、Scope、Context 与 A2-P2 Scope FK 未变化
+- Membership complete／transition／exact current-head 为 `1／1／1`，Binding／Scope／Context Version／Context Head 为 `1／1／1／1`
+- 全部 `public` 表数据和序列的低敏稳定指纹未变化，业务 DML 为 `0`
+- active historical orphan／Scope relation orphan 保持 `1／1`；A2-P2 Scope FK 继续 `NOT VALID`／`convalidated=false`
+- Allocation Lease 已释放；Execution Lease claim／consume／renewal／release／active 为 `1／1／0／1／0`
+- 执行前后恢复点均通过同集群空隔离数据库的选定 schema／data 恢复验证；该结论不扩大为 ACL、全局角色、异集群或完整灾备证明
+- PR #907 已关闭执行证据 Git 归因 F01；PR #908 结论为 `base02_membership_revision_m7_execution_review=passed`
+- 当前主动私有参数披露为 `0`；Secret、Token、密码、私钥、PII 与真实凭证披露为 `0`
+
 ### 独立审查与完成门
 
-- 独立审查结论为 `m6_implementation_review=passed`
+- M6 独立审查结论为 `m6_implementation_review=passed`
 - `fresh_membership_reader_cutover=true`、`session_restore_refresh_reread=true`、`guard_reference_cutover=true`
 - `explicit_membership_revision_lifecycle_source=true`
 - `authorization_tenant_members_updated_at_reads=0`、`authorization_membership_updated_at_compatibility_mappings=0`
-- `m6_complete=true`；本 handoff 合并后 `m6_handoff_complete=true`、`eligible_for_m7_after_handoff=true`
+- `m6_complete=true`、`m6_handoff_complete=true`
+- M7 写入契约与 Schema／Migration 独立审查均为 `passed`；执行证据归因和执行独立审查均为 `passed`
+- `m7_execution_complete=true`；本 handoff 合并后 `m7_handoff_complete=true`、`m7_complete=true`、`eligible_for_base_b1_after_handoff=true`
 
 ### 持续阻断
 
-- M7 尚未启动；M7 完成前 current envelope 最终 Enforce 与旧路径退出不得宣称完成
-- BASE-B1 Runtime 继续 `blocked`；BASE-B2～B6 均未启动
+- M7 已完成；`0043` 已消费且不得改写，后续问题只能使用独立 forward-fix
+- M7 前置阻断已关闭，BASE-B1 已具备启动资格但尚未由独立证据收口；BASE-B2～B6 均未启动
 - active historical orphan 与 Scope relation orphan 保持 `1／1`，未修改、未授权修复
 - A2-P2 Scope FK 保持 `NOT VALID`／`convalidated=false`，未执行 `VALIDATE`
 - 项目级 Writer、Audit／模板、MIG-01B、MIG-01C 与业务 Reader 继续阻断
@@ -47,11 +66,11 @@
 
 ### 唯一下一任务
 
-- 任务名称：`BASE-02 Membership Revision M7 Enforce 与旧路径退出`
+- 任务名称：`BASE-B1 Owner／Port／revision 契约闭环`
 - 任务编号：仓库尚无正式编号，本 handoff 不自行创造
-- 当前状态：仅冻结且尚未启动；本 handoff 合并后按当前 ULTRA 用户授权继续，但不得绕过动态硬门
-- 任务边界：在 M1～M6 全部证据通过后，以独立 Enforce Migration 完成 current envelope `NOT NULL`／最终 CHECK、transition 最终约束与旧路径退出，并再次证明 Owner 外 Writer／Deleter 为 `0`
-- M7 启动前必须实时冻结最新 main、journal／SQL／snapshot、Catalog／Shape、M1～M6 证据、Owner 外 Writer／Deleter、实时 Migration 编号、唯一 Lease、恢复点与固定 localhost-only 执行条件；不得夹带 orphan、A2-P2 FK `VALIDATE`、业务 Reader 或 BASE-B1
+- 当前状态：本 handoff 合并前尚未启动；合并后按当前 ULTRA 用户授权继续
+- 任务边界：重新冻结 Access Control／Identity／Tenancy／Security 的 Owner、Port 与 revision 契约，证明 Membership／Binding／Scope 三个版本域独立、Operating Context 未加入授权组合、第二事实源为 `0`
+- 若最新 main 仍为静态 `all_exact`，不得创建无意义 Runtime 改动；只形成 closure evidence、独立审查和 handoff。不得夹带 BASE-B2 Binding 生命周期、orphan、FK `VALIDATE` 或业务 Reader
 
 ```text
 membership_revision_direction=A-full_same_table_lifecycle
@@ -144,9 +163,56 @@ explicit_membership_revision_lifecycle_source=true
 m6_complete=true
 m6_handoff_complete=true
 eligible_for_m7_after_handoff=true
-m7_started=false
+m7_started=true
 m7_authorized_under_ultra=true
-eligible_for_base_b1_runtime=false
+m7_write_contract_review=passed
+m7_schema_migration_review=passed
+m7_execution_evidence_attribution=passed
+m7_execution_evidence_correction_pr=907
+m7_execution_review=passed
+m7_migration=0043
+m7_environment_journal_entries=44
+m7_environment_latest=0043
+m7_snapshot_latest=0026
+m7_planned=7
+m7_created=7
+m7_reused=0
+m7_conflict=0
+m7_unexpected=0
+m7_target_guarded_migration_calls_cumulative=1
+m7_automatic_retry_count=0
+m7_allocation_lease_released=true
+m7_allocation_lease_active=false
+m7_execution_lease_claim=1
+m7_execution_lease_consume=1
+m7_execution_lease_renewal=0
+m7_execution_lease_release=1
+m7_execution_lease_active=false
+m7_current_envelope_not_null_columns=6
+m7_post_all_null=0
+m7_post_partial=0
+m7_current_envelope_complete=1
+m7_transition_count=1
+m7_exact_current_head_count=1
+m7_owner_outside_direct_writer_files=0
+m7_owner_outside_direct_writer_symbols=0
+m7_authorization_tenant_members_updated_at_reads=0
+m7_authorization_membership_updated_at_compatibility_mappings=0
+m7_active_historical_orphan=1
+m7_scope_relation_orphan=1
+m7_scope_fk_validated=false
+m7_business_dml=0
+m7_public_table_data_changed=false
+m7_sequences_changed=false
+m7_pre_recovery_verified=true
+m7_post_recovery_verified=true
+m7_outcome_known=true
+m7_execution_complete=true
+m7_handoff_complete=true
+m7_complete=true
+eligible_for_base_b1_after_handoff=true
+base_b1_started=false
+base_b1_authorized_under_ultra=true
 base_b1_runtime=blocked
 base_b2_started=false
 base_b3_started=false
@@ -161,7 +227,7 @@ a2_p2_scope_fk_validated=false
 project_writer_started=false
 business_reader_started=false
 eligible_for_reader=false
-next_task=BASE-02 Membership Revision M7 Enforce 与旧路径退出
+next_task=BASE-B1 Owner／Port／revision 契约闭环
 next_task_started=false
 next_task_authorized_under_ultra=true
 ```
