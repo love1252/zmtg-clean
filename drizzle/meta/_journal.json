@@ -309,6 +309,13 @@
       "when": 1785656610916,
       "tag": "0043_base02_membership_revision_enforce",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1785681660893,
+      "tag": "0044_base02_binding_transition_expand",
+      "breakpoints": true
     }
   ]
 }
