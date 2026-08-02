@@ -1035,3 +1035,16 @@
 - business DML／sequence advance：`0／0`；
 - 执行前后恢复点及隔离恢复通过；
 - 下一任务切换至 Binding Runtime Writer／same-transaction evidence 前置预检。
+
+<!-- BASE02_BINDING_RUNTIME_WRITER_PREFLIGHT_RELEASE_20260803 -->
+
+## 2026-08-03｜BASE-B2 Binding Runtime Writer 前置预检收口
+
+- 前置预检 PR #925：Merge Commit `7de246bd41d8406a39647e2286985332558638df`；
+- 独立审查 PR #926：Merge Commit `937281fa60e1f192445d8e06a7a4d9228bbf672a`；
+- accepted path：`B2_W1_extend_existing_access_control_transaction_kernel`；
+- 精确实施 allowlist：`13`；
+- 实施准入：`true`；
+- Runtime Writer：未启动；
+- Schema／Migration 与数据库修改：`0`；
+- 下一任务切换至 Binding Runtime Writer／same-transaction transition evidence 实施。
