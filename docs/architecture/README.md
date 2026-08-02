@@ -542,3 +542,15 @@ MIG-01
 - M09-A 物理方向已冻结，不需要新增 physical model decision；
 - 下一任务为 Binding transition evidence Expand DDL Schema／Migration 实施；
 - 本 handoff 不表示 Schema、Migration、Lease、DDL、DML 或数据库执行已经开始。
+
+<!-- BASE02_BINDING_TRANSITION_0044_HANDOFF_START -->
+
+## BASE-B2 Binding transition evidence `0044` 执行收口
+
+- `0044_base02_binding_transition_expand` 已在固定本地验收环境唯一消费；
+- 环境 journal 为 `45`，Catalog 为 `all_exact`；
+- 唯一执行、恢复核验和执行独立审查均已通过；
+- 下一任务为 Binding Runtime Writer／same-transaction evidence 前置预检；
+- legacy calibration、orphan、FK `VALIDATE`、BASE-B3 和业务 Reader继续阻断。
+
+<!-- BASE02_BINDING_TRANSITION_0044_HANDOFF_END -->

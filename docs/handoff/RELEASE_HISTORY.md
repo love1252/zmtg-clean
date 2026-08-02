@@ -1021,3 +1021,17 @@
 - `binding_physical_model_decision_required=false`；
 - 未修改 Schema、Migration、Runtime 或数据库；
 - 唯一下一任务切换为 Binding transition evidence Expand DDL Schema／Migration 实施。
+
+<!-- BASE02_BINDING_TRANSITION_0044_RELEASE_20260803 -->
+
+## 2026-08-03｜BASE-B2 Binding transition evidence `0044` 执行收口
+
+- 实施 PR #920 与实施独立审查 PR #921 已合并；
+- 执行恢复证据 PR #922：Merge Commit `8c0c7f9059a5b435b9440f40602a8d2927147b4f`；
+- 执行独立审查 PR #923：Merge Commit `40256214931e5916e8566929003c3875cdb8698c`；
+- `0044` 唯一受控执行成功，journal `44 → 45`；
+- Catalog `all_missing → all_exact`；
+- guarded command／automatic retry／second invocation：`1／0／0`；
+- business DML／sequence advance：`0／0`；
+- 执行前后恢复点及隔离恢复通过；
+- 下一任务切换至 Binding Runtime Writer／same-transaction evidence 前置预检。

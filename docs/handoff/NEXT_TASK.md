@@ -2,58 +2,53 @@
 
 ## 当前交接状态
 
-BASE-B2 Binding transition evidence 的 accepted 决策、Schema／Migration 前置预检与独立审查已进入 `main`：
+BASE-B2 Binding transition evidence Expand DDL 已完成实施、唯一受控执行、恢复核验和独立审查：
 
-- PR #917：Head `97c02f1250f5f5fbff468b17953074db5b67eb4c`，Merge Commit `77a626ed182230f91b6d27daeaa4b0f297b377d9`，Run `30750704426` 成功；
-- 独立审查 PR #918：Head `749bb269393c50bc9638ab7f76f97b04df2a610b`，Merge Commit `32b08e5e7bca4331c421ac5a637a846a884e2bf1`，Run `30751540734` 成功；
-- `binding_transition_evidence_preflight_review=passed`；
-- `binding_physical_model_decision_required=false`；
-- Schema、Migration、journal、snapshot、Runtime 和数据库修改均为 `0`。
+- repository／environment journal：`45／45`；
+- latest：`0044_base02_binding_transition_expand`；
+- Catalog：`all_exact`；
+- transition evidence rows：`0`；
+- guarded command／automatic retry／second invocation：`1／0／0`；
+- business DML／sequence advance：`0／0`；
+- 执行前后恢复点和隔离恢复：通过；
+- active Execution Lease：`0`；
+- `0044` 已消费且不得改写或重跑。
 
 ## 唯一下一任务
 
 ```text
-BASE-B2 Binding transition evidence Expand DDL Schema／Migration 实施
+BASE-B2 Binding Runtime Writer／same-transaction transition evidence 前置预检
 ```
 
-当前状态：尚未启动；按现有 ULTRA 用户授权，可在本 handoff 合并后继续。
+## 任务目标
 
-## 启动硬门
+只读审计并冻结 Access Control Owner 下 Binding 生命周期写入的实施边界：
 
-1. 最新 `main／origin/main`、工作树、Required Check 与受保护分支无漂移；
-2. journal、SQL 集合与目标环境 latest 一致，snapshot 保持既有状态；
-3. Binding current、Membership current、Scope FK、orphan 计数及并发状态重新只读冻结；
-4. 实时分配唯一 Migration 编号与 Migration Lease；
-5. 建立执行前恢复点并完成隔离恢复验证；
-6. 目标精确为固定 localhost-only `local_acceptance`；
-7. 精确四文件 allowlist 获得动态确认。
+1. create／rebind／revoke／expire command 与状态机；
+2. Binding current、Membership current 和 transition evidence 的同事务顺序；
+3. command replay、Binding version CAS、Membership revision 与 Scope revision 观察值；
+4. external transaction／UoW 接口与 rollback 语义；
+5. legacy Writer、direct Drizzle／raw SQL 写入面；
+6. 合成测试、事务测试、并发测试和失败矩阵；
+7. 精确文件 allowlist、回退点和后续实施准入。
 
-## 候选四文件
+## 本轮禁止
 
-1. `drizzle/<实时编号>_base02_binding_transition_expand.sql`
-2. `drizzle/meta/_journal.json`
-3. `src/server/db/schema.ts`
-4. `src/server/db/tests/Schema.test.ts`
+- 不修改 Schema／Migration／journal／snapshot；
+- 不连接数据库、不运行 Migration；
+- 不写入真实业务数据；
+- 不执行 legacy calibration；
+- 不处理 historical orphan；
+- 不执行 Scope FK `VALIDATE`；
+- 不启动 BASE-B3～B6；
+- 不提前放行项目级 Writer、Audit／模板、MIG-01B／C 或业务 Reader。
 
-## 实施边界
+## 当前门禁
 
-只允许建立：
-
-- `auth_account_institution_binding_transitions`；
-- accepted transition enum 与列 Shape；
-- Binding `UNIQUE (tenant_id,id)`；
-- 原／replacement Binding FK；
-- command／version 唯一性、CHECK、索引；
-- evidence append-only trigger；
-- Binding current identity／tuple／assignment provenance 不可变；
-- Binding current DELETE／TRUNCATE 拒绝。
-
-Expand 不得夹带 legacy calibration、Runtime Writer、historical orphan 修复、FK `VALIDATE`、BASE-B3 或业务 Reader。
-
-## 持续阻断
-
-- BASE-B2 尚未完成；
-- BASE-B3～B6 未启动；
-- historical orphan 保持原值；
-- A2-P2 Scope FK 继续 `NOT VALID`；
-- 项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader继续阻断。
+```text
+binding_runtime_writer_preflight_started=false
+binding_runtime_writer_started=false
+eligible_for_binding_runtime_writer_implementation=false
+base_b2_complete=false
+eligible_for_base_b3=false
+```
