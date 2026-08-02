@@ -530,3 +530,15 @@ MIG-01
 - Capability 状态不等于对象或动作权限；
 - 角色 Audience 不等于服务端授权；
 - 代码合并、测试通过或 Demo 可用不等于七线正式上线。
+
+
+<!-- BASE02_BINDING_TRANSITION_PREFLIGHT_HANDOFF_20260802 -->
+
+## BASE-B2 Binding transition evidence 前置预检
+
+- PR #917：Head `97c02f1250f5f5fbff468b17953074db5b67eb4c`，Merge Commit `77a626ed182230f91b6d27daeaa4b0f297b377d9`，Run `30750704426` 成功；
+- 独立审查 PR #918：Head `749bb269393c50bc9638ab7f76f97b04df2a610b`，Merge Commit `32b08e5e7bca4331c421ac5a637a846a884e2bf1`，Run `30751540734` 成功；
+- 结论：`binding_transition_evidence_preflight_review=passed`；
+- M09-A 物理方向已冻结，不需要新增 physical model decision；
+- 下一任务为 Binding transition evidence Expand DDL Schema／Migration 实施；
+- 本 handoff 不表示 Schema、Migration、Lease、DDL、DML 或数据库执行已经开始。
