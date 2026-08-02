@@ -1,11 +1,11 @@
 # 智美天工架构文档索引
 
-- 任务：BASE-02 ULTRA Membership Revision M3 onboarding 委托、旧 Writer／Deleter 封堵、独立审查与 handoff（无正式 `V2-*` 编号）
+- 任务：BASE-02 ULTRA Membership Revision M4 deterministic legacy calibration 受控执行、独立审查与 handoff（无正式 `V2-*` 编号）
 - 日期：`2026-08-02 CST +0800`
-- 审计基线：`df83b9527e3569c0997f0438a68d086592f3a36b`
-- 状态：`current evidence + M3 handoff`
+- 审计基线：`4b79cdf39775fa7827be89a33fa339e8fda90faa`
+- 状态：`current evidence + M4 handoff`
 - 文档性质：架构导航索引，不是第二套架构事实源
-- 本次 M3 docs-only handoff 差异中的 Runtime、Schema、Migration、journal、snapshot、数据库、API、UI 修改：`0`
+- 本次 M4 docs-only handoff 差异中的 Runtime、Schema、Migration、journal、snapshot、数据库、API、UI 修改：`0`
 
 ## 1. 文档定位
 
@@ -162,6 +162,8 @@ MIG-01A1 Expand
 | [`../operations/base02-membership-revision-m1-local-acceptance-migration-independent-review-20260801.md`](../operations/base02-membership-revision-m1-local-acceptance-migration-independent-review-20260801.md) | `current evidence` | 独立核验完整尝试历史、Catalog、数据不变量、恢复点／Lease 终态和 M1 handoff 准入；不授权 M2 前置越界 |
 | [`../operations/base02-membership-revision-m2-implementation-independent-review-20260802.md`](../operations/base02-membership-revision-m2-implementation-independent-review-20260802.md) | `current evidence` | 独立核验 M2 Access Control 唯一 Membership Owner Writer、`expectedRevision` CAS、transaction-bound UoW、current／Binding／transition evidence 同事务原子性、重放 fail-closed 与合成／事务测试；只准入 M2 handoff，不表示 M3、数据库、Reader 或 BASE-B1 已启动 |
 | [`../operations/base02-membership-revision-m3-implementation-independent-review-20260802.md`](../operations/base02-membership-revision-m3-implementation-independent-review-20260802.md) | `current evidence` | 独立核验 M3-A onboarding 单一外层事务委托、M3-B 5 个旧 Writer／Deleter fail-closed、Owner 外 direct mutation `0／0` 与 AQ008 唯一 allowlist `1`；只准入 M3 handoff，不表示 M4、Reader 或 BASE-B1 已启动 |
+| [`../operations/base02-membership-revision-m4-local-acceptance-migration-validation-20260802.md`](../operations/base02-membership-revision-m4-local-acceptance-migration-validation-20260802.md) | `current evidence` | 记录 `0041` 第三次且仅一次授权目标执行、三次调用历史、`1／1／0／0／0`、current／baseline 原子终态、恢复点、Lease、清理和执行后无目标 Guard 拒绝低敏事实 |
+| [`../operations/base02-membership-revision-m4-local-acceptance-migration-independent-review-20260802.md`](../operations/base02-membership-revision-m4-local-acceptance-migration-independent-review-20260802.md) | `current evidence` | 独立核验 M4 journal／数据 Shape／三次执行历史、F01 零影响、恢复点和 Lease 终态；只准入 M4 handoff，不授权 M5、BASE-B1 或 Reader |
 
 这里的 `human reviewed` 只表示用户允许当前重新签发的 Candidate 作为未来 Approved Manifest 准备依据。Candidate payload 仍为 `candidate`，私有 Review State 仍为 `review_pending`；它不是 Candidate `approved` 状态，也不是 Approved Manifest 的 `approved` 状态。
 
@@ -215,7 +217,9 @@ BASE-02 准入方案已由 PR #854 以 Merge Commit `b87fad849770b83276d0572f73c
 
 BASE-B1 随后因 Membership revision 证据不足硬停止。PR #857 证明 `tenant_members.updated_at` 与 Binding version 均不能替代稳定 Membership revision，并冻结 Identity／Access Control／Tenancy／Security Owner 与 Operating Context 排除边界；PR #858 提交三方案决策包，proposed 推荐 A-full；PR #859 独立审查通过。用户随后正式接受 A-full，PR #861 将 `tenant_members` 唯一 canonical current、显式严格单调 revision、`expectedRevision` CAS、完整 lifecycle、tombstone／incarnation／ABA、current provenance、同事务 immutable transition evidence 与 Access Control 唯一 Writer 记录为 accepted，PR #862 独立审查结论为 `membership_revision_acceptance_review=passed`。该接受不决定具体字段、表结构、Migration 编号、SQL 或环境；BASE-B1 Runtime 继续阻断，Schema／Migration 前置预检尚未启动，BASE-B2～B6、orphan 修复、FK `VALIDATE`、Writer 和 Reader 均未启动。
 
-Membership Revision 物理模型已经由 PR #867 绑定接受，PR #868 独立审查通过。M1 Expand 由 PR #869 实施，PR #871 独立审查；首轮受控 Migration 因枚举聚合类型不匹配失败并完整回滚，未消费旧 `0040`。PR #872／#873 随后只完成三处显式 `enumlabel::text` 纠错与独立审查；PR #874 记录全新恢复点、全新唯一 Lease 下的第二次授权执行，PR #875 独立审查结论为 `base02_membership_revision_m1_execution_review=passed`。继承的低敏环境证据显示仓库／环境 journal 均为 41，最新为已消费且不可再改写的 `0040`，snapshot 仍为 0026；M1 Catalog 为 `all_exact`，legacy Membership current envelope 与 transition evidence 行仍为 `0／0`。实际数据库尝试累计为 2、自动重试为 0，业务 DML 为 0，orphan 仍为 `1／1`，A2-P2 Scope FK 继续 `NOT VALID`。M2 Owner Writer／CAS 已由 PR #877 实施并由 PR #878 独立审查通过。M3-A 由 PR #880 将正式 onboarding 委托给 Access Control transaction-bound Owner command；M3-B 由 PR #881 封堵 5 个旧 Writer／Deleter并建立 AQ008，Owner 外 direct mutation 为 `0／0`，唯一 allowlist 为 `1`；PR #882 独立审查结论为 `base02_membership_revision_m3_implementation_review=passed`。M3 未连接数据库，Schema、Migration、journal 和 snapshot 修改为 0；唯一下一任务为 `BASE-02 Membership Revision M4 deterministic legacy calibration`，尚未启动。
+Membership Revision 物理模型已经由 PR #867 绑定接受，PR #868 独立审查通过。M1 Expand 由 PR #869 实施，PR #871 独立审查；首轮受控 Migration 因枚举聚合类型不匹配失败并完整回滚，PR #872／#873 随后完成未消费 `0040` 的精确纠错与独立审查，PR #874／#875 完成第二次授权执行和独立审查。M2 Owner Writer／CAS 已由 PR #877 实施并由 PR #878 独立审查通过。M3-A 由 PR #880 将正式 onboarding 委托给 Access Control transaction-bound Owner command；M3-B 由 PR #881 封堵 5 个旧 Writer／Deleter并建立 AQ008，Owner 外 direct mutation 为 `0／0`，唯一 allowlist 为 `1`；PR #882 独立审查通过。
+
+M4 `0041` 经 PR #884～#889 完成实施、独立审查和两轮精确纠错。第三次且仅一次目标执行在最新 main、全新恢复点和全新唯一不可续期 Lease 下成功，目标 guarded 调用累计为 `3`、自动重试为 `0`；PR #890 记录低敏执行证据，PR #891 独立审查通过。仓库／环境 journal 均为 `42／0041`，snapshot 仍为 `0026`；Membership all-null／partial／complete 为 `0／0／1`，baseline transition 为 `1`，planned／created／reused／conflict／unexpected 为 `1／1／0／0／0`。active historical orphan／Scope relation orphan 保持 `1／1`，A2-P2 Scope FK 继续 `NOT VALID`。执行后一次无目标 Guard 启动在首道目标门禁拒绝，数据库连接和数据库变化均为 `0`，F01 已关闭。M4 已具备 handoff 收口条件；M5 尚未启动，本 handoff 合并后按当前 ULTRA 授权和动态硬门继续。
 
 文档完成只代表同一套架构 V2 的视图与入口已经建立，不代表 runtime、Schema、Migration、API、UI、Capability、环境或七线正式发布已经完成。
 
@@ -249,6 +253,8 @@ Membership Revision 物理模型已经由 PR #867 绑定接受，PR #868 独立�
 - Membership Revision M3-A onboarding 委托：PR #880 Base `5b8afc3d48932872714afc736f9c4f02f1fec675`／Head `c690789f341434fd7bb33e819151849e6c2a7afa`／Merge Commit `2d34177f0d2eb77ccaba0829ab3224e69911853f`，Run `30711226980`／Job `91398940037` 的全部质量步骤成功；
 - Membership Revision M3-B 旧 Writer／Deleter 封堵：PR #881 Base `2d34177f0d2eb77ccaba0829ab3224e69911853f`／Head `b405403d6fea87e1d022d7e027e22d9f8600ae61`／Merge Commit `f8909e098def3810e0e336c9491facf83d4c3a57`，Run `30714150218`／Job `91406737286` 的全部质量步骤成功；
 - Membership Revision M3 实现独立审查：PR #882 Base `f8909e098def3810e0e336c9491facf83d4c3a57`／Head `6f0b95b246aa115d63be49758ca66202f09ae589`／Merge Commit `df83b9527e3569c0997f0438a68d086592f3a36b`，Run `30714716713`／Job `91408247113` 的全部质量步骤成功，结论为 `base02_membership_revision_m3_implementation_review=passed`；
+- Membership Revision M4 执行低敏证据：PR #890 Base `76a162005204efd74e6919541bd8cea9c72a0170`／Head `90ca634ced30c7386d5c0a3c5338fda5df6bd911`／Merge Commit `167e1193e474237e5a612a7df9860adcad8b7e8c`，Run `30725188721`／Job `91435449482` 的全部质量步骤成功；
+- Membership Revision M4 执行独立审查：PR #891 Base `167e1193e474237e5a612a7df9860adcad8b7e8c`／Head `38c821ffe247306dc211e450923d0379f49036fe`／Merge Commit `4b79cdf39775fa7827be89a33fa339e8fda90faa`，Run `30725621418`／Job `91436644462` 的全部质量步骤成功，结论为 `base02_membership_revision_m4_execution_review=passed`；
 - 服务端硬门：`main.protected=true`，Required Check Context 为 `最小架构与质量门禁`，App ID／slug 为 `15368`／`github-actions`，`strict=true`、`enforce_admins=true`、审批数为 `0`；
 - 服务端拒绝：普通 direct push、显式 force-with-lease 和删除受保护分支均被 GitHub 拒绝；不允许管理员 bypass；
 - 合并策略：Stage A 验证 PR 使用 Merge Commit 合并；未启用 Linear History，仓库其他既有合并方法设置未在 Stage A 修改；
@@ -423,9 +429,14 @@ GitHub 最终只读核对结果为 `main.protected=true`，Required Check 已绑
 → M3-A onboarding Owner 委托（已完成，PR #880）
 → M3-B 旧 Writer／Deleter 封堵与 AQ008（已完成，PR #881）
 → M3 实现独立审查（已完成，PR #882）
-→ M3 handoff（本次收口）
-→ M4 deterministic legacy calibration（唯一下一任务；handoff 合并后按当前 ULTRA 授权启动）
-→ M5 高水位追赶与冲突清零
+→ M3 handoff（已完成，PR #883）
+→ M4 deterministic legacy calibration 实施与审查（已完成，PR #884／#885）
+→ M4 Guard CLI 纠错与审查（已完成，PR #886／#887）
+→ M4 `0041` record／relation alias 纠错与审查（已完成，PR #888／#889）
+→ M4 第三次且仅一次受控执行与低敏证据（已完成，PR #890）
+→ M4 执行独立审查（已完成，PR #891）
+→ M4 handoff（本次收口）
+→ M5 高水位追赶与冲突清零（唯一下一任务；尚未启动，handoff 合并后按当前 ULTRA 授权继续）
 → M6 Reader 切换
 → M7 Enforce
 → BASE-B1 Runtime 重新准入与关闭
@@ -437,9 +448,9 @@ GitHub 最终只读核对结果为 `main.protected=true`，Required Check 已绑
 → Reader
 ```
 
-`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已通过 PR #797 完成并合并，PR #799 已将 proposed decision pack 合并到 `main`，PR #801 已记录 accepted 选择，PR #804／#805 已完成治理 Stage A 仓库硬门与交接，PR #807／#808 已完成治理 Stage B Runner 基础与交接，PR #809 已完成本地环境只读预检，PR #811／#812 已完成本地就绪修复 Stage A 与交接，PR #814 已完成本地就绪修复 Stage B，PR #816／#817 已完成 Candidate Governance／Stage C-0 与 handoff，PR #818／#819 已完成 Source／Candidate v2 Governance 与 handoff，PR #820 已完成 Candidate 生成、重新签发和用户人工审核，PR #823 已完成 Approved Manifest 创建与低敏校验，PR #825／#826／#827 已完成 Stage D 与 handoff，PR #828～#832 已完成受控执行计划、Write Adapter Runtime、Authority／组合根无写准备及 handoff，PR #833～#836 已完成数据库级 `PUBLIC TEMPORARY` 权限决策、低敏调整、独立审查及 handoff，PR #837～#839 已完成 Approved Manifest 重新签发、独立审查及 handoff，PR #840～#842 已完成 A2-P1 受控执行、独立审查与 handoff，PR #843～#845 已完成 A2-P2 只读预检、独立审查与 handoff，PR #846～#848 已完成 P0 metadata current 校准、独立审查与 handoff，PR #849～#853 已完成 P1 四文件实施、两轮独立审查、local_acceptance 单次受控 Migration 与最终 handoff。PR #854～#856 已完成 BASE-02 前置方案、独立审查与 handoff；PR #857～#860 已完成 Membership revision 硬停止证据、proposed Decision Pack、独立审查与决策 handoff；PR #861～#863 已完成 A-full accepted decision、独立接受审查与 handoff；PR #864～#866 已完成 Schema／Migration 前置预检、proposed 物理模型决策包、独立审查与 handoff；PR #867／#868 已完成 P01～P12 与 M0～M7 绑定接受及独立审查；PR #869～#876 已完成 M1 四文件实施、独立质量修复、实施审查、未消费 `0040` 原子纠错／审查、第二次受控 Migration、执行独立审查与 handoff；PR #877～#879 已完成 M2 实施、独立审查与 handoff；PR #880～#882 已完成 M3-A、M3-B 与独立审查。唯一下一任务冻结为 `BASE-02 Membership Revision M4 deterministic legacy calibration`；M4 尚未启动，将在本 handoff 合并后按当前 ULTRA 用户授权和精确边界继续。
+`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已通过 PR #797 完成并合并，PR #799 已将 proposed decision pack 合并到 `main`，PR #801 已记录 accepted 选择，PR #804／#805 已完成治理 Stage A 仓库硬门与交接，PR #807／#808 已完成治理 Stage B Runner 基础与交接，PR #809～#823 已完成本地只读预检、就绪修复、Candidate／Source Governance、人工审核与 Approved Manifest，PR #825～#839 已完成 Stage D、A2-P1 执行准备、权限边界与 Approved Manifest 重新签发，PR #840～#853 已完成 A2-P1 与 A2-P2 全链。PR #854～#868 已完成 BASE-02 前置方案、Membership Revision A-full 接受、物理模型预检与 P01～P12／M0～M7 绑定接受；PR #869～#876 已完成 M1，PR #877～#879 已完成 M2，PR #880～#883 已完成 M3。PR #884～#891 已完成 M4 实施、独立审查、两轮精确纠错、第三次且仅一次受控执行、低敏证据和执行独立审查。本 handoff 收口 M4，唯一下一任务冻结为 `BASE-02 Membership Revision M5 高水位追赶与冲突清零`；M5 尚未启动，handoff 合并后按当前 ULTRA 授权和动态硬门继续。
 
-治理 Stage A 与治理 Stage B 已通过独立变更域和独立 PR 完成。PR #809 只读连接了受控 localhost 本地验收库并确认六项阻断；PR #811 关闭本地环境 Journal、A1 Shape 与恢复点三项阻断；PR #814 建立只读 Adapter 与 Context Policy 并关闭 `readonly_adapter_unavailable`；PR #816 建立 Candidate v1 test-only 契约并关闭 `candidate_contract_missing`；PR #818 建立用户授权 Source／Candidate v2 Governance；PR #820 记录 Candidate 低敏验证与人工审核；PR #823 记录 Approved Manifest 创建与校验；PR #825／#826 完成 Stage D；PR #829 建立 Write Adapter；PR #831 完成合成 Authority／组合根无写验证；PR #833～#836 关闭 `PUBLIC TEMPORARY` 阻断；PR #837～#839 完成 Approved Manifest 重新签发；PR #840～#842 完成 A2-P1。PR #843／#844 随后冻结并独立审查 A2-P2 exact index／FK、Catalog、Shape、metadata 和锁边界，PR #846～#848 完成 P0，PR #849～#853 完成 P1 实施、执行、独立审查与 handoff；A2-P2 已完成。PR #854～#856 已完成 BASE-02 前置方案、独立审查与 handoff；PR #857～#860 确认 Membership revision 阻断、形成 A-full proposed 推荐并完成决策 handoff，PR #861～#863 随后完成 A-full 正式接受、独立审查与 handoff，PR #864～#868 完成精确物理模型预检、绑定接受和独立审查；PR #869～#875 完成 M1 Expand、受控执行和完整纠错证据链；PR #877～#882 完成 M2 与 M3 的 Owner Writer、onboarding 委托、旧 Writer／Deleter 封堵及独立审查。BASE-B1 Runtime 与 orphan 数据修复仍未启动。
+治理 Stage A 与治理 Stage B 已通过独立变更域和独立 PR 完成。A2-P1、A2-P2、BASE-02 前置方案、Membership Revision A-full 与 P01～P12／M0～M7 accepted 边界均已完成证据链。M1 Expand、M2 Owner Writer／CAS、M3 onboarding 委托与旧 Writer／Deleter 封堵均已收口。M4 `0041` 已在固定本地验收环境形成唯一 revision `1` current 与 baseline transition；目标调用累计 `3`、自动重试 `0`，F01 无目标 Guard 拒绝已关闭。BASE-B1 Runtime、M5～M7、orphan 数据修复、FK `VALIDATE` 与 Reader 仍未启动。
 
 MIG-01 内部候选顺序继续保持：
 
@@ -453,7 +464,7 @@ A2
 → Reader
 ```
 
-本地就绪修复 Stage A、Stage B、Candidate Governance／Stage C-0、Source／Candidate v2 Governance、Stage C Candidate 人工审核、Approved Manifest 创建／校验、Stage D、A2-P1 全链和 A2-P2 P0／P1 均已完成。索引和 `NOT VALID` FK 已精确进入仓库与固定本地验收环境；active historical orphan 与 Scope 关系 orphan 仍均为 `1／1`。BASE-02 前置方案、Membership Revision A-full accepted decision、P01～P12 物理模型接受、M1 Expand、M2 Owner Writer／CAS 与 M3 onboarding 委托／旧 Writer 封堵均已完成；环境 journal 保持 41，M1 Catalog 保持 `all_exact`，legacy envelope／transition 行仍为 `0／0`。唯一下一任务为 `BASE-02 Membership Revision M4 deterministic legacy calibration`；M4 尚未启动。M5～M7、BASE-B1～B6、orphan 修复、A2-P2 FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 和业务 Reader 均未启动或继续阻断。该顺序不改变 MIG-01～MIG-06 的相对顺序。
+本地就绪修复 Stage A、Stage B、Candidate／Source Governance、Approved Manifest、Stage D、A2-P1 全链和 A2-P2 P0／P1 均已完成。索引和 `NOT VALID` FK 已精确进入仓库与固定本地验收环境；active historical orphan 与 Scope 关系 orphan 仍均为 `1／1`。BASE-02 前置方案、Membership Revision A-full accepted decision、P01～P12 物理模型、M1 Expand、M2 Owner Writer／CAS、M3 Writer 收口与 M4 deterministic legacy calibration 均已完成；环境 journal 为 `42／0041`，M1 Catalog 保持 `all_exact`，Membership complete current／baseline transition 为 `1／1`。唯一下一任务为 `BASE-02 Membership Revision M5 高水位追赶与冲突清零`；M5 尚未启动，handoff 合并后按当前 ULTRA 授权和动态硬门继续。M6～M7、BASE-B1～B6、orphan 修复、A2-P2 FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 和业务 Reader 均未启动或继续阻断。该顺序不改变 MIG-01～MIG-06 的相对顺序。
 
 后续既定数据顺序保持：
 
