@@ -554,3 +554,15 @@ MIG-01
 - legacy calibration、orphan、FK `VALIDATE`、BASE-B3 和业务 Reader继续阻断。
 
 <!-- BASE02_BINDING_TRANSITION_0044_HANDOFF_END -->
+
+<!-- BASE02_BINDING_RUNTIME_WRITER_PREFLIGHT_HANDOFF_START -->
+
+## BASE-B2 Binding Runtime Writer 前置预检收口
+
+- accepted path：`B2_W1_extend_existing_access_control_transaction_kernel`；
+- standalone `create／rebind／revoke／expire`、parent Membership Binding evidence、transaction-bound Scope assertion 与 rollback／concurrency 测试已冻结；
+- 精确实施 allowlist 为 `13` 个文件；
+- 下一任务为 Binding Runtime Writer／same-transaction transition evidence 实施；
+- Schema／Migration、数据库连接、legacy calibration、BASE-B3 与业务 Reader继续阻断。
+
+<!-- BASE02_BINDING_RUNTIME_WRITER_PREFLIGHT_HANDOFF_END -->
