@@ -673,3 +673,18 @@ MIG-01
 - 下一任务为 BASE-B3 契约关闭证据，BASE-B4 尚未启动。
 
 <!-- BASE02_B3_SESSION_REVISION_PREFLIGHT_HANDOFF_END -->
+
+<!-- BASE02_B3_FINAL_CLOSURE_HANDOFF_START -->
+
+## BASE-B3 正式 Session／三类 revision 实时重读最终收口
+
+- 正式登录、Session 恢复和每请求授权入口全部固定；
+- Membership revision、Binding version/status/expiry 与 Scope revision/status 均实时读取 canonical current；
+- 登录和 Session 恢复使用双轮 Owner fact 稳定性比较；
+- cookie 与 claims 只保存 selector，不保存授权 current；
+- transition evidence、缓存、Operating Context 与 updated_at fallback 均不参与授权 current；
+- stale、过期、撤销、多 Membership、缺 Scope 和 Reader 异常全部 fail-closed；
+- 现有 Runtime 已满足契约，无需制造代码修改；
+- BASE-B3 正式完成，下一阶段为 BASE-B4 Guard 与绕过闭环前置预检。
+
+<!-- BASE02_B3_FINAL_CLOSURE_HANDOFF_END -->
