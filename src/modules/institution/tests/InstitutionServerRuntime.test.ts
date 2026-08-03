@@ -386,6 +386,8 @@ describe('BASE-RUNTIME-01 institution server authorization root', () => {
     expect(Reflect.ownKeys(authorization as object)).toEqual([
       'authorizeCurrentInstitutionSectionV1',
       'authorizeCurrentInstitutionNavigationV1',
+      'authorizeCurrentInstitutionActionV1',
+      'authorizeCurrentInstitutionObjectV1',
     ]);
     expect(JSON.stringify(authorization)).toBe('{}');
     expect(runtimeMocks.resolveInstitutionGuardRuntimeConfigV1).toHaveBeenCalledTimes(1);
@@ -865,4 +867,31 @@ describe('BASE-RUNTIME-01 institution server authorization root', () => {
     });
     await expect(resolveInstitutionServerAuthorizationV1()).resolves.toBeNull();
   });
+  it('keeps BASE-B4 object and action capability off without an Owner adapter', async () => {
+    const authorization = await resolveInstitutionServerAuthorizationV1();
+    expect(isInstitutionRequestAuthorizationV1(authorization)).toBe(true);
+    if (!authorization) throw new Error('expected genuine authorization');
+
+    const input = Object.freeze({
+      objectType: 'customer' as const,
+      objectId: 'customer-runtime-001',
+      action: 'read' as const,
+    });
+    await expect(
+      authorization.authorizeCurrentInstitutionActionV1(input),
+    ).resolves.toEqual({
+      kind: 'rejected',
+      code: 'object_unavailable',
+    });
+    await expect(
+      authorization.authorizeCurrentInstitutionObjectV1(input),
+    ).resolves.toEqual({
+      kind: 'rejected',
+      code: 'object_unavailable',
+    });
+    expect(runtimeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(runtimeMocks.membershipRead).not.toHaveBeenCalled();
+    expect(runtimeMocks.anchorRead).not.toHaveBeenCalled();
+  });
+
 });

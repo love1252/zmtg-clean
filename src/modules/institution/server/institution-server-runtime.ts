@@ -374,6 +374,7 @@ export async function resolveInstitutionServerAuthorizationV1(): Promise<Institu
       anchorProvider,
       referenceCodec,
       now,
+      objectFactReader: null,
     });
 
     return isInstitutionRequestAuthorizationV1(authorization)

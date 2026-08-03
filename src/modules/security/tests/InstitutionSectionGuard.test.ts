@@ -1210,3 +1210,20 @@ describe('BASE-NAV-01 canonical visible navigation authorization', () => {
     }>().not.toMatchTypeOf<InstitutionNavigationAuthorizationV1>();
   });
 });
+
+describe('BASE-B4 section/object responsibility boundary', () => {
+  it('keeps Object Guard and Action Policy outside Section Guard', async () => {
+    const sectionGuardModule =
+      await import('@/modules/security/server/institution-section-guard');
+
+    expect(
+      'createInstitutionObjectGuardV1' in sectionGuardModule,
+    ).toBe(false);
+    expect(
+      'createInstitutionActionPolicyV1' in sectionGuardModule,
+    ).toBe(false);
+    expect(
+      'authorizeCurrentInstitutionObjectV1' in sectionGuardModule,
+    ).toBe(false);
+  });
+});

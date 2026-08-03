@@ -289,7 +289,11 @@ describe('AUTH-COMPOSE-01C institution request authorization', () => {
     >[0];
 
     expectTypeOf<keyof FactoryInput>().toEqualTypeOf<
-      'requestOwner' | 'anchorProvider' | 'referenceCodec' | 'now'
+      | 'requestOwner'
+      | 'anchorProvider'
+      | 'referenceCodec'
+      | 'now'
+      | 'objectFactReader'
     >();
     expectTypeOf<PublicInput>().toEqualTypeOf<InstitutionSectionGuardInputV1>();
     expectTypeOf<keyof PublicInput>().toEqualTypeOf<'sectionId'>();
@@ -983,4 +987,29 @@ describe('BASE-NAV-01 request navigation composition', () => {
       expect(isInstitutionNavigationAuthorizationV1(result)).toBe(true);
     }
   });
+  it('keeps object and action methods capability-off without an Owner adapter', async () => {
+    const created = fixture();
+    const authorization = compose(created);
+    const input = Object.freeze({
+      objectType: 'customer' as const,
+      objectId: 'customer-compose-001',
+      action: 'read' as const,
+    });
+
+    await expect(
+      authorization.authorizeCurrentInstitutionActionV1(input),
+    ).resolves.toEqual({
+      kind: 'rejected',
+      code: 'object_unavailable',
+    });
+    await expect(
+      authorization.authorizeCurrentInstitutionObjectV1(input),
+    ).resolves.toEqual({
+      kind: 'rejected',
+      code: 'object_unavailable',
+    });
+    expect(created.membershipRead).not.toHaveBeenCalled();
+    expect(created.anchorRead).not.toHaveBeenCalled();
+  });
+
 });
