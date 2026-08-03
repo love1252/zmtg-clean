@@ -1078,3 +1078,14 @@
 - Owner 外 Binding Writer：`0`；
 - Runtime／Schema／Migration／数据库执行：`0`；
 - 下一任务切换至 deterministic legacy Binding calibration DML Migration 前置预检。
+
+<!-- BASE02_BINDING_LEGACY_CALIBRATION_PREFLIGHT_RELEASE_20260803 -->
+
+## 2026-08-03｜BASE-B2 legacy Binding calibration 前置预检收口
+
+- 前置预检 PR #937：Merge Commit `d00519e2efe1e9fa637176a46779265512378f9b`；
+- 独立审查 PR #938：Merge Commit `9e63f7414b215647f9d8642c83cf288f2e2aad01`；
+- latest Migration：0044；next idx 未预留；
+- implementation allowlist：3；
+- database connection／DML execution：0；
+- 下一任务切换至 deterministic legacy Binding calibration DML Migration 实施。
