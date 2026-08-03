@@ -1099,3 +1099,16 @@
 - Migration：0045；精确实施文件：3；
 - database connection／Migration execution／DML execution：0；
 - 下一任务切换至 deterministic legacy Binding calibration DML Migration 执行准备。
+
+<!-- BASE02_BINDING_LEGACY_CALIBRATION_EXECUTION_RELEASE_20260803 -->
+
+## 2026-08-03｜BASE-B2 Binding legacy calibration 0045 执行收口
+
+- 执行证据 PR #943：Merge Commit `b575180a84dee3a8a1b60606835492e2d693cd15`；
+- 执行独立审查 PR #944：Merge Commit `6f2ca447cbc25db4f4567d7ac941487088d6c885`；
+- guarded target call／automatic retry：1／0；
+- planned／created／reused／conflict／unexpected：1／1／0／0／0；
+- environment journal：46／0045；
+- exact legacy evidence／residual candidate：1／0；
+- unauthorized business mutation：0；
+- 下一任务切换至 Binding 高水位／冲突／Owner Writer 清零复核。

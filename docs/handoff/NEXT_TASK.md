@@ -3,24 +3,24 @@
 ## 唯一下一任务
 
 ```text
-BASE-B2 deterministic legacy Binding calibration DML Migration 执行准备
+BASE-B2 Binding 高水位／冲突／Owner Writer 清零复核
 ```
 
 ## 任务目标
 
-1. 固定最新 main、0045 SQL／journal hash 与三文件实现范围；
-2. 只读核验 localhost-only local_acceptance 的 journal、Catalog、Shape 与候选数；
-3. 核验 planned／conflict／unexpected 预期值和 historical orphan 原值；
-4. 创建全新恢复点并完成隔离恢复验证；
-5. 签发全新短期、不可续期 Execution Lease；
-6. 形成单次 guarded Migration 执行授权包；
-7. 本轮执行准备不运行 Migration。
+1. 只读核验 residual uncalibrated Binding 为 0；
+2. 核验 evidence identity、tenant command 与 Binding version 冲突均为 0；
+3. 核验 Owner 外 Binding current／evidence Writer 为 0；
+4. 重跑并冻结 AQ008 Membership／Binding current／Binding evidence gate；
+5. 核验 evidence UPDATE／DELETE／TRUNCATE 为 0；
+6. 核验第二 Membership／Binding fact source 为 0；
+7. 形成 BASE-B2 完整关闭清单与独立审查准入。
 
 ## 禁止范围
 
-- 未获得明确执行授权不得运行 0045；
-- automatic retry 固定为 0；
-- 不直接执行 SQL；
-- 不修改 Binding current、Membership、Scope、Context 或 orphan；
+- 不运行或改写 0045；
+- 不连接非 localhost 数据库；
+- 不修改 Binding、Membership、Scope、Context 或 orphan；
 - 不执行 Scope FK VALIDATE；
-- 不启动 BASE-B3～B6。
+- 不启动 BASE-B3～B6；
+- 不放行项目级 Writer、Audit、MIG-01B／C 或业务 Reader。
