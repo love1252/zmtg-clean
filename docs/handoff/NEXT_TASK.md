@@ -3,28 +3,25 @@
 ## 唯一下一任务
 
 ```text
-BASE-B2 AQ008 Binding writer gate 扩展实施
+BASE-B2 deterministic legacy Binding calibration DML Migration 前置预检
 ```
 
-## 精确 allowlist
+## 任务目标
 
-1. `scripts/verify/architecture-quality.mjs`
-2. `scripts/verify/architecture-quality.test.mjs`
-
-## 实施目标
-
-- 保持现有 AQ008 rule identity 与 Membership 保护；
-- 将 `auth_account_institution_bindings` 纳入 direct-writer gate；
-- 将 `auth_account_institution_binding_transitions` 纳入 direct-writer gate；
-- 唯一 Owner allowlist 继续为 `src/modules/access-control/server/membership-command-repository.ts`；
-- 覆盖 Drizzle、raw SQL、alias、barrel、helper、reverse caller、copy／rename 与 commit blob；
-- rules.json 不允许 AQ008 例外。
+1. 只读核对既有 Binding current 与 Membership current Shape；
+2. 冻结 `legacy_calibration` eligibility、稳定 command／evidence identity 派生；
+3. 冻结 observed status／version／assignmentSource／Membership revision 映射；
+4. Scope revision 固定为 `NULL`，不得处理 historical orphan；
+5. 冻结 journal predecessor、实时 Migration Lease、恢复点与单次 guarded Migration；
+6. 冻结幂等、冲突、高水位、计数守恒、回滚与独立审查标准；
+7. 本轮只做前置预检，不执行 DML。
 
 ## 禁止范围
 
-- 不修改 Runtime／Schema／Migration；
-- 不连接数据库；
-- 不执行 legacy calibration；
+- 不修改 Binding current；
+- 不创建／修复 Scope；
 - 不处理 historical orphan；
 - 不执行 Scope FK `VALIDATE`；
-- 不启动 BASE-B3～B6。
+- 不连接外部数据库；
+- 不启动 BASE-B3～B6；
+- 不放行项目级 Writer或业务 Reader。
