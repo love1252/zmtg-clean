@@ -688,3 +688,16 @@ MIG-01
 - BASE-B3 正式完成，下一阶段为 BASE-B4 Guard 与绕过闭环前置预检。
 
 <!-- BASE02_B3_FINAL_CLOSURE_HANDOFF_END -->
+
+<!-- BASE02_B4_GUARD_BYPASS_PREFLIGHT_HANDOFF_START -->
+
+## BASE-B4 Guard／绕过闭环前置预检收口
+
+- Scope、Section 与 Navigation Guard 已具备；
+- Object Guard、Action Policy 与对象事实消费 Port 为当前缺口；
+- 入口／维护／绕过候选已形成可审计 CSV；
+- Owner 外 Membership／Binding Writer 保持 0；
+- 接受 capability-off Object／Action Guard 核心实施路径，精确 allowlist 为 10 文件；
+- 业务 Reader、Capability、BASE-B5 与 historical orphan 处置继续阻断。
+
+<!-- BASE02_B4_GUARD_BYPASS_PREFLIGHT_HANDOFF_END -->
