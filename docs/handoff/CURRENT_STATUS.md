@@ -3,48 +3,39 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B2 Binding legacy calibration 0045 执行收口状态
+## BASE-B2 Membership／Binding 生命周期最终收口状态
 
 - 更新日期：2026-08-03
-- 执行证据 PR #943：Head `66f122f368ad4bbca1e47f2f5938f97ea8ca852f`，Merge Commit `b575180a84dee3a8a1b60606835492e2d693cd15`
-- 执行证据 Required Check：Run `30799578825`／Job `91640809192` 成功
-- 执行独立审查 PR #944：Head `d5ea45804c10c2a5b507da30e9e72fd5c5874b47`，Merge Commit `6f2ca447cbc25db4f4567d7ac941487088d6c885`
-- 执行审查 Required Check：Run `30800412425`／Job `91643439699` 成功
-- Migration：`0045_base02_binding_legacy_calibration`
-- guarded target call／automatic retry：`1／0`
-- planned／created／reused／conflict／unexpected：`1／1／0／0／0`
-- environment journal：`46／0045`
-- Binding current／transition：`1／1`
-- exact legacy evidence／residual candidate：`1／0`
-- Membership／Scope／Context Version／Context Head：`1／1／1／1`
-- historical orphan／Scope relation orphan：`1／1`
-- Scope FK：`NOT VALID`
-- unauthorized business mutation：`0`
-- recovery points／post isolated restore：`2／1`，全部通过
-- Lease claim／consume／renew／release／active：`1／1／0／1／0`
-- legacy Binding calibration：已完成
-- BASE-B2：未完成
-- BASE-B3：未启动
+- 清零复核 PR #946：Merge Commit `541853c8a6bb945b37e25f34a77858a323e5d63c`
+- 清零复核 Required Check：Run `30803106992`／Job `91652114678`
+- 独立审查 PR #947：Merge Commit `0410d30565084b286bced4538188b582ed9ca524`
+- 独立审查 Required Check：Run `30803700977`／Job `91654048640`
+- residual／identity-command-version conflict：0／0
+- Owner 外 writer／evidence destructive／second fact source：0／0／0
+- AQ008 Membership／Binding current／Binding evidence gate：已验证
+- legacy Binding calibration：完成
+- historical orphan／Scope relation orphan：保持 1／1
+- Scope FK：NOT VALID
+- BASE-B2：完成
+- BASE-B3：尚未启动
 
 ### 唯一下一任务
 
-`BASE-B2 Binding 高水位／冲突／Owner Writer 清零复核`
+`BASE-B3 正式 Session／上下文刷新及三类 revision 实时重读前置预检`
 
 ```text
-binding_legacy_calibration_implementation=complete
-binding_legacy_calibration_execution=complete
-binding_legacy_calibration_execution_review=passed
+base_b2_complete=true
+base_b2_independent_review=passed
 legacy_binding_calibration_complete=true
-residual_uncalibrated_binding_count=0
-identity_command_version_conflict_count=0
-historical_orphan_modified=false
+owner_outside_binding_writer_count=0
+binding_transition_update_delete_truncate_count=0
+second_membership_binding_fact_source_count=0
+aq008_binding_writer_gate_verified=true
+historical_orphan_changed_by_base_b2=false
 a2_p2_scope_fk_validated=false
-eligible_for_binding_high_water_owner_review=true
-base_b2_complete=false
-eligible_for_base_b3=false
-next_task=BASE-B2 Binding 高水位／冲突／Owner Writer 清零复核
-next_task_started=false
-next_task_authorized_under_ultra=true
+eligible_for_base_b3=true
+base_b3_started=false
+next_task=BASE-B3 正式 Session／上下文刷新及三类 revision 实时重读前置预检
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
