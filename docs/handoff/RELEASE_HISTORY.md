@@ -1161,3 +1161,15 @@
 - accepted path：B4_G1_capability_off_object_action_guard；
 - implementation allowlist：10；
 - 下一任务切换至 BASE-B4 Action Policy／Object Guard capability-off 核心实施。
+
+<!-- BASE02_B4_OBJECT_ACTION_GUARD_CORE_RELEASE_20260803 -->
+
+## 2026-08-03｜BASE-B4 Action Policy／Object Guard capability-off 核心实施
+
+- 实施 PR #958：Merge Commit `79f2a028b3173d14f5cb9be67d9c5b5ba1a2f380`；
+- 独立审查 PR #959：Merge Commit `b3ef28c76732b813957b4fcdb578ad7faa2afe0d`；
+- object fact Port／Action Policy／Object Guard：implemented；
+- request authorization object／action methods：2；
+- business Reader／Capability：off；
+- changed files：10；
+- 下一任务切换至机构端入口清单校准与第一批正式 Route Guard 接线前置预检。

@@ -3,42 +3,43 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B4 Guard／绕过闭环前置预检收口状态
+## BASE-B4 Action Policy／Object Guard capability-off 核心实施收口
 
 - 更新日期：2026-08-03
-- 前置预检 PR #955：Head `8403a7abd5f94d89bb2d1172c5ad8a50fe63da07`，Merge Commit `e0d425741fc65fec58408c2319e1d0e8ddc73121`
-- 前置预检 Required Check：Run `30813352418`／Job `91685064178`
-- 独立审查 PR #956：Head `e9a4110b67c254056fad9ad756641df1eed06dee`，Merge Commit `79f52149feea8c1a056b91061228f2230f625059`
-- 独立审查 Required Check：Run `30814075895`／Job `91687430572`
-- inventory／formal guarded／review candidates：`116／2／104`
-- maintenance／demo-formal mixed：`2／2`
-- Scope／Section／Navigation Guard：current
-- Object Guard／Action Policy：missing／missing
-- Owner 外 Membership／Binding Writer：0
+- 实施 PR #958：Head `76c71a7cc7019c9730bb916305c710fdc1d091f7`，Merge Commit `79f2a028b3173d14f5cb9be67d9c5b5ba1a2f380`
+- 实施 Required Check：Run `30818605588`／Job `91702507633`
+- 独立审查 PR #959：Head `33a2bf8f7370e33fbe72c0548fdb9f1c5ba2824d`，Merge Commit `b3ef28c76732b813957b4fcdb578ad7faa2afe0d`
+- 独立审查 Required Check：Run `30820601809`／Job `91709274190`
+- object fact Port／Action Policy／Object Guard：implemented
+- request authorization object／action methods：2
+- institution runtime object fact reader：null
 - business Reader／Capability：关闭
-- accepted path：`B4_G1_capability_off_object_action_guard`
-- implementation allowlist：10
+- unknown／cross-scope／stale／fake handle：fail-closed
+- changed files：10
+- Schema／Migration／DB：0／0／0
 - BASE-B4：未完成
 - BASE-B5：未启动
 
 ### 唯一下一任务
 
-`BASE-B4 Action Policy／Object Guard capability-off 核心实施`
+`BASE-B4 机构端入口清单校准与第一批正式 Route Guard 接线前置预检`
 
 ```text
-base_b4_preflight=passed
-base_b4_preflight_independent_review=passed
-entry_bypass_inventory_complete=true
-object_guard_current=false
-action_policy_current=false
-owner_outside_membership_binding_writer_count=0
+base_b4_object_action_guard_core=implemented
+base_b4_object_action_guard_review=passed
+object_fact_port=implemented
+action_policy=implemented
+object_guard=implemented
+request_authorization_object_action_methods=2
+institution_runtime_object_fact_reader=null
 business_reader_release=false
-accepted_implementation_path=B4_G1_capability_off_object_action_guard
-implementation_allowlist_count=10
-eligible_for_base_b4_implementation=true
+business_capability_release=false
+entry_inventory_count=116
+entry_review_candidate_count=104
+eligible_for_base_b4_route_guard_preflight=true
 base_b4_complete=false
 base_b5_started=false
-next_task=BASE-B4 Action Policy／Object Guard capability-off 核心实施
+next_task=BASE-B4 机构端入口清单校准与第一批正式 Route Guard 接线前置预检
 next_task_started=false
 next_task_authorized_under_ultra=true
 ```

@@ -701,3 +701,17 @@ MIG-01
 - 业务 Reader、Capability、BASE-B5 与 historical orphan 处置继续阻断。
 
 <!-- BASE02_B4_GUARD_BYPASS_PREFLIGHT_HANDOFF_END -->
+
+<!-- BASE02_B4_OBJECT_ACTION_GUARD_CORE_HANDOFF_START -->
+
+## BASE-B4 Action Policy／Object Guard capability-off 核心实施
+
+- 新增版本化低敏对象事实 Port；
+- 新增固定注册表 Action Policy；
+- 新增 genuine Object Guard 与低敏 allow；
+- request authorization 新增 action／object 两个方法；
+- institution runtime 显式保持 object fact reader 为 null；
+- 业务 Reader 与真实 Capability 继续关闭；
+- 下一任务转入机构端入口清单校准和第一批正式 Route Guard 接线前置预检。
+
+<!-- BASE02_B4_OBJECT_ACTION_GUARD_CORE_HANDOFF_END -->
