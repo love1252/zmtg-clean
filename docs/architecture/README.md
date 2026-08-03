@@ -602,3 +602,16 @@ MIG-01
 - historical orphan、FK `VALIDATE`、BASE-B3 与业务 Reader继续阻断。
 
 <!-- BASE02_AQ008_BINDING_WRITER_GATE_HANDOFF_END -->
+
+<!-- BASE02_BINDING_LEGACY_CALIBRATION_PREFLIGHT_HANDOFF_START -->
+
+## BASE-B2 legacy Binding calibration 前置预检收口
+
+- deterministic mapping、identity、锁序、高水位与计数守恒已冻结；
+- DML 只允许向 Binding transition evidence 执行 INSERT；
+- Binding current、Membership、Scope、Context 与 historical orphan 保持不变；
+- 三文件实施范围已冻结；
+- 下一任务为 DML Migration 实施；
+- 数据库执行、FK VALIDATE、BASE-B3 与业务 Reader继续阻断。
+
+<!-- BASE02_BINDING_LEGACY_CALIBRATION_PREFLIGHT_HANDOFF_END -->
