@@ -3,43 +3,39 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B4 Action Policy／Object Guard capability-off 核心实施收口
+## BASE-B4 第一批正式 Route Guard 接线前置预检收口
 
 - 更新日期：2026-08-03
-- 实施 PR #958：Head `76c71a7cc7019c9730bb916305c710fdc1d091f7`，Merge Commit `79f2a028b3173d14f5cb9be67d9c5b5ba1a2f380`
-- 实施 Required Check：Run `30818605588`／Job `91702507633`
-- 独立审查 PR #959：Head `33a2bf8f7370e33fbe72c0548fdb9f1c5ba2824d`，Merge Commit `b3ef28c76732b813957b4fcdb578ad7faa2afe0d`
-- 独立审查 Required Check：Run `30820601809`／Job `91709274190`
-- object fact Port／Action Policy／Object Guard：implemented
-- request authorization object／action methods：2
-- institution runtime object fact reader：null
+- 前置预检 PR #961：Head `ff57722e6534162581a1792be3272f3fe0bbd1d0`，Merge Commit `e18dab5e96540a0ccd7b58fbd1110bdd652cedac`
+- 前置预检 Required Check：Run `30823507423`／Job `91719099999`
+- 独立审查 PR #962：Head `de059768e1b23bb0d4f78cb305a22b9923533c16`，Merge Commit `3978f203b8b9845e43fede6a0b86e2b53b129e17`
+- 独立审查 Required Check：Run `30824440196`／Job `91722298396`
+- first batch count：5
+- first batch paths：`['src/app/api/institution/entitlement-usage/route.ts', 'src/app/api/institution/knowledge-management/ai-call/usage/route.ts', 'src/app/api/institution/knowledge-management/retrieval/route.ts', 'src/app/api/institution/knowledge-management/search/route.ts', 'src/app/api/institution/knowledge-management/vector-search/route.ts']`
+- first batch sections：`['knowledge', 'system']`
+- guard chain：scope + section
+- write／dynamic／direct-db／demo：0／0／0／0
+- implementation allowlist：12
 - business Reader／Capability：关闭
-- unknown／cross-scope／stale／fake handle：fail-closed
-- changed files：10
-- Schema／Migration／DB：0／0／0
 - BASE-B4：未完成
 - BASE-B5：未启动
 
 ### 唯一下一任务
 
-`BASE-B4 机构端入口清单校准与第一批正式 Route Guard 接线前置预检`
+`BASE-B4 第一批低风险正式 Route Guard capability-off 接线实施`
 
 ```text
-base_b4_object_action_guard_core=implemented
-base_b4_object_action_guard_review=passed
-object_fact_port=implemented
-action_policy=implemented
-object_guard=implemented
-request_authorization_object_action_methods=2
-institution_runtime_object_fact_reader=null
+base_b4_route_guard_first_batch_preflight=passed
+base_b4_route_guard_first_batch_review=passed
+first_batch_count=5
+first_batch_guard_chain=scope+section
 business_reader_release=false
 business_capability_release=false
-entry_inventory_count=116
-entry_review_candidate_count=104
-eligible_for_base_b4_route_guard_preflight=true
+implementation_allowlist_count=12
+eligible_for_first_batch_route_guard_implementation=true
 base_b4_complete=false
 base_b5_started=false
-next_task=BASE-B4 机构端入口清单校准与第一批正式 Route Guard 接线前置预检
+next_task=BASE-B4 第一批低风险正式 Route Guard capability-off 接线实施
 next_task_started=false
 next_task_authorized_under_ultra=true
 ```
