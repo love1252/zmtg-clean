@@ -644,3 +644,18 @@ MIG-01
 - BASE-B3 与业务 Reader继续阻断。
 
 <!-- BASE02_BINDING_LEGACY_CALIBRATION_EXECUTION_HANDOFF_END -->
+
+<!-- BASE02_B2_FINAL_CLOSURE_HANDOFF_START -->
+
+## BASE-B2 Membership／Binding 生命周期最终收口
+
+- canonical current、CAS、provenance 与 append-only evidence 已完整建立；
+- standalone create／rebind／revoke／expire 和 Membership side effect 同事务原子；
+- legacy Binding calibration 已完成；
+- residual、冲突、Owner 外 writer、destructive evidence Runtime 和第二事实源均为 0；
+- AQ008 Binding current／evidence gate 已验证；
+- historical orphan 未修改，Scope FK 继续 NOT VALID；
+- BASE-B2 正式完成；
+- 下一任务为 BASE-B3 正式 Session／上下文刷新及三类 revision 实时重读前置预检。
+
+<!-- BASE02_B2_FINAL_CLOSURE_HANDOFF_END -->

@@ -1112,3 +1112,15 @@
 - exact legacy evidence／residual candidate：1／0；
 - unauthorized business mutation：0；
 - 下一任务切换至 Binding 高水位／冲突／Owner Writer 清零复核。
+
+<!-- BASE02_B2_FINAL_CLOSURE_RELEASE_20260803 -->
+
+## 2026-08-03｜BASE-B2 Membership／Binding 生命周期最终收口
+
+- 清零复核 PR #946：Merge Commit `541853c8a6bb945b37e25f34a77858a323e5d63c`；
+- 独立审查 PR #947：Merge Commit `0410d30565084b286bced4538188b582ed9ca524`；
+- residual／conflict／Owner outside／destructive evidence／second source：全部为 0；
+- legacy Binding calibration：完成；
+- historical orphan：未修改；Scope FK：NOT VALID；
+- BASE-B2：完成；
+- 唯一下一任务切换至 BASE-B3 正式 Session／上下文刷新及三类 revision 实时重读前置预检。
