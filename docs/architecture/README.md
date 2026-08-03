@@ -659,3 +659,17 @@ MIG-01
 - 下一任务为 BASE-B3 正式 Session／上下文刷新及三类 revision 实时重读前置预检。
 
 <!-- BASE02_B2_FINAL_CLOSURE_HANDOFF_END -->
+
+<!-- BASE02_B3_SESSION_REVISION_PREFLIGHT_HANDOFF_START -->
+
+## BASE-B3 正式 Session／revision 实时重读前置预检收口
+
+- 正式登录、Session 恢复和每请求授权入口已经冻结；
+- Membership revision、Binding version/status/expiry 与 Scope revision/status 均实时重读；
+- 登录与 Session 恢复执行双轮 Owner fact 稳定性比较；
+- cookie 与 claims 只保存 selector，不保存授权 current；
+- transition evidence、缓存、Operating Context 与 updated_at fallback 不进入授权组合；
+- 现有 Runtime 与测试已满足契约，Runtime 变更和 implementation allowlist 均为 0；
+- 下一任务为 BASE-B3 契约关闭证据，BASE-B4 尚未启动。
+
+<!-- BASE02_B3_SESSION_REVISION_PREFLIGHT_HANDOFF_END -->
