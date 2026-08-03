@@ -9,6 +9,11 @@ import {
   isInstitutionNavigationSectionIdV1,
   type InstitutionNavigationSectionIdV1,
 } from '@/modules/institution-contracts/v1/institution-navigation';
+import type { InstitutionObjectFactReaderV1 } from '@/modules/security/ports/institution-object-fact';
+import {
+  createInstitutionActionPolicyV1,
+  isInstitutionActionPolicyV1,
+} from '@/modules/security/server/institution-action-policy';
 import { isFormalProvenanceResolverV1 } from '@/modules/security/server/formal-request-provenance-owner';
 import { isActiveInstitutionAnchorProviderV1 } from '@/modules/security/server/institution-anchor-provider';
 import type { ActiveInstitutionAnchorProviderV1 } from '@/modules/security/server/institution-guard-evidence';
@@ -17,6 +22,14 @@ import {
   type InstitutionGuardReferenceCodecV1,
 } from '@/modules/security/server/institution-guard-reference';
 import { isFreshActiveMembershipProviderV1 } from '@/modules/security/server/institution-membership-provider';
+import {
+  createInstitutionObjectGuardV1,
+  isInstitutionObjectFactReaderV1,
+  isInstitutionObjectGuardV1,
+  type InstitutionObjectAuthorizationInputV1,
+  type InstitutionObjectGuardResolutionV1,
+  type InstitutionObjectGuardV1,
+} from '@/modules/security/server/institution-object-guard';
 import {
   createInstitutionScopeGuardV1,
   isInstitutionScopeGuardV1,
@@ -31,62 +44,83 @@ import {
   type InstitutionSectionGuardV1,
 } from '@/modules/security/server/institution-section-guard';
 
-const FACTORY_INPUT_KEYS = Object.freeze([
+const FACTORY_KEYS = Object.freeze([
   'requestOwner',
   'anchorProvider',
   'referenceCodec',
   'now',
 ] as const);
-const AUTHORIZE_INPUT_KEYS = Object.freeze(['sectionId'] as const);
-const NAVIGATION_AUTHORIZE_INPUT_KEYS = Object.freeze([
-  'targetSectionId',
+
+const FACTORY_WITH_OBJECT_KEYS = Object.freeze([
+  ...FACTORY_KEYS,
+  'objectFactReader',
 ] as const);
 
-declare class InstitutionRequestAuthorizationSealV1 {
-  private readonly ownerSeal;
+const SECTION_INPUT_KEYS = Object.freeze(['sectionId'] as const);
+const NAV_INPUT_KEYS = Object.freeze(['targetSectionId'] as const);
+
+declare class AuthorizationSeal {
+  private readonly seal;
 }
 
-export type InstitutionRequestAuthorizationV1 =
-  InstitutionRequestAuthorizationSealV1 &
-    Readonly<{
-      authorizeCurrentInstitutionSectionV1: (
-        input: InstitutionSectionGuardInputV1,
-      ) => Promise<InstitutionSectionGuardResolutionV1>;
-      authorizeCurrentInstitutionNavigationV1: (
-        input: InstitutionNavigationAuthorizationInputV1,
-      ) => Promise<InstitutionNavigationAuthorizationV1>;
-    }>;
+export type InstitutionRequestAuthorizationV1 = AuthorizationSeal &
+  Readonly<{
+    authorizeCurrentInstitutionSectionV1: (
+      input: InstitutionSectionGuardInputV1,
+    ) => Promise<InstitutionSectionGuardResolutionV1>;
+    authorizeCurrentInstitutionNavigationV1: (
+      input: InstitutionNavigationAuthorizationInputV1,
+    ) => Promise<InstitutionNavigationAuthorizationV1>;
+    authorizeCurrentInstitutionActionV1: (
+      input: InstitutionObjectAuthorizationInputV1,
+    ) => Promise<InstitutionObjectGuardResolutionV1>;
+    authorizeCurrentInstitutionObjectV1: (
+      input: InstitutionObjectAuthorizationInputV1,
+    ) => Promise<InstitutionObjectGuardResolutionV1>;
+  }>;
 
-type PreflightFailureV1 = 'scope_unavailable' | 'policy_unavailable';
+type Failure = 'scope_unavailable' | 'policy_unavailable';
 
-type AuthorizationDependenciesV1 = Readonly<{
-  preflightFailure: PreflightFailureV1 | null;
-  authorizeCurrentSection:
+type Dependencies = Readonly<{
+  failure: Failure | null;
+  authorizeSection:
     | InstitutionSectionGuardV1['authorizeCurrentSection']
     | null;
-  authorizeCurrentNavigation:
+  authorizeNavigation:
     | InstitutionSectionGuardV1['authorizeCurrentNavigation']
+    | null;
+  authorizeObject:
+    | InstitutionObjectGuardV1['authorizeCurrentObjectAction']
     | null;
 }>;
 
-const authenticAuthorizationsV1 = new WeakSet<object>();
+const authorizations = new WeakSet<object>();
+
 const scopeUnavailable = Object.freeze({
   kind: 'rejected',
   code: 'scope_unavailable',
 } as const);
+
 const policyUnavailable = Object.freeze({
   kind: 'rejected',
   code: 'policy_unavailable',
 } as const);
+
+const objectUnavailable = Object.freeze({
+  kind: 'rejected',
+  code: 'object_unavailable',
+} as const);
+
 const actionUnregistered = Object.freeze({
   kind: 'rejected',
   code: 'action_unregistered',
 } as const);
+
 const blockedNavigationGuard = createInstitutionSectionGuardV1({} as never);
 
-function snapshotExactPlainRecord(
+function snapshot(
   value: unknown,
-  expectedKeys: readonly string[],
+  keys: readonly string[],
 ): Readonly<Record<string, unknown>> | null {
   try {
     if (
@@ -99,34 +133,24 @@ function snapshotExactPlainRecord(
       return null;
     }
     const descriptors = Object.getOwnPropertyDescriptors(value);
-    const ownKeys = Reflect.ownKeys(descriptors);
     if (
-      ownKeys.length !== expectedKeys.length ||
-      ownKeys.some((key) => typeof key !== 'string') ||
-      expectedKeys.some(
-        (key) => !Object.prototype.hasOwnProperty.call(descriptors, key),
-      )
+      Reflect.ownKeys(descriptors).length !== keys.length ||
+      keys.some((key) => !Object.hasOwn(descriptors, key))
     ) {
       return null;
     }
-
-    const snapshot: Record<string, unknown> = Object.create(null) as Record<
-      string,
-      unknown
-    >;
-    for (const key of expectedKeys) {
+    const result: Record<string, unknown> = Object.create(null);
+    for (const key of keys) {
       const descriptor = descriptors[key];
       if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
         return null;
       }
-      Object.defineProperty(snapshot, key, {
+      Object.defineProperty(result, key, {
         value: descriptor.value,
         enumerable: true,
-        configurable: false,
-        writable: false,
       });
     }
-    return Object.freeze(snapshot);
+    return Object.freeze(result);
   } catch {
     return null;
   }
@@ -140,97 +164,103 @@ function isTrustedNow(value: unknown): value is () => Date {
   }
 }
 
-function preflightResolution(
-  code: PreflightFailureV1,
-): InstitutionSectionGuardResolutionV1 {
-  return code === 'policy_unavailable'
-    ? policyUnavailable
-    : scopeUnavailable;
-}
-
-function parseAuthorizeInput(
+function parseSection(
   value: unknown,
 ): InstitutionSectionGuardInputV1 | null {
-  const snapshot = snapshotExactPlainRecord(value, AUTHORIZE_INPUT_KEYS);
-  if (!snapshot || !isInstitutionNavigationSectionIdV1(snapshot.sectionId)) {
+  const input = snapshot(value, SECTION_INPUT_KEYS);
+  if (!input || !isInstitutionNavigationSectionIdV1(input.sectionId)) {
     return null;
   }
-  return Object.freeze({ sectionId: snapshot.sectionId });
+  return Object.freeze({ sectionId: input.sectionId });
 }
 
-function parseNavigationAuthorizeInput(
+function parseNavigation(
   value: unknown,
 ): InstitutionNavigationAuthorizationInputV1 | null {
-  const snapshot = snapshotExactPlainRecord(
-    value,
-    NAVIGATION_AUTHORIZE_INPUT_KEYS,
-  );
+  const input = snapshot(value, NAV_INPUT_KEYS);
   if (
-    !snapshot ||
-    !isInstitutionNavigationSectionIdV1(snapshot.targetSectionId)
+    !input ||
+    !isInstitutionNavigationSectionIdV1(input.targetSectionId)
   ) {
     return null;
   }
-  return Object.freeze({ targetSectionId: snapshot.targetSectionId });
+  return Object.freeze({ targetSectionId: input.targetSectionId });
 }
 
 function blockedNavigation(
-  targetSectionId: InstitutionNavigationSectionIdV1 | null,
+  target: InstitutionNavigationSectionIdV1 | null,
 ): Promise<InstitutionNavigationAuthorizationV1> {
   return blockedNavigationGuard.authorizeCurrentNavigation(
-    targetSectionId === null ? ({} as never) : { targetSectionId },
+    target === null ? ({} as never) : { targetSectionId: target },
   );
 }
 
-function createAuthorizationHandle(
-  dependencies: AuthorizationDependenciesV1,
-): InstitutionRequestAuthorizationV1 {
+function makeAuthorization(deps: Dependencies): InstitutionRequestAuthorizationV1 {
+  async function authorizeObject(
+    input: InstitutionObjectAuthorizationInputV1,
+  ): Promise<InstitutionObjectGuardResolutionV1> {
+    if (deps.failure === 'scope_unavailable') return scopeUnavailable;
+    if (deps.failure === 'policy_unavailable') return policyUnavailable;
+    if (!deps.authorizeObject) return objectUnavailable;
+    try {
+      return await deps.authorizeObject(input);
+    } catch {
+      return objectUnavailable;
+    }
+  }
+
   const authorization = Object.freeze({
     async authorizeCurrentInstitutionSectionV1(
-      input: InstitutionSectionGuardInputV1,
+      value: InstitutionSectionGuardInputV1,
     ): Promise<InstitutionSectionGuardResolutionV1> {
-      const authorizeInput = parseAuthorizeInput(input);
-      if (!authorizeInput) return actionUnregistered;
-      if (dependencies.preflightFailure) {
-        return preflightResolution(dependencies.preflightFailure);
-      }
-      if (!dependencies.authorizeCurrentSection) return scopeUnavailable;
+      const input = parseSection(value);
+      if (!input) return actionUnregistered;
+      if (deps.failure === 'scope_unavailable') return scopeUnavailable;
+      if (deps.failure === 'policy_unavailable') return policyUnavailable;
+      if (!deps.authorizeSection) return scopeUnavailable;
       try {
-        return await dependencies.authorizeCurrentSection(authorizeInput);
+        return await deps.authorizeSection(input);
       } catch {
         return scopeUnavailable;
       }
     },
     async authorizeCurrentInstitutionNavigationV1(
-      input: InstitutionNavigationAuthorizationInputV1,
+      value: InstitutionNavigationAuthorizationInputV1,
     ): Promise<InstitutionNavigationAuthorizationV1> {
-      const authorizeInput = parseNavigationAuthorizeInput(input);
-      if (!authorizeInput) return blockedNavigation(null);
-      if (
-        dependencies.preflightFailure ||
-        !dependencies.authorizeCurrentNavigation
-      ) {
-        return blockedNavigation(authorizeInput.targetSectionId);
+      const input = parseNavigation(value);
+      if (!input) return blockedNavigation(null);
+      if (deps.failure || !deps.authorizeNavigation) {
+        return blockedNavigation(input.targetSectionId);
       }
       try {
-        return await dependencies.authorizeCurrentNavigation(authorizeInput);
+        return await deps.authorizeNavigation(input);
       } catch {
-        return blockedNavigation(authorizeInput.targetSectionId);
+        return blockedNavigation(input.targetSectionId);
       }
     },
+    authorizeCurrentInstitutionActionV1(
+      input: InstitutionObjectAuthorizationInputV1,
+    ): Promise<InstitutionObjectGuardResolutionV1> {
+      return authorizeObject(input);
+    },
+    authorizeCurrentInstitutionObjectV1(
+      input: InstitutionObjectAuthorizationInputV1,
+    ): Promise<InstitutionObjectGuardResolutionV1> {
+      return authorizeObject(input);
+    },
   });
-  authenticAuthorizationsV1.add(authorization);
+
+  authorizations.add(authorization);
   return authorization as unknown as InstitutionRequestAuthorizationV1;
 }
 
-function failClosed(
-  preflightFailure: PreflightFailureV1,
-): InstitutionRequestAuthorizationV1 {
-  return createAuthorizationHandle(
+function failClosed(failure: Failure): InstitutionRequestAuthorizationV1 {
+  return makeAuthorization(
     Object.freeze({
-      preflightFailure,
-      authorizeCurrentSection: null,
-      authorizeCurrentNavigation: null,
+      failure,
+      authorizeSection: null,
+      authorizeNavigation: null,
+      authorizeObject: null,
     }),
   );
 }
@@ -243,43 +273,42 @@ export function isInstitutionRequestAuthorizationV1(
       value !== null &&
       typeof value === 'object' &&
       !isProxy(value) &&
-      authenticAuthorizationsV1.has(value)
+      authorizations.has(value)
     );
   } catch {
     return false;
   }
 }
 
-/**
- * Consumes one genuine formal-session request owner and composes its two private child handles
- * through the central scope and section guards. Callers can request only a registered target;
- * raw account, scope, role, evidence, providers, policy material and key material never leave
- * this root.
- */
 export function createInstitutionRequestAuthorizationV1(input: Readonly<{
   requestOwner: FormalServerSessionRequestOwnerV1;
   anchorProvider: ActiveInstitutionAnchorProviderV1;
   referenceCodec: InstitutionGuardReferenceCodecV1;
   now: () => Date;
+  objectFactReader?: InstitutionObjectFactReaderV1 | null;
 }>): InstitutionRequestAuthorizationV1 {
-  const snapshot = snapshotExactPlainRecord(input, FACTORY_INPUT_KEYS);
-  if (!snapshot) return failClosed('scope_unavailable');
+  const record =
+    snapshot(input, FACTORY_WITH_OBJECT_KEYS) ??
+    snapshot(input, FACTORY_KEYS);
 
-  const requestOwner = snapshot.requestOwner;
-  const anchorProvider = snapshot.anchorProvider;
-  const referenceCodec = snapshot.referenceCodec;
-  const now = snapshot.now;
+  if (!record) return failClosed('scope_unavailable');
 
-  const genuineRequestOwner = isFormalServerSessionRequestOwnerV1(requestOwner);
-  const genuineAnchorProvider = isActiveInstitutionAnchorProviderV1(anchorProvider);
-  const genuineReferenceCodec =
-    isInstitutionGuardReferenceCodecV1(referenceCodec);
-  const trustedNow = isTrustedNow(now);
+  const requestOwner = record.requestOwner;
+  const anchorProvider = record.anchorProvider;
+  const referenceCodec = record.referenceCodec;
+  const now = record.now;
 
-  if (!genuineRequestOwner || !genuineAnchorProvider || !trustedNow) {
+  if (
+    !isFormalServerSessionRequestOwnerV1(requestOwner) ||
+    !isActiveInstitutionAnchorProviderV1(anchorProvider) ||
+    !isTrustedNow(now)
+  ) {
     return failClosed('scope_unavailable');
   }
-  if (!genuineReferenceCodec) return failClosed('policy_unavailable');
+
+  if (!isInstitutionGuardReferenceCodecV1(referenceCodec)) {
+    return failClosed('policy_unavailable');
+  }
 
   let consumption: ReturnType<
     typeof consumeFormalServerSessionRequestOwnerV1
@@ -289,6 +318,7 @@ export function createInstitutionRequestAuthorizationV1(input: Readonly<{
   } catch {
     consumption = null;
   }
+
   if (
     !consumption ||
     !isFormalProvenanceResolverV1(consumption.provenanceResolver) ||
@@ -306,6 +336,7 @@ export function createInstitutionRequestAuthorizationV1(input: Readonly<{
   if (!isInstitutionScopeGuardV1(scopeGuard)) {
     return failClosed('scope_unavailable');
   }
+
   const sectionGuard = createInstitutionSectionGuardV1({
     scopeGuard,
     referenceCodec,
@@ -315,11 +346,30 @@ export function createInstitutionRequestAuthorizationV1(input: Readonly<{
     return failClosed('scope_unavailable');
   }
 
-  return createAuthorizationHandle(
+  const actionPolicy = createInstitutionActionPolicyV1({});
+  const objectFactReader = isInstitutionObjectFactReaderV1(
+    record.objectFactReader,
+  )
+    ? record.objectFactReader
+    : null;
+
+  const objectGuard = createInstitutionObjectGuardV1({
+    scopeGuard,
+    objectFactReader,
+    actionPolicy,
+    now,
+  });
+
+  return makeAuthorization(
     Object.freeze({
-      preflightFailure: null,
-      authorizeCurrentSection: sectionGuard.authorizeCurrentSection,
-      authorizeCurrentNavigation: sectionGuard.authorizeCurrentNavigation,
+      failure: null,
+      authorizeSection: sectionGuard.authorizeCurrentSection,
+      authorizeNavigation: sectionGuard.authorizeCurrentNavigation,
+      authorizeObject:
+        isInstitutionActionPolicyV1(actionPolicy) &&
+        isInstitutionObjectGuardV1(objectGuard)
+          ? objectGuard.authorizeCurrentObjectAction
+          : null,
     }),
   );
 }
