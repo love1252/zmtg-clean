@@ -3,43 +3,45 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B2 legacy Binding calibration 前置预检收口状态
+## BASE-B2 Binding legacy calibration Migration 实施收口状态
 
 - 更新日期：2026-08-03
-- 前置预检 PR #937：Head `1898e50f89eb0f2f89a9e5b635732a7b93a4f4d5`，Merge Commit `d00519e2efe1e9fa637176a46779265512378f9b`
-- 前置预检 Required Check：Run `30785688138`／Job `91598672640` 成功
-- 独立审查 PR #938：Head `2a3e881ae1187f10941bedd2bba9094b674c2997`，Merge Commit `9e63f7414b215647f9d8642c83cf288f2e2aad01`
-- 独立审查 Required Check：Run `30787800007`／Job `91604768507` 成功
-- latest Migration：`0044`
-- candidate next idx：`0045`（未预留）
-- Binding current mutation：禁止
-- evidence：insert-only
-- Scope revision：`NULL`
-- implementation allowlist：`3`
-- database connection／DML execution：`0`
+- 实施 PR #940：Head `17d1bf2c3bb9e0b62ed1802fb12b58ccb6db4b12`，Merge Commit `b18c4fb111ed4f1828e6846b3811be0e32020fac`
+- 实施 Required Check：Run `30790267699`／Job `91612096798` 成功
+- 独立审查 PR #941：Head `d5bb1cca4b9470cf697ce10f155a78b7dddeee94`，Merge Commit `855d1147e45b0015515aeec0d8cde3f8fcb79d0b`
+- 独立审查 Required Check：Run `30791420599`／Job `91615566412` 成功
+- Migration：`0045_base02_binding_legacy_calibration`
+- 精确实施文件：`3`
+- business insert target：`1`
+- Binding current／Membership／Scope／Context mutation：`0`
+- historical orphan mutation：`0`
+- FK VALIDATE：`0`
+- database connection／Migration execution／DML execution：`0`
 - execution eligible：`false`
-- legacy calibration：未完成
+- legacy Binding calibration：尚未执行
 - BASE-B2：未完成
 - BASE-B3：未启动
 
 ### 唯一下一任务
 
-`BASE-B2 deterministic legacy Binding calibration DML Migration 实施`
+`BASE-B2 deterministic legacy Binding calibration DML Migration 执行准备`
 
 ```text
-binding_legacy_calibration_preflight=passed
-binding_legacy_calibration_preflight_review=passed
-eligible_for_binding_legacy_calibration_implementation=true
+binding_legacy_calibration_implementation=complete
+binding_legacy_calibration_implementation_review=passed
+migration_idx=0045
+migration_implementation_files=3
+database_connection=false
+migration_execution=false
+dml_execution=false
+eligible_for_binding_legacy_calibration_execution_preparation=true
 eligible_for_binding_legacy_calibration_execution=false
-migration_number_reserved=false
-binding_current_mutation_allowed=false
-binding_transition_insert_only=true
+legacy_binding_calibration_complete=false
 historical_orphan_modified=false
 a2_p2_scope_fk_validated=false
-legacy_binding_calibration_complete=false
 base_b2_complete=false
 eligible_for_base_b3=false
-next_task=BASE-B2 deterministic legacy Binding calibration DML Migration 实施
+next_task=BASE-B2 deterministic legacy Binding calibration DML Migration 执行准备
 next_task_started=false
 next_task_authorized_under_ultra=true
 ```

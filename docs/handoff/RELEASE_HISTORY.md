@@ -1089,3 +1089,13 @@
 - implementation allowlist：3；
 - database connection／DML execution：0；
 - 下一任务切换至 deterministic legacy Binding calibration DML Migration 实施。
+
+<!-- BASE02_BINDING_LEGACY_CALIBRATION_IMPLEMENTATION_RELEASE_20260803 -->
+
+## 2026-08-03｜BASE-B2 Binding legacy calibration Migration 实施收口
+
+- 实施 PR #940：Merge Commit `b18c4fb111ed4f1828e6846b3811be0e32020fac`；
+- 独立审查 PR #941：Merge Commit `855d1147e45b0015515aeec0d8cde3f8fcb79d0b`；
+- Migration：0045；精确实施文件：3；
+- database connection／Migration execution／DML execution：0；
+- 下一任务切换至 deterministic legacy Binding calibration DML Migration 执行准备。
