@@ -3,34 +3,39 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B2 Binding Runtime Writer 实施收口状态
+## BASE-B2 Binding writer AQ008 前置预检收口状态
 
 - 更新日期：2026-08-03
-- 实施 PR #928：Merge Commit `105b79a172477815724e2e279e573994dae60560`
-- 实施 Required Check：Run `30762624001`／Job `91535769741` 成功
-- 独立审查 PR #929：Merge Commit `92b595f8618ce53f42cada5360c70cc4429c537f`
-- 独立审查 Required Check：Run `30778797692`／Job `91579290642` 成功
-- standalone Binding lifecycle：已实现
-- Binding current／evidence atomic：`true`
-- Membership Binding side-effect evidence atomic：`true`
-- transaction-bound Scope assertion：`true`
-- AQ008 Binding writer gate：未扩展
+- Runtime Writer 实施与独立审查：已通过
+- AQ008 前置预检 PR #931：Merge Commit `8aca6221163f7ca05b84bb1c2d50544c6b566044`
+- 独立审查 PR #932：Head `d1fbefc5278b5d22f22a3902dfcd4ad71737f517`，Merge Commit `4df631e840e61042bfde6c93e72eab594edcb53b`
+- 独立审查 Required Check：Run `30781067916`／Job `91585653515` 成功
+- Owner 外直接 Writer：`0`
+- legacy direct writers：`disabled_by_absence`
+- AQ008 Binding gate：未扩展
+- 精确实施 allowlist：`2`
 - legacy calibration：未完成
 - BASE-B2：未完成
 - BASE-B3：未启动
 
 ### 唯一下一任务
 
-`BASE-B2 旧 Binding 写入口委托或禁用与 AQ008 Binding writer gate 前置预检`
+`BASE-B2 AQ008 Binding writer gate 扩展实施`
 
 ```text
 binding_runtime_writer_implementation=complete
 binding_runtime_writer_review=passed
+legacy_auth_binding_writers=disabled_by_absence
+owner_outside_binding_writer_count=0
+aq008_binding_writer_preflight=passed
+aq008_binding_writer_preflight_review=passed
+eligible_for_aq008_binding_writer_implementation=true
 aq008_binding_writer_gate_extended=false
+implementation_allowlist_files=2
 legacy_binding_calibration_complete=false
 base_b2_complete=false
 eligible_for_base_b3=false
-next_task=BASE-B2 旧 Binding 写入口委托或禁用与 AQ008 Binding writer gate 前置预检
+next_task=BASE-B2 AQ008 Binding writer gate 扩展实施
 next_task_started=false
 next_task_authorized_under_ultra=true
 ```

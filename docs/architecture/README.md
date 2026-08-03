@@ -577,3 +577,15 @@ MIG-01
 - calibration、BASE-B3 与业务 Reader继续阻断。
 
 <!-- BASE02_BINDING_RUNTIME_WRITER_HANDOFF_END -->
+
+<!-- BASE02_BINDING_WRITER_AQ008_PREFLIGHT_HANDOFF_START -->
+
+## BASE-B2 Binding writer AQ008 前置预检收口
+
+- Owner 外 Binding current／evidence 直接 Writer 为 `0`；
+- legacy direct writers 按缺失即禁用收口；
+- AQ008 扩展方向、唯一 Owner allowlist、两文件范围与测试矩阵已冻结；
+- 下一任务为 AQ008 Binding writer gate 扩展实施；
+- calibration、BASE-B3 与业务 Reader继续阻断。
+
+<!-- BASE02_BINDING_WRITER_AQ008_PREFLIGHT_HANDOFF_END -->
