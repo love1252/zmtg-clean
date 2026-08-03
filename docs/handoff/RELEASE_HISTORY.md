@@ -1136,3 +1136,16 @@
 - cookie／claims：selector only；
 - Runtime 变更需要／implementation allowlist：false／0；
 - 下一任务切换至 BASE-B3 契约关闭证据。
+
+<!-- BASE02_B3_FINAL_CLOSURE_RELEASE_20260803 -->
+
+## 2026-08-03｜BASE-B3 正式 Session／三类 revision 实时重读最终收口
+
+- 契约关闭证据 PR #952：Merge Commit `12f9dd928aca1899a40d2460c402ce1276add66f`；
+- 独立关闭审查 PR #953：Merge Commit `251004bb840e64f84c0ee9d0b1b281696772bdac`；
+- login／session restore／request authorization roots：all exact；
+- Membership／Binding／Scope realtime read 与双轮稳定性比较：all exact；
+- cookie／claims selector only；第二授权 current：0；
+- Runtime 变更需要／implementation allowlist：false／0；
+- BASE-B3：完成；
+- 唯一下一任务切换至 BASE-B4 入口／业务／对象 Guard 与绕过闭环前置预检。

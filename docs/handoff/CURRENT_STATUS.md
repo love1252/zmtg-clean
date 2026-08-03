@@ -3,42 +3,45 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B3 正式 Session／revision 实时重读前置预检收口状态
+## BASE-B3 正式 Session／上下文刷新及三类 revision 实时重读最终收口
 
 - 更新日期：2026-08-03
-- 前置预检 PR #949：Head `7028438765f4ab0d46bf52828d06ad7935823bd8`，Merge Commit `56162452faf974c041994efd946c64a7aff6d543`
-- 前置预检 Required Check：Run `30806244424`／Job `91662168284` 成功
-- 独立审查 PR #950：Head `4c6f46a3a9d05eb8daf47fb9aa88ba57d56c56c1`，Merge Commit `d18bbfac952608ec8e5cd5df696d1aa985e0a92b`
-- 独立审查 Required Check：Run `30806948740`／Job `91664412002` 成功
-- 登录／Session 恢复／每请求授权入口：`1／1／1`
-- Membership／Binding／Scope 实时重读：`all_exact`
-- 双轮稳定性比较：`all_exact`
+- 契约关闭证据 PR #952：Head `1bcbecb2afd22ed341f4f6ee6eea12ab370c61f0`，Merge Commit `12f9dd928aca1899a40d2460c402ce1276add66f`
+- 关闭证据 Required Check：Run `30809405127`／Job `91672299774` 成功
+- 独立关闭审查 PR #953：Head `07ba09847fb558c7c650e27e96aad34258286fb5`，Merge Commit `251004bb840e64f84c0ee9d0b1b281696772bdac`
+- 独立审查 Required Check：Run `30810128564`／Job `91674648313` 成功
+- 登录／Session 恢复／每请求授权入口：`all_exact`
+- Membership／Binding／Scope current 实时重读：`all_exact`
+- 双轮 Owner fact 稳定性比较：`all_exact`
 - cookie／claims：`selector only`
-- transition evidence／缓存／Operating Context 作为授权 current：`false`
-- Membership `updated_at` fallback：`0`
+- 第二授权 current：`0`
+- transition evidence／缓存／Operating Context 作为 current：`false`
+- Membership updated_at fallback：`0`
 - fail-closed 矩阵：`all_exact`
-- Runtime 变更需要：`false`
-- implementation allowlist：`0`
-- BASE-B3：尚未完成
+- Runtime 变更需要／implementation allowlist：`false／0`
+- BASE-B3：已完成
 - BASE-B4：尚未启动
 
 ### 唯一下一任务
 
-`BASE-B3 正式 Session／上下文刷新及三类 revision 实时重读契约关闭证据`
+`BASE-B4 入口／业务／对象 Guard 与绕过闭环前置预检`
 
 ```text
-base_b3_preflight=passed
-base_b3_preflight_independent_review=passed
+base_b3_complete=true
+base_b3_independent_review=passed
 formal_login_session_request_roots=all_exact
 membership_binding_scope_realtime_read=all_exact
+double_read_stability_check=all_exact
 formal_cookie_selector_only=true
-transition_evidence_as_authorization_current=false
+second_authorization_current_count=0
+membership_updated_at_fallback_count=0
+operating_context_in_authorization_combination=false
+fail_closed_matrix=all_exact
 runtime_change_required=false
 implementation_allowlist_count=0
-eligible_for_base_b3_closure_evidence=true
-base_b3_complete=false
+eligible_for_base_b4=true
 base_b4_started=false
-next_task=BASE-B3 正式 Session／上下文刷新及三类 revision 实时重读契约关闭证据
+next_task=BASE-B4 入口／业务／对象 Guard 与绕过闭环前置预检
 next_task_started=false
 next_task_authorized_under_ultra=true
 ```

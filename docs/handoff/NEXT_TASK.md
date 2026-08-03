@@ -3,24 +3,23 @@
 ## 唯一下一任务
 
 ```text
-BASE-B3 正式 Session／上下文刷新及三类 revision 实时重读契约关闭证据
+BASE-B4 入口／业务／对象 Guard 与绕过闭环前置预检
 ```
 
 ## 任务目标
 
-1. 冻结前置预检与独立审查证据；
-2. 汇总正式登录、Session 恢复和每请求授权三类入口；
-3. 固化 Membership、Binding 与 Scope 三个独立 revision 域实时重读证明；
-4. 固化 cookie／claims selector-only 和无第二授权 current 证明；
-5. 固化 stale、过期、撤销、多 Membership、缺 Scope 的 fail-closed 矩阵；
-6. 形成 BASE-B3 完整关闭清单与独立审查；
-7. handoff 后才允许进入 BASE-B4 入口／业务／对象 Guard 前置预检。
+1. 盘点机构端正式 API、Server Action、Server Runtime 与后台任务入口；
+2. 冻结入口级 Guard、业务动作 Guard 与对象／资源级 Guard 的职责边界；
+3. 核验每个受保护入口必须消费 genuine request authorization，不能信任客户端 role、tenant、institution 或 capability；
+4. 审计 Owner 外数据库／Repository 直读、绕过 Guard 的调用链和 demo／formal 混用；
+5. 冻结 action／section／object policy、拒绝码和 fail-closed 矩阵；
+6. 形成精确 Runtime 实施 allowlist、定向测试范围和架构门禁；
+7. 前置预检和独立审查完成后才允许进入 BASE-B4 实施或关闭证据。
 
 ## 禁止范围
 
-- 不制造无意义 Runtime 修改；
-- 不修改 Schema、Migration、journal 或 snapshot；
+- 本前置预检不修改 Runtime、Schema、Migration、journal 或 snapshot；
 - 不连接数据库，不执行 DDL、DML、Migration 或 Seed；
 - 不处理 historical orphan，不执行 Scope FK VALIDATE；
-- 不在关闭证据 PR 内启动 BASE-B4～B6；
+- 不启动 BASE-B5～B6；
 - 不放行项目级 Writer、Audit／模板、MIG-01B／C 或业务 Reader。
