@@ -3,45 +3,42 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B3 正式 Session／上下文刷新及三类 revision 实时重读最终收口
+## BASE-B4 Guard／绕过闭环前置预检收口状态
 
 - 更新日期：2026-08-03
-- 契约关闭证据 PR #952：Head `1bcbecb2afd22ed341f4f6ee6eea12ab370c61f0`，Merge Commit `12f9dd928aca1899a40d2460c402ce1276add66f`
-- 关闭证据 Required Check：Run `30809405127`／Job `91672299774` 成功
-- 独立关闭审查 PR #953：Head `07ba09847fb558c7c650e27e96aad34258286fb5`，Merge Commit `251004bb840e64f84c0ee9d0b1b281696772bdac`
-- 独立审查 Required Check：Run `30810128564`／Job `91674648313` 成功
-- 登录／Session 恢复／每请求授权入口：`all_exact`
-- Membership／Binding／Scope current 实时重读：`all_exact`
-- 双轮 Owner fact 稳定性比较：`all_exact`
-- cookie／claims：`selector only`
-- 第二授权 current：`0`
-- transition evidence／缓存／Operating Context 作为 current：`false`
-- Membership updated_at fallback：`0`
-- fail-closed 矩阵：`all_exact`
-- Runtime 变更需要／implementation allowlist：`false／0`
-- BASE-B3：已完成
-- BASE-B4：尚未启动
+- 前置预检 PR #955：Head `8403a7abd5f94d89bb2d1172c5ad8a50fe63da07`，Merge Commit `e0d425741fc65fec58408c2319e1d0e8ddc73121`
+- 前置预检 Required Check：Run `30813352418`／Job `91685064178`
+- 独立审查 PR #956：Head `e9a4110b67c254056fad9ad756641df1eed06dee`，Merge Commit `79f52149feea8c1a056b91061228f2230f625059`
+- 独立审查 Required Check：Run `30814075895`／Job `91687430572`
+- inventory／formal guarded／review candidates：`116／2／104`
+- maintenance／demo-formal mixed：`2／2`
+- Scope／Section／Navigation Guard：current
+- Object Guard／Action Policy：missing／missing
+- Owner 外 Membership／Binding Writer：0
+- business Reader／Capability：关闭
+- accepted path：`B4_G1_capability_off_object_action_guard`
+- implementation allowlist：10
+- BASE-B4：未完成
+- BASE-B5：未启动
 
 ### 唯一下一任务
 
-`BASE-B4 入口／业务／对象 Guard 与绕过闭环前置预检`
+`BASE-B4 Action Policy／Object Guard capability-off 核心实施`
 
 ```text
-base_b3_complete=true
-base_b3_independent_review=passed
-formal_login_session_request_roots=all_exact
-membership_binding_scope_realtime_read=all_exact
-double_read_stability_check=all_exact
-formal_cookie_selector_only=true
-second_authorization_current_count=0
-membership_updated_at_fallback_count=0
-operating_context_in_authorization_combination=false
-fail_closed_matrix=all_exact
-runtime_change_required=false
-implementation_allowlist_count=0
-eligible_for_base_b4=true
-base_b4_started=false
-next_task=BASE-B4 入口／业务／对象 Guard 与绕过闭环前置预检
+base_b4_preflight=passed
+base_b4_preflight_independent_review=passed
+entry_bypass_inventory_complete=true
+object_guard_current=false
+action_policy_current=false
+owner_outside_membership_binding_writer_count=0
+business_reader_release=false
+accepted_implementation_path=B4_G1_capability_off_object_action_guard
+implementation_allowlist_count=10
+eligible_for_base_b4_implementation=true
+base_b4_complete=false
+base_b5_started=false
+next_task=BASE-B4 Action Policy／Object Guard capability-off 核心实施
 next_task_started=false
 next_task_authorized_under_ultra=true
 ```

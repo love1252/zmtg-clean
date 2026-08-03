@@ -1149,3 +1149,15 @@
 - Runtime 变更需要／implementation allowlist：false／0；
 - BASE-B3：完成；
 - 唯一下一任务切换至 BASE-B4 入口／业务／对象 Guard 与绕过闭环前置预检。
+
+<!-- BASE02_B4_GUARD_BYPASS_PREFLIGHT_RELEASE_20260803 -->
+
+## 2026-08-03｜BASE-B4 Guard／绕过闭环前置预检收口
+
+- 前置预检 PR #955：Merge Commit `e0d425741fc65fec58408c2319e1d0e8ddc73121`；
+- 独立审查 PR #956：Merge Commit `79f52149feea8c1a056b91061228f2230f625059`；
+- Scope／Section／Navigation Guard：current；
+- Object Guard／Action Policy：missing／missing；
+- accepted path：B4_G1_capability_off_object_action_guard；
+- implementation allowlist：10；
+- 下一任务切换至 BASE-B4 Action Policy／Object Guard capability-off 核心实施。
