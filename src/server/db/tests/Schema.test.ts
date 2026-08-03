@@ -5088,3 +5088,104 @@ describe('BASE-B2 Binding transition evidence Expand Schema', () => {
     );
   });
 });
+
+describe('BASE-B2 deterministic legacy Binding calibration Migration', () => {
+  it('将 0045 作为 0044 的唯一后继', () => {
+    const journal = JSON.parse(
+      readFileSync(join(process.cwd(), 'drizzle/meta/_journal.json'), 'utf8'),
+    ) as {
+      entries: Array<{
+        idx: number;
+        version: string;
+        when: number;
+        tag: string;
+        breakpoints: boolean;
+      }>;
+    };
+
+    expect(journal.entries).toHaveLength(46);
+    expect(journal.entries.map((entry) => entry.idx)).toEqual(
+      Array.from({ length: 46 }, (_, index) => index),
+    );
+    expect(journal.entries.at(-2)).toEqual({
+      idx: 44,
+      version: '7',
+      when: 1785681660893,
+      tag: '0044_base02_binding_transition_expand',
+      breakpoints: true,
+    });
+    expect(journal.entries.at(-1)).toMatchObject({
+      idx: 45,
+      version: '7',
+      tag: '0045_base02_binding_legacy_calibration',
+      breakpoints: true,
+    });
+  });
+
+  it('冻结 predecessor、identity、高水位和锁序', () => {
+    const migrationSql = readMigrationSql('base02_binding_legacy_calibration');
+
+    expect(migrationSql).toContain('expected_predecessor_count constant integer := 45');
+    expect(migrationSql).toContain('expected_predecessor_when constant bigint := 1785681660893');
+    expect(migrationSql).toContain('ff472b70d8cd238782682f8ba30c78d703b2a844bc149c2496e5b47bbb1d2085');
+    expect(migrationSql).toContain('zmtg:binding-calibration-command:v1');
+    expect(migrationSql).toContain('zmtg:binding-calibration-transition:v1');
+    expect(migrationSql).toContain('bcal1_605c8338a671fb4661977e19693bca6a52e497116bdedffd53073036f0967300');
+    expect(migrationSql).toContain('btcl1_9a70c0740aa1cbe5bf6caa5e5b9416aff688d0392177af5fe98a6659261c884c');
+    expect(migrationSql).toContain('high_water_created_at');
+    expect(migrationSql).toContain('id collate "c"');
+
+    const memberLock = migrationSql.indexOf('lock table "public"."tenant_members" in share mode');
+    const bindingLock = migrationSql.indexOf('lock table "public"."auth_account_institution_bindings" in share mode');
+    const transitionLock = migrationSql.indexOf('lock table "public"."auth_account_institution_binding_transitions"');
+    const scopeLock = migrationSql.indexOf('lock table "public"."institution_scopes" in share mode');
+
+    expect(memberLock).toBeGreaterThan(-1);
+    expect(memberLock).toBeLessThan(bindingLock);
+    expect(bindingLock).toBeLessThan(transitionLock);
+    expect(transitionLock).toBeLessThan(scopeLock);
+  });
+
+  it('只允许向 Binding transition evidence 插入 legacy calibration', () => {
+    const migrationSql = readMigrationSql('base02_binding_legacy_calibration');
+    const allowedInsert = /\binsert\s+into\s+public\.auth_account_institution_binding_transitions\s*\(/gu;
+
+    expect(migrationSql.match(allowedInsert) ?? []).toHaveLength(1);
+    expect(migrationSql).toContain("'legacy_calibration'");
+    expect(migrationSql).toContain("'legacy_unknown'");
+    expect(migrationSql).toContain('candidate_row.source');
+    expect(migrationSql).toContain('candidate_row.status');
+    expect(migrationSql).toContain('candidate_row.version');
+    expect(migrationSql).toContain('candidate_row.membership_revision');
+    expect(migrationSql).not.toMatch(/\b(?:insert\s+into|update|delete\s+from|truncate(?:\s+table)?)\s+(?:"public"\.)?auth_account_institution_bindings\b/u);
+    expect(migrationSql).not.toMatch(/\b(?:insert\s+into|update|delete\s+from|truncate(?:\s+table)?)\s+(?:"public"\.)?tenant_members\b/u);
+    expect(migrationSql).not.toMatch(/\b(?:insert\s+into|update|delete\s+from|truncate(?:\s+table)?)\s+(?:"public"\.)?institution_scopes\b/u);
+    expect(migrationSql).not.toContain('on conflict');
+    expect(migrationSql).not.toContain('validate constraint');
+    expect(migrationSql).not.toContain('alter table');
+  });
+
+  it('冻结 membership、orphan、fingerprint 和计数守恒', () => {
+    const migrationSql = readMigrationSql('base02_binding_legacy_calibration');
+
+    expect(migrationSql).toContain('base02_binding_calibration_membership_match_drift');
+    expect(migrationSql).toContain('base02_binding_calibration_membership_envelope_drift');
+    expect(migrationSql).toContain('base02_binding_calibration_no_candidates');
+    expect(migrationSql).toContain('base02_binding_calibration_identity_conflict');
+    expect(migrationSql).toContain('base02_binding_calibration_count_postcheck_failed');
+    expect(migrationSql).toContain('pre_binding_fingerprint');
+    expect(migrationSql).toContain('post_binding_fingerprint');
+    expect(migrationSql).toContain('pre_membership_fingerprint');
+    expect(migrationSql).toContain('post_membership_fingerprint');
+    expect(migrationSql).toContain('pre_scope_relation_orphan_count');
+    expect(migrationSql).toContain('post_scope_relation_orphan_count');
+    expect(migrationSql).toContain('pre_active_historical_orphan_count');
+    expect(migrationSql).toContain('post_active_historical_orphan_count');
+    expect(migrationSql).toContain('planned_count <> created_count');
+    expect(migrationSql).toContain('planned_count <> inserted_count');
+    expect(migrationSql).toContain('reused_count <> 0');
+    expect(migrationSql).toContain('conflict_count <> 0');
+    expect(migrationSql).toContain('unexpected_count <> 0');
+    expect(migrationSql).toContain('post_transition_count <> pre_transition_count + created_count');
+  });
+});
