@@ -44,8 +44,12 @@ const internalDependencyTargets = Object.freeze({
     'export const integration = true;\n',
 });
 const membershipSchemaFixture = Object.freeze({
-  'src/server/db/schema.ts':
-    'export const tenantMembers = { tableName: "tenant_members" };\n',
+  'src/server/db/schema.ts': [
+    'export const tenantMembers = { tableName: "tenant_members" };',
+    'export const authAccountInstitutionBindings = { tableName: "auth_account_institution_bindings" };',
+    'export const authAccountInstitutionBindingTransitions = { tableName: "auth_account_institution_binding_transitions" };',
+    '',
+  ].join('\n'),
 });
 
 function run(command, args, cwd, options = {}) {
@@ -1864,4 +1868,152 @@ test('AQ008 从提交 blob 取证，不受 Head 后工作树清理影响', async
     await runChecker(context, { head }),
     'AQ008_MEMBERSHIP_DIRECT_WRITER',
   );
+});
+
+test('AQ008 Binding canonical writer gate 扩展验收', async (t) => {
+  await t.test('Drizzle current/evidence insert update delete', async (subtest) => {
+    const cases = [
+      ['authAccountInstitutionBindings', 'insert'],
+      ['authAccountInstitutionBindings', 'update'],
+      ['authAccountInstitutionBindings', 'delete'],
+      ['authAccountInstitutionBindingTransitions', 'insert'],
+      ['authAccountInstitutionBindingTransitions', 'update'],
+      ['authAccountInstitutionBindingTransitions', 'delete'],
+    ];
+    for (const [index, [table, operation]] of cases.entries()) {
+      await subtest.test(`${table}-${operation}`, async (caseTest) => {
+        const context = await createRepository(caseTest, membershipSchemaFixture);
+        const head = await commitChanges(context, {
+          [`src/modules/auth/server/direct-binding-writer-${index}.ts`]: [
+            `import { ${table} as target } from '@/server/db/schema';`,
+            `export const write = (db) => db.${operation}(target);`,
+            '',
+          ].join('\n'),
+        });
+        assertViolation(await runChecker(context, { head }), 'AQ008_MEMBERSHIP_DIRECT_WRITER');
+      });
+    }
+  });
+
+  await t.test('raw SQL 两张 Binding 表四类 mutation', async (subtest) => {
+    const tables = ['auth_account_institution_bindings', 'auth_account_institution_binding_transitions'];
+    const statements = [
+      (table) => `INSERT INTO ${table} (id) VALUES (1)`,
+      (table) => `UPDATE ONLY public.${table} SET id = 1`,
+      (table) => `DELETE FROM "public"."${table}" WHERE id = 1`,
+      (table) => `TRUNCATE TABLE audit_events, "${table}"`,
+    ];
+    let sequence = 0;
+    for (const table of tables) {
+      for (const statement of statements) {
+        await subtest.test(`${table}-${sequence}`, async (caseTest) => {
+          const context = await createRepository(caseTest);
+          const sqlText = statement(table);
+          const head = await commitChanges(context, {
+            [`scripts/direct-binding-raw-${sequence}.ts`]: [
+              'export const write = (sql) =>',
+              `  sql\`${sqlText}\`;`,
+              '',
+            ].join('\n'),
+          });
+          sequence += 1;
+          assertViolation(await runChecker(context, { head }), 'AQ008_MEMBERSHIP_DIRECT_WRITER');
+        });
+      }
+    }
+  });
+
+  await t.test('barrel namespace alias', async (subtest) => {
+    const context = await createRepository(subtest, {
+      ...membershipSchemaFixture,
+      'src/server/db/binding-tables.ts': [
+        "export { authAccountInstitutionBindings as bindingCurrent, authAccountInstitutionBindingTransitions as bindingEvidence } from './schema';",
+        '',
+      ].join('\n'),
+    });
+    const head = await commitChanges(context, {
+      'src/modules/auth/server/barrel-binding-writer.ts': [
+        "import * as tables from '@/server/db/binding-tables';",
+        'const evidence = tables.bindingEvidence;',
+        'export const write = (db) => { db.update(tables.bindingCurrent); db.insert(evidence); };',
+        '',
+      ].join('\n'),
+    });
+    assertViolation(await runChecker(context, { head }), 'AQ008_MEMBERSHIP_DIRECT_WRITER');
+  });
+
+  await t.test('changed generic sink reverse caller', async (subtest) => {
+    const context = await createRepository(subtest, {
+      ...membershipSchemaFixture,
+      'scripts/binding-generic-helper.ts': 'export const mutate = (_db, _target) => null;\n',
+      'src/modules/auth/server/existing-binding-caller.ts': [
+        "import { authAccountInstitutionBindings } from '@/server/db/schema';",
+        "import { mutate } from '../../../../scripts/binding-generic-helper';",
+        'export const write = (db) => mutate(db, authAccountInstitutionBindings);',
+        '',
+      ].join('\n'),
+    });
+    const head = await commitChanges(context, {
+      'scripts/binding-generic-helper.ts': 'export const mutate = (db, target) => db.insert(target);\n',
+    });
+    assertViolation(await runChecker(context, { head }), 'AQ008_MEMBERSHIP_DIRECT_WRITER');
+  });
+
+  await t.test('唯一 Owner allowlist', async (subtest) => {
+    const context = await createRepository(subtest, membershipSchemaFixture);
+    const head = await commitChanges(context, {
+      'src/modules/access-control/server/membership-command-repository.ts': [
+        "import { authAccountInstitutionBindings, authAccountInstitutionBindingTransitions } from '@/server/db/schema';",
+        'export const write = (db) => { db.insert(authAccountInstitutionBindings); db.insert(authAccountInstitutionBindingTransitions); };',
+        '',
+      ].join('\n'),
+    });
+    assertPassed(await runChecker(context, { head }));
+  });
+
+  await t.test('相邻 Repository 不继承 allowlist', async (subtest) => {
+    const context = await createRepository(subtest, membershipSchemaFixture);
+    const head = await commitChanges(context, {
+      'src/modules/access-control/server/membership-command-repository-copy.ts': [
+        "import { authAccountInstitutionBindings } from '@/server/db/schema';",
+        'export const write = (db) => db.insert(authAccountInstitutionBindings);',
+        '',
+      ].join('\n'),
+    });
+    assertViolation(await runChecker(context, { head }), 'AQ008_MEMBERSHIP_DIRECT_WRITER');
+  });
+
+  await t.test('Reader 字符串 注释 测试文件不误报', async (subtest) => {
+    const context = await createRepository(subtest, membershipSchemaFixture);
+    const head = await commitChanges(context, {
+      'src/modules/auth/server/binding-reader.ts': [
+        "import { authAccountInstitutionBindings } from '@/server/db/schema';",
+        '// UPDATE auth_account_institution_bindings SET status = revoked',
+        'const note = "DELETE FROM auth_account_institution_binding_transitions";',
+        'export const read = (db) => db.select().from(authAccountInstitutionBindings);',
+        'export { note };',
+        '',
+      ].join('\n'),
+      'src/modules/auth/tests/binding-writer.test.ts': [
+        "import { authAccountInstitutionBindingTransitions } from '@/server/db/schema';",
+        'export const testOnly = (db) => db.delete(authAccountInstitutionBindingTransitions);',
+        '',
+      ].join('\n'),
+    });
+    assertPassed(await runChecker(context, { head }));
+  });
+
+  await t.test('commit blob 取证', async (subtest) => {
+    const source = 'src/modules/auth/server/committed-binding-writer.ts';
+    const context = await createRepository(subtest, membershipSchemaFixture);
+    const head = await commitChanges(context, {
+      [source]: [
+        "import { authAccountInstitutionBindings } from '@/server/db/schema';",
+        'export const write = (db) => db.insert(authAccountInstitutionBindings);',
+        '',
+      ].join('\n'),
+    });
+    await writeFixtureFile(context.repository, source, 'export const worktreeLooksSafe = true;\n');
+    assertViolation(await runChecker(context, { head }), 'AQ008_MEMBERSHIP_DIRECT_WRITER');
+  });
 });
