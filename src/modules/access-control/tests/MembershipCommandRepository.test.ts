@@ -5,6 +5,7 @@ import type { SQL } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
+import type { BindingTransitionEvidence } from '@/modules/access-control/domain/binding-lifecycle';
 import type {
   CompleteMembershipCurrent,
   MembershipCurrent,
@@ -23,6 +24,7 @@ import {
 import type { TenantDatabase } from '@/server/db/client';
 import {
   authAccountInstitutionBindings,
+  authAccountInstitutionBindingTransitions,
   tenantMembers,
   tenantMembershipTransitions,
 } from '@/server/db/schema';
@@ -70,6 +72,29 @@ function transition(): MembershipTransition {
     toLifecycleStatus: 'active',
     fromRole: 'tenant_admin',
     toRole: 'consultant',
+    occurredAt: '2026-08-01T08:00:00.000Z',
+    recordedAt: NOW,
+  };
+}
+
+function bindingTransition(): BindingTransitionEvidence {
+  return {
+    transitionId: `btr1_${'M'.repeat(43)}`,
+    tenantId: 'tenant-001',
+    bindingId: 'binding-001',
+    replacementBindingId: null,
+    commandId: `bcmd1_${'A'.repeat(43)}`,
+    transitionType: 'revoke',
+    provenanceSource: 'access_control_command',
+    assignmentSource: 'manual_admin',
+    actorId: 'actor-001',
+    reasonCode: 'binding_revoke',
+    fromStatus: 'active',
+    toStatus: 'revoked',
+    fromVersion: 8,
+    toVersion: 9,
+    membershipRevision: 4,
+    scopeRevision: null,
     occurredAt: '2026-08-01T08:00:00.000Z',
     recordedAt: NOW,
   };
@@ -313,6 +338,33 @@ describe('Access Control Membership transaction repository', () => {
     });
   });
 
+
+  it('Binding transition evidence 只执行 append-only INSERT 并完整映射版本域', async () => {
+    const returning = vi.fn(async () => [{ id: 'binding-transition-001' }]);
+    const values = vi.fn(() => ({ returning }));
+    const insert = vi.fn((table: unknown) => {
+      expect(table).toBe(authAccountInstitutionBindingTransitions);
+      return { values };
+    });
+    const unitOfWork = createTransactionBoundMembershipCommandUnitOfWork({
+      insert,
+    } as unknown as MembershipCommandTransactionDatabase, () => true);
+
+    await expect(
+      unitOfWork.appendBindingTransition(bindingTransition()),
+    ).resolves.toBe(1);
+    expect(values).toHaveBeenCalledWith(expect.objectContaining({
+      transitionType: 'revoke',
+      fromVersion: 8,
+      toVersion: 9,
+      membershipRevision: 4,
+      scopeRevision: null,
+      occurredAt: expect.any(Date),
+      recordedAt: expect.any(Date),
+    }));
+    expect(returning).toHaveBeenCalledTimes(1);
+  });
+
   it('实现静态锁定无 retry/upsert/DDL/transition mutation 与仅一个 transaction opener', () => {
     const source = readFileSync(
       join(
@@ -322,8 +374,9 @@ describe('Access Control Membership transaction repository', () => {
       'utf8',
     );
     expect(source.match(/\.transaction\(/gu)).toHaveLength(1);
-    expect(source.match(/\.for\('update'\)/gu)).toHaveLength(3);
+    expect(source.match(/\.for\('update'\)/gu)).toHaveLength(4);
     expect(source).toContain('.insert(tenantMembershipTransitions)');
+    expect(source).toContain('.insert(authAccountInstitutionBindingTransitions)');
     expect(source).not.toContain('.update(tenantMembershipTransitions)');
     expect(source).not.toContain('.delete(tenantMembershipTransitions)');
     expect(source).not.toMatch(/onConflict|ON\s+CONFLICT|upsert|IF\s+NOT\s+EXISTS/iu);
@@ -332,6 +385,9 @@ describe('Access Control Membership transaction repository', () => {
     expect(source).not.toMatch(/retry|setTimeout/iu);
     expect(source).not.toContain('DATABASE_URL');
     expect(source).toContain('.returning({ id: tenantMembershipTransitions.id })');
+    expect(source).toContain(
+      '.returning({ id: authAccountInstitutionBindingTransitions.id })',
+    );
   });
 
   it('完整 current 写入契约不使用 cast、非空断言或 nullable recordedAt 分支', () => {
@@ -390,5 +446,6 @@ describe('Access Control Membership transaction repository', () => {
   it('transition 表和 Binding 表保持明确归属', () => {
     expect(tenantMembershipTransitions.id.name).toBe('id');
     expect(authAccountInstitutionBindings.version.name).toBe('version');
+    expect(authAccountInstitutionBindingTransitions.toVersion.name).toBe('to_version');
   });
 });

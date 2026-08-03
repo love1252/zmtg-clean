@@ -1,15 +1,22 @@
 import type {
+  BindingCurrent,
+  BindingTransitionEvidence,
+} from '@/modules/access-control/domain/binding-lifecycle';
+import type {
   CompleteMembershipCurrent,
   MembershipCurrent,
   MembershipLifecycleStatus,
   MembershipTransition,
 } from '@/modules/access-control/domain/membership-lifecycle';
+import type { TransactionBoundInstitutionScopeAssertion } from '@/modules/tenancy/ports/transaction-bound-institution-scope';
 
 export const MEMBERSHIP_COMMAND_PERSISTENCE_ERROR_CODES = [
   'command_replay_rejected',
   'membership_create_conflict',
   'membership_cas_conflict',
   'binding_conflict',
+  'binding_cas_conflict',
+  'binding_evidence_conflict',
   'membership_command_constraint_conflict',
   'membership_command_concurrency_conflict',
   'membership_command_timeout',
@@ -69,12 +76,17 @@ export interface MembershipCommandUnitOfWork {
     tenantId: string;
     membershipId: string;
   }>): Promise<MembershipCurrent | null>;
-  /** current 之后、transition 之前锁定唯一 active Binding。 */
+  /** current 之后锁定唯一 persisted active Binding。 */
   lockActiveBinding(input: Readonly<{
     tenantId: string;
     accountId: string;
   }>): Promise<ActiveMembershipBinding | null>;
-  /** 只判断已提交 transition 中是否存在 command identity，不比较 payload。 */
+  /** standalone Binding command 以 explicit identity 锁定 current row。 */
+  lockBindingById(input: Readonly<{
+    tenantId: string;
+    bindingId: string;
+  }>): Promise<BindingCurrent | null>;
+  /** 同时覆盖 Membership 与 Binding transition command identity。 */
   commandExists(input: Readonly<{
     tenantId: string;
     commandId: string;
@@ -92,13 +104,21 @@ export interface MembershipCommandUnitOfWork {
     revokedAt: string;
     recordedAt: string;
   }>): Promise<number>;
+  appendBindingTransition(
+    transition: BindingTransitionEvidence,
+  ): Promise<number>;
   appendTransition(transition: MembershipTransition): Promise<number>;
 }
-
 export interface MembershipCommandTransactionPort {
   /**
-   * 精确开启一个 SERIALIZABLE、READ WRITE 外层事务并注入 transaction-bound UoW。
-   * 回调抛错必须整批回滚；实现禁止自动重试，UoW 在回调结束后失效。
+   * 精确开启一个 SERIALIZABLE、READ WRITE 外层事务并注入 transaction-bound
+   * UoW 与可选 Scope assertion。回调抛错必须整批回滚；实现禁止自动重试，
+   * UoW 与 Scope assertion 在回调结束后失效。
    */
-  run<T>(work: (unitOfWork: MembershipCommandUnitOfWork) => Promise<T>): Promise<T>;
+  run<T>(
+    work: (
+      unitOfWork: MembershipCommandUnitOfWork,
+      scopeAssertion?: TransactionBoundInstitutionScopeAssertion,
+    ) => Promise<T>,
+  ): Promise<T>;
 }

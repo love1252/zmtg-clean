@@ -19,7 +19,20 @@ import {
 
 const COMMAND_ID = `mcmd1_${'A'.repeat(43)}`;
 const TRANSITION_ID = `mtr1_${'E'.repeat(43)}`;
+const BINDING_TRANSITION_ID = `btr1_${'M'.repeat(43)}`;
 const NOW = new Date('2026-08-01T08:00:01.000Z');
+
+const SCOPE_ASSERTION = {
+  assertActive: vi.fn(async ({ tenantId, institutionId }: {
+    tenantId: string;
+    institutionId: string;
+  }) => ({
+    kind: 'active_scope' as const,
+    tenantId,
+    institutionId,
+    revision: 9,
+  })),
+};
 
 function current(overrides: Partial<MembershipCurrent> = {}): MembershipCurrent {
   return {
@@ -103,7 +116,15 @@ function unitOfWork(input: {
   current?: MembershipCurrent | null;
   activeBinding?: ActiveMembershipBinding | null;
   commandExists?: boolean;
-  affected?: Partial<Record<'insertMembership' | 'updateMembershipByCas' | 'insertActiveBinding' | 'revokeActiveBindingByCas' | 'appendTransition', number>>;
+  affected?: Partial<Record<
+    | 'insertMembership'
+    | 'updateMembershipByCas'
+    | 'insertActiveBinding'
+    | 'revokeActiveBindingByCas'
+    | 'appendBindingTransition'
+    | 'appendTransition',
+    number
+  >>;
   operations?: string[];
 } = {}) {
   const operations = input.operations ?? [];
@@ -128,6 +149,7 @@ function unitOfWork(input: {
       'lock_active_binding',
       input.activeBinding ?? null,
     ),
+    lockBindingById: record('lock_binding_by_id', null),
     commandExists: record('command_exists', input.commandExists ?? false),
     insertMembership: record('insert_membership', count('insertMembership')),
     updateMembershipByCas: record('update_membership_cas', count('updateMembershipByCas')),
@@ -135,6 +157,10 @@ function unitOfWork(input: {
     revokeActiveBindingByCas: record(
       'revoke_binding_cas',
       count('revokeActiveBindingByCas'),
+    ),
+    appendBindingTransition: record(
+      'append_binding_transition',
+      count('appendBindingTransition'),
     ),
     appendTransition: record('append_transition', count('appendTransition')),
   };
@@ -196,6 +222,7 @@ function syntheticTransactionState(input: {
           draftBindingVersion === null
             ? null
             : binding({ version: draftBindingVersion }),
+        lockBindingById: async () => null,
         commandExists: async ({ commandId }) => committedCommands.has(commandId),
         insertMembership: async (next) => {
           draftCurrent = next;
@@ -215,6 +242,7 @@ function syntheticTransactionState(input: {
           draftBindingVersion = lockedBinding.version + 1;
           return 1;
         },
+        appendBindingTransition: async () => 1,
         appendTransition: async (membershipTransition) => {
           const affected = input.appendAffected ?? 1;
           if (affected === 1) stagedCommands.add(membershipTransition.commandId);
@@ -223,7 +251,7 @@ function syntheticTransactionState(input: {
       };
 
       try {
-        const result = await work(uow);
+        const result = await work(uow, SCOPE_ASSERTION);
         if (draftCurrentLoaded) committedCurrent = draftCurrent;
         committedBindingVersion = draftBindingVersion;
         for (const commandId of stagedCommands) committedCommands.add(commandId);
@@ -253,6 +281,7 @@ function syntheticTransactionState(input: {
 
 const dependencies = {
   createTransitionId: () => TRANSITION_ID,
+  createBindingTransitionId: () => BINDING_TRANSITION_ID,
   now: () => NOW,
 };
 
@@ -305,6 +334,7 @@ describe('Access Control Membership Owner command service', () => {
     const context = unitOfWork();
     const result = await executeMembershipCommandWithUnitOfWork({
       unitOfWork: context.uow,
+      scopeAssertion: SCOPE_ASSERTION,
       command: createCommand({
         bindingId: 'binding-002',
         institutionId: 'institution-002',
@@ -326,6 +356,7 @@ describe('Access Control Membership Owner command service', () => {
       'lock_active_binding',
       'insert_membership',
       'insert_active_binding',
+      'append_binding_transition',
       'append_transition',
     ]);
   });
@@ -349,6 +380,7 @@ describe('Access Control Membership Owner command service', () => {
         'lock_active_binding',
         'update_membership_cas',
         'revoke_binding_cas',
+        'append_binding_transition',
         'append_transition',
       ]);
     }
@@ -506,7 +538,7 @@ describe('Access Control Membership Owner command service', () => {
     const transactionPort: MembershipCommandTransactionPort = {
       run: vi.fn(async (work) => {
         attempts += 1;
-        return work(context.uow);
+        return work(context.uow, SCOPE_ASSERTION);
       }),
     };
     const service = createMembershipCommandService({ transactionPort, ...dependencies });
@@ -535,7 +567,7 @@ describe('Access Control Membership Owner command service', () => {
   ])('%s affected rows 非 1 时固定失败', async (_label, affected, ownerCommand) => {
     const context = unitOfWork({ affected });
     const transactionPort: MembershipCommandTransactionPort = {
-      run: vi.fn(async (work) => work(context.uow)),
+      run: vi.fn(async (work) => work(context.uow, SCOPE_ASSERTION)),
     };
     const service = createMembershipCommandService({ transactionPort, ...dependencies });
     expect(await service.execute(ownerCommand)).toEqual({
