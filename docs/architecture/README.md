@@ -566,3 +566,14 @@ MIG-01
 - Schema／Migration、数据库连接、legacy calibration、BASE-B3 与业务 Reader继续阻断。
 
 <!-- BASE02_BINDING_RUNTIME_WRITER_PREFLIGHT_HANDOFF_END -->
+
+<!-- BASE02_BINDING_RUNTIME_WRITER_HANDOFF_START -->
+
+## BASE-B2 Binding Runtime Writer 实施收口
+
+- standalone lifecycle、same-transaction evidence 与 Scope assertion 已完成；
+- 实施及独立审查通过；
+- 下一任务为旧 Binding 写入口与 AQ008 前置预检；
+- calibration、BASE-B3 与业务 Reader继续阻断。
+
+<!-- BASE02_BINDING_RUNTIME_WRITER_HANDOFF_END -->
