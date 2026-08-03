@@ -3,39 +3,44 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B2 Membership／Binding 生命周期最终收口状态
+## BASE-B3 正式 Session／revision 实时重读前置预检收口状态
 
 - 更新日期：2026-08-03
-- 清零复核 PR #946：Merge Commit `541853c8a6bb945b37e25f34a77858a323e5d63c`
-- 清零复核 Required Check：Run `30803106992`／Job `91652114678`
-- 独立审查 PR #947：Merge Commit `0410d30565084b286bced4538188b582ed9ca524`
-- 独立审查 Required Check：Run `30803700977`／Job `91654048640`
-- residual／identity-command-version conflict：0／0
-- Owner 外 writer／evidence destructive／second fact source：0／0／0
-- AQ008 Membership／Binding current／Binding evidence gate：已验证
-- legacy Binding calibration：完成
-- historical orphan／Scope relation orphan：保持 1／1
-- Scope FK：NOT VALID
-- BASE-B2：完成
-- BASE-B3：尚未启动
+- 前置预检 PR #949：Head `7028438765f4ab0d46bf52828d06ad7935823bd8`，Merge Commit `56162452faf974c041994efd946c64a7aff6d543`
+- 前置预检 Required Check：Run `30806244424`／Job `91662168284` 成功
+- 独立审查 PR #950：Head `4c6f46a3a9d05eb8daf47fb9aa88ba57d56c56c1`，Merge Commit `d18bbfac952608ec8e5cd5df696d1aa985e0a92b`
+- 独立审查 Required Check：Run `30806948740`／Job `91664412002` 成功
+- 登录／Session 恢复／每请求授权入口：`1／1／1`
+- Membership／Binding／Scope 实时重读：`all_exact`
+- 双轮稳定性比较：`all_exact`
+- cookie／claims：`selector only`
+- transition evidence／缓存／Operating Context 作为授权 current：`false`
+- Membership `updated_at` fallback：`0`
+- fail-closed 矩阵：`all_exact`
+- Runtime 变更需要：`false`
+- implementation allowlist：`0`
+- BASE-B3：尚未完成
+- BASE-B4：尚未启动
 
 ### 唯一下一任务
 
-`BASE-B3 正式 Session／上下文刷新及三类 revision 实时重读前置预检`
+`BASE-B3 正式 Session／上下文刷新及三类 revision 实时重读契约关闭证据`
 
 ```text
-base_b2_complete=true
-base_b2_independent_review=passed
-legacy_binding_calibration_complete=true
-owner_outside_binding_writer_count=0
-binding_transition_update_delete_truncate_count=0
-second_membership_binding_fact_source_count=0
-aq008_binding_writer_gate_verified=true
-historical_orphan_changed_by_base_b2=false
-a2_p2_scope_fk_validated=false
-eligible_for_base_b3=true
-base_b3_started=false
-next_task=BASE-B3 正式 Session／上下文刷新及三类 revision 实时重读前置预检
+base_b3_preflight=passed
+base_b3_preflight_independent_review=passed
+formal_login_session_request_roots=all_exact
+membership_binding_scope_realtime_read=all_exact
+formal_cookie_selector_only=true
+transition_evidence_as_authorization_current=false
+runtime_change_required=false
+implementation_allowlist_count=0
+eligible_for_base_b3_closure_evidence=true
+base_b3_complete=false
+base_b4_started=false
+next_task=BASE-B3 正式 Session／上下文刷新及三类 revision 实时重读契约关闭证据
+next_task_started=false
+next_task_authorized_under_ultra=true
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->

@@ -1124,3 +1124,15 @@
 - historical orphan：未修改；Scope FK：NOT VALID；
 - BASE-B2：完成；
 - 唯一下一任务切换至 BASE-B3 正式 Session／上下文刷新及三类 revision 实时重读前置预检。
+
+<!-- BASE02_B3_SESSION_REVISION_PREFLIGHT_RELEASE_20260803 -->
+
+## 2026-08-03｜BASE-B3 Session／revision 实时重读前置预检收口
+
+- 前置预检 PR #949：Merge Commit `56162452faf974c041994efd946c64a7aff6d543`；
+- 独立审查 PR #950：Merge Commit `d18bbfac952608ec8e5cd5df696d1aa985e0a92b`；
+- login／session restore／request authorization roots：all exact；
+- Membership／Binding／Scope realtime read：all exact；
+- cookie／claims：selector only；
+- Runtime 变更需要／implementation allowlist：false／0；
+- 下一任务切换至 BASE-B3 契约关闭证据。
