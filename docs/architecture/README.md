@@ -629,3 +629,18 @@ MIG-01
 - FK VALIDATE、BASE-B3 与业务 Reader继续阻断。
 
 <!-- BASE02_BINDING_LEGACY_CALIBRATION_IMPLEMENTATION_HANDOFF_END -->
+
+<!-- BASE02_BINDING_LEGACY_CALIBRATION_EXECUTION_HANDOFF_START -->
+
+## BASE-B2 Binding legacy calibration 0045 执行收口
+
+- 0045 已完成唯一 guarded target call，自动重试为 0；
+- planned／created／reused／conflict／unexpected 为 1／1／0／0／0；
+- Binding current 未修改，新增 exact legacy evidence 1 条，residual candidate 为 0；
+- Membership、Scope、Context 与 historical orphan 保持原值；
+- Scope FK 继续 NOT VALID；
+- 前后恢复点、执行后隔离恢复与 Lease 清理均通过；
+- 下一任务为 Binding 高水位／冲突／Owner Writer 清零复核；
+- BASE-B3 与业务 Reader继续阻断。
+
+<!-- BASE02_BINDING_LEGACY_CALIBRATION_EXECUTION_HANDOFF_END -->

@@ -3,45 +3,46 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B2 Binding legacy calibration Migration 实施收口状态
+## BASE-B2 Binding legacy calibration 0045 执行收口状态
 
 - 更新日期：2026-08-03
-- 实施 PR #940：Head `17d1bf2c3bb9e0b62ed1802fb12b58ccb6db4b12`，Merge Commit `b18c4fb111ed4f1828e6846b3811be0e32020fac`
-- 实施 Required Check：Run `30790267699`／Job `91612096798` 成功
-- 独立审查 PR #941：Head `d5bb1cca4b9470cf697ce10f155a78b7dddeee94`，Merge Commit `855d1147e45b0015515aeec0d8cde3f8fcb79d0b`
-- 独立审查 Required Check：Run `30791420599`／Job `91615566412` 成功
+- 执行证据 PR #943：Head `66f122f368ad4bbca1e47f2f5938f97ea8ca852f`，Merge Commit `b575180a84dee3a8a1b60606835492e2d693cd15`
+- 执行证据 Required Check：Run `30799578825`／Job `91640809192` 成功
+- 执行独立审查 PR #944：Head `d5ea45804c10c2a5b507da30e9e72fd5c5874b47`，Merge Commit `6f2ca447cbc25db4f4567d7ac941487088d6c885`
+- 执行审查 Required Check：Run `30800412425`／Job `91643439699` 成功
 - Migration：`0045_base02_binding_legacy_calibration`
-- 精确实施文件：`3`
-- business insert target：`1`
-- Binding current／Membership／Scope／Context mutation：`0`
-- historical orphan mutation：`0`
-- FK VALIDATE：`0`
-- database connection／Migration execution／DML execution：`0`
-- execution eligible：`false`
-- legacy Binding calibration：尚未执行
+- guarded target call／automatic retry：`1／0`
+- planned／created／reused／conflict／unexpected：`1／1／0／0／0`
+- environment journal：`46／0045`
+- Binding current／transition：`1／1`
+- exact legacy evidence／residual candidate：`1／0`
+- Membership／Scope／Context Version／Context Head：`1／1／1／1`
+- historical orphan／Scope relation orphan：`1／1`
+- Scope FK：`NOT VALID`
+- unauthorized business mutation：`0`
+- recovery points／post isolated restore：`2／1`，全部通过
+- Lease claim／consume／renew／release／active：`1／1／0／1／0`
+- legacy Binding calibration：已完成
 - BASE-B2：未完成
 - BASE-B3：未启动
 
 ### 唯一下一任务
 
-`BASE-B2 deterministic legacy Binding calibration DML Migration 执行准备`
+`BASE-B2 Binding 高水位／冲突／Owner Writer 清零复核`
 
 ```text
 binding_legacy_calibration_implementation=complete
-binding_legacy_calibration_implementation_review=passed
-migration_idx=0045
-migration_implementation_files=3
-database_connection=false
-migration_execution=false
-dml_execution=false
-eligible_for_binding_legacy_calibration_execution_preparation=true
-eligible_for_binding_legacy_calibration_execution=false
-legacy_binding_calibration_complete=false
+binding_legacy_calibration_execution=complete
+binding_legacy_calibration_execution_review=passed
+legacy_binding_calibration_complete=true
+residual_uncalibrated_binding_count=0
+identity_command_version_conflict_count=0
 historical_orphan_modified=false
 a2_p2_scope_fk_validated=false
+eligible_for_binding_high_water_owner_review=true
 base_b2_complete=false
 eligible_for_base_b3=false
-next_task=BASE-B2 deterministic legacy Binding calibration DML Migration 执行准备
+next_task=BASE-B2 Binding 高水位／冲突／Owner Writer 清零复核
 next_task_started=false
 next_task_authorized_under_ultra=true
 ```
