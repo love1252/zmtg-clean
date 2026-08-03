@@ -3,43 +3,34 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B2 Binding Runtime Writer 前置预检收口状态
+## BASE-B2 Binding Runtime Writer 实施收口状态
 
 - 更新日期：2026-08-03
-- `0044` 已消费，environment journal `45`
-- Binding transition Catalog：`all_exact`
-- 前置预检 PR #925：Merge Commit `7de246bd41d8406a39647e2286985332558638df`
-- 前置预检 Required Check：Run `30759760204`／Job `91528066351` 成功
-- 独立审查 PR #926：Merge Commit `937281fa60e1f192445d8e06a7a4d9228bbf672a`
-- 独立审查 Required Check：Run `30760412554`／Job `91529775283` 成功
-- accepted path：`B2_W1_extend_existing_access_control_transaction_kernel`
-- current Binding production writer：`1`
-- Binding transition Runtime writer：`0`
-- standalone Binding command：`0`
-- 精确实施 allowlist：`13`
-- Schema／Migration change：禁止
-- database connection：禁止
+- 实施 PR #928：Merge Commit `105b79a172477815724e2e279e573994dae60560`
+- 实施 Required Check：Run `30762624001`／Job `91535769741` 成功
+- 独立审查 PR #929：Merge Commit `92b595f8618ce53f42cada5360c70cc4429c537f`
+- 独立审查 Required Check：Run `30778797692`／Job `91579290642` 成功
+- standalone Binding lifecycle：已实现
+- Binding current／evidence atomic：`true`
+- Membership Binding side-effect evidence atomic：`true`
+- transaction-bound Scope assertion：`true`
+- AQ008 Binding writer gate：未扩展
+- legacy calibration：未完成
 - BASE-B2：未完成
 - BASE-B3：未启动
 
 ### 唯一下一任务
 
-`BASE-B2 Binding Runtime Writer／same-transaction transition evidence 实施`
+`BASE-B2 旧 Binding 写入口委托或禁用与 AQ008 Binding writer gate 前置预检`
 
 ```text
-binding_runtime_writer_preflight=passed
-binding_runtime_writer_preflight_review=passed
-eligible_for_binding_runtime_writer_implementation=true
-binding_runtime_writer_started=false
-implementation_allowlist_files=13
-schema_migration_change_allowed=false
-database_connection_allowed=false
-legacy_calibration_started=false
-historical_orphan_modified=false
-a2_p2_scope_fk_validated=false
+binding_runtime_writer_implementation=complete
+binding_runtime_writer_review=passed
+aq008_binding_writer_gate_extended=false
+legacy_binding_calibration_complete=false
 base_b2_complete=false
-base_b3_started=false
-next_task=BASE-B2 Binding Runtime Writer／same-transaction transition evidence 实施
+eligible_for_base_b3=false
+next_task=BASE-B2 旧 Binding 写入口委托或禁用与 AQ008 Binding writer gate 前置预检
 next_task_started=false
 next_task_authorized_under_ultra=true
 ```
