@@ -46,6 +46,11 @@ const MEMBERSHIP_WRITER_RULE_ID = 'AQ008_MEMBERSHIP_DIRECT_WRITER';
 const MEMBERSHIP_WRITER_ALLOWLIST = new Set([
   'src/modules/access-control/server/membership-command-repository.ts',
 ]);
+const OWNER_WRITER_TABLE_NAMES = new Set([
+  'tenant_members',
+  'auth_account_institution_bindings',
+  'auth_account_institution_binding_transitions',
+]);
 const REQUIRED_METADATA_KEYS = [
   'ruleId',
   'taskId',
@@ -61,7 +66,7 @@ const RULE_MESSAGES = {
   AQ005_FROZEN_PLATFORM_MODULE_NEW_FILE: '冻结模块 open-platform 禁止新增未登记文件。',
   AQ006_DOMAIN_LAYER_DEPENDENCY: 'Domain 层禁止新增对应用、数据库、集成或框架层的依赖。',
   AQ007_CROSS_MODULE_SERVER_REPOSITORY: '模块间禁止新增对 server 或 Repository 实现的直接依赖。',
-  AQ008_MEMBERSHIP_DIRECT_WRITER: 'Membership 只能由 Access Control Owner Repository 直接写入。',
+  AQ008_MEMBERSHIP_DIRECT_WRITER: 'Membership 与 Binding canonical 表只能由 Access Control Owner Repository 直接写入。',
 };
 
 class ArchitectureQualityError extends Error {}
@@ -1031,7 +1036,7 @@ function stripSqlStringsAndComments(sqlText) {
 function containsMembershipMutationSql(sqlText) {
   const executable = stripSqlStringsAndComments(sqlText);
   const qualifier = '(?:(?:"(?:[^"]|"")*"|[a-zA-Z_][a-zA-Z0-9_$]*)\\s*\\.\\s*)?';
-  const target = '(?:"tenant_members"|tenant_members)';
+  const target = '(?:"tenant_members"|tenant_members|"auth_account_institution_bindings"|auth_account_institution_bindings|"auth_account_institution_binding_transitions"|auth_account_institution_binding_transitions)';
   const rowMutation = '(?:insert\\s+into|update|delete\\s+from)';
   if (
     new RegExp(
@@ -1370,7 +1375,13 @@ function membershipExportNames(
   if (!SOURCE_EXTENSIONS.some((extension) => filePath.endsWith(extension))) {
     return new Set();
   }
-  if (filePath === 'src/server/db/schema.ts') return new Set(['tenantMembers']);
+  if (filePath === 'src/server/db/schema.ts') {
+    return new Set([
+      'tenantMembers',
+      'authAccountInstitutionBindings',
+      'authAccountInstitutionBindingTransitions',
+    ]);
+  }
   if (cache.has(filePath)) return new Set(cache.get(filePath));
   if (visiting.has(filePath)) return new Set();
 
@@ -1701,7 +1712,8 @@ function calledFunctionDescriptors(ts, functions, expression) {
 function isMembershipTargetExpression(ts, expression, bindings, initializers, seen = new Set()) {
   const current = unwrapExpression(ts, expression);
   if (bindings.isMembershipTable(current)) return true;
-  if (staticStringText(ts, current, initializers) === 'tenant_members') return true;
+  const staticTarget = staticStringText(ts, current, initializers);
+  if (staticTarget && OWNER_WRITER_TABLE_NAMES.has(staticTarget)) return true;
 
   if (ts.isIdentifier(current) && !seen.has(current.text)) {
     const initializer = lexicalConstInitializer(ts, current, initializers);
