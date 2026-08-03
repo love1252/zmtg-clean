@@ -1,4 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/app/api/institution/_shared/institution-route-guard', () => ({
+  withInstitutionSectionRouteGuardV1: ({
+    handler,
+  }: {
+    handler: (...args: unknown[]) => Response | Promise<Response>;
+  }) => handler,
+}));
 import * as platformEmbeddingRoute from '@/app/api/v1/open-platform/knowledge-management/embeddings/route';
 import * as platformVectorSearchRoute from '@/app/api/v1/open-platform/knowledge-management/vector-search/route';
 import * as institutionVectorSearchRoute from '@/app/api/institution/knowledge-management/vector-search/route';
