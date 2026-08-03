@@ -715,3 +715,16 @@ MIG-01
 - 下一任务转入机构端入口清单校准和第一批正式 Route Guard 接线前置预检。
 
 <!-- BASE02_B4_OBJECT_ACTION_GUARD_CORE_HANDOFF_END -->
+
+<!-- BASE02_B4_ROUTE_GUARD_FIRST_BATCH_PREFLIGHT_START -->
+
+## BASE-B4 第一批正式 Route Guard 接线前置预检
+
+- 116 项入口已重新校准；
+- 第一批固定为 GET-only、非动态、无直接数据库、无 demo signal 的机构 Route；
+- 第一批只使用 Scope + Section Guard；
+- 不误用 Object Guard，不开放业务 Reader 或新 Capability；
+- 精确实施 allowlist 为 12 个文件；
+- 下一任务为第一批 capability-off Route Guard 接线实施。
+
+<!-- BASE02_B4_ROUTE_GUARD_FIRST_BATCH_PREFLIGHT_END -->

@@ -1173,3 +1173,15 @@
 - business Reader／Capability：off；
 - changed files：10；
 - 下一任务切换至机构端入口清单校准与第一批正式 Route Guard 接线前置预检。
+
+<!-- BASE02_B4_ROUTE_GUARD_FIRST_BATCH_PREFLIGHT_RELEASE_20260803 -->
+
+## 2026-08-03｜BASE-B4 第一批正式 Route Guard 接线前置预检
+
+- 前置预检 PR #961：Merge Commit `e18dab5e96540a0ccd7b58fbd1110bdd652cedac`；
+- 独立审查 PR #962：Merge Commit `3978f203b8b9845e43fede6a0b86e2b53b129e17`；
+- first batch count：5；
+- guard chain：Scope + Section；
+- business Reader／Capability：off；
+- implementation allowlist：12；
+- 下一任务切换至第一批低风险正式 Route Guard capability-off 接线实施。
