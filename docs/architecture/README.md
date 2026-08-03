@@ -615,3 +615,17 @@ MIG-01
 - 数据库执行、FK VALIDATE、BASE-B3 与业务 Reader继续阻断。
 
 <!-- BASE02_BINDING_LEGACY_CALIBRATION_PREFLIGHT_HANDOFF_END -->
+
+<!-- BASE02_BINDING_LEGACY_CALIBRATION_IMPLEMENTATION_HANDOFF_START -->
+
+## BASE-B2 Binding legacy calibration Migration 实施收口
+
+- 0045 deterministic legacy calibration Migration 已完成仓库实现；
+- 唯一业务 DML 为 Binding transition evidence INSERT；
+- current、Membership、Scope、Context 与 historical orphan 零 mutation；
+- identity、锁序、高水位、fingerprint 与计数守恒已固化；
+- 实施和独立审查均通过，但数据库尚未执行；
+- 下一任务为执行准备；
+- FK VALIDATE、BASE-B3 与业务 Reader继续阻断。
+
+<!-- BASE02_BINDING_LEGACY_CALIBRATION_IMPLEMENTATION_HANDOFF_END -->
