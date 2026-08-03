@@ -1067,3 +1067,14 @@
 - legacy direct writers：`disabled_by_absence`；
 - 精确实施 allowlist：`2`；
 - 下一任务切换至 AQ008 Binding writer gate 扩展实施。
+
+<!-- BASE02_AQ008_BINDING_WRITER_GATE_RELEASE_20260803 -->
+
+## 2026-08-03｜BASE-B2 AQ008 Binding writer gate 实施收口
+
+- 实施 PR #934：Merge Commit `4b55323ffeb20beb514cb9409b0701d21a334543`；
+- 独立审查 PR #935：Merge Commit `cd8cc1b8438038e2e330697a4ae8961dd63c9cec`；
+- Membership／Binding current／Binding evidence 共用 AQ008 Owner gate；
+- Owner 外 Binding Writer：`0`；
+- Runtime／Schema／Migration／数据库执行：`0`；
+- 下一任务切换至 deterministic legacy Binding calibration DML Migration 前置预检。

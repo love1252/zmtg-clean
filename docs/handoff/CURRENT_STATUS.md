@@ -3,39 +3,41 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B2 Binding writer AQ008 前置预检收口状态
+## BASE-B2 AQ008 Binding writer gate 实施收口状态
 
 - 更新日期：2026-08-03
-- Runtime Writer 实施与独立审查：已通过
-- AQ008 前置预检 PR #931：Merge Commit `8aca6221163f7ca05b84bb1c2d50544c6b566044`
-- 独立审查 PR #932：Head `d1fbefc5278b5d22f22a3902dfcd4ad71737f517`，Merge Commit `4df631e840e61042bfde6c93e72eab594edcb53b`
-- 独立审查 Required Check：Run `30781067916`／Job `91585653515` 成功
-- Owner 外直接 Writer：`0`
-- legacy direct writers：`disabled_by_absence`
-- AQ008 Binding gate：未扩展
-- 精确实施 allowlist：`2`
-- legacy calibration：未完成
+- 实施 PR #934：Head `13cc79e302a136c0ad9e699fd238e4edc0f3c4d1`，Merge Commit `4b55323ffeb20beb514cb9409b0701d21a334543`
+- 实施 Required Check：Run `30783676523`／Job `91593052235` 成功
+- 独立审查 PR #935：Merge Commit `cd8cc1b8438038e2e330697a4ae8961dd63c9cec`
+- 独立审查 Required Check：Run `30784217285`／Job `91594598982` 成功
+- AQ008 Membership gate preserved：`true`
+- AQ008 Binding current gate：`true`
+- AQ008 Binding evidence gate：`true`
+- 唯一 Owner allowlist：`1`
+- Owner 外 Binding Writer：`0`
+- Runtime／Schema／Migration／database execution：`0`
+- legacy Binding calibration：未完成
 - BASE-B2：未完成
 - BASE-B3：未启动
 
 ### 唯一下一任务
 
-`BASE-B2 AQ008 Binding writer gate 扩展实施`
+`BASE-B2 deterministic legacy Binding calibration DML Migration 前置预检`
 
 ```text
 binding_runtime_writer_implementation=complete
 binding_runtime_writer_review=passed
 legacy_auth_binding_writers=disabled_by_absence
 owner_outside_binding_writer_count=0
-aq008_binding_writer_preflight=passed
-aq008_binding_writer_preflight_review=passed
-eligible_for_aq008_binding_writer_implementation=true
-aq008_binding_writer_gate_extended=false
-implementation_allowlist_files=2
+aq008_binding_writer_gate_extended=true
+aq008_binding_writer_gate_review=passed
+legacy_binding_calibration_preflight_started=false
 legacy_binding_calibration_complete=false
+historical_orphan_modified=false
+a2_p2_scope_fk_validated=false
 base_b2_complete=false
 eligible_for_base_b3=false
-next_task=BASE-B2 AQ008 Binding writer gate 扩展实施
+next_task=BASE-B2 deterministic legacy Binding calibration DML Migration 前置预检
 next_task_started=false
 next_task_authorized_under_ultra=true
 ```

@@ -589,3 +589,16 @@ MIG-01
 - calibration、BASE-B3 与业务 Reader继续阻断。
 
 <!-- BASE02_BINDING_WRITER_AQ008_PREFLIGHT_HANDOFF_END -->
+
+<!-- BASE02_AQ008_BINDING_WRITER_GATE_HANDOFF_START -->
+
+## BASE-B2 AQ008 Binding writer gate 实施收口
+
+- Membership 既有 AQ008 保护保持；
+- Binding current 与 Binding transition evidence 已纳入同一 Owner writer gate；
+- 唯一 Owner allowlist 保持为 Access Control Membership command repository；
+- 实施与独立审查均通过；
+- 下一任务为 deterministic legacy Binding calibration DML Migration 前置预检；
+- historical orphan、FK `VALIDATE`、BASE-B3 与业务 Reader继续阻断。
+
+<!-- BASE02_AQ008_BINDING_WRITER_GATE_HANDOFF_END -->
