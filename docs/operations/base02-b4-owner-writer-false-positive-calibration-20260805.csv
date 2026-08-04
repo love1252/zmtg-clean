@@ -1,0 +1,5 @@
+path,prior_classification,corrected_classification,evidence,production_writer,production_change_required
+scripts/verify/architecture-quality.test.mjs,owner_outside_direct_writer,test_fixture_non_runtime,.test.mjs; node:test fixture; protected mutation strings are negative AQ008 test inputs,false,false
+scripts/verify/architecture-quality.mjs,lifecycle_review_required,governance_checker_non_runtime,AQ008 rule implementation; table names are policy constants; no DB runtime import,false,false
+src/modules/auth/server/auth-account-service.ts,lifecycle_review_required,semantic_error_code_non_table_access,only tenant_membership_missing reason string; no protected table symbol or DB import,false,false
+src/modules/open-platform/components/TrialDataResetPanel.tsx,lifecycle_review_required,disabled_client_ui_non_writer,client UI text only; POST route returns fixed 503; reset service write capability disabled,false,false
