@@ -1199,3 +1199,17 @@
 - production／test／changed files：6／14／20；
 - business Reader／Capability：off；
 - 下一任务切换至剩余正式 Route 再校准与第二批低风险 Route Guard 前置预检。
+
+<!-- BASE02_B4_ROUTE_GUARD_SECOND_BATCH_PREFLIGHT_RELEASE_20260804 -->
+
+## 2026-08-04｜BASE-B4 第二批低风险 Route Guard 前置预检
+
+- 前置预检 PR #967：Merge Commit `3670fcb66d99100b73dcc1fc12d4fc10c9490319`；
+- 独立审查 PR #968：Merge Commit `1a48cd46923958cbcbbcf182af43f4d2e8229dc4`；
+- second batch：5；
+- guard chain：Scope + Section；
+- compatibility tests：5；
+- implementation allowlist：15；
+- shared Guard change：false；
+- business Reader／Capability：off；
+- 下一任务切换至第二批低风险正式 Route Guard capability-off 接线实施。

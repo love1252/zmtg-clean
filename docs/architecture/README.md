@@ -743,3 +743,18 @@ MIG-01
 - 下一任务转入剩余正式 Route 再校准与第二批低风险前置预检。
 
 <!-- BASE02_B4_ROUTE_GUARD_FIRST_BATCH_IMPLEMENTATION_HANDOFF_END -->
+
+<!-- BASE02_B4_ROUTE_GUARD_SECOND_BATCH_PREFLIGHT_START -->
+
+## BASE-B4 第二批低风险 Route Guard 前置预检
+
+- 剩余机构端 Route 已重新扫描，不直接沿用旧 73 项校准；
+- 第二批冻结 5 个 GET-only、非动态、无 DB、无 demo、无高风险的 capability-off Route；
+- 第二批继续复用 `src/app/api/institution/_shared/institution-route-guard.ts`；
+- Guard 链固定为 Scope + Section；
+- 共享 Guard 不修改；
+- 既有 handler-contract 测试影响面已进入精确 allowlist；
+- 实施必须运行完整 `pnpm test`；
+- 业务 Reader 与新 Capability 继续关闭。
+
+<!-- BASE02_B4_ROUTE_GUARD_SECOND_BATCH_PREFLIGHT_END -->

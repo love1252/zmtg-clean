@@ -3,44 +3,41 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B4 第一批正式 Route Guard 接线实施收口
+## BASE-B4 第二批低风险 Route Guard 前置预检收口
 
 - 更新日期：2026-08-04
-- 实施 PR #964：Head `4f574652f1e833e6a73e0f47496bfd34391416e1`，Merge Commit `7798926a8f81475de9ba8f9155fab74972c01892`
-- 实施 Required Check：Run `30864616988`／Job `91853655436`
-- 独立审查 PR #965：Head `7c927d1b84871e490cf54e103d2decf16eee3027`，Merge Commit `eb89e44ae6a86a4543ce34f2f74df2678401efea`
-- 独立审查 Required Check：Run `30866378951`／Job `91859048029`
-- first batch Route：5
+- 前置预检 PR #967：Head `ce62fdf8da25a10d688d78e262c162b52aeb3233`，Merge Commit `3670fcb66d99100b73dcc1fc12d4fc10c9490319`
+- 前置预检 Required Check：Run `30898236616`／Job `91956160427`
+- 独立审查 PR #968：Head `09d99dbe13676e1102595a08552c69c8f473f85c`，Merge Commit `1a48cd46923958cbcbbcf182af43f4d2e8229dc4`
+- 独立审查 Required Check：Run `30899339392`／Job `91959697850`
+- second batch Route：5
 - guard chain：Scope + Section
-- Guard 拒绝：403／no-store
-- 授权通过后的原 handler contract：保持
-- production／test／changed files：6／14／20
-- legacy handler test isolation：8
+- write／dynamic／direct-db／demo／high-risk：0／0／0／0／0
+- compatibility tests：5
+- implementation allowlist：15
+- shared Guard change：false
 - business Reader／Capability：关闭
-- Schema／Migration／DB：0／0／0
 - BASE-B4：未完成
 - BASE-B5：未启动
 
 ### 唯一下一任务
 
-`BASE-B4 剩余正式 Route 再校准与第二批低风险 Route Guard 前置预检`
+`BASE-B4 第二批低风险正式 Route Guard capability-off 接线实施`
 
 ```text
-base_b4_route_guard_first_batch_implementation=passed
-base_b4_route_guard_first_batch_review=passed
-first_batch_route_count=5
-guard_chain=scope+section
-guard_denial=403_no_store
-authorized_handler_contract=preserved
-production_file_count=6
-test_file_count=14
-changed_file_count=20
+base_b4_route_guard_second_batch_preflight=passed
+base_b4_route_guard_second_batch_review=passed
+second_batch_count=5
+second_batch_guard_chain=scope+section
+compatibility_test_count=5
+implementation_allowlist_count=15
+shared_guard_change_required=false
 business_reader_release=false
 business_capability_release=false
-eligible_for_second_batch_route_guard_preflight=true
+eligible_for_second_batch_implementation=true
 base_b4_complete=false
 base_b5_started=false
-next_task=BASE-B4 剩余正式 Route 再校准与第二批低风险 Route Guard 前置预检
+next_task=BASE-B4 第二批低风险正式 Route Guard capability-off 接线实施
 next_task_started=false
 next_task_authorized_under_ultra=true
 ```
