@@ -1303,3 +1303,16 @@
 - BASE-B4 completion candidate：false；
 - business Reader／Capability：off；
 - 下一任务切换至：`BASE-B4 Owner 外 Membership／Binding Writer／Deleter 关闭前置预检`。
+
+<!-- BASE02_B4_OWNER_WRITER_FALSE_POSITIVE_CALIBRATION_RELEASE_20260805 -->
+
+## 2026-08-05｜BASE-B4 Owner 外 Writer／Deleter 静态误报校准
+
+- 校准 PR #988：Merge Commit `cfb685c04f1f6f137d85fee2197038bcf8c60fc7`；
+- 独立审查 PR #989：Merge Commit `7eb0b12c3fbbbd8b9b6c0d6d390ca3a0deb83534`；
+- false positives：4；
+- corrected Owner outside direct Writer／Deleter：0；
+- corrected lifecycle unresolved：0；
+- production change：0；
+- business Reader／Capability：off；
+- 下一任务切换至：`BASE-B4 剩余 capability-off 正式 Route 第四批精确校准前置预检`。

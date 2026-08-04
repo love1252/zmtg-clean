@@ -843,3 +843,16 @@ MIG-01
 - 下一任务：`BASE-B4 Owner 外 Membership／Binding Writer／Deleter 关闭前置预检`。
 
 <!-- BASE02_B4_FULL_ENTRY_BYPASS_CLOSURE_PREFLIGHT_END -->
+
+<!-- BASE02_B4_OWNER_WRITER_FALSE_POSITIVE_CALIBRATION_START -->
+
+## BASE-B4 Owner 外 Writer／Deleter 静态误报校准
+
+- 原 Owner outside direct Writer／Deleter `1` 校准为 `0`；
+- 原 lifecycle unresolved `4` 校准为 `0`；
+- 4 项均为测试夹具、治理检查器、错误码或禁用 UI 文案误报；
+- 生产代码修改：0；
+- 业务 Reader 与 Capability 继续关闭；
+- 下一任务：`BASE-B4 剩余 capability-off 正式 Route 第四批精确校准前置预检`。
+
+<!-- BASE02_B4_OWNER_WRITER_FALSE_POSITIVE_CALIBRATION_END -->

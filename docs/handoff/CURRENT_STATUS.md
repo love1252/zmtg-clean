@@ -3,45 +3,43 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B4 全量入口 Guard／绕过闭环终检前置预检收口
+## BASE-B4 Owner 外 Writer／Deleter 静态误报校准收口
 
 - 更新日期：2026-08-05
-- 前置预检 PR #985：Merge Commit `51c299ba231bae5e79df4a67defc4417804c079e`
-- 前置预检 Required Check：Run `30943456057`／Job `92107411582`
-- 独立审查 PR #986：Merge Commit `b21d775d72774c5e205f21d18e67e89d88cca285`
-- 独立审查 Required Check：Run `30944654807`／Job `92111504769`
-- total entries：83
-- API Routes：81
-- formal guarded Routes：14
-- route review candidates：56
-- capability-off unwired：52
-- lifecycle candidates：38
-- Owner outside direct Writer／Deleter：1
-- lifecycle unresolved：4
-- BASE-B4 completion candidate：false
+- 校准 PR #988：Merge Commit `cfb685c04f1f6f137d85fee2197038bcf8c60fc7`
+- 校准 Required Check：Run `30947869298`／Job `92122234341`
+- 独立审查 PR #989：Merge Commit `7eb0b12c3fbbbd8b9b6c0d6d390ca3a0deb83534`
+- 独立审查 Required Check：Run `30949048963`／Job `92126228367`
+- prior Owner outside direct Writer／Deleter：1
+- prior lifecycle unresolved：4
+- 静态误报：4
+- corrected Owner outside direct Writer／Deleter：0
+- corrected lifecycle unresolved：0
+- production change required：false
+- route review candidates：56（宽口径，待重校准）
+- capability-off unwired：52（宽口径，待重校准）
 - business Reader／Capability：关闭
 - BASE-B4：未完成
 - BASE-B5：未启动
 
 ### 唯一下一任务
 
-`BASE-B4 Owner 外 Membership／Binding Writer／Deleter 关闭前置预检`
+`BASE-B4 剩余 capability-off 正式 Route 第四批精确校准前置预检`
 
 ```text
-base_b4_full_entry_bypass_closure_preflight=passed
-base_b4_full_entry_bypass_closure_preflight_review=passed
-formal_route_guarded_count=14
-route_review_candidate_count=56
-capability_off_unwired_count=52
-owner_outside_direct_writer_count=1
-lifecycle_unresolved_count=4
-base_b4_completion_candidate=false
+base_b4_owner_writer_false_positive_calibration=passed
+base_b4_owner_writer_false_positive_calibration_review=passed
+false_positive_count=4
+corrected_owner_outside_direct_writer_count=0
+corrected_lifecycle_unresolved_count=0
+production_change_required=false
+route_review_candidate_count_provisional=56
+capability_off_unwired_count_provisional=52
 base_b4_complete=false
 base_b5_started=false
 business_reader_release=false
 business_capability_release=false
-next_task_decision_reason=owner_outside_direct_writer
-next_task=BASE-B4 Owner 外 Membership／Binding Writer／Deleter 关闭前置预检
+next_task=BASE-B4 剩余 capability-off 正式 Route 第四批精确校准前置预检
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
