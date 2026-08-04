@@ -758,3 +758,18 @@ MIG-01
 - 业务 Reader 与新 Capability 继续关闭。
 
 <!-- BASE02_B4_ROUTE_GUARD_SECOND_BATCH_PREFLIGHT_END -->
+
+<!-- BASE02_B4_ROUTE_GUARD_SECOND_BATCH_IMPLEMENTATION_HANDOFF_START -->
+
+## BASE-B4 第二批正式 Route Guard capability-off 接线收口
+
+- 5 个低风险 GET-only Route 已接入统一 Scope + Section Guard；
+- Guard 拒绝固定为 `403 / no-store`；
+- 授权通过后原 `503 capability-off` handler contract 保持；
+- 最终范围为 5 个生产 Route、5 个 colocated 测试和 5 个兼容性测试；
+- 共享 Guard 未修改；
+- 完整测试 446 files／6409 tests、架构门禁、lint、typecheck、build 与 Required Check 均通过；
+- 业务 Reader 与新 Capability 继续关闭；
+- 下一任务转入剩余 4 个低风险候选的第三批前置预检。
+
+<!-- BASE02_B4_ROUTE_GUARD_SECOND_BATCH_IMPLEMENTATION_HANDOFF_END -->

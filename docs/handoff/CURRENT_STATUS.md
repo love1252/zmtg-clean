@@ -3,41 +3,44 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B4 第二批低风险 Route Guard 前置预检收口
+## BASE-B4 第二批正式 Route Guard 接线实施收口
 
 - 更新日期：2026-08-04
-- 前置预检 PR #967：Head `ce62fdf8da25a10d688d78e262c162b52aeb3233`，Merge Commit `3670fcb66d99100b73dcc1fc12d4fc10c9490319`
-- 前置预检 Required Check：Run `30898236616`／Job `91956160427`
-- 独立审查 PR #968：Head `09d99dbe13676e1102595a08552c69c8f473f85c`，Merge Commit `1a48cd46923958cbcbbcf182af43f4d2e8229dc4`
-- 独立审查 Required Check：Run `30899339392`／Job `91959697850`
+- 实施 PR #970：Head `edbdc4785ce5ba2c36a9d8fecba5dbb3cf4e02e8`，Merge Commit `9fb9fb90b81bdae9a8195feab96ef302180546df`
+- 实施 Required Check：Run `30905532792`／Job `91979613368`
+- 独立审查 PR #971：Head `0b145f8812331da939e73f9cb76bfc301721965c`，Merge Commit `ca5c63de03101b098a491ad695bc8ab0fee7318a`
+- 独立审查 Required Check：Run `30907983212`／Job `91987494315`
 - second batch Route：5
 - guard chain：Scope + Section
-- write／dynamic／direct-db／demo／high-risk：0／0／0／0／0
-- compatibility tests：5
-- implementation allowlist：15
-- shared Guard change：false
+- Guard 拒绝：403／no-store
+- 授权通过后的原 handler：503 capability-off contract 保持
+- production／colocated／compatibility／changed files：5／5／5／15
+- shared Guard change：0
 - business Reader／Capability：关闭
+- Schema／Migration／DB：0／0／0
 - BASE-B4：未完成
 - BASE-B5：未启动
 
 ### 唯一下一任务
 
-`BASE-B4 第二批低风险正式 Route Guard capability-off 接线实施`
+`BASE-B4 剩余 4 个低风险正式 Route 再校准与第三批 Route Guard 前置预检`
 
 ```text
-base_b4_route_guard_second_batch_preflight=passed
+base_b4_route_guard_second_batch_implementation=passed
 base_b4_route_guard_second_batch_review=passed
-second_batch_count=5
-second_batch_guard_chain=scope+section
-compatibility_test_count=5
-implementation_allowlist_count=15
-shared_guard_change_required=false
+second_batch_route_count=5
+guard_chain=scope+section
+guard_denial=403_no_store
+authorized_handler_contract=preserved_503_capability_off
+changed_file_count=15
+shared_guard_change_count=0
 business_reader_release=false
 business_capability_release=false
-eligible_for_second_batch_implementation=true
+remaining_low_risk_candidate_count_from_prior_calibration=4
+eligible_for_third_batch_preflight=true
 base_b4_complete=false
 base_b5_started=false
-next_task=BASE-B4 第二批低风险正式 Route Guard capability-off 接线实施
+next_task=BASE-B4 剩余 4 个低风险正式 Route 再校准与第三批 Route Guard 前置预检
 next_task_started=false
 next_task_authorized_under_ultra=true
 ```
