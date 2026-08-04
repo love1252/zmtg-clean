@@ -1,3 +1,5 @@
+import { withInstitutionSectionRouteGuardV1 } from '@/app/api/institution/_shared/institution-route-guard';
+
 import { NextResponse } from 'next/server';
 
 const capabilityDisabledPayload = Object.freeze({
@@ -6,7 +8,7 @@ const capabilityDisabledPayload = Object.freeze({
   error: '机构知识库问答审计暂未启用。',
 });
 
-export function GET() {
+function GET() {
   return NextResponse.json(capabilityDisabledPayload, {
     status: 503,
     headers: {
@@ -14,3 +16,10 @@ export function GET() {
     },
   });
 }
+
+const _base02B4GuardedGET = withInstitutionSectionRouteGuardV1({
+  sectionId: 'knowledge',
+  handler: GET,
+});
+
+export { _base02B4GuardedGET as GET };
