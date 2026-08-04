@@ -800,3 +800,15 @@ MIG-01
 - 校正独立审查通过后重新准入第三批实施。
 
 <!-- BASE02_B4_ROUTE_GUARD_THIRD_BATCH_SCOPE_CORRECTION_END -->
+
+<!-- BASE02_B4_ROUTE_GUARD_THIRD_BATCH_SCOPE_CORRECTION_02_START -->
+
+## BASE-B4 第三批 Route Guard 前置范围第二次校正
+
+- 新增 2 个直接消费候选 Route 的兼容性测试；
+- compatibility tests 从 5 校正为 7；
+- implementation allowlist 从 13 校正为 15；
+- 生产范围、共享 Guard 和 v1 re-export 均未扩大；
+- corrected handoff 后恢复第三批实施。
+
+<!-- BASE02_B4_ROUTE_GUARD_THIRD_BATCH_SCOPE_CORRECTION_02_END -->
