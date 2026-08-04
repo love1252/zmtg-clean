@@ -773,3 +773,18 @@ MIG-01
 - 下一任务转入剩余 4 个低风险候选的第三批前置预检。
 
 <!-- BASE02_B4_ROUTE_GUARD_SECOND_BATCH_IMPLEMENTATION_HANDOFF_END -->
+
+<!-- BASE02_B4_ROUTE_GUARD_THIRD_BATCH_PREFLIGHT_START -->
+
+## BASE-B4 第三批低风险 Route Guard 前置预检
+
+- 第二批实施与独立审查已完成；
+- 第三批冻结 4 个 GET-only、非动态、无数据库和无高风险依赖的 capability-off Route；
+- 统一复用 `src/app/api/institution/_shared` 共享 Guard；
+- Guard 链继续为 Scope + Section；
+- 既有 handler-contract 测试与生产调用面已纳入影响面；
+- 测试调用公开 GET 时必须 `await`；
+- 完整 `pnpm test`、typecheck 和 build 是强制实施门禁；
+- 业务 Reader 与新 Capability 继续关闭。
+
+<!-- BASE02_B4_ROUTE_GUARD_THIRD_BATCH_PREFLIGHT_END -->
