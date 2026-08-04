@@ -2,6 +2,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/app/api/institution/_shared/institution-route-guard', () => ({
+  withInstitutionSectionRouteGuardV1: ({
+    handler,
+  }: {
+    handler: (...args: unknown[]) => Response | Promise<Response>;
+  }) => handler,
+}));
 import { GET } from '@/app/api/institution/entitlement-usage/route';
 
 const routeMocks = vi.hoisted(() => ({
@@ -105,14 +113,17 @@ describe('机构端 entitlement-usage capability-off API route', () => {
     expect(hostileInput.traps).toEqual({ get: 0, ownKeys: 0, descriptor: 0 });
   });
 
-  it('route 仅导入 NextResponse，且不含 session、持久化、服务或用量事实路径', () => {
+  it('route 仅导入共享 Guard 与 NextResponse，且不含 session、持久化、服务或用量事实路径', () => {
     const source = readFileSync(
       join(process.cwd(), 'src/app/api/institution/entitlement-usage/route.ts'),
       'utf8',
     );
     const imports = source.match(/^import .*$/gmu) ?? [];
 
-    expect(imports).toEqual(["import { NextResponse } from 'next/server';"]);
+    expect(imports).toEqual([
+      "import { withInstitutionSectionRouteGuardV1 } from '@/app/api/institution/_shared/institution-route-guard';",
+      "import { NextResponse } from 'next/server';",
+    ]);
     expect(source).not.toMatch(
       /getDemoAccessContextFromRequest|getDatabase|getTenantEntitlementUsageService|request\.|cookie|session|repository|service|records|items|quota|remaining|used|limit|count|fetch\(|process\.env/i,
     );

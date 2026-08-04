@@ -2,6 +2,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/app/api/institution/_shared/institution-route-guard', () => ({
+  withInstitutionSectionRouteGuardV1: ({
+    handler,
+  }: {
+    handler: (...args: unknown[]) => Response | Promise<Response>;
+  }) => handler,
+}));
 import { GET as aiCallUsageGet } from '@/app/api/institution/knowledge-management/ai-call/usage/route';
 import { GET as platformAiUsageGet } from '@/app/api/v1/open-platform/ai-usage/route';
 
@@ -138,7 +146,7 @@ describe('机构端 AI 调用记录 capability-off API route', () => {
     expect(hostileInput.traps).toEqual({ get: 0, ownKeys: 0, descriptor: 0 });
   });
 
-  it('route 仅导入 NextResponse，且不含 session、持久化、服务或 AI 用量事实路径', () => {
+  it('route 仅导入共享 Guard 与 NextResponse，且不含 session、持久化、服务或 AI 用量事实路径', () => {
     const source = readFileSync(
       join(
         process.cwd(),
@@ -148,7 +156,10 @@ describe('机构端 AI 调用记录 capability-off API route', () => {
     );
     const imports = source.match(/^import .*$/gmu) ?? [];
 
-    expect(imports).toEqual(["import { NextResponse } from 'next/server';"]);
+    expect(imports).toEqual([
+      "import { withInstitutionSectionRouteGuardV1 } from '@/app/api/institution/_shared/institution-route-guard';",
+      "import { NextResponse } from 'next/server';",
+    ]);
     expect(source).not.toMatch(
       /getDemoAccessContextFromRequest|getDatabase|createAiCallUsageRepository|listInstitutionAiCallUsageService|request\.|cookie|session|repository|service|records|emptyState|count|token|model|provider|prompt|answer|fetch\(|process\.env/i,
     );

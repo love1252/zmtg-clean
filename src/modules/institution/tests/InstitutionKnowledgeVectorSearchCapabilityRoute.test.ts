@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@/app/api/institution/_shared/institution-route-guard', () => ({
+  withInstitutionSectionRouteGuardV1: ({
+    handler,
+  }: {
+    handler: (...args: unknown[]) => Response | Promise<Response>;
+  }) => handler,
+}));
+
 const forbidden = vi.hoisted(() => ({ initialized: [] as string[] }));
 
 vi.mock('@/modules/security/server/access-context', () => { forbidden.initialized.push('auth'); throw new Error('auth must not initialize'); });
