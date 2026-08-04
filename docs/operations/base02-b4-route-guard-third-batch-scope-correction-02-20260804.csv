@@ -1,0 +1,3 @@
+path,impact_kind,canonical_route,required_change,classification
+src/modules/institution/tests/TreatmentSummaryListApiRoutes.test.ts,direct_route_handler_contract,src/app/api/institution/treatment-summaries/route.ts,"mock shared Guard boundary; preserve awaited public GET and 503 contract",required_third_batch_compatibility_test
+src/modules/institution/tests/WeComCustomerMappingReadWriteBridge.test.ts,direct_route_handler_contract,src/app/api/institution/wecom/customer-mapping-candidates/route.ts,"import vi; mock shared Guard boundary; await both public GET calls",required_third_batch_compatibility_test
