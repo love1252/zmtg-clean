@@ -7,6 +7,14 @@ import { GET } from '@/app/api/institution/followup-operations/dashboard/route';
 import { getFollowUpOperationsDashboard } from '@/modules/institution/client/tenant-business-client';
 import { SmartFollowUpShell } from '@/modules/institution/components/SmartFollowUpShell';
 
+vi.mock('@/app/api/institution/_shared/institution-route-guard', () => ({
+  withInstitutionSectionRouteGuardV1: ({
+    handler,
+  }: {
+    handler: (...args: unknown[]) => Response | Promise<Response>;
+  }) => handler,
+}));
+
 const routeMocks = vi.hoisted(() => ({
   createAuditEventRepository: vi.fn(),
   createTenantBusinessRepository: vi.fn(),
@@ -98,7 +106,14 @@ describe('follow-up operations dashboard capability gate', () => {
       'utf8',
     );
 
-    expect(source).toMatch(/^import \{ NextResponse \} from 'next\/server';/u);
+    expect(source.match(/^import .+;$/gmu) ?? []).toEqual([
+      "import { withInstitutionSectionRouteGuardV1 } from '@/app/api/institution/_shared/institution-route-guard';",
+      "import { NextResponse } from 'next/server';",
+    ]);
+    expect(source).toContain('async function GET(_request: Request)');
+    expect(source).toContain(
+      'export { _base02B4GuardedGET as GET };',
+    );
     expect(source).not.toMatch(
       /getDemoAccessContextFromRequest|getDatabase|create(?:AuditEvent|TenantBusiness)Repository|getFollowUpOperationsDashboard|fetch\(/u,
     );

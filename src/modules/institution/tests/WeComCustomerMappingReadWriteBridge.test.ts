@@ -1,7 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { GET } from '@/app/api/institution/wecom/customer-mapping-candidates/route';
 import { POST } from '@/app/api/institution/wecom/customer-mapping-reviews/[mappingId]/actions/route';
+
+vi.mock('@/app/api/institution/_shared/institution-route-guard', () => ({
+  withInstitutionSectionRouteGuardV1: ({
+    handler,
+  }: {
+    handler: (...args: unknown[]) => Response | Promise<Response>;
+  }) => handler,
+}));
 import { DEMO_SESSION_COOKIE, encodeDemoSession } from '@/modules/auth/server/demo-session';
 
 const origin = 'http://localhost';
@@ -118,7 +126,7 @@ describe('企业微信客户映射默认 GET／POST Route 能力关闭一致性'
     async (tenantId, institutionId, mappingId, idempotencyKey) => {
       const request = getRequest(tenantId, institutionId);
       const initial = await expectCapabilityDisabled(
-        GET(request),
+        await GET(request),
         getForbiddenFields,
       );
 
@@ -158,7 +166,7 @@ describe('企业微信客户映射默认 GET／POST Route 能力关闭一致性'
       expect(replayBody).toEqual(mutationBody);
 
       const next = await expectCapabilityDisabled(
-        GET(getRequest(tenantId, institutionId)),
+        await GET(getRequest(tenantId, institutionId)),
         getForbiddenFields,
       );
       expect(next).toEqual(initial);

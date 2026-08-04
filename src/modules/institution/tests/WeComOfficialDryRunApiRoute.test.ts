@@ -71,6 +71,14 @@ vi.mock('@/server/db/client', () => {
 import { POST } from '@/app/api/institution/wecom-official-dry-run/evaluate/route';
 import { GET } from '@/app/api/institution/wecom-official-dry-run/route';
 
+vi.mock('@/app/api/institution/_shared/institution-route-guard', () => ({
+  withInstitutionSectionRouteGuardV1: ({
+    handler,
+  }: {
+    handler: (...args: unknown[]) => Response | Promise<Response>;
+  }) => handler,
+}));
+
 const getRouteSourcePath = resolve(
   process.cwd(),
   'src/app/api/institution/wecom-official-dry-run/route.ts',
@@ -211,7 +219,7 @@ describe('企业微信官方 dry-run API capability-off', () => {
     const formData = vi.spyOn(input, 'formData');
 
     await expectCapabilityDisabled(
-      GET(input),
+      await GET(input),
       getCapabilityDisabledPayload,
       'input-must-not-echo',
     );
@@ -226,7 +234,7 @@ describe('企业微信官方 dry-run API capability-off', () => {
   it('GET 对 hostile Request Proxy 零 trap、零副作用', async () => {
     const hostile = hostileRequest();
 
-    await expectCapabilityDisabled(GET(hostile.value), getCapabilityDisabledPayload);
+    await expectCapabilityDisabled(await GET(hostile.value), getCapabilityDisabledPayload);
 
     expect(hostile.trapCount()).toBe(0);
     expectDownstreamsIdle();
@@ -260,12 +268,18 @@ describe('企业微信官方 dry-run API capability-off', () => {
     expectDownstreamsIdle();
   });
 
-  it('GET route 源码只保留 NextResponse，且可接收但不读取 Request', () => {
+  it('GET route 源码只保留共享 Guard 与 NextResponse，且可接收但不读取 Request', () => {
     const source = readFileSync(getRouteSourcePath, 'utf8');
     const imports = source.match(/^import .+;$/gmu) ?? [];
 
-    expect(imports).toEqual(["import { NextResponse } from 'next/server';"]);
-    expect(source).toContain('export function GET(_request: Request)');
+    expect(imports).toEqual([
+      "import { withInstitutionSectionRouteGuardV1 } from '@/app/api/institution/_shared/institution-route-guard';",
+      "import { NextResponse } from 'next/server';",
+    ]);
+    expect(source).toContain('function GET(_request: Request)');
+    expect(source).toContain(
+      'export { _base02B4GuardedGET as GET };',
+    );
     expect(source.match(/_request/gmu)).toHaveLength(1);
     for (const forbidden of [
       '@/modules/',
