@@ -3,20 +3,18 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B4 第三批低风险 Route Guard 前置预检收口
+## BASE-B4 第三批 Route Guard 前置预检范围校正收口
 
 - 更新日期：2026-08-04
-- 前置预检 PR #973：Head `286a9620c9a0a7799827627a5abb34deb78a9584`，Merge Commit `20ed0651072f2f87961038b8ce0e11f775d3a0e8`
-- 前置预检 Required Check：Run `30911890061`／Job `92000411701`
-- 独立审查 PR #974：Head `7eef22b598771d3090e06e66fd75c0fcca2a8e8f`，Merge Commit `9d6492fcbb55ae88fd9fa4eac87c48ea4fd671ff`
-- 独立审查 Required Check：Run `30913091400`／Job `92004378330`
+- 校正 PR #976：Head `ccc52ffdc7b6005c4eb7219acd0b27ee33a67d86`，Merge Commit `bdae4c00cf18fac782291266e6ba51aad54f99d2`
+- 校正 Required Check：Run `30917094350`／Job `92017874346`
+- 独立审查 PR #977：Head `0ade59bc9048945dfc39a2d66aba1ce9defc8d01`，Merge Commit `fe9f4170f1e2f9a7f2dcddcc176c200ddad25e59`
+- 独立审查 Required Check：Run `30918375915`／Job `92022239859`
 - third batch Route：4
-- third batch paths：`["src/app/api/institution/followup-operations/dashboard/route.ts", "src/app/api/institution/treatment-summaries/route.ts", "src/app/api/institution/wecom-official-dry-run/route.ts", "src/app/api/institution/wecom/customer-mapping-candidates/route.ts"]`
-- third batch sections：`["care", "conversations"]`
-- guard chain：Scope + Section
-- compatibility tests：4
-- runtime callers：3
-- implementation allowlist：12
+- compatibility tests：5
+- implementation allowlist：13
+- 新增传递兼容性测试：`V1WeComOfficialDryRunCompatibilityApiRoute.test.ts`
+- production scope change：0
 - shared Guard change required：false
 - business Reader／Capability：关闭
 - BASE-B4：未完成
@@ -28,12 +26,12 @@
 
 ```text
 base_b4_route_guard_third_batch_preflight=passed
-base_b4_route_guard_third_batch_review=passed
+base_b4_route_guard_third_batch_scope_correction=passed
+base_b4_route_guard_third_batch_scope_correction_review=passed
 third_batch_count=4
-guard_chain=scope+section
-compatibility_test_count=4
-runtime_caller_count=3
-implementation_allowlist_count=12
+compatibility_test_count=5
+implementation_allowlist_count=13
+production_scope_change=0
 shared_guard_change_required=false
 business_reader_release=false
 business_capability_release=false

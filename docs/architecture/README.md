@@ -788,3 +788,15 @@ MIG-01
 - 业务 Reader 与新 Capability 继续关闭。
 
 <!-- BASE02_B4_ROUTE_GUARD_THIRD_BATCH_PREFLIGHT_END -->
+
+<!-- BASE02_B4_ROUTE_GUARD_THIRD_BATCH_SCOPE_CORRECTION_START -->
+
+## BASE-B4 第三批 Route Guard 前置范围校正
+
+- 补充 v1 re-export 的传递兼容性测试影响面；
+- compatibility tests 从 4 校正为 5；
+- implementation allowlist 从 12 校正为 13；
+- 生产 Route、共享 Guard 和 v1 re-export 范围均未扩大；
+- 校正独立审查通过后重新准入第三批实施。
+
+<!-- BASE02_B4_ROUTE_GUARD_THIRD_BATCH_SCOPE_CORRECTION_END -->
