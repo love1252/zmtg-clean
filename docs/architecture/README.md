@@ -728,3 +728,18 @@ MIG-01
 - 下一任务为第一批 capability-off Route Guard 接线实施。
 
 <!-- BASE02_B4_ROUTE_GUARD_FIRST_BATCH_PREFLIGHT_END -->
+
+<!-- BASE02_B4_ROUTE_GUARD_FIRST_BATCH_IMPLEMENTATION_HANDOFF_START -->
+
+## BASE-B4 第一批正式 Route Guard capability-off 接线收口
+
+- 5 个低风险 GET-only Route 已接入统一 Scope + Section Guard；
+- 共享 Guard 固定在 `src/app/api/institution/_shared`；
+- 无 genuine authorization 或 Section Allow 时统一 `403 / no-store`；
+- 授权通过后原 handler Response contract 保持不变；
+- 最终范围为 6 个生产文件和 14 个测试文件；
+- 完整测试、架构门禁、lint、typecheck、build 与 Required Check 均通过；
+- 业务 Reader 与新 Capability 继续关闭；
+- 下一任务转入剩余正式 Route 再校准与第二批低风险前置预检。
+
+<!-- BASE02_B4_ROUTE_GUARD_FIRST_BATCH_IMPLEMENTATION_HANDOFF_END -->

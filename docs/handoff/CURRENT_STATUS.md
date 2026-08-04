@@ -3,39 +3,44 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B4 第一批正式 Route Guard 接线前置预检收口
+## BASE-B4 第一批正式 Route Guard 接线实施收口
 
-- 更新日期：2026-08-03
-- 前置预检 PR #961：Head `ff57722e6534162581a1792be3272f3fe0bbd1d0`，Merge Commit `e18dab5e96540a0ccd7b58fbd1110bdd652cedac`
-- 前置预检 Required Check：Run `30823507423`／Job `91719099999`
-- 独立审查 PR #962：Head `de059768e1b23bb0d4f78cb305a22b9923533c16`，Merge Commit `3978f203b8b9845e43fede6a0b86e2b53b129e17`
-- 独立审查 Required Check：Run `30824440196`／Job `91722298396`
-- first batch count：5
-- first batch paths：`['src/app/api/institution/entitlement-usage/route.ts', 'src/app/api/institution/knowledge-management/ai-call/usage/route.ts', 'src/app/api/institution/knowledge-management/retrieval/route.ts', 'src/app/api/institution/knowledge-management/search/route.ts', 'src/app/api/institution/knowledge-management/vector-search/route.ts']`
-- first batch sections：`['knowledge', 'system']`
-- guard chain：scope + section
-- write／dynamic／direct-db／demo：0／0／0／0
-- implementation allowlist：12
+- 更新日期：2026-08-04
+- 实施 PR #964：Head `4f574652f1e833e6a73e0f47496bfd34391416e1`，Merge Commit `7798926a8f81475de9ba8f9155fab74972c01892`
+- 实施 Required Check：Run `30864616988`／Job `91853655436`
+- 独立审查 PR #965：Head `7c927d1b84871e490cf54e103d2decf16eee3027`，Merge Commit `eb89e44ae6a86a4543ce34f2f74df2678401efea`
+- 独立审查 Required Check：Run `30866378951`／Job `91859048029`
+- first batch Route：5
+- guard chain：Scope + Section
+- Guard 拒绝：403／no-store
+- 授权通过后的原 handler contract：保持
+- production／test／changed files：6／14／20
+- legacy handler test isolation：8
 - business Reader／Capability：关闭
+- Schema／Migration／DB：0／0／0
 - BASE-B4：未完成
 - BASE-B5：未启动
 
 ### 唯一下一任务
 
-`BASE-B4 第一批低风险正式 Route Guard capability-off 接线实施`
+`BASE-B4 剩余正式 Route 再校准与第二批低风险 Route Guard 前置预检`
 
 ```text
-base_b4_route_guard_first_batch_preflight=passed
+base_b4_route_guard_first_batch_implementation=passed
 base_b4_route_guard_first_batch_review=passed
-first_batch_count=5
-first_batch_guard_chain=scope+section
+first_batch_route_count=5
+guard_chain=scope+section
+guard_denial=403_no_store
+authorized_handler_contract=preserved
+production_file_count=6
+test_file_count=14
+changed_file_count=20
 business_reader_release=false
 business_capability_release=false
-implementation_allowlist_count=12
-eligible_for_first_batch_route_guard_implementation=true
+eligible_for_second_batch_route_guard_preflight=true
 base_b4_complete=false
 base_b5_started=false
-next_task=BASE-B4 第一批低风险正式 Route Guard capability-off 接线实施
+next_task=BASE-B4 剩余正式 Route 再校准与第二批低风险 Route Guard 前置预检
 next_task_started=false
 next_task_authorized_under_ultra=true
 ```
