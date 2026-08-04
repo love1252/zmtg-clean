@@ -1,0 +1,2 @@
+path,impact_kind,via_runtime_file,required_test_change,classification
+src/modules/institution/tests/V1WeComOfficialDryRunCompatibilityApiRoute.test.ts,transitive_reexport_compatibility,src/app/api/v1/institution/wecom-official-dry-run/route.ts,"mock shared Guard boundary; await legacyGET/versionedGET before responseSnapshot",required_third_batch_compatibility_test
