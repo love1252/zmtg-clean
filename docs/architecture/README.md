@@ -812,3 +812,20 @@ MIG-01
 - corrected handoff 后恢复第三批实施。
 
 <!-- BASE02_B4_ROUTE_GUARD_THIRD_BATCH_SCOPE_CORRECTION_02_END -->
+
+<!-- BASE02_B4_ROUTE_GUARD_THIRD_BATCH_IMPLEMENTATION_HANDOFF_START -->
+
+## BASE-B4 第三批正式 Route Guard capability-off 接线收口
+
+- 4 个低风险 GET-only Route 已接入 Scope + Section Guard；
+- 三批累计完成 14 个正式 Route 接线；
+- Guard 拒绝固定为 `403 / no-store`；
+- 授权通过后原 `503 capability-off` contract 保持；
+- 最终范围为 4 个生产 Route、4 个 colocated 测试和 7 个兼容性测试；
+- 共享 Guard 与 v1 re-export 均未修改；
+- 完整测试 446 files／6409 tests、架构门禁、lint、typecheck、build
+  与 Required Check 均通过；
+- 业务 Reader 与新 Capability 继续关闭；
+- 下一任务进入全量入口 Guard／绕过闭环终检和剩余生命周期入口校准。
+
+<!-- BASE02_B4_ROUTE_GUARD_THIRD_BATCH_IMPLEMENTATION_HANDOFF_END -->
