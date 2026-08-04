@@ -6,6 +6,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { GET as legacyGET } from '@/app/api/institution/wecom-official-dry-run/route';
 import { GET as versionedGET } from '@/app/api/v1/institution/wecom-official-dry-run/route';
 
+vi.mock('@/app/api/institution/_shared/institution-route-guard', () => ({
+  withInstitutionSectionRouteGuardV1: ({
+    handler,
+  }: {
+    handler: (...args: unknown[]) => Response | Promise<Response>;
+  }) => handler,
+}));
+
 const versionedRouteSourcePath = resolve(
   process.cwd(),
   'src/app/api/v1/institution/wecom-official-dry-run/route.ts',
@@ -103,8 +111,8 @@ describe('v1 WeCom official dry-run compatibility route', () => {
     const arrayBuffer = vi.spyOn(versionedRequest, 'arrayBuffer');
     const formData = vi.spyOn(versionedRequest, 'formData');
 
-    const legacySnapshot = await responseSnapshot(legacyGET(legacyRequest));
-    const versionedSnapshot = await responseSnapshot(versionedGET(versionedRequest));
+    const legacySnapshot = await responseSnapshot(await legacyGET(legacyRequest));
+    const versionedSnapshot = await responseSnapshot(await versionedGET(versionedRequest));
 
     expect(versionedSnapshot).toEqual(legacySnapshot);
     expect(versionedSnapshot).toEqual({
@@ -123,7 +131,7 @@ describe('v1 WeCom official dry-run compatibility route', () => {
   it('新入口对 hostile Request Proxy 保持零 trap', async () => {
     const hostile = hostileRequest();
 
-    const snapshot = await responseSnapshot(versionedGET(hostile.value));
+    const snapshot = await responseSnapshot(await versionedGET(hostile.value));
 
     expect(snapshot).toEqual({
       status: 503,

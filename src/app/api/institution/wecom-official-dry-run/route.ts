@@ -1,6 +1,8 @@
+import { withInstitutionSectionRouteGuardV1 } from '@/app/api/institution/_shared/institution-route-guard';
+
 import { NextResponse } from 'next/server';
 
-export function GET(_request: Request) {
+function GET(_request: Request) {
   return NextResponse.json(
     {
       code: 'capability_disabled',
@@ -14,3 +16,10 @@ export function GET(_request: Request) {
     },
   );
 }
+
+const _base02B4GuardedGET = withInstitutionSectionRouteGuardV1({
+  sectionId: 'conversations',
+  handler: GET,
+});
+
+export { _base02B4GuardedGET as GET };

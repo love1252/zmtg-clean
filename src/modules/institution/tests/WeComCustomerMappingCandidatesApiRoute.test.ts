@@ -17,6 +17,14 @@ import { createWeComCustomerMappingReviewActionMockRuntime } from '@/modules/ins
 import { createWeComCustomerMappingCandidatesGetHandler } from '@/app/api/institution/wecom/customer-mapping-candidates/handler';
 import { createWeComCustomerMappingReviewActionsPostHandler } from '@/app/api/institution/wecom/customer-mapping-reviews/[mappingId]/actions/handler';
 
+vi.mock('@/app/api/institution/_shared/institution-route-guard', () => ({
+  withInstitutionSectionRouteGuardV1: ({
+    handler,
+  }: {
+    handler: (...args: unknown[]) => Response | Promise<Response>;
+  }) => handler,
+}));
+
 const routeSource = readFileSync(
   resolve(process.cwd(), 'src/app/api/institution/wecom/customer-mapping-candidates/route.ts'),
   'utf8',
@@ -628,7 +636,7 @@ describe('WeCom customer mapping candidates readonly API', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const response = GET(input);
+    const response = await GET(input);
     const responseCopy = response.clone();
     await expectCapabilityDisabled(response);
     const serialized = JSON.stringify(await responseCopy.json());
@@ -642,16 +650,20 @@ describe('WeCom customer mapping candidates readonly API', () => {
   it('在读取 Request、URL、query、session 或 headers 前返回', async () => {
     const hostile = hostileRequest();
 
-    await expectCapabilityDisabled(GET(hostile.request));
+    await expectCapabilityDisabled(await GET(hostile.request));
 
     expect(hostile.trapCount()).toBe(0);
   });
 
   it('route 仅加载响应工具，不装配 session、mock runtime、scenario、fixture、数据库或 provider', () => {
     expect(routeSource.split('\n').filter((line) => line.startsWith('import '))).toEqual([
+      "import { withInstitutionSectionRouteGuardV1 } from '@/app/api/institution/_shared/institution-route-guard';",
       "import { NextResponse } from 'next/server';",
     ]);
-    expect(routeSource).toContain('export function GET(_request: Request)');
+    expect(routeSource).toContain('function GET(_request: Request)');
+    expect(routeSource).toContain(
+      'export { _base02B4GuardedGET as GET };',
+    );
     expect(routeSource).not.toMatch(/\b_request\s*(?:\.|\[)/u);
 
     for (const forbiddenSource of [

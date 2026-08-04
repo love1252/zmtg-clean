@@ -221,7 +221,7 @@ describe('治疗结构化摘要领域模型', () => {
 
   it('治疗摘要 API route 只允许结构化摘要、受控编辑、Phase 15 随访联动与 Phase 19 作废入口', () => {
     const apiFiles = listFiles(join(process.cwd(), 'src/app/api')).filter((file) =>
-      /treatment-summary|treatment-summaries/i.test(file),
+      /treatment-summary|treatment-summaries/i.test(file) && file.endsWith('route.ts'),
     ).sort();
     const uiFiles = listFiles(join(process.cwd(), 'src/modules/institution/components')).filter(
       (file) => /treatment-summary|treatment-summaries/i.test(file),

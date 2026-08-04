@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET as treatmentSummariesGet } from '@/app/api/institution/treatment-summaries/route';
 
+vi.mock('@/app/api/institution/_shared/institution-route-guard', () => ({
+  withInstitutionSectionRouteGuardV1: ({
+    handler,
+  }: {
+    handler: (...args: unknown[]) => Response | Promise<Response>;
+  }) => handler,
+}));
+
 const routeMocks = vi.hoisted(() => ({
   auditRecord: vi.fn(),
   createAuditEventRepository: vi.fn(),
