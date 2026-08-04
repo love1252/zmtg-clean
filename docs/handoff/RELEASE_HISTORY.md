@@ -1213,3 +1213,18 @@
 - shared Guard change：false；
 - business Reader／Capability：off；
 - 下一任务切换至第二批低风险正式 Route Guard capability-off 接线实施。
+
+<!-- BASE02_B4_ROUTE_GUARD_SECOND_BATCH_IMPLEMENTATION_RELEASE_20260804 -->
+
+## 2026-08-04｜BASE-B4 第二批正式 Route Guard 接线实施收口
+
+- 实施 PR #970：Merge Commit `9fb9fb90b81bdae9a8195feab96ef302180546df`；
+- 独立审查 PR #971：Merge Commit `ca5c63de03101b098a491ad695bc8ab0fee7318a`；
+- second batch：5；
+- guard chain：Scope + Section；
+- Guard denial：403 / no-store；
+- authorized handler：原 503 capability-off contract 保持；
+- changed files：15；
+- shared Guard change：0；
+- business Reader／Capability：off；
+- 下一任务切换至剩余 4 个低风险正式 Route 再校准与第三批 Route Guard 前置预检。
