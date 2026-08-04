@@ -1288,3 +1288,18 @@
 - shared Guard / v1 re-export change：0；
 - business Reader／Capability：off；
 - 下一任务切换至全量入口 Guard／绕过闭环终检与剩余生命周期入口前置预检。
+
+<!-- BASE02_B4_FULL_ENTRY_BYPASS_CLOSURE_PREFLIGHT_RELEASE_20260805 -->
+
+## 2026-08-05｜BASE-B4 全量入口 Guard／绕过闭环终检前置预检
+
+- 前置预检 PR #985：Merge Commit `51c299ba231bae5e79df4a67defc4417804c079e`；
+- 独立审查 PR #986：Merge Commit `b21d775d72774c5e205f21d18e67e89d88cca285`；
+- formal guarded Routes：14；
+- route review candidates：56；
+- capability-off unwired：52；
+- Owner outside direct Writer／Deleter：1；
+- lifecycle unresolved：4；
+- BASE-B4 completion candidate：false；
+- business Reader／Capability：off；
+- 下一任务切换至：`BASE-B4 Owner 外 Membership／Binding Writer／Deleter 关闭前置预检`。

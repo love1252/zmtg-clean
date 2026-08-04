@@ -3,52 +3,45 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B4 第三批正式 Route Guard 接线实施收口
+## BASE-B4 全量入口 Guard／绕过闭环终检前置预检收口
 
 - 更新日期：2026-08-05
-- 第二次范围校正 PR #979：Merge Commit `2f7cd73cc169fb6c9734353c399f9728a5adbe13`
-- 校正独立审查 PR #980：Merge Commit `60eda4898b818691cc6155260ec261b0db365ca0`
-- corrected handoff PR #981：Merge Commit `b33e5e3d382bc637381e8face65ecb544c21d805`
-- 实施 PR #982：Head `0f40ef5f1880a18aabc2a70df5b5f37023f119cb`，Merge Commit `772af8bd31bcf8e2a3998133bee996d419eed1f8`
-- 实施 Required Check：Run `30932954393`／Job `92071902179`
-- 独立实施审查 PR #983：Head `9c4054b8d01c5146dee2de1706af92182e7ade77`，Merge Commit `32afafa3cee544315bc54275a3c7c216d2ef862a`
-- 独立审查 Required Check：Run `30935637247`／Job `92080963424`
-- third batch Route：4
-- 三批累计正式 Route Guard：14
-- guard chain：Scope + Section
-- Guard 拒绝：403／no-store
-- 授权通过后的原 handler：503 capability-off contract 保持
-- production／colocated／compatibility／changed files：4／4／7／15
-- shared Guard change：0
-- v1 re-export change：0
+- 前置预检 PR #985：Merge Commit `51c299ba231bae5e79df4a67defc4417804c079e`
+- 前置预检 Required Check：Run `30943456057`／Job `92107411582`
+- 独立审查 PR #986：Merge Commit `b21d775d72774c5e205f21d18e67e89d88cca285`
+- 独立审查 Required Check：Run `30944654807`／Job `92111504769`
+- total entries：83
+- API Routes：81
+- formal guarded Routes：14
+- route review candidates：56
+- capability-off unwired：52
+- lifecycle candidates：38
+- Owner outside direct Writer／Deleter：1
+- lifecycle unresolved：4
+- BASE-B4 completion candidate：false
 - business Reader／Capability：关闭
-- Schema／Migration／DB：0／0／0
 - BASE-B4：未完成
 - BASE-B5：未启动
 
 ### 唯一下一任务
 
-`BASE-B4 全量入口 Guard／绕过闭环终检与剩余生命周期入口前置预检`
+`BASE-B4 Owner 外 Membership／Binding Writer／Deleter 关闭前置预检`
 
 ```text
-base_b4_route_guard_third_batch_implementation=passed
-base_b4_route_guard_third_batch_review=passed
-third_batch_route_count=4
-formal_route_guard_batch_total=14
-guard_chain=scope+section
-guard_denial=403_no_store
-authorized_handler_contract=preserved_503_capability_off
-changed_file_count=15
-shared_guard_change_count=0
-v1_reexport_change_count=0
-business_reader_release=false
-business_capability_release=false
-eligible_for_base_b4_full_bypass_recalibration=true
+base_b4_full_entry_bypass_closure_preflight=passed
+base_b4_full_entry_bypass_closure_preflight_review=passed
+formal_route_guarded_count=14
+route_review_candidate_count=56
+capability_off_unwired_count=52
+owner_outside_direct_writer_count=1
+lifecycle_unresolved_count=4
+base_b4_completion_candidate=false
 base_b4_complete=false
 base_b5_started=false
-next_task=BASE-B4 全量入口 Guard／绕过闭环终检与剩余生命周期入口前置预检
-next_task_started=false
-next_task_authorized_under_ultra=true
+business_reader_release=false
+business_capability_release=false
+next_task_decision_reason=owner_outside_direct_writer
+next_task=BASE-B4 Owner 外 Membership／Binding Writer／Deleter 关闭前置预检
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
