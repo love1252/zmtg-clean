@@ -1243,3 +1243,16 @@
 - shared Guard change：false；
 - business Reader／Capability：off；
 - 下一任务切换至第三批低风险正式 Route Guard capability-off 接线实施。
+
+<!-- BASE02_B4_ROUTE_GUARD_THIRD_BATCH_SCOPE_CORRECTION_RELEASE_20260804 -->
+
+## 2026-08-04｜BASE-B4 第三批 Route Guard 前置范围校正
+
+- 校正 PR #976：Merge Commit `bdae4c00cf18fac782291266e6ba51aad54f99d2`；
+- 独立审查 PR #977：Merge Commit `fe9f4170f1e2f9a7f2dcddcc176c200ddad25e59`；
+- 新增传递兼容性测试：1；
+- compatibility tests：5；
+- implementation allowlist：13；
+- production scope change：0；
+- shared Guard change：false；
+- 下一任务仍为第三批低风险正式 Route Guard capability-off 接线实施。
