@@ -1185,3 +1185,17 @@
 - business Reader／Capability：off；
 - implementation allowlist：12；
 - 下一任务切换至第一批低风险正式 Route Guard capability-off 接线实施。
+
+<!-- BASE02_B4_ROUTE_GUARD_FIRST_BATCH_IMPLEMENTATION_RELEASE_20260804 -->
+
+## 2026-08-04｜BASE-B4 第一批正式 Route Guard 接线实施收口
+
+- 实施 PR #964：Merge Commit `7798926a8f81475de9ba8f9155fab74972c01892`；
+- 独立审查 PR #965：Merge Commit `eb89e44ae6a86a4543ce34f2f74df2678401efea`；
+- first batch：5；
+- guard chain：Scope + Section；
+- Guard denial：403 / no-store；
+- authorized handler contract：preserved；
+- production／test／changed files：6／14／20；
+- business Reader／Capability：off；
+- 下一任务切换至剩余正式 Route 再校准与第二批低风险 Route Guard 前置预检。
