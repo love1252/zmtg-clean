@@ -3,6 +3,14 @@ import { resolve } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@/app/api/institution/_shared/institution-route-guard', () => ({
+  withInstitutionSectionRouteGuardV1: ({
+    handler,
+  }: {
+    handler: (...args: unknown[]) => Response | Promise<Response>;
+  }) => handler,
+}));
+
 import { GET } from '@/app/api/institution/wecom/external-contacts/route';
 
 const routeSource = readFileSync(
@@ -68,7 +76,7 @@ describe('机构端企业微信外部联系人 capability-off API', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const response = GET(request);
+    const response = await GET(request);
     const responseCopy = response.clone();
     await expectCapabilityDisabled(response);
     const serialized = JSON.stringify(await responseCopy.json());
@@ -82,16 +90,20 @@ describe('机构端企业微信外部联系人 capability-off API', () => {
   it('在读取 Request、URL、query、session 或 headers 前返回', async () => {
     const hostile = hostileRequest();
 
-    await expectCapabilityDisabled(GET(hostile.request));
+    await expectCapabilityDisabled(await GET(hostile.request));
 
     expect(hostile.trapCount()).toBe(0);
   });
 
   it('route 仅加载响应工具，不装配 session、scenario、fixture、数据库或 provider', () => {
     expect(routeSource.split('\n').filter((line) => line.startsWith('import '))).toEqual([
+      "import { withInstitutionSectionRouteGuardV1 } from '@/app/api/institution/_shared/institution-route-guard';",
       "import { NextResponse } from 'next/server';",
     ]);
-    expect(routeSource).toContain('export function GET(_request: Request)');
+    expect(routeSource).toContain('function GET(_request: Request)');
+    expect(routeSource).toContain(
+      'export { _base02B4GuardedGET as GET };',
+    );
     expect(routeSource).not.toMatch(/\b_request\s*(?:\.|\[)/u);
 
     for (const forbiddenSource of [

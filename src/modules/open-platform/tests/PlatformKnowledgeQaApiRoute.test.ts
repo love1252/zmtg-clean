@@ -1,6 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/app/api/institution/_shared/institution-route-guard', () => ({
+  withInstitutionSectionRouteGuardV1: ({
+    handler,
+  }: {
+    handler: (...args: unknown[]) => Response | Promise<Response>;
+  }) => handler,
+}));
 import * as platformQaRoute from '@/app/api/v1/open-platform/knowledge-management/qa/route';
 import * as platformQaAuditsRoute from '@/app/api/v1/open-platform/knowledge-management/qa/audits/route';
 import * as platformCapabilitiesRoute from '@/app/api/v1/open-platform/knowledge-management/capabilities/route';
@@ -601,7 +609,10 @@ describe('知识库 QA API route', () => {
     );
     const imports = source.match(/^import .+;$/gmu) ?? [];
 
-    expect(imports).toEqual(["import { NextResponse } from 'next/server';"]);
+    expect(imports).toEqual([
+      "import { withInstitutionSectionRouteGuardV1 } from '@/app/api/institution/_shared/institution-route-guard';",
+      "import { NextResponse } from 'next/server';",
+    ]);
     expect(source).not.toMatch(
       /getDemoAccessContextFromRequest|getDatabase|repository|storage|provider|embedding|listInstitutionKnowledgeQaAuditsService|\b_?request\s*(?:\.|\[)|fetch\(/u,
     );
@@ -632,7 +643,7 @@ describe('知识库 QA API route', () => {
       const route = await import(
         '@/app/api/institution/knowledge-management/qa/audits/route'
       );
-      const response = route.GET();
+      const response = await route.GET();
 
       expect(initialized).toEqual([]);
       expect(fetchSpy).not.toHaveBeenCalled();
