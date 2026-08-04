@@ -829,3 +829,17 @@ MIG-01
 - 下一任务进入全量入口 Guard／绕过闭环终检和剩余生命周期入口校准。
 
 <!-- BASE02_B4_ROUTE_GUARD_THIRD_BATCH_IMPLEMENTATION_HANDOFF_END -->
+
+<!-- BASE02_B4_FULL_ENTRY_BYPASS_CLOSURE_PREFLIGHT_START -->
+
+## BASE-B4 全量入口 Guard／绕过闭环终检前置预检
+
+- 从第三批收口后的 main 重建 API、Page、Server Action 和生命周期入口清单；
+- formal guarded Routes：14；
+- Owner outside direct Writer／Deleter：1；
+- lifecycle unresolved：4；
+- completion candidate：false；
+- 业务 Reader 与 Capability 继续关闭；
+- 下一任务：`BASE-B4 Owner 外 Membership／Binding Writer／Deleter 关闭前置预检`。
+
+<!-- BASE02_B4_FULL_ENTRY_BYPASS_CLOSURE_PREFLIGHT_END -->
