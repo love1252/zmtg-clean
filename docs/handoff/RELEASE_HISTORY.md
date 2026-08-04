@@ -1269,3 +1269,22 @@
 - production scope change：0；
 - shared Guard / v1 re-export change：0；
 - 下一任务仍为第三批低风险正式 Route Guard capability-off 接线实施。
+
+<!-- BASE02_B4_ROUTE_GUARD_THIRD_BATCH_IMPLEMENTATION_RELEASE_20260805 -->
+
+## 2026-08-05｜BASE-B4 第三批正式 Route Guard 接线实施收口
+
+- 第二次范围校正 PR #979：Merge Commit `2f7cd73cc169fb6c9734353c399f9728a5adbe13`；
+- 校正独立审查 PR #980：Merge Commit `60eda4898b818691cc6155260ec261b0db365ca0`；
+- corrected handoff PR #981：Merge Commit `b33e5e3d382bc637381e8face65ecb544c21d805`；
+- 实施 PR #982：Merge Commit `772af8bd31bcf8e2a3998133bee996d419eed1f8`；
+- 独立实施审查 PR #983：Merge Commit `32afafa3cee544315bc54275a3c7c216d2ef862a`；
+- third batch：4；
+- 三批累计正式 Route Guard：14；
+- Guard chain：Scope + Section；
+- Guard denial：403 / no-store；
+- authorized handler：原 503 capability-off contract 保持；
+- changed files：15；
+- shared Guard / v1 re-export change：0；
+- business Reader／Capability：off；
+- 下一任务切换至全量入口 Guard／绕过闭环终检与剩余生命周期入口前置预检。
