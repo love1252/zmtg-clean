@@ -3,19 +3,19 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B4 第三批 Route Guard 前置预检范围校正收口
+## BASE-B4 第三批 Route Guard 前置范围第二次校正收口
 
 - 更新日期：2026-08-04
-- 校正 PR #976：Head `ccc52ffdc7b6005c4eb7219acd0b27ee33a67d86`，Merge Commit `bdae4c00cf18fac782291266e6ba51aad54f99d2`
-- 校正 Required Check：Run `30917094350`／Job `92017874346`
-- 独立审查 PR #977：Head `0ade59bc9048945dfc39a2d66aba1ce9defc8d01`，Merge Commit `fe9f4170f1e2f9a7f2dcddcc176c200ddad25e59`
-- 独立审查 Required Check：Run `30918375915`／Job `92022239859`
+- 校正 PR #979：Merge Commit `2f7cd73cc169fb6c9734353c399f9728a5adbe13`
+- 校正 Required Check：Run `30929404659`／Job `92059967748`
+- 独立审查 PR #980：Merge Commit `60eda4898b818691cc6155260ec261b0db365ca0`
+- 独立审查 Required Check：Run `30930690784`／Job `92064302222`
 - third batch Route：4
-- compatibility tests：5
-- implementation allowlist：13
-- 新增传递兼容性测试：`V1WeComOfficialDryRunCompatibilityApiRoute.test.ts`
+- compatibility tests：7
+- implementation allowlist：15
+- 第二次补充：TreatmentSummaryListApiRoutes、WeComCustomerMappingReadWriteBridge
 - production scope change：0
-- shared Guard change required：false
+- shared Guard / v1 re-export change：0
 - business Reader／Capability：关闭
 - BASE-B4：未完成
 - BASE-B5：未启动
@@ -25,22 +25,18 @@
 `BASE-B4 第三批低风险正式 Route Guard capability-off 接线实施`
 
 ```text
-base_b4_route_guard_third_batch_preflight=passed
-base_b4_route_guard_third_batch_scope_correction=passed
-base_b4_route_guard_third_batch_scope_correction_review=passed
+base_b4_route_guard_third_batch_scope_correction_02=passed
+base_b4_route_guard_third_batch_scope_correction_02_review=passed
 third_batch_count=4
-compatibility_test_count=5
-implementation_allowlist_count=13
+compatibility_test_count=7
+implementation_allowlist_count=15
 production_scope_change=0
 shared_guard_change_required=false
-business_reader_release=false
-business_capability_release=false
+v1_reexport_change_required=false
 eligible_for_third_batch_implementation=true
 base_b4_complete=false
 base_b5_started=false
 next_task=BASE-B4 第三批低风险正式 Route Guard capability-off 接线实施
-next_task_started=false
-next_task_authorized_under_ultra=true
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->

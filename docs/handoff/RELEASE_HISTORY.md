@@ -1256,3 +1256,16 @@
 - production scope change：0；
 - shared Guard change：false；
 - 下一任务仍为第三批低风险正式 Route Guard capability-off 接线实施。
+
+<!-- BASE02_B4_ROUTE_GUARD_THIRD_BATCH_SCOPE_CORRECTION_02_RELEASE_20260804 -->
+
+## 2026-08-04｜BASE-B4 第三批 Route Guard 前置范围第二次校正
+
+- 校正 PR #979：Merge Commit `2f7cd73cc169fb6c9734353c399f9728a5adbe13`；
+- 独立审查 PR #980：Merge Commit `60eda4898b818691cc6155260ec261b0db365ca0`；
+- 新增遗漏兼容性测试：2；
+- compatibility tests：7；
+- implementation allowlist：15；
+- production scope change：0；
+- shared Guard / v1 re-export change：0；
+- 下一任务仍为第三批低风险正式 Route Guard capability-off 接线实施。
