@@ -3,44 +3,44 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B4 第二批正式 Route Guard 接线实施收口
+## BASE-B4 第三批低风险 Route Guard 前置预检收口
 
 - 更新日期：2026-08-04
-- 实施 PR #970：Head `edbdc4785ce5ba2c36a9d8fecba5dbb3cf4e02e8`，Merge Commit `9fb9fb90b81bdae9a8195feab96ef302180546df`
-- 实施 Required Check：Run `30905532792`／Job `91979613368`
-- 独立审查 PR #971：Head `0b145f8812331da939e73f9cb76bfc301721965c`，Merge Commit `ca5c63de03101b098a491ad695bc8ab0fee7318a`
-- 独立审查 Required Check：Run `30907983212`／Job `91987494315`
-- second batch Route：5
+- 前置预检 PR #973：Head `286a9620c9a0a7799827627a5abb34deb78a9584`，Merge Commit `20ed0651072f2f87961038b8ce0e11f775d3a0e8`
+- 前置预检 Required Check：Run `30911890061`／Job `92000411701`
+- 独立审查 PR #974：Head `7eef22b598771d3090e06e66fd75c0fcca2a8e8f`，Merge Commit `9d6492fcbb55ae88fd9fa4eac87c48ea4fd671ff`
+- 独立审查 Required Check：Run `30913091400`／Job `92004378330`
+- third batch Route：4
+- third batch paths：`["src/app/api/institution/followup-operations/dashboard/route.ts", "src/app/api/institution/treatment-summaries/route.ts", "src/app/api/institution/wecom-official-dry-run/route.ts", "src/app/api/institution/wecom/customer-mapping-candidates/route.ts"]`
+- third batch sections：`["care", "conversations"]`
 - guard chain：Scope + Section
-- Guard 拒绝：403／no-store
-- 授权通过后的原 handler：503 capability-off contract 保持
-- production／colocated／compatibility／changed files：5／5／5／15
-- shared Guard change：0
+- compatibility tests：4
+- runtime callers：3
+- implementation allowlist：12
+- shared Guard change required：false
 - business Reader／Capability：关闭
-- Schema／Migration／DB：0／0／0
 - BASE-B4：未完成
 - BASE-B5：未启动
 
 ### 唯一下一任务
 
-`BASE-B4 剩余 4 个低风险正式 Route 再校准与第三批 Route Guard 前置预检`
+`BASE-B4 第三批低风险正式 Route Guard capability-off 接线实施`
 
 ```text
-base_b4_route_guard_second_batch_implementation=passed
-base_b4_route_guard_second_batch_review=passed
-second_batch_route_count=5
+base_b4_route_guard_third_batch_preflight=passed
+base_b4_route_guard_third_batch_review=passed
+third_batch_count=4
 guard_chain=scope+section
-guard_denial=403_no_store
-authorized_handler_contract=preserved_503_capability_off
-changed_file_count=15
-shared_guard_change_count=0
+compatibility_test_count=4
+runtime_caller_count=3
+implementation_allowlist_count=12
+shared_guard_change_required=false
 business_reader_release=false
 business_capability_release=false
-remaining_low_risk_candidate_count_from_prior_calibration=4
-eligible_for_third_batch_preflight=true
+eligible_for_third_batch_implementation=true
 base_b4_complete=false
 base_b5_started=false
-next_task=BASE-B4 剩余 4 个低风险正式 Route 再校准与第三批 Route Guard 前置预检
+next_task=BASE-B4 第三批低风险正式 Route Guard capability-off 接线实施
 next_task_started=false
 next_task_authorized_under_ultra=true
 ```

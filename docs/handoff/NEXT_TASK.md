@@ -3,40 +3,50 @@
 ## 唯一下一任务
 
 ```text
-BASE-B4 剩余 4 个低风险正式 Route 再校准与第三批 Route Guard 前置预检
+BASE-B4 第三批低风险正式 Route Guard capability-off 接线实施
 ```
 
-## 上轮校准中的剩余候选
+## 冻结 Route
 
-1. `src/app/api/institution/followup-operations/dashboard/route.ts` → `care`
-2. `src/app/api/institution/treatment-summaries/route.ts` → `care`
-3. `src/app/api/institution/wecom-official-dry-run/route.ts` → `conversations`
-4. `src/app/api/institution/wecom/customer-mapping-candidates/route.ts` → `conversations`
+`["src/app/api/institution/followup-operations/dashboard/route.ts", "src/app/api/institution/treatment-summaries/route.ts", "src/app/api/institution/wecom-official-dry-run/route.ts", "src/app/api/institution/wecom/customer-mapping-candidates/route.ts"]`
 
-以上 4 个仅是第二批前置校准留下的候选，不代表已准入。第三批必须从当前 main 重新核对。
+## Section
 
-## 任务目标
+`["care", "conversations"]`
 
-1. 从第二批合并后的 main 重新扫描机构端正式 Route；
-2. 核对上述 4 个候选是否仍为 GET-only、非动态、无数据库、无 demo、无高风险路径；
-3. 核对现有 handler 是否 capability-off、是否读取 Request、是否已有 formal Guard；
-4. 重新扫描全部测试对这 4 个 Route 的 import 和源码路径引用；
-5. 冻结每个 Route 的 section、拒绝响应、成功 handler contract；
-6. 冻结生产文件、colocated 测试和兼容性测试精确 allowlist；
-7. 前置预检和独立审查完成后才允许第三批实施。
+## 既有兼容性测试
 
-## 经验固化
+`["src/modules/institution/tests/FollowUpOperationsDashboardApiRoutes.test.ts", "src/modules/institution/tests/TreatmentSummaryDomain.test.ts", "src/modules/institution/tests/WeComCustomerMappingCandidatesApiRoute.test.ts", "src/modules/institution/tests/WeComOfficialDryRunApiRoute.test.ts"]`
 
-- 共享 Guard 固定在 `src/app/api/institution/_shared`；
-- 实施前必须纳入既有 handler-contract 测试；
-- Guard 包装后公开 GET 可能返回 `Promise<Response>`，测试调用必须 `await`；
-- 自动文本替换不得修改源码字符串断言中的 `function GET`；
-- 本地门禁必须包含完整 `pnpm test`、typecheck 和 build。
+## 生产调用面证据
+
+`["src/app/api/v1/institution/wecom-official-dry-run/route.ts", "src/modules/institution/client/tenant-business-client.ts", "src/modules/institution/components/WeComCustomerMappingCandidatesReadonlyPanel.tsx"]`
+
+调用面文件只用于回归验证，不自动纳入修改范围。
+
+## 精确 implementation allowlist
+
+`["src/app/api/institution/followup-operations/dashboard/route.test.ts", "src/app/api/institution/followup-operations/dashboard/route.ts", "src/app/api/institution/treatment-summaries/route.test.ts", "src/app/api/institution/treatment-summaries/route.ts", "src/app/api/institution/wecom-official-dry-run/route.test.ts", "src/app/api/institution/wecom-official-dry-run/route.ts", "src/app/api/institution/wecom/customer-mapping-candidates/route.test.ts", "src/app/api/institution/wecom/customer-mapping-candidates/route.ts", "src/modules/institution/tests/FollowUpOperationsDashboardApiRoutes.test.ts", "src/modules/institution/tests/TreatmentSummaryDomain.test.ts", "src/modules/institution/tests/WeComCustomerMappingCandidatesApiRoute.test.ts", "src/modules/institution/tests/WeComOfficialDryRunApiRoute.test.ts"]`
+
+共 `12` 个文件。
+
+## 固定实施方式
+
+1. 复用 `src/app/api/institution/_shared/institution-route-guard.ts`；
+2. 4 个 Route 分别接入冻结的 Section；
+3. Guard 拒绝继续使用 `403 / no-store`；
+4. Guard 通过后保持原 `503`、payload 与 no-store；
+5. 每个 Route 增加或更新 colocated 接线测试；
+6. 既有 handler-contract 测试按需 mock 共享 Guard；
+7. 公开 GET 的测试调用必须 `await`；
+8. 自动替换不得修改源码字符串断言中的 `function GET`；
+9. 完整 `pnpm test`、架构门禁、lint、typecheck 和 build 全部通过。
 
 ## 禁止范围
 
-- 本预检不修改生产 Route 或共享 Guard；
-- 不开放业务 Reader、对象事实 Adapter或新 Capability；
+- 不修改共享 Guard；
+- 不修改 allowlist 外文件；
+- 不开放业务 Reader、对象事实 Adapter 或新 Capability；
 - 不处理动态对象、写 Route、凭证、HIS、上传下载、解析、索引或外部触达；
 - 不修改 Schema、Migration、journal 或 snapshot；
 - 不连接数据库，不执行 DDL、DML、Migration 或 Seed；

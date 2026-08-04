@@ -1228,3 +1228,18 @@
 - shared Guard change：0；
 - business Reader／Capability：off；
 - 下一任务切换至剩余 4 个低风险正式 Route 再校准与第三批 Route Guard 前置预检。
+
+<!-- BASE02_B4_ROUTE_GUARD_THIRD_BATCH_PREFLIGHT_RELEASE_20260804 -->
+
+## 2026-08-04｜BASE-B4 第三批低风险 Route Guard 前置预检
+
+- 前置预检 PR #973：Merge Commit `20ed0651072f2f87961038b8ce0e11f775d3a0e8`；
+- 独立审查 PR #974：Merge Commit `9d6492fcbb55ae88fd9fa4eac87c48ea4fd671ff`；
+- third batch：4；
+- guard chain：Scope + Section；
+- compatibility tests：4；
+- runtime callers：3；
+- implementation allowlist：12；
+- shared Guard change：false；
+- business Reader／Capability：off；
+- 下一任务切换至第三批低风险正式 Route Guard capability-off 接线实施。
