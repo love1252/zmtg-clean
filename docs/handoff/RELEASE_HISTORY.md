@@ -1316,3 +1316,17 @@
 - production change：0；
 - business Reader／Capability：off；
 - 下一任务切换至：`BASE-B4 剩余 capability-off 正式 Route 第四批精确校准前置预检`。
+
+<!-- BASE02_B4_ROUTE_GUARD_FOURTH_BATCH_PREFLIGHT_RELEASE_20260805 -->
+
+## 2026-08-05｜BASE-B4 第四批低风险 Route Guard 精确校准
+
+- 前置预检 PR #991：Merge Commit `17406553aebf1edee4230fd3d32942d61edcaba3`；
+- 独立审查 PR #992：Merge Commit `54b0997d9ce4ca62db291fd6e9c8a12547f78729`；
+- broad capability-off：70；
+- strict eligible：1；
+- fourth batch：1；
+- implementation allowlist：3；
+- production change：0；
+- business Reader／Capability：off；
+- 下一任务切换至：`BASE-B4 第四批低风险正式 Route Guard capability-off 接线实施`。

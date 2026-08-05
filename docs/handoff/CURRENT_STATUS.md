@@ -3,43 +3,44 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B4 Owner 外 Writer／Deleter 静态误报校准收口
+## BASE-B4 第四批低风险 Route Guard 精确校准收口
 
 - 更新日期：2026-08-05
-- 校准 PR #988：Merge Commit `cfb685c04f1f6f137d85fee2197038bcf8c60fc7`
-- 校准 Required Check：Run `30947869298`／Job `92122234341`
-- 独立审查 PR #989：Merge Commit `7eb0b12c3fbbbd8b9b6c0d6d390ca3a0deb83534`
-- 独立审查 Required Check：Run `30949048963`／Job `92126228367`
-- prior Owner outside direct Writer／Deleter：1
-- prior lifecycle unresolved：4
-- 静态误报：4
-- corrected Owner outside direct Writer／Deleter：0
-- corrected lifecycle unresolved：0
-- production change required：false
-- route review candidates：56（宽口径，待重校准）
-- capability-off unwired：52（宽口径，待重校准）
+- 前置预检 PR #991：Merge Commit `17406553aebf1edee4230fd3d32942d61edcaba3`
+- 前置预检 Required Check：Run `30967367427`／Job `92184129671`
+- 独立审查 PR #992：Merge Commit `54b0997d9ce4ca62db291fd6e9c8a12547f78729`
+- 独立审查 Required Check：Run `30968122608`／Job `92186421273`
+- routes：81
+- formal guarded Routes：14
+- broad capability-off：70
+- strict eligible：1
+- fourth batch：1
+- direct／transitive compatibility tests：1／0
+- implementation allowlist：3
+- production change：0
 - business Reader／Capability：关闭
 - BASE-B4：未完成
 - BASE-B5：未启动
 
 ### 唯一下一任务
 
-`BASE-B4 剩余 capability-off 正式 Route 第四批精确校准前置预检`
+`BASE-B4 第四批低风险正式 Route Guard capability-off 接线实施`
 
 ```text
-base_b4_owner_writer_false_positive_calibration=passed
-base_b4_owner_writer_false_positive_calibration_review=passed
-false_positive_count=4
-corrected_owner_outside_direct_writer_count=0
-corrected_lifecycle_unresolved_count=0
-production_change_required=false
-route_review_candidate_count_provisional=56
-capability_off_unwired_count_provisional=52
+base_b4_route_guard_fourth_batch_preflight=passed
+base_b4_route_guard_fourth_batch_preflight_review=passed
+formal_guarded_route_count=14
+strict_eligible_count=1
+fourth_batch_count=1
+implementation_allowlist_count=3
+shared_guard_change_required=false
+production_change=false
 base_b4_complete=false
 base_b5_started=false
 business_reader_release=false
 business_capability_release=false
-next_task=BASE-B4 剩余 capability-off 正式 Route 第四批精确校准前置预检
+next_task_reason=strict_fourth_batch_candidates_found
+next_task=BASE-B4 第四批低风险正式 Route Guard capability-off 接线实施
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
