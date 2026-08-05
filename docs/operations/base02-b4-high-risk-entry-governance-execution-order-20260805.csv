@@ -1,0 +1,8 @@
+order,implementation_wave,route_count,decision,entry_condition,exit_condition,production_change_in_this_task
+1,W1_OBJECT_READONLY,9,readonly dynamic object routes,freeze exact Section + object parameter + compatibility tests,all selected routes have an approved object-guard preflight,false
+2,W2_LEGACY,3,legacy or compatibility routes,prove retirement or canonical delegation,each route is retired or delegates to one guarded canonical entry,false
+3,W3_DEMO,1,demo or fixture routes,prove demo-only status,formal completion excludes demo-only exposure,false
+4,W4_DIRECT_DB,0,direct database routes,freeze adapter boundary and authorization owner,no direct database expansion remains,false
+5,W5_EXTERNAL,1,external touch routes,freeze external preflight and safety switch evidence,real touch remains disabled until separately authorized,false
+6,W6_MUTATION,52,mutation or mixed routes,freeze Action/Object and mutation-security ownership,each route has a route-specific authorization plan,false
+7,W7_UNRESOLVED,0,unresolved routes,manual route-by-route decision,unresolved count is zero,false
