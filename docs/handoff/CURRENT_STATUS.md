@@ -15,7 +15,7 @@
 - customer routes：3
 - production Object Fact Reader Adapter：0
 - Institution Runtime objectFactReader null：true
-- implementation allowlist：7
+- implementation allowlist：8
 - Schema／Migration／Route wiring：0
 - production change：0
 - BASE-B4：未完成
@@ -33,7 +33,7 @@ semantic_owner=src/modules/customers
 customer_route_count=3
 production_object_fact_reader_adapter_count=0
 institution_runtime_object_fact_reader_null=true
-implementation_allowlist_count=7
+implementation_allowlist_count=8
 schema_change_required=false
 migration_required=false
 route_wiring_in_scope=false

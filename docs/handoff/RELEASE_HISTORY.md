@@ -1397,7 +1397,18 @@
 - 独立审查 PR #1007：Merge Commit `dc04d28bdf53bd89ec8ef28cec286b1bf054db4c`；
 - admission：approved_with_exact_allowlist；
 - semantic owner：src/modules/customers；
-- implementation allowlist：7；
+- implementation allowlist：8；
 - Schema／Migration／Route wiring：0；
 - production／database／DML：0；
 - 下一任务：`BASE-B4 客户对象事实 Reader 核心实施`。
+
+
+<!-- BASE02_B4_CUSTOMER_OBJECT_FACT_READER_AQ007_AMENDMENT_RELEASE_20260805 -->
+
+## 2026-08-05｜BASE-B4 客户对象事实 Reader AQ007 架构修正
+
+- 触发：`AQ007_CROSS_MODULE_SERVER_REPOSITORY`；
+- 修正：Customers Application → Security Application façade；
+- allowlist：7 → 8；
+- architecture exception：0；
+- Route／Policy／Schema／Migration／database execution：0。

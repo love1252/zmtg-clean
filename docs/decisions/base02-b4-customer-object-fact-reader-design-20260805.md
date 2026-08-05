@@ -13,7 +13,7 @@ customer_summary_updated_at_exposed=false
 customer_summary_revision_exposed=false
 schema_change_required=false
 migration_required=false
-implementation_allowlist_count=7
+implementation_allowlist_count=8
 route_wiring_in_scope=false
 business_capability_release=false
 production_change=false
@@ -48,9 +48,21 @@ next_task=BASE-B4 客户对象事实 Reader 核心实施
 
 ## 准入
 
-核心实施获准严格修改 7 个文件。不得修改 Route、Schema、Migration、
+核心实施获准严格修改 8 个文件。不得修改 Route、Schema、Migration、
 journal、snapshot、Seed、package、lock、CI 或 Security 核心。
 核心 Reader 实施完成后，业务 Capability 仍保持关闭。
+
+## AQ007 架构修正
+
+首次核心实施命中 `AQ007_CROSS_MODULE_SERVER_REPOSITORY`。Customers Application
+不得直接依赖 Security Server implementation。修正后的依赖链为：
+
+```text
+Customers Application → Security Application façade → Security Server
+```
+
+新增 `src/modules/security/application/institution-object-fact-reader.ts`。
+allowlist 由 7 修正为 8；不新增架构规则例外。
 
 ## 唯一下一任务
 
