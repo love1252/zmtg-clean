@@ -1,0 +1,5 @@
+order,path,change_type,responsibility,required_tests
+1,src/app/api/institution/_shared/institution-route-guard.ts,modify,add generic section plus dynamic object route wrapper,two fresh authorizations order low-sensitive failures
+2,src/app/api/institution/_shared/institution-route-guard.test.ts,modify,shared wrapper acceptance,factory section param object allow aliases handler once
+3,src/app/api/institution/customers/[customerId]/timeline/route.ts,modify,wire customers plus customer read guard only,authorized preserves 503 denied 403 no-store
+4,src/modules/institution/tests/CustomerTimelineApiRoutes.test.ts,modify,customer timeline route guard compatibility,section before param object second handler disabled
