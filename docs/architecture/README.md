@@ -884,3 +884,15 @@ MIG-01
 - 下一任务进入剩余正式入口分类校准与 BASE-B4 完成审计前置预检。
 
 <!-- BASE02_B4_ROUTE_GUARD_FOURTH_BATCH_IMPLEMENTATION_HANDOFF_END -->
+
+<!-- BASE02_B4_REMAINING_ENTRY_CLASSIFICATION_HANDOFF_START -->
+
+## BASE-B4 剩余正式入口分类校准收口
+
+- 已生成全量 inventory、完成审计缺口清单和下一窄切片证据；
+- formal guarded Routes：15；
+- completion audit ready：false；
+- production、database、migration、DML：0；
+- 唯一下一任务：`BASE-B4 剩余高风险正式入口治理决策`。
+
+<!-- BASE02_B4_REMAINING_ENTRY_CLASSIFICATION_HANDOFF_END -->
