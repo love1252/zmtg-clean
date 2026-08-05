@@ -950,3 +950,18 @@ MIG-01
 - Route／Policy／Schema／Migration／database execution：0。
 
 <!-- BASE02_B4_CUSTOMER_OBJECT_FACT_READER_AQ007_AMENDMENT_END -->
+
+<!-- BASE02_B4_CUSTOMER_OBJECT_FACT_READER_CORE_HANDOFF_START -->
+
+## BASE-B4 客户对象事实 Reader 核心实施收口
+
+- AQ007 已通过 Security Application façade 修正，未新增架构例外；
+- Customers-owned source Port 与 genuine Reader 已实施；
+- legacy repository 仅提供 scoped 低敏桥；
+- revision 来源为 customers.updatedAt；
+- Runtime 已懒注入 Reader；
+- customer Route wiring 仍为 0；
+- 业务 Capability 继续关闭；
+- 下一任务仅预检 3 条 customer GET Route。
+
+<!-- BASE02_B4_CUSTOMER_OBJECT_FACT_READER_CORE_HANDOFF_END -->

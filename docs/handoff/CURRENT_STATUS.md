@@ -3,45 +3,51 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B4 客户对象事实 Reader 前置设计与准入收口
+## BASE-B4 客户对象事实 Reader 核心实施收口
 
-- 更新日期：2026-08-05
-- 设计准入 PR #1006：Merge Commit `ae9a8719d886db4ba301fea32a5061aa9c5f188d`
-- 设计 Required Check：Run `30991853317`
-- 独立审查 PR #1007：Merge Commit `dc04d28bdf53bd89ec8ef28cec286b1bf054db4c`
-- 独立审查 Required Check：Run `30992968084`
-- admission：approved_with_exact_allowlist
-- semantic owner：src/modules/customers
-- customer routes：3
-- production Object Fact Reader Adapter：0
-- Institution Runtime objectFactReader null：true
-- implementation allowlist：8
-- Schema／Migration／Route wiring：0
-- production change：0
+- 更新日期：2026-08-06
+- AQ007 修正规范 PR #1009：Merge Commit `f30ce93ae33503ae809fa9a7bdd31c9fe9958a7e`
+- 核心实施 PR #1010：Head `72833a8107fa12f5b97be82ac96cd22e3ccd8f9e`，Merge Commit `d1608b0898689b2fb9fd0ef135719b44f41024c7`
+- 核心实施 Required Check：Run `31026758287`
+- 独立审查 PR #1011：Head `dea5c7876a7dae9db282a65f67aaa420847f4976`，Merge Commit `1b49e7f9eb4648e8701e14a5583a7e48ecb75772`
+- 独立审查 Required Check：Run `31029235721`
+- implementation file count：8
+- Security Application façade：implemented
+- architecture exception count：0
+- customer Object Fact Reader：implemented
+- production Object Fact Reader Adapter：1
+- Runtime reader wired／lazy：true／true
+- customer Route wiring：0
+- business Capability release：false
+- Schema／Migration／Seed：0
+- database connection／DML：0
 - BASE-B4：未完成
 - BASE-B5：未启动
 
 ### 唯一下一任务
 
-`BASE-B4 客户对象事实 Reader 核心实施`
+`BASE-B4 客户只读动态对象 Route Object Guard 接线前置预检`
 
 ```text
-base_b4_customer_object_fact_reader_design=approved
-base_b4_customer_object_fact_reader_design_review=passed
-admission=approved_with_exact_allowlist
-semantic_owner=src/modules/customers
-customer_route_count=3
-production_object_fact_reader_adapter_count=0
-institution_runtime_object_fact_reader_null=true
-implementation_allowlist_count=8
-schema_change_required=false
-migration_required=false
-route_wiring_in_scope=false
+base_b4_customer_object_fact_reader_core=implemented
+base_b4_customer_object_fact_reader_core_review=passed
+implementation_file_count=8
+security_application_facade=implemented
+architecture_exception_count=0
+customer_object_fact_reader=implemented
+production_object_fact_reader_adapter_count=1
+runtime_object_fact_reader_wired=true
+runtime_object_fact_reader_lazy=true
+customer_route_wiring_count=0
 business_capability_release=false
-production_change=false
+schema_change=false
+migration_change=false
+seed_change=false
+database_connection=false
+dml_execution=false
 base_b4_complete=false
 base_b5_started=false
-next_task=BASE-B4 客户对象事实 Reader 核心实施
+next_task=BASE-B4 客户只读动态对象 Route Object Guard 接线前置预检
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
