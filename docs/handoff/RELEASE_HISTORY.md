@@ -1374,3 +1374,17 @@
 - CSV physical newline repair：passed；
 - production／database／migration／DML：0；
 - 下一任务：`BASE-B4 只读动态对象正式入口 Object Guard 精确预检`。
+
+<!-- BASE02_B4_READONLY_DYNAMIC_OBJECT_GUARD_PREFLIGHT_RELEASE_20260805 -->
+
+## 2026-08-05｜BASE-B4 只读动态对象 Object Guard 精确预检收口
+
+- 前置预检 PR #1003：Merge Commit `1e647a0db7f072853103d47c596fd47a23748f8e`；
+- 独立审查 PR #1004：Merge Commit `806c6b4d9c5d32202c5762f610a143d23cbabaf2`；
+- routes：9；
+- supported direct object routes：4；
+- unsupported／compound routes：5；
+- implementation eligible：0；
+- production Object Fact Reader Adapter：0；
+- Runtime objectFactReader null：true；
+- 下一任务：`BASE-B4 客户对象事实 Reader 前置设计与准入`。

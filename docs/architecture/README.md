@@ -909,3 +909,17 @@ MIG-01
 - production、database、migration 与 DML 变化均为 0。
 
 <!-- BASE02_B4_HIGH_RISK_ENTRY_GOVERNANCE_HANDOFF_END -->
+
+<!-- BASE02_B4_READONLY_DYNAMIC_OBJECT_GUARD_PREFLIGHT_HANDOFF_START -->
+
+## BASE-B4 只读动态对象 Object Guard 精确预检收口
+
+- 9 条只读动态对象 Route 已完成分类；
+- 3 条 customer 与 1 条 knowledge_item 可由现有 Object Port 表达；
+- 5 条为未注册对象类型或父子复合资源；
+- production Object Fact Reader Adapter 为 0；
+- Runtime 继续显式 `objectFactReader: null`；
+- implementation allowlist 为 0；
+- 下一任务进入客户对象事实 Reader 前置设计与准入。
+
+<!-- BASE02_B4_READONLY_DYNAMIC_OBJECT_GUARD_PREFLIGHT_HANDOFF_END -->
