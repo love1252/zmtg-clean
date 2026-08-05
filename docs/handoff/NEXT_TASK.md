@@ -3,33 +3,34 @@
 ## 唯一下一任务
 
 ```text
-BASE-B4 客户对象事实 Reader 前置设计与准入
+BASE-B4 客户对象事实 Reader 核心实施
 ```
 
 ## 当前基线
 
-- 只读动态对象 Route：9；
-- Object Port 可直接表达：4；
-- customer Route：3；
-- 当前 implementation allowlist：0；
+- semantic owner：`src/modules/customers`；
+- customer dynamic Route：3；
 - production Object Fact Reader Adapter：0；
 - Institution Runtime `objectFactReader: null`：true；
+- implementation allowlist：7；
+- Schema／Migration／Route wiring：0；
 - BASE-B4：未完成；
 - BASE-B5：未启动。
 
-## 任务目标
+## 权威输入
 
-1. 冻结 `customer` 对象事实的唯一业务 Owner；
-2. 冻结低敏 current fact、revision、status、observedAt 与拒绝语义；
-3. 冻结 Reader Port Adapter 与 Runtime 注入边界；
-4. 冻结 freshness、跨 scope 拒绝、异常 fail-closed 和测试；
-5. 输出实施 allowlist；
-6. 本任务只设计与准入，不修改生产代码。
+1. `docs/decisions/base02-b4-customer-object-fact-reader-design-20260805.md`
+2. `docs/operations/base02-b4-customer-object-fact-reader-source-evidence-20260805.csv`
+3. `docs/operations/base02-b4-customer-object-fact-reader-contract-matrix-20260805.csv`
+4. `docs/operations/base02-b4-customer-object-fact-reader-implementation-allowlist-20260805.csv`
+5. `docs/operations/base02-b4-customer-object-fact-reader-independent-review-20260805.md`
 
-## 禁止范围
+## 持续禁止
 
-- 不实施 Object Fact Reader，不修改 Runtime；
-- 不接线动态 Route；
+- 不修改任何 Route；
+- 不开放业务 Capability；
+- 不修改 Schema、Migration、journal、snapshot 或 Seed；
+- 不新建第二数据库客户端；
+- 不连接数据库，不执行 DDL、DML 或 Migration；
 - 不处理其他对象类型；
-- 不连接数据库，不执行 DDL、DML、Migration 或 Seed；
-- 不开放业务 Capability，不启动 BASE-B5～B6。
+- 不启动 BASE-B5～B6。
