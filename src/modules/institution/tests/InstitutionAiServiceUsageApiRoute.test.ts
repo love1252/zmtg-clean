@@ -5,6 +5,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET } from '@/app/api/institution/ai-service-usage/route';
 import { InstitutionAiServiceUsageShell } from '@/modules/institution/components/InstitutionAiServiceUsageShell';
 
+vi.mock('@/app/api/institution/_shared/institution-route-guard', () => ({
+  withInstitutionSectionRouteGuardV1: ({
+    handler,
+  }: {
+    handler: (request: Request) => Response | Promise<Response>;
+  }) => handler,
+}));
+
 const routeMocks = vi.hoisted(() => ({
   getDatabase: vi.fn(),
   getDemoAccessContextFromRequest: vi.fn(),

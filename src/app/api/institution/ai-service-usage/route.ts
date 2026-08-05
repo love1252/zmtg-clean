@@ -1,3 +1,5 @@
+import { withInstitutionSectionRouteGuardV1 } from '@/app/api/institution/_shared/institution-route-guard';
+
 import { NextResponse } from 'next/server';
 
 const capabilityOffBody = Object.freeze({
@@ -5,9 +7,16 @@ const capabilityOffBody = Object.freeze({
   error: 'AI 服务使用能力当前未开放。',
 });
 
-export async function GET(_request: Request) {
+async function GET(_request: Request) {
   return NextResponse.json(capabilityOffBody, {
     status: 410,
     headers: { 'Cache-Control': 'no-store' },
   });
 }
+
+const _base02B4GuardedGET = withInstitutionSectionRouteGuardV1({
+  sectionId: 'system',
+  handler: GET,
+});
+
+export { _base02B4GuardedGET as GET };
