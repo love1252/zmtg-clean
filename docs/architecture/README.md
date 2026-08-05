@@ -896,3 +896,16 @@ MIG-01
 - 唯一下一任务：`BASE-B4 剩余高风险正式入口治理决策`。
 
 <!-- BASE02_B4_REMAINING_ENTRY_CLASSIFICATION_HANDOFF_END -->
+
+<!-- BASE02_B4_HIGH_RISK_ENTRY_GOVERNANCE_HANDOFF_START -->
+
+## BASE-B4 剩余高风险正式入口治理决策收口
+
+- 剩余 66 个入口已按风险族冻结治理决策；
+- broad Section Guard 不得批量套用到 mutation／mixed 或高风险入口；
+- CSV 证据已恢复为真实 LF 物理行；
+- 第一治理切片冻结为 9 个只读动态对象入口；
+- 下一任务只进行 Scope + Section + Object Guard 精确预检；
+- production、database、migration 与 DML 变化均为 0。
+
+<!-- BASE02_B4_HIGH_RISK_ENTRY_GOVERNANCE_HANDOFF_END -->

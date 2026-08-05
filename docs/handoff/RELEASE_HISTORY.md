@@ -1360,3 +1360,17 @@
 - strict candidates：0；
 - completion audit ready：false；
 - 下一任务：`BASE-B4 剩余高风险正式入口治理决策`。
+
+<!-- BASE02_B4_HIGH_RISK_ENTRY_GOVERNANCE_RELEASE_20260805 -->
+
+## 2026-08-05｜BASE-B4 剩余高风险正式入口治理决策收口
+
+- 治理决策 PR #1000：Merge Commit `471d3cbf83a37cb9851755c0224e19832c25f6fc`；
+- 独立审查 PR #1001：Merge Commit `6aed9aecebe41b094cbde4f50f96fc95abff30be`；
+- routes：81；
+- formal guarded Routes：15；
+- governance required：66；
+- readonly dynamic object first slice：9；
+- CSV physical newline repair：passed；
+- production／database／migration／DML：0；
+- 下一任务：`BASE-B4 只读动态对象正式入口 Object Guard 精确预检`。
