@@ -3,34 +3,37 @@
 ## 唯一下一任务
 
 ```text
-BASE-B4 客户对象事实 Reader 核心实施
+BASE-B4 客户只读动态对象 Route Object Guard 接线前置预检
 ```
 
 ## 当前基线
 
-- semantic owner：`src/modules/customers`；
+- customer Object Fact Reader：已实施；
+- Security Application façade：已实施；
+- architecture exception：0；
+- production Object Fact Reader Adapter：1；
+- Institution Runtime reader：已懒注入；
 - customer dynamic Route：3；
-- production Object Fact Reader Adapter：0；
-- Institution Runtime `objectFactReader: null`：true；
-- implementation allowlist：8；
-- Schema／Migration／Route wiring：0；
+- customer Route wiring：0；
+- business Capability：继续关闭；
 - BASE-B4：未完成；
 - BASE-B5：未启动。
 
-## 权威输入
+## 任务目标
 
-1. `docs/decisions/base02-b4-customer-object-fact-reader-design-20260805.md`
-2. `docs/operations/base02-b4-customer-object-fact-reader-source-evidence-20260805.csv`
-3. `docs/operations/base02-b4-customer-object-fact-reader-contract-matrix-20260805.csv`
-4. `docs/operations/base02-b4-customer-object-fact-reader-implementation-allowlist-20260805.csv`
-5. `docs/operations/base02-b4-customer-object-fact-reader-independent-review-20260805.md`
+1. 复核 3 条 customerId GET Route 的 Handler 和现有状态码；
+2. 冻结 Section、objectType=customer、action=read；
+3. 冻结 Scope + Section + Object 授权顺序；
+4. 冻结 Guard 拒绝结果的 HTTP 映射；
+5. 冻结 no-store、payload 与兼容性测试；
+6. 输出首个窄实施 allowlist；
+7. 本任务只预检，不修改生产 Route。
 
-## 持续禁止
+## 禁止范围
 
-- 不修改任何 Route；
-- 不开放业务 Capability；
-- 不修改 Schema、Migration、journal、snapshot 或 Seed；
-- 不新建第二数据库客户端；
-- 不连接数据库，不执行 DDL、DML 或 Migration；
+- 不实施 Route 接线；
+- 不修改 Reader 核心、Security 核心或 Action Policy；
 - 不处理其他对象类型；
+- 不连接数据库，不执行 DDL、DML、Migration 或 Seed；
+- 不开放 mutation 或外部触达；
 - 不启动 BASE-B5～B6。

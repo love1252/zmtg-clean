@@ -1412,3 +1412,19 @@
 - allowlist：7 → 8；
 - architecture exception：0；
 - Route／Policy／Schema／Migration／database execution：0。
+
+<!-- BASE02_B4_CUSTOMER_OBJECT_FACT_READER_CORE_RELEASE_20260806 -->
+
+## 2026-08-06｜BASE-B4 客户对象事实 Reader 核心实施收口
+
+- AQ007 修正规范 PR #1009：Merge Commit `f30ce93ae33503ae809fa9a7bdd31c9fe9958a7e`；
+- 核心实施 PR #1010：Merge Commit `d1608b0898689b2fb9fd0ef135719b44f41024c7`；
+- 独立审查 PR #1011：Merge Commit `1b49e7f9eb4648e8701e14a5583a7e48ecb75772`；
+- implementation file count：8；
+- Security Application façade：implemented；
+- architecture exception：0；
+- production Object Fact Reader Adapter：1；
+- Runtime reader wired／lazy：true／true；
+- customer Route wiring：0；
+- Schema／Migration／Seed／database execution：0；
+- 下一任务：`BASE-B4 客户只读动态对象 Route Object Guard 接线前置预检`。
