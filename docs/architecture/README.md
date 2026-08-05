@@ -856,3 +856,17 @@ MIG-01
 - 下一任务：`BASE-B4 剩余 capability-off 正式 Route 第四批精确校准前置预检`。
 
 <!-- BASE02_B4_OWNER_WRITER_FALSE_POSITIVE_CALIBRATION_END -->
+
+<!-- BASE02_B4_ROUTE_GUARD_FOURTH_BATCH_PREFLIGHT_START -->
+
+## BASE-B4 第四批低风险 Route Guard 精确校准
+
+- 宽口径 capability-off：70；
+- 严格候选：1；
+- 第四批冻结：1；
+- implementation allowlist：3；
+- 生产修改：0；
+- 业务 Reader 与 Capability 继续关闭；
+- 下一任务：`BASE-B4 第四批低风险正式 Route Guard capability-off 接线实施`。
+
+<!-- BASE02_B4_ROUTE_GUARD_FOURTH_BATCH_PREFLIGHT_END -->
