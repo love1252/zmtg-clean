@@ -870,3 +870,17 @@ MIG-01
 - 下一任务：`BASE-B4 第四批低风险正式 Route Guard capability-off 接线实施`。
 
 <!-- BASE02_B4_ROUTE_GUARD_FOURTH_BATCH_PREFLIGHT_END -->
+
+<!-- BASE02_B4_ROUTE_GUARD_FOURTH_BATCH_IMPLEMENTATION_HANDOFF_START -->
+
+## BASE-B4 第四批正式 Route Guard capability-off 接线收口
+
+- `ai-service-usage` 已接入 Scope + system Section Guard；
+- Guard 拒绝固定为 `403 / no-store`；
+- 授权通过后原 `410 capability-off` 状态、payload 与 no-store 保持；
+- 最终范围为 1 个生产 Route、1 个 colocated 测试和 1 个兼容性测试；
+- 共享 Guard 未修改；
+- 业务 Reader 与新 Capability 继续关闭；
+- 下一任务进入剩余正式入口分类校准与 BASE-B4 完成审计前置预检。
+
+<!-- BASE02_B4_ROUTE_GUARD_FOURTH_BATCH_IMPLEMENTATION_HANDOFF_END -->

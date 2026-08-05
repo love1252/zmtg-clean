@@ -3,44 +3,45 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B4 第四批低风险 Route Guard 精确校准收口
+## BASE-B4 第四批正式 Route Guard 接线实施收口
 
 - 更新日期：2026-08-05
-- 前置预检 PR #991：Merge Commit `17406553aebf1edee4230fd3d32942d61edcaba3`
-- 前置预检 Required Check：Run `30967367427`／Job `92184129671`
-- 独立审查 PR #992：Merge Commit `54b0997d9ce4ca62db291fd6e9c8a12547f78729`
-- 独立审查 Required Check：Run `30968122608`／Job `92186421273`
-- routes：81
-- formal guarded Routes：14
-- broad capability-off：70
-- strict eligible：1
-- fourth batch：1
-- direct／transitive compatibility tests：1／0
-- implementation allowlist：3
-- production change：0
+- 实施 PR #994：Head `45c5dd0aba3f1ab49f709254040e3c17c9efca5d`，Merge Commit `c6fa9245b703c0aaf7074c8e2be8d86f9a40c184`
+- 实施 Required Check：Run `30973363307`／Job `92202251273`
+- 独立审查 PR #995：Head `8cae9343f9fb0950f23bf8db3fa398ae27d9e474`，Merge Commit `d6865fa1f7ebabfcec52daf61c61e976631492cf`
+- 独立审查 Required Check：Run `30974112194`／Job `92204482740`
+- fourth batch Route：1
+- 三批累计基线 14 + 第四批 1 = formal guarded Routes 15
+- Section：system
+- Guard chain：Scope + Section
+- Guard 拒绝：403／no-store
+- 授权通过后的原 handler：410 capability-off contract 保持
+- production／colocated／compatibility／changed files：1／1／1／3
+- shared Guard change：0
 - business Reader／Capability：关闭
 - BASE-B4：未完成
 - BASE-B5：未启动
 
 ### 唯一下一任务
 
-`BASE-B4 第四批低风险正式 Route Guard capability-off 接线实施`
+`BASE-B4 剩余正式入口分类校准与完成审计前置预检`
 
 ```text
-base_b4_route_guard_fourth_batch_preflight=passed
-base_b4_route_guard_fourth_batch_preflight_review=passed
-formal_guarded_route_count=14
-strict_eligible_count=1
-fourth_batch_count=1
-implementation_allowlist_count=3
-shared_guard_change_required=false
-production_change=false
-base_b4_complete=false
-base_b5_started=false
+base_b4_route_guard_fourth_batch_implementation=passed
+base_b4_route_guard_fourth_batch_review=passed
+fourth_batch_route_count=1
+formal_guarded_route_count=15
+section=system
+guard_chain=scope+section
+guard_denial=403_no_store
+authorized_handler_contract=preserved_410_capability_off
+changed_file_count=3
+shared_guard_change_count=0
 business_reader_release=false
 business_capability_release=false
-next_task_reason=strict_fourth_batch_candidates_found
-next_task=BASE-B4 第四批低风险正式 Route Guard capability-off 接线实施
+base_b4_complete=false
+base_b5_started=false
+next_task=BASE-B4 剩余正式入口分类校准与完成审计前置预检
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
