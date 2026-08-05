@@ -933,7 +933,20 @@ MIG-01
 - revision 来源：customers.updatedAt；
 - production Reader Adapter：0；
 - Runtime：`objectFactReader: null`；
-- 核心实施严格限制在 7 文件 allowlist；
+- 核心实施严格限制在 8 文件 allowlist；
 - 核心实施不包含 Route 接线或 Capability 开放。
 
 <!-- BASE02_B4_CUSTOMER_OBJECT_FACT_READER_DESIGN_HANDOFF_END -->
+
+
+<!-- BASE02_B4_CUSTOMER_OBJECT_FACT_READER_AQ007_AMENDMENT_START -->
+
+## BASE-B4 客户对象事实 Reader AQ007 架构修正
+
+- 禁止 Customers Application 直接依赖 Security Server；
+- 新增 Security Application façade；
+- 不新增架构规则例外；
+- allowlist：7 → 8；
+- Route／Policy／Schema／Migration／database execution：0。
+
+<!-- BASE02_B4_CUSTOMER_OBJECT_FACT_READER_AQ007_AMENDMENT_END -->

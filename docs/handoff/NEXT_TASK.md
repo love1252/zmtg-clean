@@ -12,7 +12,7 @@ BASE-B4 客户对象事实 Reader 核心实施
 - customer dynamic Route：3；
 - production Object Fact Reader Adapter：0；
 - Institution Runtime `objectFactReader: null`：true；
-- implementation allowlist：7；
+- implementation allowlist：8；
 - Schema／Migration／Route wiring：0；
 - BASE-B4：未完成；
 - BASE-B5：未启动。
