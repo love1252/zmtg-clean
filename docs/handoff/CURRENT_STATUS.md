@@ -3,51 +3,46 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B4 剩余高风险正式入口治理决策收口
+## BASE-B4 只读动态对象 Object Guard 精确预检收口
 
 - 更新日期：2026-08-05
-- 治理决策 PR #1000：Head `4ca6888ed6689c4a5bb37a32d95f054460a07ba9`，Merge Commit `471d3cbf83a37cb9851755c0224e19832c25f6fc`
-- 治理决策 Required Check：Run `30980227677`
-- 独立审查 PR #1001：Head `abea7e67ba396632c8f5bc45a39c15cff6f25f27`，Merge Commit `6aed9aecebe41b094cbde4f50f96fc95abff30be`
-- 独立审查 Required Check：Run `30984417433`
-- routes：81
-- formal guarded Routes：15
-- governance required：66
-- readonly dynamic object first slice：9
-- mutation／mixed：52
-- legacy／compatibility：3
-- demo／fixture：1
-- direct DB：0
-- external touch：1
-- CSV physical newline repair：passed
+- 前置预检 PR #1003：Merge Commit `1e647a0db7f072853103d47c596fd47a23748f8e`
+- 前置预检 Required Check：Run `30987063337`
+- 独立审查 PR #1004：Merge Commit `806c6b4d9c5d32202c5762f610a143d23cbabaf2`
+- 独立审查 Required Check：Run `30988090286`
+- routes：9
+- supported direct object routes：4
+- unsupported／compound routes：5
+- semantic candidates：4
+- implementation eligible：0
+- customer routes：3
+- knowledge_item routes：1
+- production Object Fact Reader Adapter：0
+- Institution Runtime objectFactReader null：true
 - production change：0
-- business Reader／Capability：关闭
 - BASE-B4：未完成
 - BASE-B5：未启动
 
 ### 唯一下一任务
 
-`BASE-B4 只读动态对象正式入口 Object Guard 精确预检`
+`BASE-B4 客户对象事实 Reader 前置设计与准入`
 
 ```text
-base_b4_high_risk_entry_governance_decision=approved
-base_b4_high_risk_entry_governance_review=passed
-route_count=81
-formal_guarded_route_count=15
-governance_required_count=66
-readonly_dynamic_object_count=9
-mutation_or_mixed_count=52
-legacy_or_compatibility_count=3
-demo_fixture_count=1
-direct_database_count=0
-external_touch_count=1
-csv_physical_newline_repair=passed
+base_b4_readonly_dynamic_object_guard_preflight=passed
+base_b4_readonly_dynamic_object_guard_review=passed
+route_count=9
+supported_direct_object_route_count=4
+unsupported_or_compound_route_count=5
+semantic_candidate_count=4
+implementation_eligible_count=0
+customer_route_count=3
+knowledge_item_route_count=1
+production_object_fact_reader_adapter_count=0
+institution_runtime_object_fact_reader_null=true
 production_change=false
-business_reader_release=false
-business_capability_release=false
 base_b4_complete=false
 base_b5_started=false
-next_task=BASE-B4 只读动态对象正式入口 Object Guard 精确预检
+next_task=BASE-B4 客户对象事实 Reader 前置设计与准入
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
