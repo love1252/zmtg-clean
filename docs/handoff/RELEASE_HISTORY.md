@@ -1346,3 +1346,17 @@
 - shared Guard change：0；
 - business Reader／Capability：off；
 - 下一任务切换至 BASE-B4 剩余正式入口分类校准与完成审计前置预检。
+
+<!-- BASE02_B4_REMAINING_ENTRY_CLASSIFICATION_RELEASE_20260805 -->
+
+## 2026-08-05｜BASE-B4 剩余正式入口分类校准收口
+
+- 前置预检 PR #997：Merge Commit `78332c5add509bf2bcfb824e72c6daa339adac21`；
+- 独立审查 PR #998：Merge Commit `bf85ef84537e91ca965815787fe39b4693e52003`；
+- routes：81；
+- formal guarded Routes：15；
+- policy confirmation required：0；
+- governance required：66；
+- strict candidates：0；
+- completion audit ready：false；
+- 下一任务：`BASE-B4 剩余高风险正式入口治理决策`。

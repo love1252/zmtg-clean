@@ -3,45 +3,44 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B4 第四批正式 Route Guard 接线实施收口
+## BASE-B4 剩余正式入口分类校准与完成审计前置预检收口
 
 - 更新日期：2026-08-05
-- 实施 PR #994：Head `45c5dd0aba3f1ab49f709254040e3c17c9efca5d`，Merge Commit `c6fa9245b703c0aaf7074c8e2be8d86f9a40c184`
-- 实施 Required Check：Run `30973363307`／Job `92202251273`
-- 独立审查 PR #995：Head `8cae9343f9fb0950f23bf8db3fa398ae27d9e474`，Merge Commit `d6865fa1f7ebabfcec52daf61c61e976631492cf`
-- 独立审查 Required Check：Run `30974112194`／Job `92204482740`
-- fourth batch Route：1
-- 三批累计基线 14 + 第四批 1 = formal guarded Routes 15
-- Section：system
-- Guard chain：Scope + Section
-- Guard 拒绝：403／no-store
-- 授权通过后的原 handler：410 capability-off contract 保持
-- production／colocated／compatibility／changed files：1／1／1／3
-- shared Guard change：0
+- 前置预检 PR #997：Merge Commit `78332c5add509bf2bcfb824e72c6daa339adac21`
+- 前置预检 Required Check：Run `30976780054`／Job `92212318227`
+- 独立审查 PR #998：Merge Commit `bf85ef84537e91ca965815787fe39b4693e52003`
+- 独立审查 Required Check：Run `30977574903`／Job `92214757965`
+- routes：81
+- formal guarded Routes：15
+- independent Guard marker：0
+- policy confirmation required：0
+- governance required：66
+- strict low-risk candidates：0
+- completion audit ready：false
+- production change：0
 - business Reader／Capability：关闭
 - BASE-B4：未完成
 - BASE-B5：未启动
 
 ### 唯一下一任务
 
-`BASE-B4 剩余正式入口分类校准与完成审计前置预检`
+`BASE-B4 剩余高风险正式入口治理决策`
 
 ```text
-base_b4_route_guard_fourth_batch_implementation=passed
-base_b4_route_guard_fourth_batch_review=passed
-fourth_batch_route_count=1
+base_b4_remaining_entry_classification_preflight=passed
+base_b4_remaining_entry_classification_review=passed
+route_count=81
 formal_guarded_route_count=15
-section=system
-guard_chain=scope+section
-guard_denial=403_no_store
-authorized_handler_contract=preserved_410_capability_off
-changed_file_count=3
-shared_guard_change_count=0
-business_reader_release=false
-business_capability_release=false
+independent_guard_marker_count=0
+policy_confirmation_required_count=0
+governance_required_count=66
+strict_low_risk_candidate_count=0
+completion_audit_ready=false
+production_change=false
 base_b4_complete=false
 base_b5_started=false
-next_task=BASE-B4 剩余正式入口分类校准与完成审计前置预检
+next_task_reason=remaining_governance_required
+next_task=BASE-B4 剩余高风险正式入口治理决策
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
