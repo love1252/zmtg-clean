@@ -1216,4 +1216,119 @@ describe('租户业务仓储映射', () => {
       /tenant-quota-enforcement|enforceTenantQuota|openai|rag|\bagent\b|wechat|sms|phone_call|external_system|auditEvents|createAuditEvent|fetch\(|axios/i,
     );
   });
+  it('returns one minimal scoped customer object fact source row', async () => {
+    const projectedRow = {
+      customerId: customerRow.id,
+      tenantId: customerRow.tenantId,
+      institutionId: customerRow.institutionId,
+      updatedAt: customerRow.updatedAt,
+    };
+    const query = createSelectDatabase([projectedRow]);
+    const result = await createTenantBusinessRepository(
+      query.database,
+    ).getCustomerObjectFactSourceByScope({
+      customerId: customerRow.id,
+      tenantId: customerRow.tenantId,
+      institutionId: customerRow.institutionId,
+    });
+
+    expect(result).toEqual({
+      customerId: customerRow.id,
+      tenantId: customerRow.tenantId,
+      institutionId: customerRow.institutionId,
+      updatedAt: customerRow.updatedAt.toISOString(),
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Reflect.ownKeys(result as object)).toEqual([
+      'customerId',
+      'tenantId',
+      'institutionId',
+      'updatedAt',
+    ]);
+    expect(query.select).toHaveBeenCalledWith({
+      customerId: customers.id,
+      tenantId: customers.tenantId,
+      institutionId: customers.institutionId,
+      updatedAt: customers.updatedAt,
+    });
+    expect(query.where).toHaveBeenCalledWith({
+      conditions: [
+        {
+          column: customers.tenantId,
+          operator: 'eq',
+          value: customerRow.tenantId,
+        },
+        {
+          column: customers.institutionId,
+          operator: 'eq',
+          value: customerRow.institutionId,
+        },
+        {
+          column: customers.id,
+          operator: 'eq',
+          value: customerRow.id,
+        },
+      ],
+      operator: 'and',
+    });
+    expect(JSON.stringify(result)).not.toMatch(
+      /displayName|phone|medical|tags|notes/i,
+    );
+  });
+
+  it('returns null for not-found and defensive cross-scope source rows', async () => {
+    const notFound = createSelectDatabase([]);
+    const crossScope = createSelectDatabase([
+      {
+        customerId: customerRow.id,
+        tenantId: customerRow.tenantId,
+        institutionId: 'institution-other',
+        updatedAt: customerRow.updatedAt,
+      },
+    ]);
+    const input = {
+      customerId: customerRow.id,
+      tenantId: customerRow.tenantId,
+      institutionId: customerRow.institutionId,
+    };
+
+    await expect(
+      createTenantBusinessRepository(
+        notFound.database,
+      ).getCustomerObjectFactSourceByScope(input),
+    ).resolves.toBeNull();
+    await expect(
+      createTenantBusinessRepository(
+        crossScope.database,
+      ).getCustomerObjectFactSourceByScope(input),
+    ).resolves.toBeNull();
+  });
+
+  it('customer fact bridge contains no profile projection or mutation', () => {
+    const source = readFileSync(
+      join(
+        process.cwd(),
+        'src/modules/institution/server/tenant-business-repository.ts',
+      ),
+      'utf8',
+    );
+    const start = source.indexOf(
+      'async getCustomerObjectFactSourceByScope(',
+    );
+    const end = source.indexOf(
+      'async listAppointmentsByTenantAndCustomer(',
+      start,
+    );
+    const block = source.slice(start, end);
+
+    expect(start).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(start);
+    expect(block).toContain('customers.updatedAt');
+    expect(block).toContain('customers.institutionId');
+    expect(block).not.toMatch(
+      /displayName|maskedPhone|maskedMedicalRecordNo|tags|notes/i,
+    );
+    expect(block).not.toMatch(/\.(insert|update|delete)\s*\(/i);
+  });
+
 });

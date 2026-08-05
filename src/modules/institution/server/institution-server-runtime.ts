@@ -3,6 +3,10 @@ import { isProxy } from 'node:util/types';
 import { cookies } from 'next/headers';
 
 import {
+  createCustomerObjectFactReaderV1,
+  createCustomerObjectFactSourceV1,
+} from '@/modules/customers/application/customer-object-fact-reader';
+import {
   createAccessControlAuthoritativeMembershipFactReaderV1,
 } from '@/modules/access-control/application/authoritative-membership-reader';
 import { createIdentityAuthoritativeFormalSessionIdentityFactReaderV1 } from '@/modules/auth/application/authoritative-formal-session-identity-reader';
@@ -22,6 +26,10 @@ import {
   type InstitutionRequestAuthorizationV1,
 } from '@/modules/security/server/institution-request-authorization';
 import { createTenancyAuthoritativeInstitutionScopeFactReaderV1 } from '@/modules/tenancy/application/authoritative-institution-scope-reader';
+import {
+  createTenantBusinessRepository,
+} from '@/modules/institution/server/tenant-business-repository';
+import { getDatabase } from '@/server/db/client';
 
 const RUNTIME_CONFIG_KEYS = Object.freeze([
   'kind',
@@ -346,6 +354,19 @@ export async function resolveInstitutionServerAuthorizationV1(): Promise<Institu
 
   try {
     const now = () => new Date(Date.now());
+    const customerObjectFactSource =
+      createCustomerObjectFactSourceV1({
+        async resolve(input) {
+          const repository = createTenantBusinessRepository(
+            getDatabase(),
+          );
+          return repository.getCustomerObjectFactSourceByScope(input);
+        },
+      });
+    const objectFactReader = createCustomerObjectFactReaderV1({
+      source: customerObjectFactSource,
+      now,
+    });
     const referenceCodec = createInstitutionGuardReferenceCodecV1({
       keyRing: runtimeConfig.institutionGuardReferenceKeyRing,
       now,
@@ -374,7 +395,7 @@ export async function resolveInstitutionServerAuthorizationV1(): Promise<Institu
       anchorProvider,
       referenceCodec,
       now,
-      objectFactReader: null,
+      objectFactReader,
     });
 
     return isInstitutionRequestAuthorizationV1(authorization)
