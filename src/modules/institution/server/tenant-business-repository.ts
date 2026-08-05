@@ -38,6 +38,10 @@ import type {
   FollowUpCustomerTimelineSourceType,
 } from '@/modules/institution/domain/followup-customer-timeline';
 import type { TenantDatabase } from '@/server/db/client';
+import type {
+  CustomerObjectFactSourceCandidateV1,
+  CustomerObjectFactSourceQueryV1,
+} from '@/modules/customers/ports/customer-object-fact-source';
 import {
   createDefaultWeComAuthorizationRecord,
   createWeComAuthorizationRecord,
@@ -965,6 +969,39 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
         );
 
       return row ? mapCustomerRowToRecord(row) : null;
+    },
+    async getCustomerObjectFactSourceByScope(
+      input: CustomerObjectFactSourceQueryV1,
+    ): Promise<CustomerObjectFactSourceCandidateV1 | null> {
+      const [row] = await database
+        .select({
+          customerId: customers.id,
+          tenantId: customers.tenantId,
+          institutionId: customers.institutionId,
+          updatedAt: customers.updatedAt,
+        })
+        .from(customers)
+        .where(
+          and(
+            eq(customers.tenantId, input.tenantId),
+            eq(customers.institutionId, input.institutionId),
+            eq(customers.id, input.customerId),
+          ),
+        );
+
+      if (
+        !row ||
+        row.customerId !== input.customerId ||
+        row.tenantId !== input.tenantId ||
+        row.institutionId !== input.institutionId
+      ) return null;
+
+      return Object.freeze({
+        customerId: row.customerId,
+        tenantId: row.tenantId,
+        institutionId: row.institutionId,
+        updatedAt: row.updatedAt.toISOString(),
+      });
     },
     async listAppointmentsByTenantAndCustomer(
       input: CustomerTimelineRelatedLookupInput,

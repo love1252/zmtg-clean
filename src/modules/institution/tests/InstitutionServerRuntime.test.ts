@@ -33,6 +33,8 @@ const runtimeMocks = vi.hoisted(() => ({
   createAccessControlAuthoritativeMembershipFactReaderV1: vi.fn(),
   createIdentityAuthoritativeFormalSessionIdentityFactReaderV1: vi.fn(),
   createTenancyAuthoritativeInstitutionScopeFactReaderV1: vi.fn(),
+  createTenantBusinessRepository: vi.fn(),
+  customerObjectFactSourceRead: vi.fn(),
   getDatabase: vi.fn(),
   identityRead: vi.fn(),
   membershipRead: vi.fn(),
@@ -45,6 +47,22 @@ vi.mock('@/server/db/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/server/db/client')>();
   return { ...actual, getDatabase: runtimeMocks.getDatabase };
 });
+
+vi.mock(
+  '@/modules/institution/server/tenant-business-repository',
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import(
+        '@/modules/institution/server/tenant-business-repository'
+      )
+    >();
+    return {
+      ...actual,
+      createTenantBusinessRepository:
+        runtimeMocks.createTenantBusinessRepository,
+    };
+  },
+);
 
 vi.mock('@/modules/access-control/application/authoritative-membership-reader', async (importOriginal) => {
   const actual =
@@ -227,6 +245,12 @@ function expectNoCookieOrPersistence() {
   expect(runtimeMocks.cookieGet).not.toHaveBeenCalled();
   expect(runtimeMocks.getDatabase).not.toHaveBeenCalled();
   expect(
+    runtimeMocks.createTenantBusinessRepository,
+  ).not.toHaveBeenCalled();
+  expect(
+    runtimeMocks.customerObjectFactSourceRead,
+  ).not.toHaveBeenCalled();
+  expect(
     runtimeMocks.createAccessControlAuthoritativeMembershipFactReaderV1,
   ).not.toHaveBeenCalled();
   expect(
@@ -261,6 +285,16 @@ describe('BASE-RUNTIME-01 institution server authorization root', () => {
       value: signToken(),
     });
     runtimeMocks.getDatabase.mockReturnValue(database);
+    runtimeMocks.customerObjectFactSourceRead.mockResolvedValue({
+      customerId: 'customer-server-runtime-001',
+      tenantId: payload.tenantId,
+      institutionId: payload.institutionId,
+      updatedAt: '2026-07-22T08:01:30.000Z',
+    });
+    runtimeMocks.createTenantBusinessRepository.mockReturnValue({
+      getCustomerObjectFactSourceByScope:
+        runtimeMocks.customerObjectFactSourceRead,
+    });
     runtimeMocks.identityRead.mockImplementation(async (input) => ({
       kind: 'current_identity_fact' as const,
       accountId: input.accountId,
@@ -397,6 +431,12 @@ describe('BASE-RUNTIME-01 institution server authorization root', () => {
       FORMAL_SERVER_SESSION_COOKIE_V1,
     );
     expect(runtimeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(
+      runtimeMocks.createTenantBusinessRepository,
+    ).not.toHaveBeenCalled();
+    expect(
+      runtimeMocks.customerObjectFactSourceRead,
+    ).not.toHaveBeenCalled();
 
     if (!authorization) throw new Error('expected genuine authorization');
     const result = await authorizeWorkbench(authorization);
@@ -412,6 +452,109 @@ describe('BASE-RUNTIME-01 institution server authorization root', () => {
     expect(runtimeMocks.membershipRead).toHaveBeenCalledTimes(4);
     expect(runtimeMocks.createTenancyAuthoritativeInstitutionScopeFactReaderV1).toHaveBeenCalledTimes(1);
     expect(runtimeMocks.anchorRead).toHaveBeenCalledTimes(2);
+    expect(
+      runtimeMocks.createTenantBusinessRepository,
+    ).not.toHaveBeenCalled();
+    expect(
+      runtimeMocks.customerObjectFactSourceRead,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('lazily resolves one genuine scoped customer object fact', async () => {
+    const authorization = await resolveInstitutionServerAuthorizationV1();
+
+    expect(isInstitutionRequestAuthorizationV1(authorization)).toBe(true);
+    expect(
+      runtimeMocks.createTenantBusinessRepository,
+    ).not.toHaveBeenCalled();
+    expect(
+      runtimeMocks.customerObjectFactSourceRead,
+    ).not.toHaveBeenCalled();
+
+    if (!authorization) throw new Error('expected genuine authorization');
+
+    const result =
+      await authorization.authorizeCurrentInstitutionObjectV1({
+        objectType: 'customer',
+        objectId: 'customer-server-runtime-001',
+        action: 'read',
+      });
+
+    expect(result).toMatchObject({
+      kind: 'institution_object_action_allow',
+      objectType: 'customer',
+      action: 'read',
+      objectRevision: Date.parse(
+        '2026-07-22T08:01:30.000Z',
+      ),
+    });
+    expect(
+      runtimeMocks.createTenantBusinessRepository,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      runtimeMocks.customerObjectFactSourceRead,
+    ).toHaveBeenCalledWith({
+      customerId: 'customer-server-runtime-001',
+      tenantId: payload.tenantId,
+      institutionId: payload.institutionId,
+    });
+  });
+
+  it.each([
+    ['not found', null, 'object_denied'],
+    [
+      'cross scope',
+      {
+        customerId: 'customer-server-runtime-001',
+        tenantId: payload.tenantId,
+        institutionId: 'institution-other',
+        updatedAt: '2026-07-22T08:01:30.000Z',
+      },
+      'object_denied',
+    ],
+  ] as const)(
+    'keeps customer object authorization fail-closed for %s',
+    async (_label, value, expectedCode) => {
+      runtimeMocks.customerObjectFactSourceRead.mockResolvedValueOnce(
+        value,
+      );
+      const authorization =
+        await resolveInstitutionServerAuthorizationV1();
+      if (!authorization) {
+        throw new Error('expected genuine authorization');
+      }
+      await expect(
+        authorization.authorizeCurrentInstitutionObjectV1({
+          objectType: 'customer',
+          objectId: 'customer-server-runtime-001',
+          action: 'read',
+        }),
+      ).resolves.toEqual({
+        kind: 'rejected',
+        code: expectedCode,
+      });
+    },
+  );
+
+  it('maps customer source exceptions to object_unavailable', async () => {
+    runtimeMocks.customerObjectFactSourceRead.mockRejectedValueOnce(
+      new Error('customer database unavailable'),
+    );
+    const authorization =
+      await resolveInstitutionServerAuthorizationV1();
+    if (!authorization) {
+      throw new Error('expected genuine authorization');
+    }
+    await expect(
+      authorization.authorizeCurrentInstitutionObjectV1({
+        objectType: 'customer',
+        objectId: 'customer-server-runtime-001',
+        action: 'read',
+      }),
+    ).resolves.toEqual({
+      kind: 'rejected',
+      code: 'object_unavailable',
+    });
   });
 
   it('keeps exact accepted key rotation config compatible', async () => {
@@ -867,31 +1010,45 @@ describe('BASE-RUNTIME-01 institution server authorization root', () => {
     });
     await expect(resolveInstitutionServerAuthorizationV1()).resolves.toBeNull();
   });
-  it('keeps BASE-B4 object and action capability off without an Owner adapter', async () => {
-    const authorization = await resolveInstitutionServerAuthorizationV1();
-    expect(isInstitutionRequestAuthorizationV1(authorization)).toBe(true);
-    if (!authorization) throw new Error('expected genuine authorization');
+  it.each(['action', 'object'] as const)(
+    'keeps unknown customer %s fail-closed with the genuine Owner adapter',
+    async (entry) => {
+      runtimeMocks.customerObjectFactSourceRead.mockResolvedValueOnce(null);
 
-    const input = Object.freeze({
-      objectType: 'customer' as const,
-      objectId: 'customer-runtime-001',
-      action: 'read' as const,
-    });
-    await expect(
-      authorization.authorizeCurrentInstitutionActionV1(input),
-    ).resolves.toEqual({
-      kind: 'rejected',
-      code: 'object_unavailable',
-    });
-    await expect(
-      authorization.authorizeCurrentInstitutionObjectV1(input),
-    ).resolves.toEqual({
-      kind: 'rejected',
-      code: 'object_unavailable',
-    });
-    expect(runtimeMocks.getDatabase).not.toHaveBeenCalled();
-    expect(runtimeMocks.membershipRead).not.toHaveBeenCalled();
-    expect(runtimeMocks.anchorRead).not.toHaveBeenCalled();
-  });
+      const authorization = await resolveInstitutionServerAuthorizationV1();
+      expect(isInstitutionRequestAuthorizationV1(authorization)).toBe(true);
+      if (!authorization) {
+        throw new Error('expected genuine authorization');
+      }
+
+      const input = {
+        objectType: 'customer' as const,
+        objectId: 'customer-unknown-runtime-001',
+        action: 'read' as const,
+      };
+      const result =
+        entry === 'action'
+          ? authorization.authorizeCurrentInstitutionActionV1(input)
+          : authorization.authorizeCurrentInstitutionObjectV1(input);
+
+      await expect(result).resolves.toEqual({
+        kind: 'rejected',
+        code: 'object_denied',
+      });
+      expect(
+        runtimeMocks.createTenantBusinessRepository,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        runtimeMocks.customerObjectFactSourceRead,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        runtimeMocks.customerObjectFactSourceRead,
+      ).toHaveBeenCalledWith({
+        customerId: input.objectId,
+        tenantId: payload.tenantId,
+        institutionId: payload.institutionId,
+      });
+    },
+  );
 
 });
