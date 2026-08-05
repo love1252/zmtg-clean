@@ -1388,3 +1388,16 @@
 - production Object Fact Reader Adapter：0；
 - Runtime objectFactReader null：true；
 - 下一任务：`BASE-B4 客户对象事实 Reader 前置设计与准入`。
+
+<!-- BASE02_B4_CUSTOMER_OBJECT_FACT_READER_DESIGN_RELEASE_20260805 -->
+
+## 2026-08-05｜BASE-B4 客户对象事实 Reader 设计准入收口
+
+- 设计准入 PR #1006：Merge Commit `ae9a8719d886db4ba301fea32a5061aa9c5f188d`；
+- 独立审查 PR #1007：Merge Commit `dc04d28bdf53bd89ec8ef28cec286b1bf054db4c`；
+- admission：approved_with_exact_allowlist；
+- semantic owner：src/modules/customers；
+- implementation allowlist：7；
+- Schema／Migration／Route wiring：0；
+- production／database／DML：0；
+- 下一任务：`BASE-B4 客户对象事实 Reader 核心实施`。

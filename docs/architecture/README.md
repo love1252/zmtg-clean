@@ -923,3 +923,17 @@ MIG-01
 - 下一任务进入客户对象事实 Reader 前置设计与准入。
 
 <!-- BASE02_B4_READONLY_DYNAMIC_OBJECT_GUARD_PREFLIGHT_HANDOFF_END -->
+
+<!-- BASE02_B4_CUSTOMER_OBJECT_FACT_READER_DESIGN_HANDOFF_START -->
+
+## BASE-B4 客户对象事实 Reader 前置设计与准入收口
+
+- Customers 目标语义 Owner：`src/modules/customers`；
+- legacy repository 只保留 scoped compatibility bridge；
+- revision 来源：customers.updatedAt；
+- production Reader Adapter：0；
+- Runtime：`objectFactReader: null`；
+- 核心实施严格限制在 7 文件 allowlist；
+- 核心实施不包含 Route 接线或 Capability 开放。
+
+<!-- BASE02_B4_CUSTOMER_OBJECT_FACT_READER_DESIGN_HANDOFF_END -->

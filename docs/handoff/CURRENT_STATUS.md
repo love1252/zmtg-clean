@@ -3,46 +3,45 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B4 只读动态对象 Object Guard 精确预检收口
+## BASE-B4 客户对象事实 Reader 前置设计与准入收口
 
 - 更新日期：2026-08-05
-- 前置预检 PR #1003：Merge Commit `1e647a0db7f072853103d47c596fd47a23748f8e`
-- 前置预检 Required Check：Run `30987063337`
-- 独立审查 PR #1004：Merge Commit `806c6b4d9c5d32202c5762f610a143d23cbabaf2`
-- 独立审查 Required Check：Run `30988090286`
-- routes：9
-- supported direct object routes：4
-- unsupported／compound routes：5
-- semantic candidates：4
-- implementation eligible：0
+- 设计准入 PR #1006：Merge Commit `ae9a8719d886db4ba301fea32a5061aa9c5f188d`
+- 设计 Required Check：Run `30991853317`
+- 独立审查 PR #1007：Merge Commit `dc04d28bdf53bd89ec8ef28cec286b1bf054db4c`
+- 独立审查 Required Check：Run `30992968084`
+- admission：approved_with_exact_allowlist
+- semantic owner：src/modules/customers
 - customer routes：3
-- knowledge_item routes：1
 - production Object Fact Reader Adapter：0
 - Institution Runtime objectFactReader null：true
+- implementation allowlist：7
+- Schema／Migration／Route wiring：0
 - production change：0
 - BASE-B4：未完成
 - BASE-B5：未启动
 
 ### 唯一下一任务
 
-`BASE-B4 客户对象事实 Reader 前置设计与准入`
+`BASE-B4 客户对象事实 Reader 核心实施`
 
 ```text
-base_b4_readonly_dynamic_object_guard_preflight=passed
-base_b4_readonly_dynamic_object_guard_review=passed
-route_count=9
-supported_direct_object_route_count=4
-unsupported_or_compound_route_count=5
-semantic_candidate_count=4
-implementation_eligible_count=0
+base_b4_customer_object_fact_reader_design=approved
+base_b4_customer_object_fact_reader_design_review=passed
+admission=approved_with_exact_allowlist
+semantic_owner=src/modules/customers
 customer_route_count=3
-knowledge_item_route_count=1
 production_object_fact_reader_adapter_count=0
 institution_runtime_object_fact_reader_null=true
+implementation_allowlist_count=7
+schema_change_required=false
+migration_required=false
+route_wiring_in_scope=false
+business_capability_release=false
 production_change=false
 base_b4_complete=false
 base_b5_started=false
-next_task=BASE-B4 客户对象事实 Reader 前置设计与准入
+next_task=BASE-B4 客户对象事实 Reader 核心实施
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
