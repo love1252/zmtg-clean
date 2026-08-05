@@ -1,0 +1,6 @@
+route,impact_kind,path,implementation_allowlist,reason
+src/app/api/institution/ai-service-usage/route.ts,api_regression_test,src/modules/institution/tests/InstitutionAiServiceUsageService.test.ts,false,API URL consumer; regression evidence only
+src/app/api/institution/ai-service-usage/route.ts,api_regression_test,src/modules/workspace/tests/WorkspaceEntryPages.test.tsx,false,API URL consumer; regression evidence only
+src/app/api/institution/ai-service-usage/route.ts,direct_compatibility_test,src/modules/institution/tests/InstitutionAiServiceUsageApiRoute.test.ts,true,direct route import or source contract reference
+src/app/api/institution/ai-service-usage/route.ts,planned_colocated_test,src/app/api/institution/ai-service-usage/route.test.ts,true,new or existing Route Guard wiring test
+src/app/api/institution/ai-service-usage/route.ts,runtime_caller,src/modules/institution/client/institution-ai-service-usage-client.ts,false,production import or API URL consumer; regression evidence only
