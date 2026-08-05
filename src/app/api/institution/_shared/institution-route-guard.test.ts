@@ -1,69 +1,84 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const guardMocks = vi.hoisted(() => ({
+const mocks = vi.hoisted(() => ({
   resolveAuthorization: vi.fn(),
-  genuineAuthorizations: new WeakSet<object>(),
-  genuineAllows: new WeakSet<object>(),
+  authorizations: new WeakSet<object>(),
+  sectionAllows: new WeakSet<object>(),
+  objectAllows: new WeakSet<object>(),
 }));
 
-vi.mock(
-  '@/modules/institution/server/institution-server-runtime',
-  () => ({
-    resolveInstitutionServerAuthorizationV1:
-      guardMocks.resolveAuthorization,
-  }),
-);
+vi.mock('@/modules/institution/server/institution-server-runtime', () => ({
+  resolveInstitutionServerAuthorizationV1: mocks.resolveAuthorization,
+}));
+vi.mock('@/modules/security/server/institution-request-authorization', () => ({
+  isInstitutionRequestAuthorizationV1(value: unknown) {
+    return value !== null && typeof value === 'object' &&
+      mocks.authorizations.has(value);
+  },
+}));
+vi.mock('@/modules/security/server/institution-section-guard', () => ({
+  isInstitutionSectionAllowV1(value: unknown) {
+    return value !== null && typeof value === 'object' &&
+      mocks.sectionAllows.has(value);
+  },
+}));
+vi.mock('@/modules/security/server/institution-object-guard', () => ({
+  isInstitutionObjectActionAllowV1(value: unknown) {
+    return value !== null && typeof value === 'object' &&
+      mocks.objectAllows.has(value);
+  },
+}));
 
-vi.mock(
-  '@/modules/security/server/institution-request-authorization',
-  () => ({
-    isInstitutionRequestAuthorizationV1(value: unknown) {
-      return (
-        value !== null &&
-        typeof value === 'object' &&
-        guardMocks.genuineAuthorizations.has(value)
-      );
-    },
-  }),
-);
+import {
+  withInstitutionObjectRouteGuardV1,
+  withInstitutionSectionRouteGuardV1,
+} from '@/app/api/institution/_shared/institution-route-guard';
 
-vi.mock(
-  '@/modules/security/server/institution-section-guard',
-  () => ({
-    isInstitutionSectionAllowV1(value: unknown) {
-      return (
-        value !== null &&
-        typeof value === 'object' &&
-        guardMocks.genuineAllows.has(value)
-      );
-    },
-  }),
-);
-
-import { withInstitutionSectionRouteGuardV1 } from '@/app/api/institution/_shared/institution-route-guard';
-
-function genuineAllow(sectionId: 'knowledge' | 'system') {
-  const allow = Object.freeze({
+function sectionAllow(
+  sectionId: 'knowledge' | 'system' | 'customers',
+) {
+  const value = Object.freeze({
     kind: 'institution_section_allow' as const,
     sectionId,
   });
-  guardMocks.genuineAllows.add(allow);
-  return allow;
+  mocks.sectionAllows.add(value);
+  return value;
 }
 
-function genuineAuthorization(
-  authorize: () => Promise<unknown> = vi.fn(async () =>
-    genuineAllow('knowledge'),
-  ),
+function objectAllow(
+  objectType: 'customer' | 'knowledge_item' = 'customer',
+  action: 'read' | 'update' = 'read',
 ) {
-  const authorization = Object.freeze({
-    authorizeCurrentInstitutionSectionV1: authorize,
+  const value = Object.freeze({
+    kind: 'institution_object_action_allow' as const,
+    objectType,
+    action,
+    objectRevision: 1,
+    decidedAt: '2026-08-06T00:00:00.000Z',
+    validUntil: '2026-08-06T00:00:30.000Z',
   });
-  guardMocks.genuineAuthorizations.add(authorization);
-  return authorization;
+  mocks.objectAllows.add(value);
+  return value;
 }
 
-async function expectForbidden(response: Response) {
+function authorization(input: Readonly<{
+  section?: (value: unknown) => Promise<unknown>;
+  object?: (value: unknown) => Promise<unknown>;
+  action?: (value: unknown) => Promise<unknown>;
+}> = {}) {
+  const value = Object.freeze({
+    authorizeCurrentInstitutionSectionV1:
+      input.section ?? vi.fn(async () => sectionAllow('knowledge')),
+    authorizeCurrentInstitutionObjectV1:
+      input.object ?? vi.fn(async () => objectAllow()),
+    authorizeCurrentInstitutionActionV1:
+      input.action ?? vi.fn(async () => objectAllow()),
+  });
+  mocks.authorizations.add(value);
+  return value;
+}
+
+async function expectSectionForbidden(response: Response) {
   expect(response.status).toBe(403);
   expect(response.headers.get('cache-control')).toBe('no-store');
   await expect(response.json()).resolves.toEqual({
@@ -72,120 +87,164 @@ async function expectForbidden(response: Response) {
   });
 }
 
+async function expectObjectForbidden(response: Response) {
+  expect(response.status).toBe(403);
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  await expect(response.json()).resolves.toEqual({
+    error: 'institution_route_forbidden',
+    code: 'institution_object_forbidden',
+  });
+}
+
 describe('BASE-B4 institution Route Guard', () => {
   beforeEach(() => {
-    guardMocks.resolveAuthorization.mockReset();
-    guardMocks.genuineAuthorizations = new WeakSet<object>();
-    guardMocks.genuineAllows = new WeakSet<object>();
+    mocks.resolveAuthorization.mockReset();
+    mocks.authorizations = new WeakSet<object>();
+    mocks.sectionAllows = new WeakSet<object>();
+    mocks.objectAllows = new WeakSet<object>();
   });
 
-  it('fails closed before the handler for malformed factory input', async () => {
-    const handler = vi.fn(async () => new Response('should-not-run'));
+  it('preserves the existing Section wrapper contract', async () => {
+    const response = new Response('existing', { status: 207 });
+    const handler = vi.fn(async () => response);
+    const section = vi.fn(async () => sectionAllow('knowledge'));
+    mocks.resolveAuthorization.mockResolvedValueOnce(
+      authorization({ section }),
+    );
+
     const guarded = withInstitutionSectionRouteGuardV1({
-      sectionId: 'unknown',
+      sectionId: 'knowledge',
+      handler,
+    });
+    expect(await guarded()).toBe(response);
+    expect(section).toHaveBeenCalledWith({ sectionId: 'knowledge' });
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects malformed Object factories before authorization', async () => {
+    const resolver = vi.fn(async () => 'customer-001');
+    const handler = vi.fn(async () => new Response('bad'));
+    const guarded = withInstitutionObjectRouteGuardV1({
+      sectionId: 'customers',
+      objectType: 'unknown',
+      action: 'read',
+      resolveObjectId: resolver,
       handler,
     } as never);
-
-    await expectForbidden(await guarded());
+    await expectObjectForbidden(await guarded());
+    expect(mocks.resolveAuthorization).not.toHaveBeenCalled();
+    expect(resolver).not.toHaveBeenCalled();
     expect(handler).not.toHaveBeenCalled();
-    expect(guardMocks.resolveAuthorization).not.toHaveBeenCalled();
   });
 
-  it('fails closed for missing or structural fake authorization', async () => {
-    const handler = vi.fn(async () => new Response('should-not-run'));
-    const guarded = withInstitutionSectionRouteGuardV1({
-      sectionId: 'knowledge',
+  it('checks Section before context access', async () => {
+    const traps = { get: 0 };
+    const context = new Proxy({}, {
+      get() {
+        traps.get += 1;
+        throw new Error('context must not be read');
+      },
+    });
+    const section = vi.fn(async () => ({
+      kind: 'rejected',
+      code: 'scope_unavailable',
+    }));
+    const resolver = vi.fn(
+      async (_request: Request, value: { customerId: string }) =>
+        value.customerId,
+    );
+    const handler = vi.fn(async () => new Response('bad'));
+    mocks.resolveAuthorization.mockResolvedValueOnce(
+      authorization({ section }),
+    );
+
+    const guarded = withInstitutionObjectRouteGuardV1({
+      sectionId: 'customers',
+      objectType: 'customer',
+      action: 'read',
+      resolveObjectId: resolver,
       handler,
     });
+    await expectObjectForbidden(
+      await guarded(new Request('http://localhost'), context as never),
+    );
+    expect(traps.get).toBe(0);
+    expect(resolver).not.toHaveBeenCalled();
+    expect(mocks.resolveAuthorization).toHaveBeenCalledTimes(1);
+  });
 
-    for (const authorization of [
-      null,
-      Object.freeze({
-        authorizeCurrentInstitutionSectionV1: vi.fn(),
-      }),
+  it('rejects invalid ids before the second authorization', async () => {
+    const section = vi.fn(async () => sectionAllow('customers'));
+    mocks.resolveAuthorization.mockResolvedValueOnce(
+      authorization({ section }),
+    );
+    const guarded = withInstitutionObjectRouteGuardV1({
+      sectionId: 'customers',
+      objectType: 'customer',
+      action: 'read',
+      resolveObjectId: vi.fn(async () => 'customer id with spaces'),
+      handler: vi.fn(async () => new Response('bad')),
+    });
+    await expectObjectForbidden(await guarded());
+    expect(mocks.resolveAuthorization).toHaveBeenCalledTimes(1);
+  });
+
+  it('maps Object rejection and wrong allows to one 403 contract', async () => {
+    for (const objectResult of [
+      { kind: 'rejected', code: 'object_denied' },
+      objectAllow('knowledge_item', 'read'),
     ]) {
-      guardMocks.resolveAuthorization.mockResolvedValueOnce(authorization);
-      await expectForbidden(await guarded());
+      const section = vi.fn(async () => sectionAllow('customers'));
+      const object = vi.fn(async () => objectResult);
+      mocks.resolveAuthorization
+        .mockResolvedValueOnce(authorization({ section }))
+        .mockResolvedValueOnce(authorization({ object }));
+      const guarded = withInstitutionObjectRouteGuardV1({
+        sectionId: 'customers',
+        objectType: 'customer',
+        action: 'read',
+        resolveObjectId: vi.fn(async () => 'customer-001'),
+        handler: vi.fn(async () => new Response('bad')),
+      });
+      await expectObjectForbidden(await guarded());
+      expect(object).toHaveBeenCalledWith({
+        objectType: 'customer',
+        objectId: 'customer-001',
+        action: 'read',
+      });
     }
-
-    expect(handler).not.toHaveBeenCalled();
   });
 
-  it('fails closed when resolver or Section Guard throws', async () => {
-    const handler = vi.fn(async () => new Response('should-not-run'));
-    const guarded = withInstitutionSectionRouteGuardV1({
-      sectionId: 'knowledge',
+  it('uses two fresh authorizations and invokes the handler once', async () => {
+    const section = vi.fn(async () => sectionAllow('customers'));
+    const object = vi.fn(async () => objectAllow());
+    const actionAlias = vi.fn(async () => objectAllow());
+    mocks.resolveAuthorization
+      .mockResolvedValueOnce(authorization({ section }))
+      .mockResolvedValueOnce(
+        authorization({ object, action: actionAlias }),
+      );
+
+    const response = new Response('existing', { status: 207 });
+    const handler = vi.fn(async () => response);
+    const resolver = vi.fn(async () => 'customer-001');
+    const guarded = withInstitutionObjectRouteGuardV1({
+      sectionId: 'customers',
+      objectType: 'customer',
+      action: 'read',
+      resolveObjectId: resolver,
       handler,
     });
 
-    guardMocks.resolveAuthorization.mockRejectedValueOnce(
-      new Error('authorization unavailable'),
-    );
-    await expectForbidden(await guarded());
-
-    const authorize = vi.fn(async () => {
-      throw new Error('section unavailable');
+    expect(await guarded()).toBe(response);
+    expect(mocks.resolveAuthorization).toHaveBeenCalledTimes(2);
+    expect(section).toHaveBeenCalledWith({ sectionId: 'customers' });
+    expect(object).toHaveBeenCalledWith({
+      objectType: 'customer',
+      objectId: 'customer-001',
+      action: 'read',
     });
-    guardMocks.resolveAuthorization.mockResolvedValueOnce(
-      genuineAuthorization(authorize),
-    );
-    await expectForbidden(await guarded());
-
-    expect(handler).not.toHaveBeenCalled();
-  });
-
-  it('fails closed for rejection and wrong-section allow', async () => {
-    const handler = vi.fn(async () => new Response('should-not-run'));
-    const guarded = withInstitutionSectionRouteGuardV1({
-      sectionId: 'knowledge',
-      handler,
-    });
-
-    guardMocks.resolveAuthorization.mockResolvedValueOnce(
-      genuineAuthorization(
-        vi.fn(async () => ({
-          kind: 'rejected',
-          code: 'scope_unavailable',
-        })),
-      ),
-    );
-    await expectForbidden(await guarded());
-
-    guardMocks.resolveAuthorization.mockResolvedValueOnce(
-      genuineAuthorization(
-        vi.fn(async () => genuineAllow('system')),
-      ),
-    );
-    await expectForbidden(await guarded());
-
-    expect(handler).not.toHaveBeenCalled();
-  });
-
-  it('calls the existing handler once and preserves its response', async () => {
-    const response = new Response('existing-success', {
-      status: 207,
-      headers: { 'x-existing-contract': 'preserved' },
-    });
-    const handler = vi.fn(async (_request: Request) => response);
-    const authorize = vi.fn(async () => genuineAllow('knowledge'));
-
-    guardMocks.resolveAuthorization.mockResolvedValueOnce(
-      genuineAuthorization(authorize),
-    );
-
-    const guarded = withInstitutionSectionRouteGuardV1({
-      sectionId: 'knowledge',
-      handler,
-    });
-    const request = new Request('http://localhost/api/institution/example');
-    const result = await guarded(request);
-
-    expect(result).toBe(response);
-    expect(result.status).toBe(207);
-    expect(result.headers.get('x-existing-contract')).toBe('preserved');
+    expect(actionAlias).not.toHaveBeenCalled();
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(handler).toHaveBeenCalledWith(request);
-    expect(authorize).toHaveBeenCalledTimes(1);
-    expect(authorize).toHaveBeenCalledWith({ sectionId: 'knowledge' });
   });
 });

@@ -1,3 +1,7 @@
+import {
+  withInstitutionObjectRouteGuardV1,
+} from '@/app/api/institution/_shared/institution-route-guard';
+
 import { NextResponse } from 'next/server';
 
 type CustomerTimelineRouteContext = {
@@ -12,13 +16,28 @@ const noStoreHeaders = Object.freeze({
   'cache-control': 'no-store',
 });
 
-/**
- * No request or route data is inspected until an institution-scoped reader exists.
- * This deliberately avoids demo-session, database, repository, service, audit, and fetch side effects.
- */
-export async function GET(_request: Request, _context: CustomerTimelineRouteContext) {
+async function GET(
+  _request: Request,
+  _context: CustomerTimelineRouteContext,
+) {
   return NextResponse.json(customerTimelineReadDisabled, {
     status: 503,
     headers: noStoreHeaders,
   });
 }
+
+const guardedGET = withInstitutionObjectRouteGuardV1({
+  sectionId: 'customers',
+  objectType: 'customer',
+  action: 'read',
+  async resolveObjectId(
+    _request: Request,
+    context: CustomerTimelineRouteContext,
+  ) {
+    const params = await context.params;
+    return params.customerId;
+  },
+  handler: GET,
+});
+
+export { guardedGET as GET };
