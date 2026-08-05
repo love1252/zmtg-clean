@@ -1,0 +1,13 @@
+contract_area,decision,source,fail_closed_rule,production_change_in_design_task
+semantic_owner,src/modules/customers,architecture map,legacy institution cannot own new business fact,false
+source_lookup,tenant+institution+customer exact lookup,tenant-business-repository,no tenant-only or id-only lookup,false
+source_projection,id tenantId institutionId updatedAt only,customers table,no profile fields enter security fact,false
+object_contract,customer + read,security port and action policy,unknown type/action rejected,false
+status,existing exact row maps active,current customers row,not-found and cross-scope both object_denied,false
+revision,positive safe integer from updatedAt epoch ms,customers.updatedAt,invalid timestamp object_invalid,false
+observed_at,canonical UTC from injected now,reader clock,invalid clock object_invalid,false
+freshness,reuse 60-second Object Guard window,institution-object-guard,stale object_stale,false
+source_failure,repository exception object_unavailable,source adapter,never fallback allow,false
+runtime,lazy genuine reader at composition root,institution-server-runtime,no lookup before object authorization,false
+database,reuse canonical TenantDatabase,existing database runtime,no second client/schema and no route DB,false
+route_scope,reader core only,three customer routes,business capability stays closed,false

@@ -1,0 +1,12 @@
+evidence_key,path,status,detail,sha256
+target_semantic_owner,docs/architecture/architecture-v2-module-map.md,confirmed,customer-center migrates to customers; Customers is semantic owner,86e953f39cb5dbb87afabf8eaa3786531ac996188f0424c81a8e383f105e04a5
+legacy_write_policy,docs/architecture/architecture-v2-module-map.md,confirmed,legacy institution module remains freeze_new_business,86e953f39cb5dbb87afabf8eaa3786531ac996188f0424c81a8e383f105e04a5
+scoped_lookup,src/modules/institution/server/tenant-business-repository.ts,confirmed,tenantId + institutionId + customerId predicates exist,2263715d3fc878c31cb3efd2702ea4eaf2a7dcc96bc652999dd39baee679f2ac
+revision_source,src/server/db/schema.ts,confirmed,customers has updatedAt through shared timestamps,7d6311c8235dafeb16ea9522c59a83cfc3850e84f6a89a183170f65bcee1e53f
+summary_gap,src/modules/institution/domain/customer-records.ts,gap,summary omits updatedAt and revision,7833efdd44ec0d60e53f425cef8d0e4fa4b1c6c8e8e4005faf299b09bcaa24dc
+security_contract,src/modules/security/ports/institution-object-fact.ts,confirmed,customer object type already registered,fee8e06251c74cd52f9f3ea9d0c793bfe21c6c1778363422e0272c23cb9ad355
+read_policy,src/modules/security/server/institution-action-policy.ts,confirmed,customer/read already registered,8beb8f5f7222da2ed40ac6db549b80494b1509887210d9bed22d89309c48e08b
+runtime_state,src/modules/institution/server/institution-server-runtime.ts,blocked,objectFactReader is null,54d22ec99063637fc11c28dfd89b5fd88730ce4768a916ccbac3b212912e51c9
+production_reader,src,missing,production reader adapter count is zero,
+customer_routes,docs/operations/base02-b4-readonly-dynamic-object-guard-route-matrix-20260805.csv,confirmed,three customerId GET routes are semantic candidates,e86cdab86a5b82ee2912f5177a753c9bd770c7c9ab26b0673004830127e26c96
+target_module,src/modules/customers,not_present,target module state before implementation,
