@@ -965,3 +965,18 @@ MIG-01
 - 下一任务仅预检 3 条 customer GET Route。
 
 <!-- BASE02_B4_CUSTOMER_OBJECT_FACT_READER_CORE_HANDOFF_END -->
+
+<!-- BASE02_B4_CUSTOMER_ROUTE_OBJECT_GUARD_PREFLIGHT_START -->
+
+## BASE-B4 客户 Route Object Guard 前置预检收口
+
+- 三条 customerId GET Route 当前均未接 Object Guard；
+- customer Reader 与 Runtime 注入已就绪；
+- Shared Guard 将新增 Section + Dynamic Object wrapper；
+- Section 与 Object 必须各使用一个 fresh Authorization；
+- Context 仅在 Section allow 后读取，Guard 阶段不读取 Request；
+- 所有 Guard 失败统一为低敏 no-store 403；
+- 首个切片仅接线客户完整时间线，共 4 文件；
+- 允许后仍保留原 capability-disabled 503 Handler。
+
+<!-- BASE02_B4_CUSTOMER_ROUTE_OBJECT_GUARD_PREFLIGHT_END -->
