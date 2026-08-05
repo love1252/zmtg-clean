@@ -1330,3 +1330,19 @@
 - production change：0；
 - business Reader／Capability：off；
 - 下一任务切换至：`BASE-B4 第四批低风险正式 Route Guard capability-off 接线实施`。
+
+<!-- BASE02_B4_ROUTE_GUARD_FOURTH_BATCH_IMPLEMENTATION_RELEASE_20260805 -->
+
+## 2026-08-05｜BASE-B4 第四批正式 Route Guard 接线实施收口
+
+- 实施 PR #994：Merge Commit `c6fa9245b703c0aaf7074c8e2be8d86f9a40c184`；
+- 独立审查 PR #995：Merge Commit `d6865fa1f7ebabfcec52daf61c61e976631492cf`；
+- fourth batch：1；
+- formal guarded Routes：15；
+- Section：system；
+- Guard denial：403 / no-store；
+- authorized handler：原 410 capability-off contract 保持；
+- changed files：3；
+- shared Guard change：0；
+- business Reader／Capability：off；
+- 下一任务切换至 BASE-B4 剩余正式入口分类校准与完成审计前置预检。
