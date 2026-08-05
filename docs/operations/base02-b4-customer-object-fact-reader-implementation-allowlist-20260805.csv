@@ -1,0 +1,8 @@
+order,path,change_type,responsibility,required_tests
+1,src/modules/customers/ports/customer-object-fact-source.ts,create,customer-owned scoped source contract,shape and rejection
+2,src/modules/customers/application/customer-object-fact-reader.ts,create,map current source to genuine security reader,scope revision freshness fail-closed
+3,src/modules/customers/tests/CustomerObjectFactReader.test.ts,create,reader core acceptance,allow denied invalid unavailable stale fake
+4,src/modules/institution/server/tenant-business-repository.ts,modify_exact_bridge,minimal id/tenant/institution/updatedAt projection,exact triple predicate no profile
+5,src/modules/institution/tests/TenantBusinessRepository.test.ts,modify,compatibility source query tests,found not-found cross-scope timestamp
+6,src/modules/institution/server/institution-server-runtime.ts,modify,lazy genuine reader composition,no route capability
+7,src/modules/institution/tests/InstitutionServerRuntime.test.ts,modify,runtime fail-closed tests,genuine lazy config unavailable
