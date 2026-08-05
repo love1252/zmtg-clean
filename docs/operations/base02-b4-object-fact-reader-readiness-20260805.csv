@@ -1,0 +1,7 @@
+candidate_object_type,route_count,registered_in_object_port,read_policy_registered,production_reader_adapter_count,runtime_reader_wired,readiness,blocker
+customer,3,true,true,0,false,blocked,business_object_fact_reader_adapter_missing
+followup_enrollment,1,false,false,0,false,blocked,object_type_unregistered
+knowledge_file,2,false,false,0,false,blocked,object_type_unregistered
+knowledge_item,1,true,true,0,false,blocked,business_object_fact_reader_adapter_missing
+knowledge_job,1,false,false,0,false,blocked,object_type_unregistered
+treatment_summary,1,false,false,0,false,blocked,object_type_unregistered
