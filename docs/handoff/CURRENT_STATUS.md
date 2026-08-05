@@ -3,20 +3,23 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B4 剩余正式入口分类校准与完成审计前置预检收口
+## BASE-B4 剩余高风险正式入口治理决策收口
 
 - 更新日期：2026-08-05
-- 前置预检 PR #997：Merge Commit `78332c5add509bf2bcfb824e72c6daa339adac21`
-- 前置预检 Required Check：Run `30976780054`／Job `92212318227`
-- 独立审查 PR #998：Merge Commit `bf85ef84537e91ca965815787fe39b4693e52003`
-- 独立审查 Required Check：Run `30977574903`／Job `92214757965`
+- 治理决策 PR #1000：Head `4ca6888ed6689c4a5bb37a32d95f054460a07ba9`，Merge Commit `471d3cbf83a37cb9851755c0224e19832c25f6fc`
+- 治理决策 Required Check：Run `30980227677`
+- 独立审查 PR #1001：Head `abea7e67ba396632c8f5bc45a39c15cff6f25f27`，Merge Commit `6aed9aecebe41b094cbde4f50f96fc95abff30be`
+- 独立审查 Required Check：Run `30984417433`
 - routes：81
 - formal guarded Routes：15
-- independent Guard marker：0
-- policy confirmation required：0
 - governance required：66
-- strict low-risk candidates：0
-- completion audit ready：false
+- readonly dynamic object first slice：9
+- mutation／mixed：52
+- legacy／compatibility：3
+- demo／fixture：1
+- direct DB：0
+- external touch：1
+- CSV physical newline repair：passed
 - production change：0
 - business Reader／Capability：关闭
 - BASE-B4：未完成
@@ -24,23 +27,27 @@
 
 ### 唯一下一任务
 
-`BASE-B4 剩余高风险正式入口治理决策`
+`BASE-B4 只读动态对象正式入口 Object Guard 精确预检`
 
 ```text
-base_b4_remaining_entry_classification_preflight=passed
-base_b4_remaining_entry_classification_review=passed
+base_b4_high_risk_entry_governance_decision=approved
+base_b4_high_risk_entry_governance_review=passed
 route_count=81
 formal_guarded_route_count=15
-independent_guard_marker_count=0
-policy_confirmation_required_count=0
 governance_required_count=66
-strict_low_risk_candidate_count=0
-completion_audit_ready=false
+readonly_dynamic_object_count=9
+mutation_or_mixed_count=52
+legacy_or_compatibility_count=3
+demo_fixture_count=1
+direct_database_count=0
+external_touch_count=1
+csv_physical_newline_repair=passed
 production_change=false
+business_reader_release=false
+business_capability_release=false
 base_b4_complete=false
 base_b5_started=false
-next_task_reason=remaining_governance_required
-next_task=BASE-B4 剩余高风险正式入口治理决策
+next_task=BASE-B4 只读动态对象正式入口 Object Guard 精确预检
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
