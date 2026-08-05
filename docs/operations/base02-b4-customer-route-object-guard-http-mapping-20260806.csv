@@ -1,0 +1,6 @@
+stage,condition,http_status,response_code,response_error,inspect_request,inspect_context,invoke_handler,notes
+factory,malformed factory or unsupported constants,403,institution_object_forbidden,institution_route_forbidden,false,false,false,fail before authorization resolution
+section,authorization unavailable fake throw or customers denied,403,institution_object_forbidden,institution_route_forbidden,false,false,false,first fresh authorization instance
+parameter,customerId missing malformed proxy or accessor,403,institution_object_forbidden,institution_route_forbidden,false,after_section_allow_only,false,do not resolve object authorization
+object,scope_unavailable object_denied object_invalid object_unavailable object_stale action_unregistered action_role_denied policy_unavailable or throw,403,institution_object_forbidden,institution_route_forbidden,false,customerId_only,false,second fresh authorization instance; never expose internal guard code
+allow,genuine customer read allow with matching type action,preserve_handler,preserve_handler,preserve_handler,handler_contract_only,handler_contract_only,once,first slice preserves current 503 capability-disabled response and no-store header
