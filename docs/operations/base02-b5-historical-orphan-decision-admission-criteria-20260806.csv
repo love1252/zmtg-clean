@@ -1,0 +1,13 @@
+order,criterion,expected,actual,status
+1,BASE-B4 complete,true,true,passed
+2,BASE-B5 decision preplanning ready,true,true,passed
+3,frozen branch matrix available,true,true,passed
+4,accepted low-sensitive historical orphan evidence recorded,1/1,1/1,passed
+5,external authority evidence submitted,absence forces keep-blocked,0,passed
+6,exact target Scope authority admitted,absence forbids rebind,false,passed
+7,invalid-record and retention authority admitted,absence forbids delete/archive,false,passed
+8,selected branch explicit,B5_KEEP_BLOCKED,B5_KEEP_BLOCKED,passed
+9,database connection prohibited,0,0,passed
+10,DDL DML Migration Seed FK VALIDATE prohibited,0,0,passed
+11,Reader and business Capability remain closed,false,false,passed
+12,remediation authority remains closed,false,false,passed
