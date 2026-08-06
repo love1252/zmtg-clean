@@ -1068,3 +1068,19 @@ MIG-01
 - Reader、Capability、historical orphan 与 BASE-B5 均未放行。
 
 <!-- BASE02_B4_FULL_ENTRY_BYPASS_FINAL_RECOMPUTE_END -->
+
+<!-- BASE02_B4_COMPLETION_BASEB5_ORPHAN_PREPLAN_START -->
+
+## BASE-B4 完成与 BASE-B5 historical orphan 决策前置规划
+
+- BASE-B4 的 12 项完成标准已通过完成审计和独立复核；
+- 81 条机构 API Route 保持 18／63／0 的正式 Guard、治理型 fail-closed、ungoverned 分布；
+- 客户 Section/Object Guard 为 3／3；
+- Owner 外 Writer 与 lifecycle unresolved 均为 0；
+- BASE-B4 已标记 complete；
+- BASE-B5 的 5 个决策分支、权威证据和停止条件已冻结；
+- 保持阻断仍为默认；
+- historical orphan 未处置，数据库与 DML 未授权；
+- BASE-02、Reader 和 Capability 继续阻断。
+
+<!-- BASE02_B4_COMPLETION_BASEB5_ORPHAN_PREPLAN_END -->

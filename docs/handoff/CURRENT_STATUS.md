@@ -3,54 +3,47 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B4 全量入口 Guard／绕过闭环终检复算收口
+## BASE-B4 完成与 BASE-B5 orphan 决策前置规划收口
 
 - 更新日期：2026-08-06
-- 终检复算 PR #1031：Head `666c5c950a38990c7bb96fdbb7d0ac8b0c1143f8`，Merge Commit `3fc7019b292a76854844f0882580fc98e0b693c1`
-- 终检 Required Check：Run `31088647023`
-- 独立审查 PR #1032：Head `2ba4ed7dfe223b2e93b7920235b2dd3528238131`，Merge Commit `8824524652a7eafad2fa71fc2d98a6a916af79d7`
-- 独立审查 Required Check：Run `31089746541`
+- 完成审计 PR #1034：Head `20a39080a64f25ccfaa328010176db0d09c28c38`，Merge Commit `b59505681ba6230b00c44e59911e0a5c5380a49a`
+- 完成审计 Required Check：Run `31094600859`
+- 独立审查 PR #1035：Head `788ae6a3934682e96668d373e0ab1edf382e87d7`，Merge Commit `740b55d08a7bf83ee2efcc636ed4b72bf65dcb60`
+- 独立审查 Required Check：Run `31095616558`
+- BASE-B4 completion criteria：12／12 passed
 - API Route：81
-- formal Page：2
-- formal guarded Route：18
-- governed fail-closed Route：63
-- ungoverned Route：0
+- formal guarded／governed fail-closed／ungoverned：18／63／0
 - customer Section/Object wiring：3／3
-- remaining unwired customer Routes：0
-- Owner outside direct Writer：0
-- lifecycle unresolved：0
-- BASE-B4 completion candidate：true
-- BASE-B4：未完成，等待独立完成审计
+- Owner outside Writer／lifecycle unresolved：0／0
+- BASE-B4：complete
+- BASE-B5 decision preplanning：ready
 - BASE-B5：未启动
-- Reader／Capability release：false
+- historical orphan remediation：未授权
+- BASE-02：未完成
+- Reader／Capability：继续关闭
 - database／migration／DML：0
 
 ### 唯一下一任务
 
-`BASE-B4 完成审计与 BASE-B5 historical orphan 处置分支决策前置规划`
+`BASE-B5 historical orphan 权威处置分支决策与证据准入`
 
 ```text
-base_b4_full_entry_bypass_final_recompute=passed
-base_b4_full_entry_bypass_final_recompute_review=passed
-api_route_count=81
-formal_page_count=2
-formal_guarded_route_count=18
-governed_fail_closed_route_count=63
-ungoverned_route_count=0
-customer_section_guard_wiring_count=3
-customer_object_guard_wiring_count=3
-remaining_unwired_customer_route_count=0
-owner_outside_direct_writer_count=0
-lifecycle_unresolved_count=0
-base_b4_completion_candidate=true
-base_b4_complete=false
+base_b4_completion_audit=passed
+base_b4_completion_review=passed
+completion_criteria_count=12
+completion_criteria_passed=12
+base_b4_complete=true
+base_b5_decision_preplanning_ready=true
 base_b5_started=false
+historical_orphan_remediation_authorized=false
+live_readonly_reprobe_required=true
+base02_complete=false
 business_reader_release=false
 business_capability_release=false
 database_connection=false
 migration_execution=false
 dml_execution=false
-next_task=BASE-B4 完成审计与 BASE-B5 historical orphan 处置分支决策前置规划
+next_task=BASE-B5 historical orphan 权威处置分支决策与证据准入
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
