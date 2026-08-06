@@ -1496,3 +1496,15 @@
 - shared Guard change：forbidden；
 - production／Route wiring／Capability release：0；
 - 下一任务：`BASE-B4 客户随访时间线 Route Object Guard 最小接线`。
+
+<!-- BASE02_B4_CUSTOMER_FOLLOWUP_TIMELINE_OBJECT_GUARD_RELEASE_20260806 -->
+
+## 2026-08-06｜BASE-B4 客户三路 Object Guard 接线收口
+
+- 实施 PR #1028：Merge Commit `f36eced8f9631b99e6576dc66d18f4023375c8be`；
+- 独立审查 PR #1029：Merge Commit `3a9a752527c274d7b057c1cdf418beec85a58da7`；
+- current customer Section/Object wiring：3／3；
+- remaining unwired customer Routes：0；
+- 三条原 503 capability-disabled Handler：保留；
+- business Capability／Schema／Migration／database execution：0；
+- 下一任务：`BASE-B4 全量入口 Guard／绕过闭环终检复算`。

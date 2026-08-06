@@ -1039,3 +1039,17 @@ MIG-01
 - 业务随访时间线读取能力继续关闭。
 
 <!-- BASE02_B4_CUSTOMER_FOLLOWUP_TIMELINE_OBJECT_GUARD_ADMISSION_END -->
+
+<!-- BASE02_B4_CUSTOMER_THREE_ROUTE_OBJECT_GUARD_WIRING_START -->
+
+## BASE-B4 客户三路动态 Route Object Guard 接线收口
+
+- 客户完整时间线、随访概览、随访时间线均已接 customers／customer／read；
+- 所有 Guard 失败统一为低敏 no-store 403；
+- 三条原 503 capability-disabled Handler 均保留；
+- 当前客户 Section/Object Route 接线为 3／3；
+- remaining unwired customer Routes 为 0；
+- 业务客户读取能力继续关闭；
+- 下一步回到 BASE-B4 全量入口 Guard／绕过闭环终检复算。
+
+<!-- BASE02_B4_CUSTOMER_THREE_ROUTE_OBJECT_GUARD_WIRING_END -->
