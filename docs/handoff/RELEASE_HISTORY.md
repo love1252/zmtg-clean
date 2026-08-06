@@ -1522,3 +1522,16 @@
 - BASE-B4 completion candidate：true；
 - BASE-B4 complete：false；
 - 下一任务：`BASE-B4 完成审计与 BASE-B5 historical orphan 处置分支决策前置规划`。
+
+<!-- BASE02_B4_COMPLETION_BASEB5_ORPHAN_PREPLAN_RELEASE_20260806 -->
+
+## 2026-08-06｜BASE-B4 完成与 BASE-B5 orphan 决策前置规划收口
+
+- 完成审计 PR #1034：Merge Commit `b59505681ba6230b00c44e59911e0a5c5380a49a`；
+- 独立审查 PR #1035：Merge Commit `740b55d08a7bf83ee2efcc636ed4b72bf65dcb60`；
+- BASE-B4 completion criteria：12／12；
+- BASE-B4：complete；
+- BASE-B5 decision preplanning：ready；
+- historical orphan remediation：未授权；
+- database／DML／Reader／Capability：0；
+- 下一任务：`BASE-B5 historical orphan 权威处置分支决策与证据准入`。
