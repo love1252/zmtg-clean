@@ -1,4 +1,18 @@
 # 智美天工架构文档索引
+<!-- BASE02_B5_NO_AUTHORITY_SUBMISSION_START -->
+
+## BASE-B5 无权威业务依据输入提交（2026-08-06）
+
+- input submission received：`1`；
+- input validation：`passed`；
+- authority evidence submitted／admitted：`0／0`；
+- selected branch：`B5_KEEP_BLOCKED`；
+- live readonly reprobe：未执行；
+- remediation／database／Reader／Capability：未授权；
+- 下一任务：取得并提交可核验仓库外权威业务依据。
+
+<!-- BASE02_B5_NO_AUTHORITY_SUBMISSION_END -->
+
 
 <!-- BASE02_B5_EVIDENCE_INTAKE_START -->
 
