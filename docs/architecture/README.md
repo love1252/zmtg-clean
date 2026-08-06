@@ -1,5 +1,16 @@
 # 智美天工架构文档索引
 
+<!-- BASE02_B5_EVIDENCE_INTAKE_START -->
+
+## BASE-B5 仓库外权威业务依据提交契约（2026-08-06）
+
+- contract／template：`ready／ready`；
+- authority evidence submitted／admitted：`0／0`；
+- selected branch：`B5_KEEP_BLOCKED`；
+- remediation／database／Reader／Capability：未授权。
+
+<!-- BASE02_B5_EVIDENCE_INTAKE_END -->
+
 <!-- BASE02_B5_DECISION_GATE_START -->
 
 ## BASE-B5 historical orphan 权威处置决策门（2026-08-06）
