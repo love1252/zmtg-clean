@@ -1024,3 +1024,18 @@ MIG-01
 - 业务随访概览读取能力继续关闭。
 
 <!-- BASE02_B4_CUSTOMER_FOLLOWUP_OVERVIEW_OBJECT_GUARD_WIRING_END -->
+
+<!-- BASE02_B4_CUSTOMER_FOLLOWUP_TIMELINE_OBJECT_GUARD_ADMISSION_START -->
+
+## BASE-B4 客户随访时间线 Route Object Guard 接线准入收口
+
+- 共享 Object Route Guard 已就绪并通过独立审查；
+- 客户完整时间线与客户随访概览已接线；
+- 当前客户 Section/Object 接线为 2／2；
+- 客户随访时间线仍保持未接线的低敏 no-store 503；
+- 冻结 customers／customer／read 与 context.params.customerId；
+- 实施 allowlist 精确为 Route 与 Route 测试两个文件；
+- 共享 Guard 不允许修改；
+- 业务随访时间线读取能力继续关闭。
+
+<!-- BASE02_B4_CUSTOMER_FOLLOWUP_TIMELINE_OBJECT_GUARD_ADMISSION_END -->

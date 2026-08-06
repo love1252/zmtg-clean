@@ -3,20 +3,20 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B4 客户随访概览 Route Object Guard 最小接线收口
+## BASE-B4 客户随访时间线 Route Object Guard 接线准入收口
 
 - 更新日期：2026-08-06
-- 实施 PR #1022：Head `62a4457f16dcfb1a412d1046e4189234d6678501`，Merge Commit `c137a4ff73ea3298c0a89eb917ff38b3eb75ebc8`
-- 实施 Required Check：Run `31074745871`
-- 独立审查 PR #1023：Head `959f68ea4d81b27d7589705e925276e4590c0d21`，Merge Commit `f21f77ac21be66810aca688f7e1de27aba96de67`
-- 独立审查 Required Check：Run `31075510424`
-- implementation file count：2
-- shared Object Route Guard：reused unchanged
-- followup overview Section/Object wiring：true／true
-- current customer Section/Object wiring count：2／2
-- remaining unwired customer Routes：1
-- capability-disabled handlers：3
-- business followup overview read release：false
+- 准入 PR #1025：Head `a1ebf5beb760a0942edf229516886f6296f9e3f5`，Merge Commit `fbe04ffa90fb64ffe0046cca3fdd941509f2f997`
+- 准入 Required Check：Run `31080481330`
+- 独立审查 PR #1026：Head `804f22ffcdb8bdb93a1faf4a8e900f4a9a6333e6`，Merge Commit `414ed67e50fdef1ce07377599a2542d0023ce693`
+- 独立审查 Required Check：Run `31081345371`
+- shared Object Route Guard：ready／review passed
+- current customer Section/Object wiring：2／2
+- followup timeline current wiring：0／0
+- implementation allowlist：2
+- shared Guard change：forbidden
+- admission production change：0
+- business followup timeline read release：false
 - Schema／Migration／Seed：0
 - database connection／DML：0
 - BASE-B4：未完成
@@ -24,21 +24,21 @@
 
 ### 唯一下一任务
 
-`BASE-B4 客户随访时间线 Route Object Guard 接线前置准入`
+`BASE-B4 客户随访时间线 Route Object Guard 最小接线`
 
 ```text
-base_b4_customer_followup_overview_object_guard=implemented
-base_b4_customer_followup_overview_object_guard_review=passed
-implementation_file_count=2
-shared_object_route_guard_reused=true
-shared_guard_changed=false
-followup_overview_section_guard_wired=true
-followup_overview_object_guard_wired=true
+base_b4_customer_followup_timeline_object_guard_admission=approved
+base_b4_customer_followup_timeline_object_guard_admission_review=passed
+shared_object_route_guard_ready=true
 current_customer_section_guard_wiring_count=2
 current_customer_object_guard_wiring_count=2
+current_followup_timeline_section_guard_wired=false
+current_followup_timeline_object_guard_wired=false
 remaining_unwired_customer_route_count=1
-capability_disabled_handler_count=3
-business_followup_overview_read_release=false
+implementation_allowlist_count=2
+shared_guard_change_allowed=false
+route_wiring_in_admission=false
+business_followup_timeline_read_release=false
 schema_change=false
 migration_change=false
 seed_change=false
@@ -46,7 +46,7 @@ database_connection=false
 dml_execution=false
 base_b4_complete=false
 base_b5_started=false
-next_task=BASE-B4 客户随访时间线 Route Object Guard 接线前置准入
+next_task=BASE-B4 客户随访时间线 Route Object Guard 最小接线
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
