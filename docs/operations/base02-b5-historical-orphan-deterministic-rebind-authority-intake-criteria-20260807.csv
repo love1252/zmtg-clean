@@ -1,0 +1,23 @@
+order,criterion,expected,actual,status
+1,low-sensitive submission present,true,true,passed
+2,validation result present,true,true,passed
+3,submission checksum verified,true,true,passed
+4,validation checksum verified,true,true,passed
+5,authority source reference present,true,true,passed
+6,authority original remains outside repository,true,true,passed
+7,authority verifiable,true,true,passed
+8,applicable record reference present,true,true,passed
+9,record scope unambiguous,true,true,passed
+10,requested branch B5_DETERMINISTIC_REBIND,B5_DETERMINISTIC_REBIND,B5_DETERMINISTIC_REBIND,passed
+11,exact target Scope authority reference present,true,true,passed
+12,exact target Scope authority verifiable,true,true,passed
+13,PII absent,false,false,passed
+14,raw tenant institution keys absent,false,false,passed
+15,database credentials absent,false,false,passed
+16,secrets tokens absent,false,false,passed
+17,unredacted database export absent,false,false,passed
+18,remediation authorization remains false,false,false,passed
+19,database connection authorization remains false,false,false,passed
+20,DML authorization remains false,false,false,passed
+21,independent admission review still required,true,true,passed
+22,live readonly reprobe still required,true,true,passed
