@@ -1,5 +1,14 @@
 # 项目重构历史
 
+## 2026-08-06：BASE-B5 仓库外权威业务依据提交契约
+
+- 提交契约 PR #1040 合并：`93517235c307c86b22ded333bb741a788b2a6984`；
+- 独立审查 PR #1041 合并：`71eb0162f901170a23e38b6efe1f9d89f58b4aa4`；
+- contract/template 已 ready，空白模板不计为证据，当前提交／准入仍为 `0／0`；
+- `B5_KEEP_BLOCKED`、Reader 关闭和 BASE-02 未完成状态保持不变；
+- 未连接数据库，未执行 Migration、DML、Seed 或 FK VALIDATE。
+
+
 ## 2026-08-06：BASE-B5 historical orphan 权威处置决策门
 
 - 权威决策 PR #1037 合并：`7171acc1ad603a00a840f3fbffc211556424544a`；

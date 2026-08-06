@@ -3,16 +3,15 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B5 historical orphan 权威处置决策门收口
+## BASE-B5 仓库外权威业务依据提交契约收口
 
 - 更新日期：2026-08-06
-- 权威决策 PR #1037：Merge Commit `7171acc1ad603a00a840f3fbffc211556424544a`
-- 独立审查 PR #1038：Merge Commit `ae1013d5836903fd3d5266f3050b92e5e0597199`
-- BASE-B4：complete
-- BASE-B5 decision preplanning：ready
+- 提交契约 PR #1040：Merge Commit `93517235c307c86b22ded333bb741a788b2a6984`
+- 独立审查 PR #1041：Merge Commit `71eb0162f901170a23e38b6efe1f9d89f58b4aa4`
 - BASE-B5：started，但未完成
-- 权威证据提交／准入：0／0
-- 已选择分支：`B5_KEEP_BLOCKED`
+- selected branch：`B5_KEEP_BLOCKED`
+- evidence submission contract／input template：ready／ready
+- authority evidence submitted／admitted：0／0
 - historical orphan remediation：未授权
 - live readonly reprobe：required，未执行
 - BASE-02：未完成
@@ -21,13 +20,11 @@
 
 ### 唯一下一任务
 
-`BASE-B5 仓库外权威业务依据补充与重新准入`
+`填写并提交 BASE-B5 仓库外权威业务依据输入表`
 
 ```text
-base_b4_complete=true
-base_b5_decision_preplanning_ready=true
-base_b5_started=true
-base_b5_decision_gate=passed
+base_b5_evidence_submission_contract_ready=true
+base_b5_evidence_input_template_ready=true
 base_b5_selected_branch=B5_KEEP_BLOCKED
 base_b5_complete=false
 authority_evidence_submitted_count=0
@@ -40,7 +37,7 @@ business_capability_release=false
 database_connection=false
 migration_execution=false
 dml_execution=false
-next_task=BASE-B5 仓库外权威业务依据补充与重新准入
+next_task=填写并提交 BASE-B5 仓库外权威业务依据输入表
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
