@@ -1009,3 +1009,18 @@ MIG-01
 - 本轮未修改生产 Route，未开放业务读取能力。
 
 <!-- BASE02_B4_CUSTOMER_FOLLOWUP_OVERVIEW_OBJECT_GUARD_ADMISSION_END -->
+
+<!-- BASE02_B4_CUSTOMER_FOLLOWUP_OVERVIEW_OBJECT_GUARD_WIRING_START -->
+
+## BASE-B4 客户随访概览 Route Object Guard 最小接线收口
+
+- 复用既有共享 Object Route Guard，未修改共享 Guard；
+- 客户随访概览已接 customers／customer／read；
+- customerId 仅来自 context.params.customerId；
+- 所有 Guard 失败统一为低敏 no-store 403；
+- 原 503 capability-disabled Handler 保留；
+- 当前客户 Section/Object Route 接线为 2／2；
+- 客户随访时间线仍未接线；
+- 业务随访概览读取能力继续关闭。
+
+<!-- BASE02_B4_CUSTOMER_FOLLOWUP_OVERVIEW_OBJECT_GUARD_WIRING_END -->
