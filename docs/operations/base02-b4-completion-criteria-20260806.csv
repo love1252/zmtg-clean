@@ -1,0 +1,13 @@
+order,criterion,expected,actual,status,evidence
+1,all_institution_api_routes_enumerated,81,81,passed,docs/operations/base02-b4-full-entry-bypass-final-recompute-inventory-20260806.csv
+2,formal_guarded_routes,18,18,passed,docs/operations/base02-b4-full-entry-bypass-final-recompute-independent-review-20260806.md
+3,governed_fail_closed_routes,63,63,passed,docs/operations/base02-b4-full-entry-bypass-final-recompute-independent-review-20260806.md
+4,ungoverned_routes,0,0,passed,docs/operations/base02-b4-full-entry-bypass-final-recompute-independent-review-20260806.md
+5,customer_section_object_wiring,3/3,3/3,passed,three customer dynamic routes
+6,owner_outside_direct_writer,0,0,passed,docs/operations/base02-b4-lifecycle-bypass-final-recompute-20260806.csv
+7,lifecycle_unresolved,0,0,passed,docs/operations/base02-b4-lifecycle-bypass-final-recompute-20260806.csv
+8,business_reader_release,false,false,passed,docs/operations/base02-b4-full-entry-bypass-final-recompute-independent-review-20260806.md
+9,business_capability_release,false,false,passed,docs/operations/base02-b4-full-entry-bypass-final-recompute-independent-review-20260806.md
+10,audit_template_expansion_in_b4,false,false,passed,docs/operations/base02-readiness-plan-20260801.md
+11,schema_migration_database_dml,0/0/0/0,0/0/0/0,passed,task execution boundary
+12,historical_orphan_remediation_in_b4,false,false,passed,docs/operations/base02-readiness-plan-20260801.md
