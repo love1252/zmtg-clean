@@ -3,15 +3,15 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B5 仓库外权威业务依据提交契约收口
+## BASE-B5 无权威业务依据输入提交收口
 
 - 更新日期：2026-08-06
-- 提交契约 PR #1040：Merge Commit `93517235c307c86b22ded333bb741a788b2a6984`
-- 独立审查 PR #1041：Merge Commit `71eb0162f901170a23e38b6efe1f9d89f58b4aa4`
-- BASE-B5：started，但未完成
-- selected branch：`B5_KEEP_BLOCKED`
-- evidence submission contract／input template：ready／ready
+- 输入与准入 PR #1043：Merge Commit `712c2385d85844a4f1f4299dc956cd436dcf2aa9`
+- 独立审查 PR #1044：Merge Commit `9dfdc8438d36046b42eb0435b48278b94f402cc8`
+- authority evidence input submission received：1
 - authority evidence submitted／admitted：0／0
+- selected branch：`B5_KEEP_BLOCKED`
+- BASE-B5：started，但未完成
 - historical orphan remediation：未授权
 - live readonly reprobe：required，未执行
 - BASE-02：未完成
@@ -20,24 +20,27 @@
 
 ### 唯一下一任务
 
-`填写并提交 BASE-B5 仓库外权威业务依据输入表`
+`取得并提交 BASE-B5 可核验仓库外权威业务依据`
 
 ```text
 base_b5_evidence_submission_contract_ready=true
 base_b5_evidence_input_template_ready=true
-base_b5_selected_branch=B5_KEEP_BLOCKED
-base_b5_complete=false
+authority_evidence_input_submission_received_count=1
+authority_evidence_input_submission_validation=passed
 authority_evidence_submitted_count=0
 authority_evidence_admitted_count=0
+base_b5_selected_branch=B5_KEEP_BLOCKED
+base_b5_complete=false
 historical_orphan_remediation_authorized=false
 live_readonly_reprobe_required=true
+live_readonly_reprobe_executed=false
 base02_complete=false
 business_reader_release=false
 business_capability_release=false
 database_connection=false
 migration_execution=false
 dml_execution=false
-next_task=填写并提交 BASE-B5 仓库外权威业务依据输入表
+next_task=取得并提交 BASE-B5 可核验仓库外权威业务依据
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->

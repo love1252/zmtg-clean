@@ -1,5 +1,17 @@
 # 项目重构历史
 
+## 2026-08-06：BASE-B5 无权威业务依据输入提交
+
+- 输入与准入 PR #1043 合并：`712c2385d85844a4f1f4299dc956cd436dcf2aa9`；
+- 独立审查 PR #1044 合并：`9dfdc8438d36046b42eb0435b48278b94f402cc8`；
+- 输入表接收数量：1；
+- authority evidence submitted／admitted：`0／0`；
+- selected branch 继续为 `B5_KEEP_BLOCKED`；
+- 未启动 live readonly reprobe；
+- 未连接数据库，未执行 Migration、DML、Seed 或 FK VALIDATE；
+- Reader、业务 Capability、BASE-B5 和 BASE-02 完成状态继续关闭。
+
+
 ## 2026-08-06：BASE-B5 仓库外权威业务依据提交契约
 
 - 提交契约 PR #1040 合并：`93517235c307c86b22ded333bb741a788b2a6984`；
