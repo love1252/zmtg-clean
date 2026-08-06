@@ -1442,3 +1442,17 @@
 - first-slice allowlist：4；
 - production／Route wiring／Capability release：0；
 - 下一任务：`BASE-B4 客户完整时间线 Route Object Guard 最小接线`。
+
+<!-- BASE02_B4_CUSTOMER_TIMELINE_OBJECT_GUARD_RELEASE_20260806 -->
+
+## 2026-08-06｜BASE-B4 客户完整时间线 Object Guard 最小接线收口
+
+- 实施 PR #1016：Merge Commit `8ee7007a38cce52bab664dd609b2e93ff7073b2a`；
+- 独立审查 PR #1017：Merge Commit `f66bbfbd1a8ccc29d33be2954eb760ce9fe236ea`；
+- implementation files：4；
+- shared Object Route Guard：implemented；
+- current customer Section/Object wiring：1／1；
+- remaining unwired customer Routes：2；
+- 原 503 capability-disabled Handler：保留；
+- business Capability／Schema／Migration／database execution：0；
+- 下一任务：`BASE-B4 客户随访概览 Route Object Guard 接线前置准入`。
