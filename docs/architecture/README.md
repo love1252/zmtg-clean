@@ -995,3 +995,17 @@ MIG-01
 - 业务 Timeline 读取能力继续关闭。
 
 <!-- BASE02_B4_CUSTOMER_TIMELINE_OBJECT_GUARD_WIRING_END -->
+
+<!-- BASE02_B4_CUSTOMER_FOLLOWUP_OVERVIEW_OBJECT_GUARD_ADMISSION_START -->
+
+## BASE-B4 客户随访概览 Object Guard 接线准入收口
+
+- shared Object Route Guard 已就绪并通过独立审查；
+- 客户随访概览当前仍未接线；
+- customers／customer／read 与 customerId 来源已冻结；
+- 首次实施严格限制 Route 与测试 2 文件；
+- 共享 Guard 不允许修改；
+- 原低敏 no-store 503 Handler 必须保留；
+- 本轮未修改生产 Route，未开放业务读取能力。
+
+<!-- BASE02_B4_CUSTOMER_FOLLOWUP_OVERVIEW_OBJECT_GUARD_ADMISSION_END -->
