@@ -1,5 +1,16 @@
 # 项目重构历史
 
+## 2026-08-06：BASE-B5 historical orphan 权威处置决策门
+
+- 权威决策 PR #1037 合并：`7171acc1ad603a00a840f3fbffc211556424544a`；
+- 独立审查 PR #1038 合并：`ae1013d5836903fd3d5266f3050b92e5e0597199`；
+- 本轮未收到仓库外权威业务依据，证据提交／准入为 `0／0`；
+- 明确选择 `B5_KEEP_BLOCKED`；
+- BASE-B5 已启动但未完成，remediation 继续未授权；
+- 未连接数据库，未执行 Migration、DML、Seed 或 FK VALIDATE；
+- Reader、业务 Capability 与 BASE-02 完成状态继续关闭。
+
+
 ## 2026-07-25
 
 - 创建目录重构基线。
