@@ -1,0 +1,13 @@
+order,criterion,expected,status
+1,acceptable authority sources defined,true,passed
+2,input template low-sensitive,true,passed
+3,PII raw keys credentials exports prohibited,true,passed
+4,all five branches represented,true,passed
+5,rebind requires exact Scope authority,true,passed
+6,Provisioning remains separate,true,passed
+7,delete archive requires invalid-record and retention authority,true,passed
+8,blank template is not submitted evidence,true,passed
+9,blank template is not admitted evidence,true,passed
+10,B5_KEEP_BLOCKED remains selected,true,passed
+11,database and mutations remain prohibited,true,passed
+12,Reader Capability BASE-B5 BASE-02 remain closed,true,passed
