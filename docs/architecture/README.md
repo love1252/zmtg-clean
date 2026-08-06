@@ -980,3 +980,18 @@ MIG-01
 - 允许后仍保留原 capability-disabled 503 Handler。
 
 <!-- BASE02_B4_CUSTOMER_ROUTE_OBJECT_GUARD_PREFLIGHT_END -->
+
+<!-- BASE02_B4_CUSTOMER_TIMELINE_OBJECT_GUARD_WIRING_START -->
+
+## BASE-B4 客户完整时间线 Route Object Guard 最小接线收口
+
+- 共享 Section + Dynamic Object Route Guard 已实施；
+- Section 与 Object 各使用 fresh Authorization；
+- Context 仅在 Section allow 后读取；
+- 客户完整时间线已接 customers／customer／read；
+- 所有 Guard 失败统一为低敏 no-store 403；
+- 原 503 capability-disabled Handler 保留；
+- 另外两条客户 Route 仍未接线；
+- 业务 Timeline 读取能力继续关闭。
+
+<!-- BASE02_B4_CUSTOMER_TIMELINE_OBJECT_GUARD_WIRING_END -->

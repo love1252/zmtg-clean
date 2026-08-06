@@ -3,49 +3,43 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B4 客户 Route Object Guard 前置预检收口
+## BASE-B4 客户完整时间线 Route Object Guard 最小接线收口
 
 - 更新日期：2026-08-06
-- 前置预检 PR #1013：Head `407fca9c4a49234b2f235b2f925289fad0809401`，Merge Commit `d2ebbba20de588fce4f9303704005943118dd100`
-- 前置预检 Required Check：Run `31032804657`
-- 独立审查 PR #1014：Head `99ced815bff8c852cdcfe173e02b6a1dee3b3fba`，Merge Commit `75313609f776f39abea8cbefac89e5556093dbbc`
-- 独立审查 Required Check：Run `31034047964`
-- customer routes：3
-- customer Reader Adapter：1
-- shared Section wrapper：存在
-- shared Object wrapper：不存在
-- current customer Section/Object wiring：0／0
-- current capability-disabled handlers：3
+- 实施 PR #1016：Head `0069f74df3f7ac51c10692534ff55ac211035265`，Merge Commit `8ee7007a38cce52bab664dd609b2e93ff7073b2a`
+- 实施 Required Check：Run `31038702254`
+- 独立审查 PR #1017：Head `5dfee4869ba8965b4b60221bc9551d8ce04a7025`，Merge Commit `f66bbfbd1a8ccc29d33be2954eb760ce9fe236ea`
+- 独立审查 Required Check：Run `31065979563`
+- implementation files：4
+- shared Object Route Guard：implemented
 - authorization strategy：fresh instance per gate
-- first slice：客户完整时间线
-- first-slice allowlist：4
-- preflight production change：0
-- Route wiring：0
-- business Capability release：false
+- current customer Section/Object wiring：1／1
+- remaining unwired customer Routes：2
+- capability-disabled handlers：3
+- business Timeline read release：false
 - BASE-B4：未完成
 - BASE-B5：未启动
 
 ### 唯一下一任务
 
-`BASE-B4 客户完整时间线 Route Object Guard 最小接线`
+`BASE-B4 客户随访概览 Route Object Guard 接线前置准入`
 
 ```text
-base_b4_customer_route_object_guard_preflight=passed
-base_b4_customer_route_object_guard_preflight_review=passed
-customer_route_count=3
-production_object_fact_reader_adapter_count=1
-shared_section_route_guard_exists=true
-shared_object_route_guard_exists=false
-current_customer_section_guard_wiring_count=0
-current_customer_object_guard_wiring_count=0
+base_b4_customer_timeline_object_guard=implemented
+base_b4_customer_timeline_object_guard_review=passed
+implementation_file_count=4
+shared_object_route_guard=implemented
 authorization_instance_strategy=fresh_instance_per_gate
-first_slice_route_count=1
-first_slice_implementation_allowlist_count=4
-route_wiring_in_preflight=false
-business_capability_release=false
+customer_timeline_section_guard_wired=true
+customer_timeline_object_guard_wired=true
+current_customer_section_guard_wiring_count=1
+current_customer_object_guard_wiring_count=1
+remaining_unwired_customer_route_count=2
+capability_disabled_handler_count=3
+business_timeline_read_release=false
 base_b4_complete=false
 base_b5_started=false
-next_task=BASE-B4 客户完整时间线 Route Object Guard 最小接线
+next_task=BASE-B4 客户随访概览 Route Object Guard 接线前置准入
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
