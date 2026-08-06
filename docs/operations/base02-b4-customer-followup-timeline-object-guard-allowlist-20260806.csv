@@ -1,0 +1,3 @@
+order,path,change_type,responsibility,required_tests
+1,src/app/api/institution/customers/[customerId]/followup-timeline/route.ts,modify,wire existing shared customers customer read guard,authorized preserves 503 denied 403 no-store
+2,src/modules/institution/tests/CustomerFollowUpTimelineApiRoute.test.ts,modify,followup timeline route guard compatibility,section before context object second handler disabled
