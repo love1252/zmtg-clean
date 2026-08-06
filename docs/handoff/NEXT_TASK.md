@@ -3,34 +3,37 @@
 ## 唯一下一任务
 
 ```text
-BASE-B4 全量入口 Guard／绕过闭环终检复算
+BASE-B4 完成审计与 BASE-B5 historical orphan 处置分支决策前置规划
 ```
 
 ## 当前基线
 
-- shared Object Route Guard：已实施并通过独立审查；
-- customer complete timeline wiring：已完成；
-- customer followup overview wiring：已完成；
-- customer followup timeline wiring：已完成；
-- current customer Section/Object wiring：3／3；
-- remaining unwired customer Routes：0；
-- 三条 Handler 继续保持 capability-disabled；
-- business customer read：继续关闭；
-- BASE-B4：未完成，等待全量入口终检复算；
-- BASE-B5：未启动。
+- BASE-B4 全量入口终检复算：passed；
+- independent recompute：passed；
+- API Route：81；
+- formal guarded Route：18；
+- governed fail-closed Route：63；
+- ungoverned Route：0；
+- customer Section/Object wiring：3／3；
+- Owner outside direct Writer：0；
+- lifecycle unresolved：0；
+- BASE-B4 completion candidate：true；
+- BASE-B4 complete：false；
+- BASE-B5 started：false。
 
 ## 任务目标
 
-1. 基于最新 main 重新枚举全部机构入口；
-2. 复算 formal guarded、capability-off、dynamic object 与 lifecycle 分类；
-3. 复核 Membership／Binding Owner、Writer／Deleter 与运维入口；
-4. 复核三条客户动态 Route 的 Section／Object Guard 接线；
-5. 判定 BASE-B4 是否具备 completion candidate；
-6. 只做静态终检复算，不开放 Reader 或业务 Capability。
+1. 独立复核 BASE-B4 的全部完成条件；
+2. 复核 Guard、Writer、Reader、Capability、Audit、绕过和生命周期证据；
+3. 明确 completion candidate 与正式 complete 的差异；
+4. 判定 BASE-B4 是否可以关闭；
+5. 仅在 BASE-B4 关闭后，形成 BASE-B5 historical orphan 处置分支决策准入。
 
 ## 禁止范围
 
-- 不修改生产 Route、Guard、Reader、Runtime 或 Security 核心；
-- 不开放客户、知识库或其他业务真实读取；
-- 不连接数据库，不执行 DDL、DML、Migration 或 Seed；
-- 不启动 BASE-B5～B6。
+- 不修改生产 Runtime、Route、Guard、Reader 或 Writer；
+- 不连接数据库；
+- 不处置 historical orphan；
+- 不执行 FK VALIDATE、DDL、DML、Migration 或 Seed；
+- 不放行业务 Reader 或 Capability；
+- 不直接启动 BASE-B5 实施。

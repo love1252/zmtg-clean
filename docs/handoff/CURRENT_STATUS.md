@@ -3,49 +3,54 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B4 客户三路动态 Route Object Guard 接线收口
+## BASE-B4 全量入口 Guard／绕过闭环终检复算收口
 
 - 更新日期：2026-08-06
-- 实施 PR #1028：Head `638a4370cf880320bd81e8e1fed38300d5252a01`，Merge Commit `f36eced8f9631b99e6576dc66d18f4023375c8be`
-- 实施 Required Check：Run `31084636401`
-- 独立审查 PR #1029：Head `18cc1ca7cef67f0db88b4ab94bb73d4668e9da38`，Merge Commit `3a9a752527c274d7b057c1cdf418beec85a58da7`
-- 独立审查 Required Check：Run `31085605579`
-- implementation file count：2
-- shared Object Route Guard：reused unchanged
-- customer complete timeline wiring：true
-- customer followup overview wiring：true
-- customer followup timeline wiring：true
-- current customer Section/Object wiring count：3／3
+- 终检复算 PR #1031：Head `666c5c950a38990c7bb96fdbb7d0ac8b0c1143f8`，Merge Commit `3fc7019b292a76854844f0882580fc98e0b693c1`
+- 终检 Required Check：Run `31088647023`
+- 独立审查 PR #1032：Head `2ba4ed7dfe223b2e93b7920235b2dd3528238131`，Merge Commit `8824524652a7eafad2fa71fc2d98a6a916af79d7`
+- 独立审查 Required Check：Run `31089746541`
+- API Route：81
+- formal Page：2
+- formal guarded Route：18
+- governed fail-closed Route：63
+- ungoverned Route：0
+- customer Section/Object wiring：3／3
 - remaining unwired customer Routes：0
-- capability-disabled handlers：3
-- business customer read release：false
-- Schema／Migration／Seed：0
-- database connection／DML：0
-- BASE-B4：未完成，等待全量终检复算
+- Owner outside direct Writer：0
+- lifecycle unresolved：0
+- BASE-B4 completion candidate：true
+- BASE-B4：未完成，等待独立完成审计
 - BASE-B5：未启动
+- Reader／Capability release：false
+- database／migration／DML：0
 
 ### 唯一下一任务
 
-`BASE-B4 全量入口 Guard／绕过闭环终检复算`
+`BASE-B4 完成审计与 BASE-B5 historical orphan 处置分支决策前置规划`
 
 ```text
-base_b4_customer_followup_timeline_object_guard=implemented
-base_b4_customer_followup_timeline_object_guard_review=passed
-shared_object_route_guard_reused=true
-shared_guard_changed=false
-current_customer_section_guard_wiring_count=3
-current_customer_object_guard_wiring_count=3
+base_b4_full_entry_bypass_final_recompute=passed
+base_b4_full_entry_bypass_final_recompute_review=passed
+api_route_count=81
+formal_page_count=2
+formal_guarded_route_count=18
+governed_fail_closed_route_count=63
+ungoverned_route_count=0
+customer_section_guard_wiring_count=3
+customer_object_guard_wiring_count=3
 remaining_unwired_customer_route_count=0
-capability_disabled_handler_count=3
-business_customer_read_release=false
-schema_change=false
-migration_change=false
-seed_change=false
-database_connection=false
-dml_execution=false
+owner_outside_direct_writer_count=0
+lifecycle_unresolved_count=0
+base_b4_completion_candidate=true
 base_b4_complete=false
 base_b5_started=false
-next_task=BASE-B4 全量入口 Guard／绕过闭环终检复算
+business_reader_release=false
+business_capability_release=false
+database_connection=false
+migration_execution=false
+dml_execution=false
+next_task=BASE-B4 完成审计与 BASE-B5 historical orphan 处置分支决策前置规划
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->

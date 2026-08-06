@@ -1053,3 +1053,18 @@ MIG-01
 - 下一步回到 BASE-B4 全量入口 Guard／绕过闭环终检复算。
 
 <!-- BASE02_B4_CUSTOMER_THREE_ROUTE_OBJECT_GUARD_WIRING_END -->
+
+<!-- BASE02_B4_FULL_ENTRY_BYPASS_FINAL_RECOMPUTE_START -->
+
+## BASE-B4 全量入口 Guard／绕过闭环终检复算收口
+
+- 81 条机构 API Route 已重新枚举；
+- 18 条正式 Guard Route 与 63 条治理型 fail-closed Route 精确覆盖；
+- ungoverned Route 为 0；
+- 客户三条动态 Route Section/Object Guard 为 3／3；
+- Owner 外直接 Writer 与 lifecycle unresolved 均为 0；
+- BASE-B4 completion candidate 为 true；
+- BASE-B4 仍需独立完成审计，不在本轮直接标记 complete；
+- Reader、Capability、historical orphan 与 BASE-B5 均未放行。
+
+<!-- BASE02_B4_FULL_ENTRY_BYPASS_FINAL_RECOMPUTE_END -->

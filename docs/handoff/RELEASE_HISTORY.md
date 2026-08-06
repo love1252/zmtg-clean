@@ -1508,3 +1508,17 @@
 - 三条原 503 capability-disabled Handler：保留；
 - business Capability／Schema／Migration／database execution：0；
 - 下一任务：`BASE-B4 全量入口 Guard／绕过闭环终检复算`。
+
+<!-- BASE02_B4_FULL_ENTRY_BYPASS_FINAL_RECOMPUTE_RELEASE_20260806 -->
+
+## 2026-08-06｜BASE-B4 全量入口终检复算收口
+
+- 终检复算 PR #1031：Merge Commit `3fc7019b292a76854844f0882580fc98e0b693c1`；
+- 独立审查 PR #1032：Merge Commit `8824524652a7eafad2fa71fc2d98a6a916af79d7`；
+- API Route：81；
+- formal guarded／governed fail-closed／ungoverned：18／63／0；
+- customer Section/Object wiring：3／3；
+- Owner outside direct Writer／lifecycle unresolved：0／0；
+- BASE-B4 completion candidate：true；
+- BASE-B4 complete：false；
+- 下一任务：`BASE-B4 完成审计与 BASE-B5 historical orphan 处置分支决策前置规划`。
