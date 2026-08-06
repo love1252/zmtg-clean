@@ -1,5 +1,21 @@
 # 智美天工架构文档索引
 
+<!-- BASE02_B5_DECISION_GATE_START -->
+
+## BASE-B5 historical orphan 权威处置决策门（2026-08-06）
+
+- 权威证据提交／准入：`0／0`；
+- 选择分支：`B5_KEEP_BLOCKED`；
+- BASE-B5：started，未完成；
+- remediation：未授权；
+- live readonly reprobe：required，未执行；
+- Reader／Capability／BASE-02 complete：false；
+- 决策记录：[`../operations/base02-b5-historical-orphan-authoritative-decision-20260806.md`](../operations/base02-b5-historical-orphan-authoritative-decision-20260806.md)；
+- 证据准入：[`../operations/base02-b5-historical-orphan-authority-evidence-admission-20260806.md`](../operations/base02-b5-historical-orphan-authority-evidence-admission-20260806.md)；
+- 独立审查：[`../operations/base02-b5-historical-orphan-authority-decision-independent-review-20260806.md`](../operations/base02-b5-historical-orphan-authority-decision-independent-review-20260806.md)。
+
+<!-- BASE02_B5_DECISION_GATE_END -->
+
 - 任务：BASE-02 ULTRA Binding provenance accepted decision handoff（无正式 `V2-*` 编号）
 - 日期：`2026-08-02 CST +0800`
 - 审计基线：`85bac25f48f930f260dbed2ac9b8dd16b23cbe68`

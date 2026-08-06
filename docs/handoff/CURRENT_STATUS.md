@@ -3,38 +3,35 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B4 完成与 BASE-B5 orphan 决策前置规划收口
+## BASE-B5 historical orphan 权威处置决策门收口
 
 - 更新日期：2026-08-06
-- 完成审计 PR #1034：Head `20a39080a64f25ccfaa328010176db0d09c28c38`，Merge Commit `b59505681ba6230b00c44e59911e0a5c5380a49a`
-- 完成审计 Required Check：Run `31094600859`
-- 独立审查 PR #1035：Head `788ae6a3934682e96668d373e0ab1edf382e87d7`，Merge Commit `740b55d08a7bf83ee2efcc636ed4b72bf65dcb60`
-- 独立审查 Required Check：Run `31095616558`
-- BASE-B4 completion criteria：12／12 passed
-- API Route：81
-- formal guarded／governed fail-closed／ungoverned：18／63／0
-- customer Section/Object wiring：3／3
-- Owner outside Writer／lifecycle unresolved：0／0
+- 权威决策 PR #1037：Merge Commit `7171acc1ad603a00a840f3fbffc211556424544a`
+- 独立审查 PR #1038：Merge Commit `ae1013d5836903fd3d5266f3050b92e5e0597199`
 - BASE-B4：complete
 - BASE-B5 decision preplanning：ready
-- BASE-B5：未启动
+- BASE-B5：started，但未完成
+- 权威证据提交／准入：0／0
+- 已选择分支：`B5_KEEP_BLOCKED`
 - historical orphan remediation：未授权
+- live readonly reprobe：required，未执行
 - BASE-02：未完成
 - Reader／Capability：继续关闭
 - database／migration／DML：0
 
 ### 唯一下一任务
 
-`BASE-B5 historical orphan 权威处置分支决策与证据准入`
+`BASE-B5 仓库外权威业务依据补充与重新准入`
 
 ```text
-base_b4_completion_audit=passed
-base_b4_completion_review=passed
-completion_criteria_count=12
-completion_criteria_passed=12
 base_b4_complete=true
 base_b5_decision_preplanning_ready=true
-base_b5_started=false
+base_b5_started=true
+base_b5_decision_gate=passed
+base_b5_selected_branch=B5_KEEP_BLOCKED
+base_b5_complete=false
+authority_evidence_submitted_count=0
+authority_evidence_admitted_count=0
 historical_orphan_remediation_authorized=false
 live_readonly_reprobe_required=true
 base02_complete=false
@@ -43,7 +40,7 @@ business_capability_release=false
 database_connection=false
 migration_execution=false
 dml_execution=false
-next_task=BASE-B5 historical orphan 权威处置分支决策与证据准入
+next_task=BASE-B5 仓库外权威业务依据补充与重新准入
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
