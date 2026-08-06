@@ -1,0 +1,13 @@
+order,criterion,expected,actual,status
+1,input submission received,1,1,passed
+2,input submission SHA-256 verified,true,true,passed
+3,input is low-sensitive,true,true,passed
+4,input states authority evidence unavailable,true,true,passed
+5,authority evidence submitted count remains zero,0,0,passed
+6,authority evidence admitted count remains zero,0,0,passed
+7,requested branch remains B5_KEEP_BLOCKED,B5_KEEP_BLOCKED,B5_KEEP_BLOCKED,passed
+8,no exact target Scope authority,false,false,passed
+9,no provisioning approval,false,false,passed
+10,no invalid-record and retention authority,false,false,passed
+11,no database readonly reprobe executed,false,false,passed
+12,no remediation DML Migration Reader or Capability authorization,false,false,passed
