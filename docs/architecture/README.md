@@ -1,4 +1,20 @@
 # 智美天工架构文档索引
+<!-- BASE02_B5_TRANSFER_RUNNER_IMPLEMENTATION_CLOSURE_START -->
+
+## BASE-B5 Controlled Runner 实现收口（2026-08-08）
+
+- Implementation PR：#1067 / `10bcaf1a7609512d32e71a212809060d91afec03`；
+- Independent Review：#1068 / `d5de0603f2bde493b90939fb35522c02e5c8c1be`；
+- exact files：2；
+- controlled execution entry：present；
+- runner type：one-shot CLI；
+- database execution：未授权；
+- local_acceptance dry-run：未执行；
+- future manifest code SHA：绑定 Handoff 后 reviewed clean main HEAD；
+- 下一任务：readonly preflight + private manifest + dry-run 独立授权。
+
+<!-- BASE02_B5_TRANSFER_RUNNER_IMPLEMENTATION_CLOSURE_END -->
+
 <!-- BASE02_B5_TRANSFER_RUNNER_ADMISSION_START -->
 
 ## BASE-B5 Controlled Execution Runner 准入（2026-08-08）

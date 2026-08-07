@@ -3,59 +3,75 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B5 Controlled Execution Runner 准入收口
+## BASE-B5 Controlled Runner 2-file 实现收口
 
 - 更新日期：2026-08-08
-- Runner Admission PR #1064：Merge Commit `ffcc8e516cfbd39801aca1c928c59e5a895501f6`
-- Independent Review PR #1065：Merge Commit `15e6ec79939d99fc8181a5ac47dcdd3c3dd6b4f1`
-- runner admission：passed
-- runner type：one-shot CLI
-- exact allowlist：2 files
-- package.json/lockfile change：0
-- Schema/Migration change：0
-- existing transfer foundation change：0
-- runner implementation：未授权
-- DB execution：未授权
-- historical orphan remediation：未授权
+- Runner Implementation PR #1067：Merge Commit `10bcaf1a7609512d32e71a212809060d91afec03`
+- Independent Review PR #1068：Merge Commit `d5de0603f2bde493b90939fb35522c02e5c8c1be`
+- runner implementation：passed
+- independent review：passed
+- exact file count：2
+- third file change：false
+- controlled execution entry：present
+- one-shot CLI：true
+- long-lived API：false
+- package.json/Schema/Migration/既有 transfer foundation change：0
+- actual database connection：0
+- local_acceptance dry-run：0
+- execute：0
 - BASE-B5 execution ready：false
 - BASE-B5／BASE-02：未完成
 - Reader／Capability：继续关闭
 
-### Frozen runner allowlist
+### Implemented runner
 
 ```text
 scripts/db/base02-b5-cross-tenant-transfer-runner.mjs
 scripts/db/base02-b5-cross-tenant-transfer-runner.test.mjs
 ```
 
-### Runner protocol
+### 验证
 
 ```text
-one_shot_cli=true
-localhost_only=true
-local_acceptance_only=true
-secure_private_manifest=true
-execute_requires_secure_lease=true
-dry_run_readonly_only=true
-automatic_retry=0
-outcome_unknown_readonly_reconcile=true
+runner_targeted_tests=36/36
+architecture_tests=148/148
+full_test_files=455/455
+full_tests=6494/6494
+lint=0_errors_existing_warnings_only
+typecheck=passed
+build=passed
+architecture_diff=passed
+required_check=success
+```
+
+### 执行边界
+
+```text
+controlled_execution_entry_present=true
+runner_code_ready_for_readonly_preflight=true
+
+database_execution_authorized=false
+local_acceptance_dry_run_authorized=false
+historical_orphan_remediation_authorized=false
+
 fk_validate=false
+reader_release=false
+capability_release=false
 ```
 
 ### 唯一下一任务
 
-`BASE-B5 跨 tenant transfer controlled execution runner 2-file 最小实现授权与执行`
+`BASE-B5 controlled runner local_acceptance readonly preflight、private manifest 签发与 dry-run 授权执行`
 
 ```text
-controlled_execution_runner_admission_passed=true
-controlled_execution_runner_exact_allowlist_frozen=true
-controlled_execution_runner_exact_file_count=2
-
-runner_implementation_authorized=false
-database_execution_authorized=false
-historical_orphan_remediation_authorized=false
+controlled_runner_implementation=passed
+controlled_runner_independent_review=passed
+controlled_execution_entry_present=true
+runner_code_ready_for_readonly_preflight=true
 
 database_connection=false
+local_acceptance_dry_run=false
+execute_run=false
 migration_execution=false
 dml_execution=false
 ddl_execution=false
@@ -68,7 +84,7 @@ base02_complete=false
 business_reader_release=false
 business_capability_release=false
 
-next_task=BASE-B5 跨 tenant transfer controlled execution runner 2-file 最小实现授权与执行
+next_task=BASE-B5 controlled runner local_acceptance readonly preflight、private manifest 签发与 dry-run 授权执行
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->

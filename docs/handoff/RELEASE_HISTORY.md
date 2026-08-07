@@ -1,5 +1,17 @@
 # 项目重构历史
 
+## 2026-08-08：BASE-B5 Controlled Runner 2-file 实现收口
+
+- Runner Implementation PR #1067 合并：`10bcaf1a7609512d32e71a212809060d91afec03`；
+- Independent Review PR #1068 合并：`d5de0603f2bde493b90939fb35522c02e5c8c1be`；
+- exact runner diff：2 files；
+- targeted 36/36、architecture 148/148、full 6494/6494、typecheck/build 通过；
+- controlled execution entry 已存在；
+- 本轮没有数据库连接、local_acceptance dry-run、execute、DDL/DML/Migration 或 remediation；
+- future manifest code SHA 必须绑定 Handoff 后 reviewed clean main HEAD；
+- 下一任务：local_acceptance readonly preflight、private manifest 签发与 dry-run 授权执行。
+
+
 ## 2026-08-08：BASE-B5 Controlled Execution Runner 准入收口
 
 - Runner Admission PR #1064 合并：`ffcc8e516cfbd39801aca1c928c59e5a895501f6`；
