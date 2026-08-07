@@ -1,0 +1,13 @@
+path,actual_db_mutation,mutation_call_count,mutation_methods,table_symbols,classification,proposed_owner,proposed_action,runtime_change_authorized
+src/modules/institution/components/CustomerCenterShell.tsx,false,0,none,none,static_false_positive,none,exclude,false
+src/modules/institution/components/InstitutionNavigationShell.tsx,false,0,none,none,static_false_positive,none,exclude,false
+src/modules/institution/domain/wecom-customer-mapping-review-actions.ts,false,0,none,none,static_false_positive,none,exclude,false
+src/modules/institution/domain/wecom-customer-mapping-review.ts,false,0,none,none,static_false_positive,none,exclude,false
+src/modules/institution/domain/wecom-real-send-proof.ts,false,0,none,none,static_false_positive,none,exclude,false
+src/modules/institution/server/tenant-business-repository.ts,true,17,insert|update,appointments|customers|followUpCustomerTimelineEvents|followUpMessageDrafts|followUpPathEnrollments|followUpPathStages|followUpTasks,real_mixed_legacy_writer,Customers,split_customers_core,false
+src/modules/institution/server/treatment-summary-repository.ts,true,3,insert|update,treatmentSummaries,real_writer_wrong_slice,Care,reassign_W2_CARE,false
+src/modules/institution/server/trial-provisioning-service.ts,true,4,insert,appointments|customers|followUpTasks|treatmentSummaries,real_provisioning_writer,Provisioning,separate_provisioning_review,false
+src/modules/institution/server/trusted-reachout-safety-repository.ts,true,5,insert|update,customerChannelContactConsents|customerChannelFrequencyStates|institutionChannelDryRunSnapshots,real_messaging_writer,Customers/Messaging,defer_W1B_W1C,false
+src/modules/institution/server/wecom-customer-broadcast-task-outcome-repository.ts,true,2,insert|update,weComCustomerBroadcastTaskProviderAttempts,real_messaging_writer,Customers/Messaging,defer_W1B_W1C,false
+src/modules/institution/server/wecom-customer-mapping-repository.ts,true,2,insert|update,weComCustomerMappingStates,real_messaging_writer,Customers/Messaging,defer_W1B_W1C,false
+src/modules/institution/server/wecom-real-send-proof-repository.ts,true,7,insert|update,auditEvents|customerChannelFrequencyStates|weComRealSendProofOperations,real_messaging_writer,Customers/Messaging,defer_W1B_W1C,false

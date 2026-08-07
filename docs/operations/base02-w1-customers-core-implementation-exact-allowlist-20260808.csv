@@ -1,0 +1,7 @@
+path,role,change_kind,required,implementation_authorized
+src/modules/customers/application/customer-command-service.ts,new_customers_application_owner,create,true,false
+src/modules/customers/server/customer-command-repository.ts,new_customers_canonical_writer,create,true,false
+src/modules/customers/tests/CustomerCommandService.test.ts,application_contract_tests,create,true,false
+src/modules/customers/tests/CustomerCommandRepository.test.ts,writer_attribution_negative_tests,create,true,false
+src/modules/institution/server/tenant-business-repository.ts,legacy_customer_writer_blockade,modify,true,false
+src/modules/institution/tests/TenantBusinessRepository.test.ts,legacy_regression_tests,modify,true,false
