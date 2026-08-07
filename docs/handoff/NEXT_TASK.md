@@ -3,39 +3,22 @@
 ## 唯一下一任务
 
 ```text
-BASE-B6 BASE-02 completion audit、Option 1 supersession reconciliation 与 physical FK terminal strategy preplanning
+BASE-02 post-closure business Writer dual-write / old Writer blockade admission
 ```
 
 ## 已完成
 
-- BASE-B1～B4 治理/实现链已完成；
-- BASE-B5 cross-tenant transfer foundation 已完成；
-- controlled runner admission / implementation / Independent Review 已完成；
-- localhost-only readonly preflight 已通过；
-- private manifest / secure lease 已签发并消费；
-- one-time execute 已严格执行 1 次；
-- execute result=`applied_verified`；
-- outcome=`committed`；
-- fresh independent postcheck=`passed`；
-- active authorization orphan=`0`；
-- active Scope relation orphan=`0`；
-- retained revoked historical relation orphan=`1`；
-- BASE-B5 已完成。
-
-## 当前 BASE-02 状态
-
 ```text
-base_b5_complete=true
-base02_complete=false
-reader_release=false
-capability_release=false
+BASE-B1 complete
+BASE-B2 complete
+BASE-B3 complete
+BASE-B4 complete
+BASE-B5 complete
+BASE-B6 completion audit passed
+BASE-02 complete
 ```
 
-## 为什么下一步是 BASE-B6 audit
-
-早期 BASE-02 readiness plan 的 BASE-B6 硬门形成于 Option 1 ADR 之前，其中包含“全部物理 relation orphan=0”的旧口径。
-
-后续 accepted Option 1 已 supersede 该口径：
+当前授权完整性终态：
 
 ```text
 active authorization orphan = 0
@@ -43,24 +26,61 @@ active Scope relation orphan = 0
 retained revoked historical relation orphan = 1 expected
 ```
 
-因此 BASE-B6 必须先完成：
+## BASE-02 完成不代表什么
 
-1. BASE-B1～B5 独立证据总审计；
-2. 对旧 BASE-B6 success gate 做 Option 1 supersession reconciliation；
-3. 核对 Owner / Session / Membership / Binding / Scope revision / Guard / bypass matrix；
-4. 判断 BASE-02 是否已经满足当前业务授权完整性完成标准；
-5. 将 physical FK 与业务完成标准明确分离；
-6. 冻结 physical FK terminal strategy 的候选路径与后续授权边界；
-7. 在没有独立 Schema/Migration 授权时不得选择或实施物理约束改造；
-8. Reader / Capability 仍不得放行。
+仍未放行：
+
+- business Reader；
+- business Capability；
+- 全业务 Writer；
+- Audit attribution / templates；
+- MIG-01B；
+- MIG-01C；
+- physical FK VALIDATE；
+- production release。
+
+## 下一阶段目标
+
+按照既有顺序进入：
+
+```text
+全部业务 Writer 双写
++
+旧 Writer / bypass 封堵
+```
+
+下一任务先做 admission，不直接批量修改代码。
+
+必须：
+
+1. 重新枚举机构端各业务事实 Writer；
+2. 按 Customers / Care / Knowledge / Conversations / Analytics / Institution System 等 Owner 分类；
+3. 冻结 `tenantId + institutionId` attribution 写入契约；
+4. 识别旧 Writer、直写 Repository、Seed/fixture/import/maintenance 绕过；
+5. 按垂直切片给出 exact allowlist；
+6. 不把 Access Control Binding lifecycle Writer 与业务 Writer 混为一类；
+7. Reader/Capability 继续关闭。
+
+## Physical FK 独立边界
+
+B6 已完成 terminal strategy preplanning，但尚未决策。
+
+候选：
+
+```text
+PFK-1 active-only constraint trigger
+PFK-2 derived active relation projection + standard FK
+PFK-3 current/history physical split
+PFK-0 keep NOT VALID (temporary only)
+```
+
+physical FK terminal ADR 是 MIG-01C 前置，不与 business Writer admission 混做。
 
 ## 当前禁止
 
-- 不自动连接数据库；
-- 不执行 DDL/DML/Migration/Seed；
+- 未经新授权不得批量修改业务 Writer；
+- 不执行数据库连接、DDL、DML、Migration、Seed；
 - 不执行 FK VALIDATE；
-- 不再执行 BASE-B5 transfer；
-- 不修改 historical Binding tuple；
-- 不删除/归档 historical Binding；
+- 不删除/归档/改写 historical Binding；
 - 不开放 Reader/Capability；
-- 不做生产连接或生产变更。
+- 不做生产变更。

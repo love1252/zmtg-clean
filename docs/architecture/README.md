@@ -1,4 +1,38 @@
 # 智美天工架构文档索引
+<!-- BASE02_B6_COMPLETION_START -->
+
+## BASE-B6 / BASE-02 Completion（2026-08-08）
+
+```text
+base_b1_complete=true
+base_b2_complete=true
+base_b3_complete=true
+base_b4_complete=true
+base_b5_complete=true
+base_b6_completion_audit=passed
+base_b6_independent_review=passed
+
+base02_complete=true
+
+active_authorization_orphan_count=0
+active_scope_relation_orphan_count=0
+retained_revoked_historical_relation_orphan_count=1
+
+reader_release=false
+capability_release=false
+
+physical_fk_strategy_resolved=false
+fk_validate=false
+```
+
+Option 1 supersedes BASE-B6 的旧 all-row relation-orphan=0 业务完成口径，但不自动放行 Reader/MIG-01C/FK VALIDATE。
+
+下一任务：
+
+`BASE-02 post-closure business Writer dual-write / old Writer blockade admission`
+
+<!-- BASE02_B6_COMPLETION_END -->
+
 <!-- BASE02_B5_EXECUTION_CLOSURE_START -->
 
 ## BASE-B5 Execution 最终收口（2026-08-08）
