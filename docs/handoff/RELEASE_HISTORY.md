@@ -1,5 +1,19 @@
 # 项目重构历史
 
+## 2026-08-07：BASE-B5 relation-orphan 终态与成功标准 ADR 收口
+
+- 用户确认 Option 1：保持 M09-A immutable/no-delete；
+- ADR Decision PR #1055 合并：`0dea160ad1267f9ddd74c7d9bba0279cd0c71616`；
+- Independent Review PR #1056 合并：`0dd90c40c54c47e7958881b692ae38df97a036c5`；
+- active authorization orphan 与 active Scope relation orphan 必须清零；
+- revoked 且 evidence 完整的 historical relation orphan 允许保留 1；
+- XT09 架构冲突解除，XT10 仍需实际执行与独立 postcheck；
+- cross-tenant transfer implementation/execution 继续未授权；
+- 未连接数据库，未执行 DDL、DML、Migration、Membership/Binding 写入或 remediation；
+- BASE-B5、BASE-02、Reader、Capability 继续关闭；
+- 下一任务：BASE-B5 跨 tenant transfer orchestration 实现准入与 exact allowlist 冻结。
+
+
 ## 2026-08-07：BASE-B5 跨 tenant Membership／Transfer 决策准入收口
 
 - 决策准入 PR #1052 合并：`426a320957389b248c43e2f868a8feee1f7ca07c`；

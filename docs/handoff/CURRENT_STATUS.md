@@ -3,49 +3,52 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B5 跨 tenant Membership／Transfer 决策准入收口
+## BASE-B5 relation-orphan 终态与成功标准 ADR 收口
 
 - 更新日期：2026-08-07
-- 决策准入 PR #1052：Merge Commit `426a320957389b248c43e2f868a8feee1f7ca07c`
-- 独立审查 PR #1053：Merge Commit `696c3541a013e703431485caed51c7880545f448`
-- 用户 XT01–XT10 选择：已确认
-- XT01–XT08：accepted / accepted-for-preplanning
-- XT09：blocked_invariant_conflict
-- XT10：blocked_by_xt09
-- cross-tenant transfer orchestration preplanning：已准入
-- implementation：未授权
-- BASE-B5 success criteria conflict：true
+- ADR Decision PR #1055：Merge Commit `0dea160ad1267f9ddd74c7d9bba0279cd0c71616`
+- Independent Review PR #1056：Merge Commit `0dd90c40c54c47e7958881b692ae38df97a036c5`
+- accepted option：`1 / active authorization zero + retained history`
+- M09-A immutable/no-delete：保持
+- historical Binding tuple rewrite：禁止
+- active authorization orphan：必须 0
+- active Scope relation orphan：必须 0
+- revoked + evidence-complete historical relation orphan：允许保留 1
+- XT09：resolved_by_adr
+- XT10：execution_still_required
+- cross-tenant transfer implementation：未授权
 - BASE-B5 execution ready：false
-- historical orphan remediation：未授权
+- BASE-B5：未完成
 - BASE-02：未完成
 - Reader／Capability：继续关闭
-- database／migration／DML：0
+- database／Migration／DML：0
 
 ### 唯一下一任务
 
-`BASE-B5 跨 tenant relation-orphan 终态处置分支与成功标准 ADR 决策`
+`BASE-B5 跨 tenant transfer orchestration 实现准入与 exact allowlist 冻结`
 
 ```text
-base_b5_selected_branch=B5_DETERMINISTIC_REBIND
-business_scope_linkage_confirmed=true
-cross_tenant_target=true
+relation_orphan_terminal_state_option=1
+relation_orphan_success_criteria_adr=accepted
+relation_orphan_success_criteria_independent_review=passed
 
-xt01_accepted=true
-xt02_accepted=true
-xt03_accepted=true
-xt04_accepted=true
-xt05_preplanning_accepted=true
-xt06_preplanning_accepted=true
-xt07_preplanning_accepted=true
-xt08_accepted=true
-xt09_technical_admission=blocked_invariant_conflict
-xt10_technical_admission=blocked_by_xt09
+m09a_immutable_preserved=true
+binding_no_delete_preserved=true
+historical_binding_tuple_rewrite=false
 
-cross_tenant_transfer_orchestration_preplanning_admitted=true
+active_authorization_orphan_must_zero=true
+active_scope_relation_orphan_must_zero=true
+retained_revoked_historical_relation_orphan_allowed=true
+retained_revoked_historical_relation_orphan_expected_count=1
+
+xt09_technical_admission=resolved_by_adr
+xt10_release_boundary_decision=execution_still_required
+
+cross_tenant_transfer_design_ready=true
 cross_tenant_transfer_implementation_authorized=false
 cross_tenant_transfer_execution_authorized=false
 
-base_b5_success_criteria_conflict=true
+base_b5_success_criteria_conflict=false
 base_b5_execution_ready=false
 historical_orphan_remediation_authorized=false
 
@@ -59,7 +62,7 @@ base02_complete=false
 business_reader_release=false
 business_capability_release=false
 
-next_task=BASE-B5 跨 tenant relation-orphan 终态处置分支与成功标准 ADR 决策
+next_task=BASE-B5 跨 tenant transfer orchestration 实现准入与 exact allowlist 冻结
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
