@@ -1,4 +1,22 @@
 # 智美天工架构文档索引
+<!-- BASE02_B5_TRANSFER_RUNNER_ADMISSION_START -->
+
+## BASE-B5 Controlled Execution Runner 准入（2026-08-08）
+
+- runner type：one-shot CLI；
+- exact allowlist：2 files；
+- secure manifest：required；
+- execute lease：required；
+- local_acceptance only：true；
+- dry-run readonly only：true；
+- outcome unknown auto-retry：0；
+- FK VALIDATE：forbidden；
+- implementation：未授权；
+- database execution：未授权；
+- 下一任务：2-file runner 最小实现授权与执行。
+
+<!-- BASE02_B5_TRANSFER_RUNNER_ADMISSION_END -->
+
 <!-- BASE02_B5_TRANSFER_IMPLEMENTATION_CLOSURE_START -->
 
 ## BASE-B5 Cross-Tenant Transfer 4-file 实现收口（2026-08-08）
