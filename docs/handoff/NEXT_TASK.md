@@ -3,50 +3,64 @@
 ## 唯一下一任务
 
 ```text
-BASE-B5 controlled runner local_acceptance readonly preflight、private manifest 签发与 dry-run 授权执行
+BASE-B6 BASE-02 completion audit、Option 1 supersession reconciliation 与 physical FK terminal strategy preplanning
 ```
 
 ## 已完成
 
-- cross-tenant transfer 4-file foundation 已完成并独立审查；
-- controlled runner admission 已通过；
-- controlled runner 2-file implementation PR #1067 已合并；
-- Runner Independent Review 已通过；
-- exact runner diff 为 2 文件；
-- controlled execution entry 已存在；
-- targeted / architecture / full tests / typecheck / build / Required Check 全部通过；
-- 本阶段没有实际连接数据库，没有执行 local_acceptance dry-run/execute。
+- BASE-B1～B4 治理/实现链已完成；
+- BASE-B5 cross-tenant transfer foundation 已完成；
+- controlled runner admission / implementation / Independent Review 已完成；
+- localhost-only readonly preflight 已通过；
+- private manifest / secure lease 已签发并消费；
+- one-time execute 已严格执行 1 次；
+- execute result=`applied_verified`；
+- outcome=`committed`；
+- fresh independent postcheck=`passed`；
+- active authorization orphan=`0`；
+- active Scope relation orphan=`0`；
+- retained revoked historical relation orphan=`1`；
+- BASE-B5 已完成。
 
-## 下一任务目标
-
-下一任务不是 remediation execution，而是先完成**只读现场准入**：
-
-1. 新取得 localhost-only `local_acceptance` 数据库只读授权；
-2. 只允许 `SELECT` / read-only transaction；
-3. 禁止 DDL/DML/Migration/Seed/FK VALIDATE；
-4. 通过只读现场重新定位 source/target technical tuple；
-5. 生成仓库外 `0600` private manifest；
-6. manifest `expectedCodeSha` 必须绑定当时已 review 的 clean `main` HEAD；
-7. 只读计算 journal/schema fingerprint；
-8. 执行 runner `--dry-run` 一次；
-9. 输出低敏 ready/blocked 结果；
-10. 不生成 execution lease，不执行 `--execute`。
-
-## 当前仍禁止
-
-- 未授权前不得连接数据库；
-- 不执行 `--execute`；
-- 不执行 Membership/Binding 实际数据库写入；
-- 不执行 historical orphan remediation；
-- 不执行 FK VALIDATE；
-- 不开放 Reader/Capability；
-- 不做生产变更；
-- 不宣称 BASE-B5/BASE-02 完成。
-
-## 新授权要求
-
-进入下一任务必须取得类似以下明确授权：
+## 当前 BASE-02 状态
 
 ```text
-授权连接本机 localhost-only local_acceptance 数据库，执行 BASE-B5 controlled runner readonly preflight、仓库外 private manifest 签发与一次 --dry-run；仅允许 SELECT/read-only transaction，禁止 --execute、DDL、DML、Migration、Seed、FK VALIDATE、Membership/Binding 数据写入、historical orphan remediation 和生产连接。
+base_b5_complete=true
+base02_complete=false
+reader_release=false
+capability_release=false
 ```
+
+## 为什么下一步是 BASE-B6 audit
+
+早期 BASE-02 readiness plan 的 BASE-B6 硬门形成于 Option 1 ADR 之前，其中包含“全部物理 relation orphan=0”的旧口径。
+
+后续 accepted Option 1 已 supersede 该口径：
+
+```text
+active authorization orphan = 0
+active Scope relation orphan = 0
+retained revoked historical relation orphan = 1 expected
+```
+
+因此 BASE-B6 必须先完成：
+
+1. BASE-B1～B5 独立证据总审计；
+2. 对旧 BASE-B6 success gate 做 Option 1 supersession reconciliation；
+3. 核对 Owner / Session / Membership / Binding / Scope revision / Guard / bypass matrix；
+4. 判断 BASE-02 是否已经满足当前业务授权完整性完成标准；
+5. 将 physical FK 与业务完成标准明确分离；
+6. 冻结 physical FK terminal strategy 的候选路径与后续授权边界；
+7. 在没有独立 Schema/Migration 授权时不得选择或实施物理约束改造；
+8. Reader / Capability 仍不得放行。
+
+## 当前禁止
+
+- 不自动连接数据库；
+- 不执行 DDL/DML/Migration/Seed；
+- 不执行 FK VALIDATE；
+- 不再执行 BASE-B5 transfer；
+- 不修改 historical Binding tuple；
+- 不删除/归档 historical Binding；
+- 不开放 Reader/Capability；
+- 不做生产连接或生产变更。

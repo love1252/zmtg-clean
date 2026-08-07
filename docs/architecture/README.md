@@ -1,4 +1,33 @@
 # 智美天工架构文档索引
+<!-- BASE02_B5_EXECUTION_CLOSURE_START -->
+
+## BASE-B5 Execution 最终收口（2026-08-08）
+
+```text
+execute_attempt_count=1
+execute_status=applied_verified
+outcome_classification=committed
+independent_postcheck=passed
+automatic_retry=false
+second_execute=false
+
+active_authorization_orphan_count=0
+active_scope_relation_orphan_count=0
+retained_revoked_historical_relation_orphan_count=1
+
+base_b5_complete=true
+base02_complete=false
+
+physical_fk_strategy_resolved=false
+fk_validate=false
+```
+
+下一任务：
+
+`BASE-B6 BASE-02 completion audit、Option 1 supersession reconciliation 与 physical FK terminal strategy preplanning`
+
+<!-- BASE02_B5_EXECUTION_CLOSURE_END -->
+
 <!-- BASE02_B5_TRANSFER_RUNNER_IMPLEMENTATION_CLOSURE_START -->
 
 ## BASE-B5 Controlled Runner 实现收口（2026-08-08）

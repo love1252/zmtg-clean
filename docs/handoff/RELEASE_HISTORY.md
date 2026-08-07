@@ -1,5 +1,26 @@
 # 项目重构历史
 
+## 2026-08-08：BASE-B5 one-time execute 最终收口
+
+- BASE-B5 controlled runner one-time execute 严格执行 1 次；
+- execute result：`applied_verified`；
+- outcome classification：`committed`；
+- fresh independent postcheck：passed；
+- source Membership revoked，source active Binding=0；
+- target Membership/Binding/Scope active=1/1/1；
+- active authorization orphan=0；
+- active Scope relation orphan=0；
+- retained revoked historical relation orphan=1；
+- Membership/Binding evidence=2/2；
+- automatic retry=0，second execute=0；
+- no direct SQL DML，no Migration/DDL/Seed/FK VALIDATE；
+- accepted Option 1 terminal semantics satisfied；
+- BASE-B5 complete=true；
+- BASE-02 仍未完成，Reader/Capability 继续关闭；
+- physical FK strategy 保持独立未决；
+- 下一任务：BASE-B6 completion audit + Option 1 supersession reconciliation + physical FK terminal strategy preplanning。
+
+
 ## 2026-08-08：BASE-B5 Controlled Runner 2-file 实现收口
 
 - Runner Implementation PR #1067 合并：`10bcaf1a7609512d32e71a212809060d91afec03`；
