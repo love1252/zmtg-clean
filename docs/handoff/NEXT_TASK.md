@@ -3,37 +3,38 @@
 ## 唯一下一任务
 
 ```text
-取得并提交 BASE-B5 可核验仓库外权威业务依据
+执行 BASE-B5 B5_DETERMINISTIC_REBIND live readonly reprobe
 ```
 
 ## 当前基线
 
-- 输入表已接收并通过低敏安全校验：1；
-- 仓库外权威业务依据 submitted／admitted：`0／0`；
-- selected branch：`B5_KEEP_BLOCKED`；
+- 可核验权威业务依据 submitted／admitted：`1／1`；
+- admitted branch：`B5_DETERMINISTIC_REBIND`；
 - BASE-B5：未完成；
+- historical orphan remediation：未授权；
 - live readonly reprobe：required，未执行；
 - BASE-02：未完成；
 - Reader／Capability：继续关闭。
 
-## 需要取得的真实依据
+## 下一任务目标
 
-以下任一类均可作为后续重新准入输入：
+在单独授权的只读数据库连接中核验：
 
-1. 正式组织归属确认；
-2. 具备责任权限的业务负责人决定；
-3. 已批准的 Tenancy／Scope Provisioning 决定；
-4. 已批准的记录无效认定和数据保留政策；
-5. 可审计治理工单。
+1. 当前 historical orphan 仍然唯一存在；
+2. 仓库外权威依据指向的目标机构 Scope 在现场存在；
+3. 目标 Scope 唯一，不存在同名或多候选歧义；
+4. historical orphan 当前没有被其他任务修改；
+5. 当前 Binding、Scope、Membership 和证据表形状符合预期；
+6. 只读复核不执行任何 DDL、DML、Migration、Seed 或 FK VALIDATE。
 
-材料必须具备签发角色、签发日期、适用记录范围和低敏来源引用。不得依赖模型推断、聊天记录、仓库计数或“只有一个 Scope”的推断。
+## 当前仍禁止
 
-## 当前禁止范围
-
-- 不启动 live readonly reprobe；
-- 不连接数据库；
-- 不执行 DDL、DML、Migration、Seed 或 FK VALIDATE；
+- 本任务收口本身不连接数据库；
+- 不执行确定性重绑；
+- 不修改 Binding；
 - 不创建 Scope；
-- 不放行 Reader 或业务 Capability；
-- 不把输入表接收写成权威证据已提交或已准入；
+- 不执行 DDL、DML、Migration、Seed 或 FK VALIDATE；
+- 不开放 Reader 或业务 Capability；
 - 不把 BASE-B5 或 BASE-02 写成已完成。
+
+live readonly reprobe 必须由下一份独立脚本明确列出连接边界、SQL 白名单、输出脱敏规则、停止条件和执行授权。

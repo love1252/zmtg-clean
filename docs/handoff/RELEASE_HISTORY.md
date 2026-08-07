@@ -1,5 +1,18 @@
 # 项目重构历史
 
+## 2026-08-07：BASE-B5 确定性重绑权威依据准入
+
+- 权威依据提交与初审 PR #1046 合并：`d5da4a409d728d6cf4b7263e96d9f489a68e2b86`；
+- 独立准入审查 PR #1047 合并：`c86f879616d723888167d716ca0197f913e38e88`；
+- authority evidence submitted／admitted：`1／1`；
+- selected branch 更新为 `B5_DETERMINISTIC_REBIND`；
+- BASE-B5 仍未完成；
+- historical orphan remediation 仍未授权；
+- live readonly reprobe required，尚未执行；
+- 未连接数据库，未执行 Migration、DML、Seed 或 FK VALIDATE；
+- Reader、业务 Capability 和 BASE-02 完成状态继续关闭。
+
+
 ## 2026-08-06：BASE-B5 无权威业务依据输入提交
 
 - 输入与准入 PR #1043 合并：`712c2385d85844a4f1f4299dc956cd436dcf2aa9`；

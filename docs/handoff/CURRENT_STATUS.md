@@ -3,14 +3,14 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B5 无权威业务依据输入提交收口
+## BASE-B5 确定性重绑权威依据准入收口
 
-- 更新日期：2026-08-06
-- 输入与准入 PR #1043：Merge Commit `712c2385d85844a4f1f4299dc956cd436dcf2aa9`
-- 独立审查 PR #1044：Merge Commit `9dfdc8438d36046b42eb0435b48278b94f402cc8`
-- authority evidence input submission received：1
-- authority evidence submitted／admitted：0／0
-- selected branch：`B5_KEEP_BLOCKED`
+- 更新日期：2026-08-07
+- 权威依据提交与初审 PR #1046：Merge Commit `d5da4a409d728d6cf4b7263e96d9f489a68e2b86`
+- 独立准入审查 PR #1047：Merge Commit `c86f879616d723888167d716ca0197f913e38e88`
+- authority evidence input submission received：2
+- authority evidence submitted／admitted：1／1
+- selected branch：`B5_DETERMINISTIC_REBIND`
 - BASE-B5：started，但未完成
 - historical orphan remediation：未授权
 - live readonly reprobe：required，未执行
@@ -20,16 +20,17 @@
 
 ### 唯一下一任务
 
-`取得并提交 BASE-B5 可核验仓库外权威业务依据`
+`执行 BASE-B5 B5_DETERMINISTIC_REBIND live readonly reprobe`
 
 ```text
 base_b5_evidence_submission_contract_ready=true
 base_b5_evidence_input_template_ready=true
-authority_evidence_input_submission_received_count=1
-authority_evidence_input_submission_validation=passed
-authority_evidence_submitted_count=0
-authority_evidence_admitted_count=0
-base_b5_selected_branch=B5_KEEP_BLOCKED
+authority_evidence_input_submission_received_count=2
+authority_evidence_submitted_count=1
+authority_evidence_admitted_count=1
+authority_evidence_independent_review=passed
+authority_evidence_admitted_branch=B5_DETERMINISTIC_REBIND
+base_b5_selected_branch=B5_DETERMINISTIC_REBIND
 base_b5_complete=false
 historical_orphan_remediation_authorized=false
 live_readonly_reprobe_required=true
@@ -40,7 +41,7 @@ business_capability_release=false
 database_connection=false
 migration_execution=false
 dml_execution=false
-next_task=取得并提交 BASE-B5 可核验仓库外权威业务依据
+next_task=执行 BASE-B5 B5_DETERMINISTIC_REBIND live readonly reprobe
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
