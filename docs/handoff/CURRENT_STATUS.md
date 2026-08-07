@@ -3,70 +3,71 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B5 Execution 最终收口
+## BASE-02 / BASE-B6 最终完成状态
 
 - 更新日期：2026-08-08
-- Execution Base：`93dfeba3972fb25c74fecf6a6159935d73bcd1a7`
-- Execution Independent Closure Review PR #1070：Merge Commit `2abc0d97bafd3a6bc8757b04f6a3216d20dbc4c2`
-- Execution Handoff PR #pending：Merge Commit `pending`
-- one-time execute：1/1
-- execute result：`applied_verified`
-- outcome classification：`committed`
-- fresh independent postcheck：passed
-- automatic retry：0
-- second execute：0
-- direct SQL DML：0
-- controlled Membership/Binding write：executed
-- historical orphan remediation：executed
-- Migration/DDL/Seed/FK VALIDATE：0
-- production connection/change：0
+- B6 Completion Audit PR #1072：`312417468f5006235eca946a443873d8ad3a7ebe`
+- B6 Independent Review PR #1073：`a8c25ebe3e7cf795d3d0fe699a8fd0493bda4de2`
+- B6 Handoff PR：本收口 PR
+- BASE-B1：complete
+- BASE-B2：complete
+- BASE-B3：complete
+- BASE-B4：complete
+- BASE-B5：complete
+- BASE-B6 completion audit：passed
+- BASE-02：complete
+- business Reader：closed
+- capability：closed
+- physical FK strategy：unresolved
+- FK VALIDATE：false
 
-### Accepted Option 1 terminal state
+### Current authorization terminal state
 
 ```text
-source_membership_revoked_count=1
-source_membership_active_count=0
-source_active_binding_count=0
-
-target_membership_active_count=1
-target_active_binding_count=1
-target_scope_active_count=1
-
 active_authorization_orphan_count=0
 active_scope_relation_orphan_count=0
-
 retained_revoked_historical_relation_orphan_count=1
+option1_terminal_state_satisfied=true
+```
 
-membership_evidence_count=2
-binding_evidence_count=2
-journal_match=true
+### Option 1 supersession
+
+旧 B6：
+
+```text
+all physical Scope relation orphan = 0
+```
+
+当前 accepted B6：
+
+```text
+active authorization orphan = 0
+active Scope relation orphan = 0
+one revoked/evidence-complete historical relation orphan retained
 ```
 
 ### Completion
 
 ```text
-base_b5_execution_succeeded=true
-base_b5_independent_closure_review=passed
+base_b1_complete=true
+base_b2_complete=true
+base_b3_complete=true
+base_b4_complete=true
 base_b5_complete=true
+base_b6_completion_audit=passed
+base_b6_independent_review=passed
 
-base02_complete=false
+base02_complete=true
+
 reader_release=false
 capability_release=false
-```
-
-### Physical FK boundary
-
-```text
-retained_historical_relation_orphan_count=1
 physical_fk_strategy_resolved=false
 fk_validate=false
 ```
 
-BASE-B5 成功不表示当前 physical FK 可以 VALIDATE。
+### 下一任务
 
-### 唯一下一任务
-
-`BASE-B6 BASE-02 completion audit、Option 1 supersession reconciliation 与 physical FK terminal strategy preplanning`
+`BASE-02 post-closure business Writer dual-write / old Writer blockade admission`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 

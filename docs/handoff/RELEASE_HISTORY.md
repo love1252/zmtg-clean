@@ -1,5 +1,22 @@
 # 项目重构历史
 
+## 2026-08-08：BASE-B6 / BASE-02 最终完成
+
+- BASE-B1～B5 独立证据链通过；
+- BASE-B6 completion audit 通过；
+- Option 1 supersession reconciliation 完成；
+- active authorization orphan=0；
+- active Scope relation orphan=0；
+- retained revoked historical relation orphan=1 expected；
+- Owner outside direct Writer/Deleter=0；
+- lifecycle unresolved=0；
+- BASE-02 complete=true；
+- Reader/Capability 继续关闭；
+- physical FK strategy 未决，FK VALIDATE=false；
+- B6 完成了 PFK-0～PFK-3 preplanning，未选择/实施 Schema 方案；
+- 下一任务进入 business Writer dual-write / old Writer blockade admission。
+
+
 ## 2026-08-08：BASE-B5 one-time execute 最终收口
 
 - BASE-B5 controlled runner one-time execute 严格执行 1 次；
