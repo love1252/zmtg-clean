@@ -1,4 +1,30 @@
 # 智美天工架构文档索引
+<!-- BASE02_BUSINESS_WRITER_ADMISSION_START -->
+
+## post-BASE02 Business Writer Admission（2026-08-08）
+
+```text
+base02_complete=true
+business_writer_admission=passed
+static_writer_inventory=complete
+total_mutation_candidate_files=75
+business_writer_surface_files=27
+bypass_surface_review_files=3
+vertical_slice_matrix=frozen
+business_writer_implementation_authorized=false
+reader_release=false
+capability_release=false
+physical_fk_strategy_resolved=false
+fk_validate=false
+first_recommended_slice=W1_CUSTOMERS_MESSAGING
+```
+
+下一任务：
+
+`W1_CUSTOMERS_MESSAGING first vertical slice exact implementation allowlist / authorization decision`
+
+<!-- BASE02_BUSINESS_WRITER_ADMISSION_END -->
+
 <!-- BASE02_B6_COMPLETION_START -->
 
 ## BASE-B6 / BASE-02 Completion（2026-08-08）
