@@ -3,89 +3,70 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B5 Controlled Runner 2-file 实现收口
+## BASE-B5 Execution 最终收口
 
 - 更新日期：2026-08-08
-- Runner Implementation PR #1067：Merge Commit `10bcaf1a7609512d32e71a212809060d91afec03`
-- Independent Review PR #1068：Merge Commit `d5de0603f2bde493b90939fb35522c02e5c8c1be`
-- runner implementation：passed
-- independent review：passed
-- exact file count：2
-- third file change：false
-- controlled execution entry：present
-- one-shot CLI：true
-- long-lived API：false
-- package.json/Schema/Migration/既有 transfer foundation change：0
-- actual database connection：0
-- local_acceptance dry-run：0
-- execute：0
-- BASE-B5 execution ready：false
-- BASE-B5／BASE-02：未完成
-- Reader／Capability：继续关闭
+- Execution Base：`93dfeba3972fb25c74fecf6a6159935d73bcd1a7`
+- Execution Independent Closure Review PR #1070：Merge Commit `2abc0d97bafd3a6bc8757b04f6a3216d20dbc4c2`
+- Execution Handoff PR #pending：Merge Commit `pending`
+- one-time execute：1/1
+- execute result：`applied_verified`
+- outcome classification：`committed`
+- fresh independent postcheck：passed
+- automatic retry：0
+- second execute：0
+- direct SQL DML：0
+- controlled Membership/Binding write：executed
+- historical orphan remediation：executed
+- Migration/DDL/Seed/FK VALIDATE：0
+- production connection/change：0
 
-### Implemented runner
+### Accepted Option 1 terminal state
 
 ```text
-scripts/db/base02-b5-cross-tenant-transfer-runner.mjs
-scripts/db/base02-b5-cross-tenant-transfer-runner.test.mjs
+source_membership_revoked_count=1
+source_membership_active_count=0
+source_active_binding_count=0
+
+target_membership_active_count=1
+target_active_binding_count=1
+target_scope_active_count=1
+
+active_authorization_orphan_count=0
+active_scope_relation_orphan_count=0
+
+retained_revoked_historical_relation_orphan_count=1
+
+membership_evidence_count=2
+binding_evidence_count=2
+journal_match=true
 ```
 
-### 验证
+### Completion
 
 ```text
-runner_targeted_tests=36/36
-architecture_tests=148/148
-full_test_files=455/455
-full_tests=6494/6494
-lint=0_errors_existing_warnings_only
-typecheck=passed
-build=passed
-architecture_diff=passed
-required_check=success
-```
+base_b5_execution_succeeded=true
+base_b5_independent_closure_review=passed
+base_b5_complete=true
 
-### 执行边界
-
-```text
-controlled_execution_entry_present=true
-runner_code_ready_for_readonly_preflight=true
-
-database_execution_authorized=false
-local_acceptance_dry_run_authorized=false
-historical_orphan_remediation_authorized=false
-
-fk_validate=false
+base02_complete=false
 reader_release=false
 capability_release=false
 ```
 
-### 唯一下一任务
-
-`BASE-B5 controlled runner local_acceptance readonly preflight、private manifest 签发与 dry-run 授权执行`
+### Physical FK boundary
 
 ```text
-controlled_runner_implementation=passed
-controlled_runner_independent_review=passed
-controlled_execution_entry_present=true
-runner_code_ready_for_readonly_preflight=true
-
-database_connection=false
-local_acceptance_dry_run=false
-execute_run=false
-migration_execution=false
-dml_execution=false
-ddl_execution=false
-membership_database_write_execution=false
-binding_database_write_execution=false
-
-base_b5_execution_ready=false
-base_b5_complete=false
-base02_complete=false
-business_reader_release=false
-business_capability_release=false
-
-next_task=BASE-B5 controlled runner local_acceptance readonly preflight、private manifest 签发与 dry-run 授权执行
+retained_historical_relation_orphan_count=1
+physical_fk_strategy_resolved=false
+fk_validate=false
 ```
+
+BASE-B5 成功不表示当前 physical FK 可以 VALIDATE。
+
+### 唯一下一任务
+
+`BASE-B6 BASE-02 completion audit、Option 1 supersession reconciliation 与 physical FK terminal strategy preplanning`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
