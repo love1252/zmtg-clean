@@ -3,62 +3,35 @@
 ## 唯一下一任务
 
 ```text
-BASE-B5 跨 tenant relation-orphan 终态处置分支与成功标准 ADR 决策
+BASE-B5 跨 tenant transfer orchestration 实现准入与 exact allowlist 冻结
 ```
 
-## 已完成
+## 当前已接受
 
-- XT01–XT04：accepted；
-- XT05–XT07：accepted for preplanning；
-- XT08：accepted；
-- XT09：`blocked_invariant_conflict`；
-- XT10：`blocked_by_xt09`；
-- cross-tenant transfer orchestration 方向已冻结，但 implementation/execution 未授权。
+- relation-orphan 终态方案：Option 1；
+- M09-A immutable/no-delete 保持不变；
+- active authorization orphan 必须清零；
+- active Scope relation orphan 必须清零；
+- revoked 且 evidence 完整的 historical relation orphan 允许保留 1；
+- XT09：`resolved_by_adr`；
+- XT10：仍需真实执行与独立 postcheck 才能进入完成审查。
 
-## 当前冲突
+## 下一任务只做
 
-未来访问迁移方向：
-
-```text
-target Membership create + target Binding create
-+
-source Membership revoke + source Binding revoke
-```
-
-现有 accepted Binding 规则同时要求：
-
-- revoked Binding 永久保留；
-- tenant／institution identity tuple 不可原地改写；
-- BASE-B2 不提供 DELETE。
-
-而 B5 deterministic rebind 当前成功标准要求：
-
-```text
-active_orphan=1->0
-relation_orphan=1->0
-```
-
-在不创建伪 Scope、不修改旧 tuple、不 delete/archive old Binding 的情况下，只能得到：
-
-```text
-active_orphan=0
-relation_orphan=1
-```
-
-## 下一任务必须明确选择
-
-1. 保持 M09-A immutable/no-delete，并通过独立 ADR 修改 BASE-B5 relation-orphan 成功定义；
-2. 重新开启 archive/delete old Binding 的治理路径；
-3. 重开 Binding identity/tuple immutability；
-4. 或继续保持 BASE-B5 blocked。
+1. 审计现有 Access Control Membership/Binding Owner 服务、transaction-bound UoW、composition root 和 AQ008；
+2. 冻结 cross-tenant transfer orchestration exact source/test allowlist；
+3. 冻结 application/server transaction contract；
+4. 冻结 command/evidence correlation contract；
+5. 冻结未来实现测试矩阵；
+6. 判断是否确实无需 Schema/Migration；
+7. 输出 implementation admission + independent review + handoff。
 
 ## 当前禁止
 
-- 不创建或修改 Membership；
-- 不创建、更新、撤销、删除或重绑 Binding；
-- 不创建 source fake Scope；
-- 不执行 DDL、DML、Migration、Seed 或 FK VALIDATE；
-- 不实现 cross-tenant transfer orchestration；
-- 不修改 same-tenant rebind 语义；
-- 不开放 Reader 或业务 Capability；
-- 不把 BASE-B5 或 BASE-02 写成已完成。
+- 不连接数据库；
+- 不执行 DDL、DML、Migration、Seed、FK VALIDATE；
+- 不创建或修改 Membership/Binding；
+- 不执行 historical orphan remediation；
+- 不直接开始代码实现；
+- 不开放 Reader 或 Capability；
+- 不把 BASE-B5/BASE-02 写成完成。

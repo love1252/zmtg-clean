@@ -1,4 +1,20 @@
 # 智美天工架构文档索引
+<!-- BASE02_B5_RELATION_ORPHAN_ADR_START -->
+
+## BASE-B5 relation-orphan 终态 ADR（2026-08-07）
+
+- accepted option：1；
+- M09-A immutable/no-delete：preserved；
+- active authorization orphan：must be 0；
+- active Scope relation orphan：must be 0；
+- revoked + evidence-complete historical relation orphan：expected retained count 1；
+- XT09：resolved_by_adr；
+- XT10：execution_still_required；
+- implementation/execution：未授权；
+- 下一任务：cross-tenant transfer orchestration 实现准入与 exact allowlist 冻结。
+
+<!-- BASE02_B5_RELATION_ORPHAN_ADR_END -->
+
 <!-- BASE02_B5_XT_DECISION_START -->
 
 ## BASE-B5 Cross-Tenant Transfer 决策状态（2026-08-07）
