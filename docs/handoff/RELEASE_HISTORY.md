@@ -1,5 +1,20 @@
 # 项目重构历史
 
+## 2026-08-07：BASE-B5 目标 Scope 业务关联确认与跨 tenant 阻断收口
+
+- 业务负责人确认当前 A2-P1 唯一已批准并落库 Scope 与已准入目标机构一致；
+- 业务关联确认／阻断审计 PR #1049 合并：`5760a39d2167ed37cc1344b201422b19acb2aa6f`；
+- 独立审查 PR #1050 合并：`5ee3674f37863aebe6a8de78722fee7d0fa10dbc`；
+- A2-P1 Triplet canonical digest、Scope active、revision／version／approval shape：通过；
+- historical orphan 与目标 Scope tenant 不一致；
+- target tenant Membership 和同账号 target-tenant active Binding 均为 0；
+- 当前 `rebind` transition 不能直接表示跨 tenant replacement；
+- selected branch 仍为 `B5_DETERMINISTIC_REBIND`，但 execution ready 为 false；
+- 未连接数据库，未执行 DDL、DML、Migration、Seed、FK VALIDATE 或重绑；
+- BASE-B5、BASE-02、Reader 和业务 Capability 继续关闭；
+- 下一任务：BASE-B5 跨 tenant Membership 权威决策与重绑语义准入。
+
+
 ## 2026-08-07：BASE-B5 确定性重绑权威依据准入
 
 - 权威依据提交与初审 PR #1046 合并：`d5da4a409d728d6cf4b7263e96d9f489a68e2b86`；

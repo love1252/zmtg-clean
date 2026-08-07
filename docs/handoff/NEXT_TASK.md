@@ -3,38 +3,44 @@
 ## 唯一下一任务
 
 ```text
-执行 BASE-B5 B5_DETERMINISTIC_REBIND live readonly reprobe
+BASE-B5 跨 tenant Membership 权威决策与重绑语义准入
 ```
 
 ## 当前基线
 
-- 可核验权威业务依据 submitted／admitted：`1／1`；
-- admitted branch：`B5_DETERMINISTIC_REBIND`；
-- BASE-B5：未完成；
-- historical orphan remediation：未授权；
-- live readonly reprobe：required，未执行；
-- BASE-02：未完成；
-- Reader／Capability：继续关闭。
+- 权威业务依据 submitted／admitted：`1／1`；
+- 业务目标分支：`B5_DETERMINISTIC_REBIND`；
+- 当前 A2-P1 唯一已批准并落库 Scope 与目标机构的业务关联：已确认；
+- A2-P1 Scope／Context Triplet canonical digest：匹配；
+- historical orphan：仍为 1；
+- Scope relation orphan：仍为 1；
+- historical orphan tenant 与目标 Scope tenant：不一致；
+- 当前账号在目标 tenant 的 Membership：0；
+- 当前账号在目标 tenant 的 active Binding：0；
+- 当前 `rebind` transition：不能直接表示跨 tenant replacement；
+- BASE-B5 execution ready：false；
+- remediation、Reader、Capability：继续关闭。
 
 ## 下一任务目标
 
-在单独授权的只读数据库连接中核验：
+完成并独立审查以下决策：
 
-1. 当前 historical orphan 仍然唯一存在；
-2. 仓库外权威依据指向的目标机构 Scope 在现场存在；
-3. 目标 Scope 唯一，不存在同名或多候选歧义；
-4. historical orphan 当前没有被其他任务修改；
-5. 当前 Binding、Scope、Membership 和证据表形状符合预期；
-6. 只读复核不执行任何 DDL、DML、Migration、Seed 或 FK VALIDATE。
+1. 当前账号是否获准进入目标 tenant；
+2. 目标 tenant Membership 的角色、revision、provenance、生效与撤销策略；
+3. 当前 tenant Membership 的保留、撤销或迁移策略；
+4. 跨 tenant Binding 处置采用两步 revoke／create，还是新增 transfer contract／Schema；
+5. 如何形成跨 tenant 低敏 correlation evidence；
+6. Writer Owner、事务边界、锁、Execution Lease、恢复点和 forward-fix；
+7. exact pre-state／post-state 计数与停止条件；
+8. 是否需要独立 Schema／Migration 任务。
 
-## 当前仍禁止
+## 当前禁止
 
-- 本任务收口本身不连接数据库；
-- 不执行确定性重绑；
-- 不修改 Binding；
-- 不创建 Scope；
+- 不创建或修改 Membership；
+- 不创建、更新或撤销 Binding；
+- 不执行 historical orphan 重绑；
 - 不执行 DDL、DML、Migration、Seed 或 FK VALIDATE；
+- 不把数据库唯一候选替代业务负责人确认；
+- 不把业务关联确认写成 remediation 授权；
 - 不开放 Reader 或业务 Capability；
 - 不把 BASE-B5 或 BASE-02 写成已完成。
-
-live readonly reprobe 必须由下一份独立脚本明确列出连接边界、SQL 白名单、输出脱敏规则、停止条件和执行授权。
