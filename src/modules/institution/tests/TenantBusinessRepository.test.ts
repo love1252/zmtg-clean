@@ -664,83 +664,30 @@ describe('租户业务仓储映射', () => {
     expect(summaryRecords).toEqual([mapFollowUpTaskRowToRecord(sourceFollowUpTaskRow)]);
   });
 
-  it('创建客户写入 customers、使用调用方 tenantId 并返回脱敏记录', async () => {
-    const mutation = createMutationDatabase(customerRow);
-    const input = {
-      ...customerRow,
-      tenantId: 'demo-tenant-001',
-      createdAt: undefined,
-      updatedAt: undefined,
-    };
-
-    const record = await createTenantBusinessRepository(mutation.database).createCustomer(input);
-
-    expect(mutation.insert).toHaveBeenCalledWith(customers);
-    expect(mutation.values).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: input.tenantId }),
-    );
-    expect(record).toEqual(mapCustomerRowToRecord(customerRow));
-    expect(JSON.stringify(record)).not.toMatch(/phoneNumber|idNumber|medicalRecordNo/);
-  });
-
-  it('更新客户方法按 tenantId + id 更新客户且无返回行时返回 null', async () => {
-    const mutation = createMutationDatabase(null);
-
-    const record = await createTenantBusinessRepository(mutation.database).updateCustomer({
-      tenantId: 'demo-tenant-001',
-      id: 'cust_001',
-      displayName: '王女士更新',
-      projectInterest: undefined,
-    });
-
-    expect(mutation.update).toHaveBeenCalledWith(customers);
-    expect(mutation.set).toHaveBeenCalledWith(
-      expect.objectContaining({
-        displayName: '王女士更新',
-        updatedAt: expect.any(Date),
-      }),
-    );
-    expect(mutation.set).toHaveBeenCalled();
-    const updateValues = mutation.set.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(updateValues).not.toHaveProperty('projectInterest');
-    expect(eqMock).toHaveBeenCalledWith(customers.tenantId, 'demo-tenant-001');
-    expect(eqMock).toHaveBeenCalledWith(customers.id, 'cust_001');
-    expect(andMock).toHaveBeenCalledWith(
-      { column: customers.tenantId, operator: 'eq', value: 'demo-tenant-001' },
-      { column: customers.id, operator: 'eq', value: 'cust_001' },
-    );
-    expect(mutation.where).toHaveBeenCalledWith({
-      conditions: [
-        { column: customers.tenantId, operator: 'eq', value: 'demo-tenant-001' },
-        { column: customers.id, operator: 'eq', value: 'cust_001' },
-      ],
-      operator: 'and',
-    });
-    expect(record).toBeNull();
-  });
-
-  it('更新客户方法即使收到不安全入参也不会写入 createdAt、tenantId 或 id', async () => {
+  it('legacy customer create/update Writer 均 fail-closed 且不再直接写 customers', async () => {
     const mutation = createMutationDatabase(customerRow);
     const repository = createTenantBusinessRepository(mutation.database);
 
-    await repository.updateCustomer({
-      tenantId: 'demo-tenant-001',
-      id: 'cust_001',
-      displayName: '王女士更新',
-      createdAt: new Date('2026-01-01T00:00:00.000Z'),
-    } as unknown as Parameters<typeof repository.updateCustomer>[0]);
-
-    expect(mutation.set).toHaveBeenCalled();
-    const updateValues = mutation.set.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(updateValues).toEqual(
-      expect.objectContaining({
-        displayName: '王女士更新',
-        updatedAt: expect.any(Date),
+    await expect(
+      repository.createCustomer({
+        ...customerRow,
+        createdAt: undefined,
+        updatedAt: undefined,
       }),
-    );
-    expect(updateValues).not.toHaveProperty('createdAt');
-    expect(updateValues).not.toHaveProperty('tenantId');
-    expect(updateValues).not.toHaveProperty('id');
+    ).rejects.toThrow('legacy_customer_writer_disabled');
+
+    await expect(
+      repository.updateCustomer({
+        tenantId: 'demo-tenant-001',
+        id: 'cust_001',
+        displayName: '不应写入',
+      }),
+    ).rejects.toThrow('legacy_customer_writer_disabled');
+
+    expect(mutation.insert).not.toHaveBeenCalled();
+    expect(mutation.update).not.toHaveBeenCalled();
+    expect(mutation.values).not.toHaveBeenCalled();
+    expect(mutation.set).not.toHaveBeenCalled();
   });
 
   it('创建预约写入调用方 tenantId 并映射 scheduledAt', async () => {

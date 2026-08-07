@@ -815,20 +815,12 @@ function createWeComCustomerContactSeeds(input: {
 export function createTenantBusinessRepository(database: TenantDatabase) {
   return {
     async createCustomer(input: CreateCustomerInput): Promise<CustomerRecordSummary> {
-      const [row] = await database.insert(customers).values(input).returning();
-      return mapCustomerRowToRecord(row);
+      void input;
+      throw new Error('legacy_customer_writer_disabled');
     },
     async updateCustomer(input: UpdateCustomerInput): Promise<CustomerRecordSummary | null> {
-      const [row] = await database
-        .update(customers)
-        .set({
-          ...pickCustomerUpdateValues(input),
-          updatedAt: new Date(),
-        })
-        .where(and(eq(customers.tenantId, input.tenantId), eq(customers.id, input.id)))
-        .returning();
-
-      return row ? mapCustomerRowToRecord(row) : null;
+      void pickCustomerUpdateValues(input);
+      throw new Error('legacy_customer_writer_disabled');
     },
     async createAppointment(input: CreateAppointmentInput): Promise<AppointmentRecordSummary> {
       const [row] = await database.insert(appointments).values(input).returning();
