@@ -3,35 +3,38 @@
 ## 唯一下一任务
 
 ```text
-BASE-B5 跨 tenant transfer orchestration 实现准入与 exact allowlist 冻结
+BASE-B5 跨 tenant transfer orchestration 4-file 最小实现授权与执行
 ```
 
-## 当前已接受
+## 已完成
 
-- relation-orphan 终态方案：Option 1；
-- M09-A immutable/no-delete 保持不变；
-- active authorization orphan 必须清零；
-- active Scope relation orphan 必须清零；
-- revoked 且 evidence 完整的 historical relation orphan 允许保留 1；
-- XT09：`resolved_by_adr`；
-- XT10：仍需真实执行与独立 postcheck 才能进入完成审查。
+- relation-orphan Option 1 ADR 已收口；
+- transfer implementation admission 已通过；
+- exact source/test allowlist 已冻结为 4 文件；
+- minimal foundation 不需要 Schema/Migration/AQ008/既有 Writer/Port/composition-root 修改。
 
-## 下一任务只做
+## 冻结 allowlist
 
-1. 审计现有 Access Control Membership/Binding Owner 服务、transaction-bound UoW、composition root 和 AQ008；
-2. 冻结 cross-tenant transfer orchestration exact source/test allowlist；
-3. 冻结 application/server transaction contract；
-4. 冻结 command/evidence correlation contract；
-5. 冻结未来实现测试矩阵；
-6. 判断是否确实无需 Schema/Migration；
-7. 输出 implementation admission + independent review + handoff。
+```text
+src/modules/access-control/application/cross-tenant-transfer-service.ts
+src/modules/access-control/server/cross-tenant-transfer-transaction.ts
+src/modules/access-control/tests/CrossTenantTransferService.test.ts
+src/modules/access-control/tests/CrossTenantTransferTransaction.test.ts
+```
 
-## 当前禁止
+## 下一任务进入条件
 
-- 不连接数据库；
-- 不执行 DDL、DML、Migration、Seed、FK VALIDATE；
-- 不创建或修改 Membership/Binding；
-- 不执行 historical orphan remediation；
-- 不直接开始代码实现；
-- 不开放 Reader 或 Capability；
-- 不把 BASE-B5/BASE-02 写成完成。
+必须取得明确“实际代码实现”授权。
+
+授权后仍只允许修改上述 4 个文件；若实现证明需要第 5 个文件，必须立即停止并重新准入。
+
+## 当前仍禁止
+
+- 数据库连接；
+- DDL/DML/Migration/Seed/FK VALIDATE；
+- Membership/Binding 实际数据库写入；
+- historical orphan remediation；
+- composition root/API/runner 接线；
+- Reader/Capability release；
+- 生产变更；
+- 把 BASE-B5/BASE-02 写成完成。
