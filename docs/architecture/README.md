@@ -1,4 +1,19 @@
 # 智美天工架构文档索引
+<!-- BASE02_B5_TRANSFER_IMPLEMENTATION_CLOSURE_START -->
+
+## BASE-B5 Cross-Tenant Transfer 4-file 实现收口（2026-08-08）
+
+- Implementation PR：#1061 / `633f77415ea74e3456f528e650de28198cd30da9`；
+- Independent Review：#1062 / `c8edb5a95cc88abb85647b9dadc34b3f4b941aff`；
+- exact files：4；
+- AQ007：passed；
+- direct Tenancy server dependency：0；
+- composition root/API/runner wiring：0；
+- database execution：未授权；
+- 下一任务：controlled execution runner 准入与 exact allowlist 冻结。
+
+<!-- BASE02_B5_TRANSFER_IMPLEMENTATION_CLOSURE_END -->
+
 
 <!-- BASE02_B5_TRANSFER_IMPLEMENTATION_ADMISSION_START -->
 
