@@ -3,71 +3,38 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-02 / BASE-B6 最终完成状态
+## BASE-02 post-closure Business Writer Admission
 
 - 更新日期：2026-08-08
-- B6 Completion Audit PR #1072：`312417468f5006235eca946a443873d8ad3a7ebe`
-- B6 Independent Review PR #1073：`a8c25ebe3e7cf795d3d0fe699a8fd0493bda4de2`
-- B6 Handoff PR：本收口 PR
-- BASE-B1：complete
-- BASE-B2：complete
-- BASE-B3：complete
-- BASE-B4：complete
-- BASE-B5：complete
-- BASE-B6 completion audit：passed
 - BASE-02：complete
-- business Reader：closed
-- capability：closed
+- Admission PR #1075：`0fb1c8ef53018f9230643552ebb9b082002bfd9c`
+- Independent Review PR #1076：`f8fd56c8507806a9880fbe4828b7f58d41e64c31`
+- static mutation inventory：complete
+- mutation candidate files：75
+- business Writer surface：27
+- bypass review surface：3
+- vertical slice matrix：frozen
+- current writer candidate surface paths：frozen
+- business Writer Runtime implementation：not authorized
+- Reader / Capability：closed
 - physical FK strategy：unresolved
 - FK VALIDATE：false
 
-### Current authorization terminal state
-
 ```text
-active_authorization_orphan_count=0
-active_scope_relation_orphan_count=0
-retained_revoked_historical_relation_orphan_count=1
-option1_terminal_state_satisfied=true
-```
-
-### Option 1 supersession
-
-旧 B6：
-
-```text
-all physical Scope relation orphan = 0
-```
-
-当前 accepted B6：
-
-```text
-active authorization orphan = 0
-active Scope relation orphan = 0
-one revoked/evidence-complete historical relation orphan retained
-```
-
-### Completion
-
-```text
-base_b1_complete=true
-base_b2_complete=true
-base_b3_complete=true
-base_b4_complete=true
-base_b5_complete=true
-base_b6_completion_audit=passed
-base_b6_independent_review=passed
-
+business_writer_admission=passed
+business_writer_admission_independent_review=passed
+business_writer_implementation_authorized=false
 base02_complete=true
-
 reader_release=false
 capability_release=false
 physical_fk_strategy_resolved=false
 fk_validate=false
+first_recommended_slice=W1_CUSTOMERS_MESSAGING
 ```
 
-### 下一任务
+### 唯一下一任务
 
-`BASE-02 post-closure business Writer dual-write / old Writer blockade admission`
+`BASE-02 business Writer W1_CUSTOMERS_MESSAGING first vertical slice implementation exact allowlist freeze / authorization decision`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 

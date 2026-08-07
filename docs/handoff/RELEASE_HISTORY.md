@@ -1,5 +1,21 @@
 # 项目重构历史
 
+## 2026-08-08：post-BASE02 Business Writer 阶段准入
+
+- BASE-02 complete=true；
+- 静态盘点 mutation candidate files=75；
+- business Writer surface=27；
+- bypass review surface=3；
+- 完成 Owner / vertical slice 分类；
+- 冻结 institution-scoped `tenantId + institutionId` Writer attribution 契约；
+- old Writer / bypass 终态仅允许 delegate 或 fail-closed；
+- Access Control/Identity/Tenancy foundation 排除；
+- Runtime implementation 未授权；
+- Reader/Capability 继续关闭；
+- physical FK strategy 独立未决；
+- 首个 slice：W1_CUSTOMERS_MESSAGING。
+
+
 ## 2026-08-08：BASE-B6 / BASE-02 最终完成
 
 - BASE-B1～B5 独立证据链通过；
