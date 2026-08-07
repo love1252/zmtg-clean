@@ -1,5 +1,16 @@
 # 项目重构历史
 
+## 2026-08-07：BASE-B5 Cross-Tenant Transfer 实现准入收口
+
+- Implementation Admission PR #1058 合并：`90824387e28e56373b23ae6c425ef5f4af95ff90`；
+- Independent Review PR #1059 合并：`83d3ce20abba8be18ef84922cb88a10deab6631d`；
+- exact implementation allowlist 冻结为 4 个新文件；
+- minimal foundation 不需要 Schema/Migration/AQ008/既有 Writer/Port/composition-root 修改；
+- actual implementation 仍未授权；
+- 未连接数据库，未执行 DDL、DML、Migration、Membership/Binding 写入或 remediation；
+- 下一任务：BASE-B5 跨 tenant transfer orchestration 4-file 最小实现授权与执行。
+
+
 ## 2026-08-07：BASE-B5 relation-orphan 终态与成功标准 ADR 收口
 
 - 用户确认 Option 1：保持 M09-A immutable/no-delete；

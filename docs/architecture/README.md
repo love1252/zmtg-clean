@@ -1,4 +1,21 @@
 # 智美天工架构文档索引
+
+<!-- BASE02_B5_TRANSFER_IMPLEMENTATION_ADMISSION_START -->
+
+## BASE-B5 Cross-Tenant Transfer 实现准入（2026-08-07）
+
+- implementation admission：passed；
+- exact allowlist：4 files；
+- new application service：1；
+- new server transaction：1；
+- new tests：2；
+- Schema/Migration/AQ008/Writer/Port/composition root change：0；
+- actual implementation authorized：false；
+- DB execution authorized：false；
+- 下一任务：4-file 最小实现授权与执行。
+
+<!-- BASE02_B5_TRANSFER_IMPLEMENTATION_ADMISSION_END -->
+
 <!-- BASE02_B5_RELATION_ORPHAN_ADR_START -->
 
 ## BASE-B5 relation-orphan 终态 ADR（2026-08-07）

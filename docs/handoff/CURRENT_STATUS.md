@@ -3,66 +3,56 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B5 relation-orphan 终态与成功标准 ADR 收口
+## BASE-B5 Cross-Tenant Transfer 实现准入收口
 
 - 更新日期：2026-08-07
-- ADR Decision PR #1055：Merge Commit `0dea160ad1267f9ddd74c7d9bba0279cd0c71616`
-- Independent Review PR #1056：Merge Commit `0dd90c40c54c47e7958881b692ae38df97a036c5`
-- accepted option：`1 / active authorization zero + retained history`
-- M09-A immutable/no-delete：保持
-- historical Binding tuple rewrite：禁止
-- active authorization orphan：必须 0
-- active Scope relation orphan：必须 0
-- revoked + evidence-complete historical relation orphan：允许保留 1
-- XT09：resolved_by_adr
-- XT10：execution_still_required
-- cross-tenant transfer implementation：未授权
+- Implementation Admission PR #1058：Merge Commit `90824387e28e56373b23ae6c425ef5f4af95ff90`
+- Independent Review PR #1059：Merge Commit `83d3ce20abba8be18ef84922cb88a10deab6631d`
+- implementation admission：passed
+- exact allowlist：frozen
+- exact file count：4
+- Schema/Migration/AQ008/Writer/Port/composition-root change required：false
+- actual implementation：未授权
+- DB execution：未授权
 - BASE-B5 execution ready：false
-- BASE-B5：未完成
-- BASE-02：未完成
+- BASE-B5／BASE-02：未完成
 - Reader／Capability：继续关闭
 - database／Migration／DML：0
 
-### 唯一下一任务
-
-`BASE-B5 跨 tenant transfer orchestration 实现准入与 exact allowlist 冻结`
+### Frozen 4-file allowlist
 
 ```text
-relation_orphan_terminal_state_option=1
-relation_orphan_success_criteria_adr=accepted
-relation_orphan_success_criteria_independent_review=passed
+src/modules/access-control/application/cross-tenant-transfer-service.ts
+src/modules/access-control/server/cross-tenant-transfer-transaction.ts
+src/modules/access-control/tests/CrossTenantTransferService.test.ts
+src/modules/access-control/tests/CrossTenantTransferTransaction.test.ts
+```
 
-m09a_immutable_preserved=true
-binding_no_delete_preserved=true
-historical_binding_tuple_rewrite=false
-
-active_authorization_orphan_must_zero=true
-active_scope_relation_orphan_must_zero=true
-retained_revoked_historical_relation_orphan_allowed=true
-retained_revoked_historical_relation_orphan_expected_count=1
-
-xt09_technical_admission=resolved_by_adr
-xt10_release_boundary_decision=execution_still_required
-
-cross_tenant_transfer_design_ready=true
+```text
+cross_tenant_transfer_implementation_admission_passed=true
+cross_tenant_transfer_exact_allowlist_frozen=true
+cross_tenant_transfer_exact_file_count=4
+schema_change_required=false
+migration_required=false
+aq008_change_required=false
+existing_writer_repository_change_required=false
+existing_port_change_required=false
+composition_root_change_required=false
 cross_tenant_transfer_implementation_authorized=false
 cross_tenant_transfer_execution_authorized=false
-
-base_b5_success_criteria_conflict=false
-base_b5_execution_ready=false
-historical_orphan_remediation_authorized=false
-
 database_connection=false
 migration_execution=false
 dml_execution=false
 ddl_execution=false
-
+membership_write_execution=false
+binding_write_execution=false
+historical_orphan_remediation_authorized=false
+base_b5_execution_ready=false
 base_b5_complete=false
 base02_complete=false
 business_reader_release=false
 business_capability_release=false
-
-next_task=BASE-B5 跨 tenant transfer orchestration 实现准入与 exact allowlist 冻结
+next_task=BASE-B5 跨 tenant transfer orchestration 4-file 最小实现授权与执行
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
