@@ -1,5 +1,19 @@
 # 项目重构历史
 
+## 2026-08-08：BASE-B5 Cross-Tenant Transfer 4-file 最小实现收口
+
+- Implementation PR #1061 合并：`633f77415ea74e3456f528e650de28198cd30da9`；
+- Independent Review PR #1062 合并：`c8edb5a95cc88abb85647b9dadc34b3f4b941aff`；
+- frozen 4-file minimal foundation 完成；
+- targeted 17/17、architecture 148/148、full 6458/6458、typecheck/build 通过；
+- AQ007 修复后无 `access-control/server -> tenancy/server` 新依赖；
+- 第 5 文件修改为 0；
+- composition root/API/runner 仍未接线；
+- 未连接数据库，未执行 DDL/DML/Migration 或 Membership/Binding 数据库写入；
+- BASE-B5、BASE-02、Reader、Capability 继续关闭；
+- 下一任务：BASE-B5 跨 tenant transfer controlled execution runner 准入与 exact allowlist 冻结。
+
+
 ## 2026-08-07：BASE-B5 Cross-Tenant Transfer 实现准入收口
 
 - Implementation Admission PR #1058 合并：`90824387e28e56373b23ae6c425ef5f4af95ff90`；

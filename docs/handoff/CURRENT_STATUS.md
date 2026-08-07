@@ -3,23 +3,29 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B5 Cross-Tenant Transfer 实现准入收口
+## BASE-B5 Cross-Tenant Transfer 4-file 最小实现收口
 
-- 更新日期：2026-08-07
-- Implementation Admission PR #1058：Merge Commit `90824387e28e56373b23ae6c425ef5f4af95ff90`
-- Independent Review PR #1059：Merge Commit `83d3ce20abba8be18ef84922cb88a10deab6631d`
-- implementation admission：passed
-- exact allowlist：frozen
+- 更新日期：2026-08-08
+- Implementation PR #1061：Merge Commit `633f77415ea74e3456f528e650de28198cd30da9`
+- Implementation Head：`b14d9b1c8b91ad02bb23742aa4373a1c531811f0`
+- Independent Review PR #1062：Merge Commit `c8edb5a95cc88abb85647b9dadc34b3f4b941aff`
+- 4-file minimal implementation：passed
+- Independent Review：passed
 - exact file count：4
-- Schema/Migration/AQ008/Writer/Port/composition-root change required：false
-- actual implementation：未授权
-- DB execution：未授权
+- fifth file change：false
+- AQ007：passed
+- AQ008 bypass：false
+- direct Tenancy server dependency：false
+- Schema/Migration/Writer/Port change：0
+- composition root/API/runner wiring：0
+- controlled execution entry：尚不存在
+- database execution：未授权
+- historical orphan remediation：未授权
 - BASE-B5 execution ready：false
 - BASE-B5／BASE-02：未完成
 - Reader／Capability：继续关闭
-- database／Migration／DML：0
 
-### Frozen 4-file allowlist
+### 已合并 4-file foundation
 
 ```text
 src/modules/access-control/application/cross-tenant-transfer-service.ts
@@ -28,31 +34,54 @@ src/modules/access-control/tests/CrossTenantTransferService.test.ts
 src/modules/access-control/tests/CrossTenantTransferTransaction.test.ts
 ```
 
+### 验证
+
 ```text
-cross_tenant_transfer_implementation_admission_passed=true
-cross_tenant_transfer_exact_allowlist_frozen=true
-cross_tenant_transfer_exact_file_count=4
-schema_change_required=false
-migration_required=false
-aq008_change_required=false
-existing_writer_repository_change_required=false
-existing_port_change_required=false
-composition_root_change_required=false
-cross_tenant_transfer_implementation_authorized=false
-cross_tenant_transfer_execution_authorized=false
+targeted_transfer_tests=17/17
+architecture_diff_check=passed
+architecture_tests=148/148
+full_test_files=454/454
+full_tests=6458/6458
+lint=0_errors_existing_warnings_only
+typecheck=passed
+build=passed
+required_check=success
+```
+
+### 唯一下一任务
+
+`BASE-B5 跨 tenant transfer controlled execution runner 准入与 exact allowlist 冻结`
+
+```text
+cross_tenant_transfer_minimal_implementation=passed
+cross_tenant_transfer_independent_review=passed
+implementation_foundation_complete=true
+
+exact_file_count=4
+fifth_file_change=false
+cross_module_tenancy_server_dependency=false
+aq007_passed=true
+aq008_writer_bypass=false
+
+controlled_execution_entry_present=false
+controlled_execution_runner_admitted=false
+database_execution_authorized=false
+historical_orphan_remediation_authorized=false
+
 database_connection=false
 migration_execution=false
 dml_execution=false
 ddl_execution=false
-membership_write_execution=false
-binding_write_execution=false
-historical_orphan_remediation_authorized=false
+membership_database_write_execution=false
+binding_database_write_execution=false
+
 base_b5_execution_ready=false
 base_b5_complete=false
 base02_complete=false
 business_reader_release=false
 business_capability_release=false
-next_task=BASE-B5 跨 tenant transfer orchestration 4-file 最小实现授权与执行
+
+next_task=BASE-B5 跨 tenant transfer controlled execution runner 准入与 exact allowlist 冻结
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
