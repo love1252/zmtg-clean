@@ -1,0 +1,11 @@
+order,decision_id,topic,current_fact,required_decision,owner,status,blocking
+1,XT01,target_tenant_membership,current account membership in target tenant = 0,whether account may enter target tenant and under which authority,Access Control + business owner,pending,true
+2,XT02,target_membership_shape,no target membership row,role revision provenance effective time and lifecycle,Access Control,pending,true
+3,XT03,current_membership_lifecycle,current membership parent = 1,retain revoke expire or transfer current membership,Access Control + business owner,pending,true
+4,XT04,identity_portability,one global account referenced by tenant-scoped membership,whether the same identity may be authorized in target tenant,Identity + Access Control,pending,true
+5,XT05,cross_tenant_binding_semantics,current rebind transition is same-tenant scoped,two-step revoke/create or new transfer contract/schema,Access Control architecture,pending,true
+6,XT06,transition_correlation,no current cross-tenant replacement FK or correlation fact,low-sensitive transfer correlation and audit evidence model,Access Control + Audit,pending,true
+7,XT07,writer_transaction_boundary,no cross-tenant writer authorized,atomicity ordering locks lease and outcome-unknown forward-fix,Access Control + database operator,pending,true
+8,XT08,recovery_and_verification,no write task authorized,recovery point pre/post fingerprints and independent readonly verification,project control + database operator,pending,true
+9,XT09,success_criteria,active orphan=1 and relation orphan=1,freeze expected affected conflict unexpected and exact post-state,project control,pending,true
+10,XT10,release_boundary,Reader and Capability remain closed,conditions for BASE-B5 completion and later BASE-02 release,project control,pending,true
