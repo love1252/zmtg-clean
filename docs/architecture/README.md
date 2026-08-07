@@ -1,4 +1,17 @@
 # 智美天工架构文档索引
+<!-- BASE02_B5_DETERMINISTIC_REBIND_ADMISSION_START -->
+
+## BASE-B5 确定性重绑权威依据准入（2026-08-07）
+
+- authority evidence submitted／admitted：`1／1`；
+- admitted branch：`B5_DETERMINISTIC_REBIND`；
+- live readonly reprobe：required，未执行；
+- remediation／database／DML：未授权；
+- Reader／Capability／BASE-02：继续关闭；
+- 下一任务：执行受控 live readonly reprobe。
+
+<!-- BASE02_B5_DETERMINISTIC_REBIND_ADMISSION_END -->
+
 <!-- BASE02_B5_NO_AUTHORITY_SUBMISSION_START -->
 
 ## BASE-B5 无权威业务依据输入提交（2026-08-06）
