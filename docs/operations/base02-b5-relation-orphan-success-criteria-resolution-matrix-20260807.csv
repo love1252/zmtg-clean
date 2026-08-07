@@ -1,0 +1,11 @@
+order,criterion_id,domain,old_rule,accepted_rule,status,blocking
+1,SC01,active_authorization_orphan,active_orphan_1_to_0,active authorization orphan must equal 0,accepted,false
+2,SC02,active_scope_relation,relation_orphan_1_to_0,active binding to missing/inactive scope relation must equal 0,accepted,false
+3,SC03,retained_history,relation_orphan_must_zero,exactly one revoked evidenced historical relation orphan may remain,accepted,false
+4,SC04,binding_history,not_explicit,revoked source binding identity and tuple remain immutable and retained,accepted,false
+5,SC05,evidence,not_explicit,retained historical relation must have complete immutable baseline/runtime transition evidence,accepted,false
+6,SC06,target_membership,target_membership_0_to_1,target membership must be exactly one active after future transfer,accepted,false
+7,SC07,target_binding,target_binding_0_to_1,target binding must be exactly one active against active target scope,accepted,false
+8,SC08,source_terminal,source_membership_and_binding_terminal,source membership revoked and source active binding count zero,accepted,false
+9,SC09,unexpected,conflict_0_unexpected_0,conflict=0 and unexpected=0,accepted,false
+10,SC10,release,base_b5_complete_after_all_success,BASE-B5 completion only after authorized execution plus independent readonly postcheck,accepted,false
