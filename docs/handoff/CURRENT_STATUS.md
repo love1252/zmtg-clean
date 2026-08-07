@@ -3,45 +3,64 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B5 确定性重绑权威依据准入收口
+## BASE-B5 目标 Scope 业务关联确认与跨 tenant 阻断收口
 
 - 更新日期：2026-08-07
-- 权威依据提交与初审 PR #1046：Merge Commit `d5da4a409d728d6cf4b7263e96d9f489a68e2b86`
-- 独立准入审查 PR #1047：Merge Commit `c86f879616d723888167d716ca0197f913e38e88`
-- authority evidence input submission received：2
-- authority evidence submitted／admitted：1／1
+- 业务关联确认／阻断审计 PR #1049：Merge Commit `5760a39d2167ed37cc1344b201422b19acb2aa6f`
+- 独立审查 PR #1050：Merge Commit `5ee3674f37863aebe6a8de78722fee7d0fa10dbc`
+- authority evidence submitted／admitted：`1／1`
 - selected branch：`B5_DETERMINISTIC_REBIND`
-- BASE-B5：started，但未完成
+- 目标 Scope 业务关联：已确认
+- A2-P1 Triplet canonical digest：匹配
+- live readonly reprobe：已执行，结果为跨 tenant 前置条件阻断
+- target tenant Membership：缺失
+- same-account target-tenant active Binding：缺失
+- 当前 rebind transition：仅支持同 tenant replacement
+- BASE-B5 execution ready：false
 - historical orphan remediation：未授权
-- live readonly reprobe：required，未执行
 - BASE-02：未完成
 - Reader／Capability：继续关闭
-- database／migration／DML：0
+- 本轮 database／migration／DML：0
 
 ### 唯一下一任务
 
-`执行 BASE-B5 B5_DETERMINISTIC_REBIND live readonly reprobe`
+`BASE-B5 跨 tenant Membership 权威决策与重绑语义准入`
 
 ```text
-base_b5_evidence_submission_contract_ready=true
-base_b5_evidence_input_template_ready=true
-authority_evidence_input_submission_received_count=2
 authority_evidence_submitted_count=1
 authority_evidence_admitted_count=1
-authority_evidence_independent_review=passed
 authority_evidence_admitted_branch=B5_DETERMINISTIC_REBIND
 base_b5_selected_branch=B5_DETERMINISTIC_REBIND
-base_b5_complete=false
+
+business_scope_linkage_confirmed=true
+target_scope_mapping_source=db_reconstructed_a2_p1_triplet
+db_triplet_canonical_digest_match=true
+target_scope_active=true
+
+live_readonly_reprobe_executed=true
+live_readonly_reprobe_result=blocked_cross_tenant_membership_prerequisite
+cross_tenant_target=true
+target_membership_prerequisite_satisfied=false
+same_account_target_tenant_binding_present=false
+current_rebind_transition_cross_tenant_supported=false
+
+cross_tenant_prerequisite_preplanning_ready=true
+cross_tenant_membership_authority_decision_received=false
+cross_tenant_rebind_semantics_admitted=false
+base_b5_execution_ready=false
+
 historical_orphan_remediation_authorized=false
-live_readonly_reprobe_required=true
-live_readonly_reprobe_executed=false
+database_write_authorized=false
+dml_authorized=false
+base_b5_complete=false
 base02_complete=false
 business_reader_release=false
 business_capability_release=false
+
 database_connection=false
 migration_execution=false
 dml_execution=false
-next_task=执行 BASE-B5 B5_DETERMINISTIC_REBIND live readonly reprobe
+next_task=BASE-B5 跨 tenant Membership 权威决策与重绑语义准入
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->

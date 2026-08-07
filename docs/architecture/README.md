@@ -1,4 +1,21 @@
 # 智美天工架构文档索引
+<!-- BASE02_B5_CROSS_TENANT_BLOCKER_START -->
+
+## BASE-B5 跨 tenant Membership 前置阻断（2026-08-07）
+
+- 目标 Scope 业务关联：已确认；
+- A2-P1 Triplet canonical digest：匹配；
+- selected branch：`B5_DETERMINISTIC_REBIND`；
+- historical orphan 与目标 Scope tenant：不一致；
+- target tenant Membership：0；
+- same-account target-tenant active Binding：0；
+- current rebind cross-tenant support：false；
+- execution ready：false；
+- remediation／database write／Reader／Capability：未授权；
+- 下一任务：跨 tenant Membership 权威决策与重绑语义准入。
+
+<!-- BASE02_B5_CROSS_TENANT_BLOCKER_END -->
+
 <!-- BASE02_B5_DETERMINISTIC_REBIND_ADMISSION_START -->
 
 ## BASE-B5 确定性重绑权威依据准入（2026-08-07）
