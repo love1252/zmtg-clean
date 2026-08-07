@@ -3,64 +3,63 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-B5 目标 Scope 业务关联确认与跨 tenant 阻断收口
+## BASE-B5 跨 tenant Membership／Transfer 决策准入收口
 
 - 更新日期：2026-08-07
-- 业务关联确认／阻断审计 PR #1049：Merge Commit `5760a39d2167ed37cc1344b201422b19acb2aa6f`
-- 独立审查 PR #1050：Merge Commit `5ee3674f37863aebe6a8de78722fee7d0fa10dbc`
-- authority evidence submitted／admitted：`1／1`
-- selected branch：`B5_DETERMINISTIC_REBIND`
-- 目标 Scope 业务关联：已确认
-- A2-P1 Triplet canonical digest：匹配
-- live readonly reprobe：已执行，结果为跨 tenant 前置条件阻断
-- target tenant Membership：缺失
-- same-account target-tenant active Binding：缺失
-- 当前 rebind transition：仅支持同 tenant replacement
+- 决策准入 PR #1052：Merge Commit `426a320957389b248c43e2f868a8feee1f7ca07c`
+- 独立审查 PR #1053：Merge Commit `696c3541a013e703431485caed51c7880545f448`
+- 用户 XT01–XT10 选择：已确认
+- XT01–XT08：accepted / accepted-for-preplanning
+- XT09：blocked_invariant_conflict
+- XT10：blocked_by_xt09
+- cross-tenant transfer orchestration preplanning：已准入
+- implementation：未授权
+- BASE-B5 success criteria conflict：true
 - BASE-B5 execution ready：false
 - historical orphan remediation：未授权
 - BASE-02：未完成
 - Reader／Capability：继续关闭
-- 本轮 database／migration／DML：0
+- database／migration／DML：0
 
 ### 唯一下一任务
 
-`BASE-B5 跨 tenant Membership 权威决策与重绑语义准入`
+`BASE-B5 跨 tenant relation-orphan 终态处置分支与成功标准 ADR 决策`
 
 ```text
-authority_evidence_submitted_count=1
-authority_evidence_admitted_count=1
-authority_evidence_admitted_branch=B5_DETERMINISTIC_REBIND
 base_b5_selected_branch=B5_DETERMINISTIC_REBIND
-
 business_scope_linkage_confirmed=true
-target_scope_mapping_source=db_reconstructed_a2_p1_triplet
-db_triplet_canonical_digest_match=true
-target_scope_active=true
-
-live_readonly_reprobe_executed=true
-live_readonly_reprobe_result=blocked_cross_tenant_membership_prerequisite
 cross_tenant_target=true
-target_membership_prerequisite_satisfied=false
-same_account_target_tenant_binding_present=false
-current_rebind_transition_cross_tenant_supported=false
 
-cross_tenant_prerequisite_preplanning_ready=true
-cross_tenant_membership_authority_decision_received=false
-cross_tenant_rebind_semantics_admitted=false
+xt01_accepted=true
+xt02_accepted=true
+xt03_accepted=true
+xt04_accepted=true
+xt05_preplanning_accepted=true
+xt06_preplanning_accepted=true
+xt07_preplanning_accepted=true
+xt08_accepted=true
+xt09_technical_admission=blocked_invariant_conflict
+xt10_technical_admission=blocked_by_xt09
+
+cross_tenant_transfer_orchestration_preplanning_admitted=true
+cross_tenant_transfer_implementation_authorized=false
+cross_tenant_transfer_execution_authorized=false
+
+base_b5_success_criteria_conflict=true
 base_b5_execution_ready=false
-
 historical_orphan_remediation_authorized=false
-database_write_authorized=false
-dml_authorized=false
+
+database_connection=false
+migration_execution=false
+dml_execution=false
+ddl_execution=false
+
 base_b5_complete=false
 base02_complete=false
 business_reader_release=false
 business_capability_release=false
 
-database_connection=false
-migration_execution=false
-dml_execution=false
-next_task=BASE-B5 跨 tenant Membership 权威决策与重绑语义准入
+next_task=BASE-B5 跨 tenant relation-orphan 终态处置分支与成功标准 ADR 决策
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->

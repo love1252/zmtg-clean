@@ -1,5 +1,18 @@
 # 项目重构历史
 
+## 2026-08-07：BASE-B5 跨 tenant Membership／Transfer 决策准入收口
+
+- 决策准入 PR #1052 合并：`426a320957389b248c43e2f868a8feee1f7ca07c`；
+- 独立审查 PR #1053 合并：`696c3541a013e703431485caed51c7880545f448`；
+- XT01–XT08 完成 accepted / preplanning admission；
+- XT09 因 retained revoked Binding、immutable tuple、no-delete 与 relation-orphan `1→0` 成功标准冲突而保持 blocked；
+- XT10 随 XT09 保持 blocked；
+- transfer orchestration 设计前置已准入，但 implementation/execution 未授权；
+- 本轮未连接数据库，未执行 DDL、DML、Migration、Seed、FK VALIDATE、Membership/Binding 写入或 remediation；
+- BASE-B5、BASE-02、Reader 和业务 Capability 继续关闭；
+- 下一任务：BASE-B5 跨 tenant relation-orphan 终态处置分支与成功标准 ADR 决策。
+
+
 ## 2026-08-07：BASE-B5 目标 Scope 业务关联确认与跨 tenant 阻断收口
 
 - 业务负责人确认当前 A2-P1 唯一已批准并落库 Scope 与已准入目标机构一致；

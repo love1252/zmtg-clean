@@ -3,44 +3,62 @@
 ## 唯一下一任务
 
 ```text
-BASE-B5 跨 tenant Membership 权威决策与重绑语义准入
+BASE-B5 跨 tenant relation-orphan 终态处置分支与成功标准 ADR 决策
 ```
 
-## 当前基线
+## 已完成
 
-- 权威业务依据 submitted／admitted：`1／1`；
-- 业务目标分支：`B5_DETERMINISTIC_REBIND`；
-- 当前 A2-P1 唯一已批准并落库 Scope 与目标机构的业务关联：已确认；
-- A2-P1 Scope／Context Triplet canonical digest：匹配；
-- historical orphan：仍为 1；
-- Scope relation orphan：仍为 1；
-- historical orphan tenant 与目标 Scope tenant：不一致；
-- 当前账号在目标 tenant 的 Membership：0；
-- 当前账号在目标 tenant 的 active Binding：0；
-- 当前 `rebind` transition：不能直接表示跨 tenant replacement；
-- BASE-B5 execution ready：false；
-- remediation、Reader、Capability：继续关闭。
+- XT01–XT04：accepted；
+- XT05–XT07：accepted for preplanning；
+- XT08：accepted；
+- XT09：`blocked_invariant_conflict`；
+- XT10：`blocked_by_xt09`；
+- cross-tenant transfer orchestration 方向已冻结，但 implementation/execution 未授权。
 
-## 下一任务目标
+## 当前冲突
 
-完成并独立审查以下决策：
+未来访问迁移方向：
 
-1. 当前账号是否获准进入目标 tenant；
-2. 目标 tenant Membership 的角色、revision、provenance、生效与撤销策略；
-3. 当前 tenant Membership 的保留、撤销或迁移策略；
-4. 跨 tenant Binding 处置采用两步 revoke／create，还是新增 transfer contract／Schema；
-5. 如何形成跨 tenant 低敏 correlation evidence；
-6. Writer Owner、事务边界、锁、Execution Lease、恢复点和 forward-fix；
-7. exact pre-state／post-state 计数与停止条件；
-8. 是否需要独立 Schema／Migration 任务。
+```text
+target Membership create + target Binding create
++
+source Membership revoke + source Binding revoke
+```
+
+现有 accepted Binding 规则同时要求：
+
+- revoked Binding 永久保留；
+- tenant／institution identity tuple 不可原地改写；
+- BASE-B2 不提供 DELETE。
+
+而 B5 deterministic rebind 当前成功标准要求：
+
+```text
+active_orphan=1->0
+relation_orphan=1->0
+```
+
+在不创建伪 Scope、不修改旧 tuple、不 delete/archive old Binding 的情况下，只能得到：
+
+```text
+active_orphan=0
+relation_orphan=1
+```
+
+## 下一任务必须明确选择
+
+1. 保持 M09-A immutable/no-delete，并通过独立 ADR 修改 BASE-B5 relation-orphan 成功定义；
+2. 重新开启 archive/delete old Binding 的治理路径；
+3. 重开 Binding identity/tuple immutability；
+4. 或继续保持 BASE-B5 blocked。
 
 ## 当前禁止
 
 - 不创建或修改 Membership；
-- 不创建、更新或撤销 Binding；
-- 不执行 historical orphan 重绑；
+- 不创建、更新、撤销、删除或重绑 Binding；
+- 不创建 source fake Scope；
 - 不执行 DDL、DML、Migration、Seed 或 FK VALIDATE；
-- 不把数据库唯一候选替代业务负责人确认；
-- 不把业务关联确认写成 remediation 授权；
+- 不实现 cross-tenant transfer orchestration；
+- 不修改 same-tenant rebind 语义；
 - 不开放 Reader 或业务 Capability；
 - 不把 BASE-B5 或 BASE-02 写成已完成。

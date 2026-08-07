@@ -1,4 +1,21 @@
 # 智美天工架构文档索引
+<!-- BASE02_B5_XT_DECISION_START -->
+
+## BASE-B5 Cross-Tenant Transfer 决策状态（2026-08-07）
+
+- XT01–XT08：accepted / preplanning admitted；
+- XT09：blocked_invariant_conflict；
+- XT10：blocked_by_xt09；
+- planned transfer：target create + source revoke；
+- existing same-tenant rebind：保持不变；
+- implementation authorized：false；
+- execution authorized：false；
+- BASE-B5 success criteria conflict：true；
+- Reader／Capability：继续关闭；
+- 下一任务：relation-orphan 终态处置与成功标准 ADR 决策。
+
+<!-- BASE02_B5_XT_DECISION_END -->
+
 <!-- BASE02_B5_CROSS_TENANT_BLOCKER_START -->
 
 ## BASE-B5 跨 tenant Membership 前置阻断（2026-08-07）
