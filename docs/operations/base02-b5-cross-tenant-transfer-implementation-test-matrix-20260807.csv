@@ -1,0 +1,26 @@
+id,category,scenario,expected
+T01,happy_path,valid source active target absent target scope active,atomic target create and source revoke
+T02,identity,source tenant equals target tenant,blocked
+T03,identity,account mismatch,blocked
+T04,source_membership,missing or inactive,blocked
+T05,source_membership,revision stale,blocked
+T06,source_binding,missing active binding,blocked
+T07,source_binding,version stale,blocked
+T08,source_binding,expired,blocked
+T09,target_membership,target membership exists,blocked
+T10,target_binding,target active binding exists,blocked
+T11,target_scope,missing or inactive,blocked
+T12,target_scope,invalid or unavailable,blocked
+T13,role,target role inherited from locked source membership,passed
+T14,command,same command id reused across source and target tenant,passed
+T15,evidence,four evidence records correlate to same command id,passed
+T16,rollback,target applied then source blocked,outer transaction rollback
+T17,rollback,write-stage error,outer transaction rollback
+T18,locking,account advisory lock before tenant locks,passed
+T19,transaction,serializable read write and exact timeouts,passed
+T20,transaction,nested transaction count,0
+T21,transaction,automatic retry count,0
+T22,writer,new direct membership or binding table writer,0
+T23,compatibility,same-tenant binding rebind changed,false
+T24,compatibility,formal onboarding adapter changed,false
+T25,outcome_unknown,commit outcome unknown,stop and do not retry

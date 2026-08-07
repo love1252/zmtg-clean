@@ -1,0 +1,5 @@
+order,path,change_type,owner,purpose,allowed
+1,src/modules/access-control/application/cross-tenant-transfer-service.ts,create,access_control,application orchestration using existing owner commands,yes
+2,src/modules/access-control/server/cross-tenant-transfer-transaction.ts,create,access_control,single outer serializable transaction plus account advisory lock,yes
+3,src/modules/access-control/tests/CrossTenantTransferService.test.ts,create,access_control,application contract and rollback tests,yes
+4,src/modules/access-control/tests/CrossTenantTransferTransaction.test.ts,create,access_control,transaction lock order timeout and no-retry tests,yes
