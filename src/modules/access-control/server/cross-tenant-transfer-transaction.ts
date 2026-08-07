@@ -13,8 +13,8 @@ import {
   MEMBERSHIP_COMMAND_TRANSACTION_OPTIONS,
   createTransactionBoundMembershipCommandUnitOfWork,
   type MembershipCommandTransactionDatabase,
+  type TransactionBoundScopeAssertionFactory,
 } from '@/modules/access-control/server/membership-command-repository';
-import { createTransactionBoundInstitutionScopeAssertion } from '@/modules/tenancy/server/transaction-bound-institution-scope';
 import type { TenantDatabase } from '@/server/db/client';
 
 export const CROSS_TENANT_TRANSFER_TRANSACTION_OPTIONS =
@@ -124,6 +124,9 @@ function isCanonicalAccountId(value: unknown): value is string {
 
 export function createCrossTenantTransferTransactionPort(
   database: TenantDatabase,
+  dependencies: Readonly<{
+    createScopeAssertion?: TransactionBoundScopeAssertionFactory;
+  }> = {},
 ): CrossTenantTransferTransactionPort {
   return Object.freeze({
     run: async <T>(
@@ -163,27 +166,28 @@ export function createCrossTenantTransferTransactionPort(
               isActive,
               isAccountLocked,
             );
-            const baseScopeAssertion =
-              createTransactionBoundInstitutionScopeAssertion(
-                tenantTransaction,
-                isActive,
-              );
-            const scopeAssertion = Object.freeze({
-              assertActive: async (
-                input: Readonly<{
-                  tenantId: string;
-                  institutionId: string;
-                }>,
-              ) => {
-                if (!active || lockedAccountId === null) {
-                  return Object.freeze({
-                    kind: 'rejected' as const,
-                    code: 'scope_unavailable' as const,
-                  });
-                }
-                return baseScopeAssertion.assertActive(input);
-              },
-            });
+            const baseScopeAssertion = dependencies.createScopeAssertion?.(
+              transaction,
+              isActive,
+            );
+            const scopeAssertion = baseScopeAssertion === undefined
+              ? undefined
+              : Object.freeze({
+                  assertActive: async (
+                    input: Readonly<{
+                      tenantId: string;
+                      institutionId: string;
+                    }>,
+                  ) => {
+                    if (!active || lockedAccountId === null) {
+                      return Object.freeze({
+                        kind: 'rejected' as const,
+                        code: 'scope_unavailable' as const,
+                      });
+                    }
+                    return baseScopeAssertion.assertActive(input);
+                  },
+                });
 
             const context: CrossTenantTransferTransactionContext =
               Object.freeze({
