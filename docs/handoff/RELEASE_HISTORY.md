@@ -1,5 +1,17 @@
 # 项目重构历史
 
+## 2026-08-08：BASE-B5 Controlled Execution Runner 准入收口
+
+- Runner Admission PR #1064 合并：`ffcc8e516cfbd39801aca1c928c59e5a895501f6`；
+- Independent Review PR #1065 合并：`15e6ec79939d99fc8181a5ac47dcdd3c3dd6b4f1`；
+- exact runner allowlist 冻结为 2 个新文件；
+- 选择 one-shot CLI，不建设长期 API；
+- fixed localhost/local_acceptance、secure manifest、execute lease、dry-run/execute、outcome-unknown 协议已冻结；
+- package.json/Schema/Migration/现有 transfer foundation 不修改；
+- 本轮未创建 runner，未连接数据库，未执行 DDL/DML/Migration 或 remediation；
+- 下一任务：BASE-B5 跨 tenant transfer controlled execution runner 2-file 最小实现授权与执行。
+
+
 ## 2026-08-08：BASE-B5 Cross-Tenant Transfer 4-file 最小实现收口
 
 - Implementation PR #1061 合并：`633f77415ea74e3456f528e650de28198cd30da9`；
