@@ -1,0 +1,27 @@
+id,category,scenario,expected
+R01,cli,unknown or duplicate arguments,fail_closed
+R02,cli,dry-run and execute together,fail_closed
+R03,cli,execute without lease,fail_closed
+R04,manifest,relative manifest path,fail_closed
+R05,manifest,symlink hardlink wrong owner or unsafe mode,fail_closed
+R06,manifest,oversize invalid UTF8 duplicate JSON key,fail_closed
+R07,lease,unsafe lease file,fail_closed
+R08,lease,manifest sha mismatch,fail_closed
+R09,code,expectedCodeSha differs from clean git HEAD,fail_closed
+R10,code,dirty worktree,fail_closed
+R11,environment,non-local shell DATABASE_URL,fail_closed
+R12,environment,runner endpoint,fixed_127.0.0.1_55432_local_acceptance
+R13,dry_run,prestate exact,ready_no_mutation
+R14,dry_run,source membership revision mismatch,blocked
+R15,dry_run,source binding version mismatch,blocked
+R16,dry_run,target membership or binding conflict,blocked
+R17,dry_run,target scope missing or inactive,blocked
+R18,dry_run,source or target command replay,blocked
+R19,dry_run,journal schema fingerprint mismatch,blocked
+R20,execute,valid lease and ready prestate,transfer_service_called_once
+R21,execute,direct canonical mutation SQL in runner,forbidden
+R22,postcheck,Option1 accepted terminal metrics,passed
+R23,outcome_unknown,automatic retry count,0
+R24,outcome_unknown,fresh readonly classification,committed_or_not_committed_or_indeterminate
+R25,output,raw technical identifiers emitted,0
+R26,resource,postgres client closes on every terminal path,true

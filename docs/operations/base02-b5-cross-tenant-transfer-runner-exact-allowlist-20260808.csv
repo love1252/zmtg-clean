@@ -1,0 +1,3 @@
+order,path,change_type,owner,purpose,future_implementation_allowed
+1,scripts/db/base02-b5-cross-tenant-transfer-runner.mjs,create,repository_operations,one-shot localhost-only local_acceptance controlled runner,yes
+2,scripts/db/base02-b5-cross-tenant-transfer-runner.test.mjs,create,repository_operations,runner CLI manifest lease dry-run execute postcheck outcome-unknown tests,yes
