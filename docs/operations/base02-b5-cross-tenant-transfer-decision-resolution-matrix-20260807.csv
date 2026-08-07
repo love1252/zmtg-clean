@@ -1,0 +1,11 @@
+order,decision_id,topic,user_direction,technical_admission,selected_policy,execution_effect,blocking
+1,XT01,target_tenant_membership,confirmed,accepted,allow existing global account to receive future target-tenant membership under explicit authority,design authority only,false
+2,XT02,target_membership_shape,confirmed,accepted,revision=1 role=inherit_source_role provenance=access_control_command target binding assignment=manual_admin,preplanning only,false
+3,XT03,current_membership_lifecycle,confirmed,accepted,source membership revoke and source binding revoke; no delete,preplanning only,false
+4,XT04,identity_portability,confirmed,accepted,reuse same global auth account and represent tenant access through tenant-scoped membership/binding,preplanning only,false
+5,XT05,cross_tenant_binding_semantics,confirmed,accepted_for_preplanning,new cross-tenant orchestration = target create + source revoke in one outer transaction; do not widen same-tenant rebind,implementation still forbidden,false
+6,XT06,transition_correlation,confirmed,accepted_for_preplanning,shared low-sensitive transfer command identity across tenant-scoped evidence; schema fallback requires new decision,implementation still forbidden,false
+7,XT07,writer_transaction_boundary,confirmed,accepted_for_preplanning,Access Control owner + single SERIALIZABLE transaction + transfer/account advisory lock + no retry,implementation still forbidden,false
+8,XT08,recovery_and_verification,confirmed,accepted,recovery point + frozen prestate + outcome-unknown readonly recompute + independent postcheck,execution still forbidden,false
+9,XT09,success_criteria,confirmed,blocked_invariant_conflict,desired active_orphan 1->0 and relation_orphan 1->0 conflicts with immutable retained revoked source binding,BASE-B5 execution not admissible,true
+10,XT10,release_boundary,confirmed,blocked_by_xt09,BASE-B5/BASE-02/Reader/Capability remain closed until XT09 resolved,no release,true
