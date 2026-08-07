@@ -1,4 +1,23 @@
 # 智美天工架构文档索引
+<!-- BASE02_W1A_CUSTOMERS_CORE_ADMISSION_START -->
+
+## W1A Customers Core Writer Admission（2026-08-08）
+
+```text
+w1_symbol_audit=passed
+w1_true_db_writer_files=7
+w1_false_positive_files=5
+w1a_exact_allowlist_file_count=6
+w1a_runtime_implementation_authorized=false
+customers_route_capability_off=true
+reader_release=false
+capability_release=false
+```
+
+下一任务：W1A exact allowlist Runtime implementation explicit authorization。
+
+<!-- BASE02_W1A_CUSTOMERS_CORE_ADMISSION_END -->
+
 <!-- BASE02_BUSINESS_WRITER_ADMISSION_START -->
 
 ## post-BASE02 Business Writer Admission（2026-08-08）

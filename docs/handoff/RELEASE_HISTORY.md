@@ -1,5 +1,16 @@
 # 项目重构历史
 
+## 2026-08-08：W1A Customers Core Writer 准入
+
+- W1_CUSTOMERS_MESSAGING 完成逐符号复核；
+- false positives 已排除；
+- 首原子子切片冻结为 W1A Customers Core；
+- exact implementation allowlist 已冻结；
+- Customers route 保持 capability-off；
+- Runtime implementation 未授权；
+- 下一步等待用户明确 Runtime 授权。
+
+
 ## 2026-08-08：post-BASE02 Business Writer 阶段准入
 
 - BASE-02 complete=true；

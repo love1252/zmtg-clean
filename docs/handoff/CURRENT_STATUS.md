@@ -3,38 +3,29 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-02 post-closure Business Writer Admission
+## W1A Customers Core Business Writer 准入
 
 - 更新日期：2026-08-08
 - BASE-02：complete
-- Admission PR #1075：`0fb1c8ef53018f9230643552ebb9b082002bfd9c`
-- Independent Review PR #1076：`f8fd56c8507806a9880fbe4828b7f58d41e64c31`
-- static mutation inventory：complete
-- mutation candidate files：75
-- business Writer surface：27
-- bypass review surface：3
-- vertical slice matrix：frozen
-- current writer candidate surface paths：frozen
-- business Writer Runtime implementation：not authorized
-- Reader / Capability：closed
-- physical FK strategy：unresolved
-- FK VALIDATE：false
+- W1A Admission PR #1078：`cacd724d8db2f0e5e3751c1a06475aaaab92cf9a`
+- W1A Review PR #1079：`46fa8b0bb8ee061750efcaca364900db99428791`
+- W1 coarse candidates：12
+- true DB Writer files：7
+- false positives：5
+- exact allowlist files：6
+- Runtime implementation：not authorized
+- Reader/Capability：closed
 
 ```text
-business_writer_admission=passed
-business_writer_admission_independent_review=passed
-business_writer_implementation_authorized=false
-base02_complete=true
-reader_release=false
-capability_release=false
-physical_fk_strategy_resolved=false
-fk_validate=false
-first_recommended_slice=W1_CUSTOMERS_MESSAGING
+w1_symbol_audit=passed
+w1a_customers_core_admission=passed
+w1a_exact_allowlist=frozen
+w1a_runtime_implementation_authorized=false
 ```
 
 ### 唯一下一任务
 
-`BASE-02 business Writer W1_CUSTOMERS_MESSAGING first vertical slice implementation exact allowlist freeze / authorization decision`
+`W1A Customers Core exact allowlist Runtime implementation explicit authorization`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
