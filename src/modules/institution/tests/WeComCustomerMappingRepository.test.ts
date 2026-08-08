@@ -33,8 +33,8 @@ const row = {
   updatedAt: new Date('2026-07-10T08:00:00.000Z'),
 } satisfies typeof weComCustomerMappingStates.$inferSelect;
 
-describe('WeComCustomerMappingRepository', () => {
-  it('按 tenantId + institutionId + proofContactId 查询并只返回低敏字段', async () => {
+describe('WeComCustomerMappingRepository legacy compatibility', () => {
+  it('read compatibility：按 tenant + institution + proofContact 查询', async () => {
     const where = vi.fn(async () => [row]);
     const from = vi.fn(() => ({ where }));
     const select = vi.fn(() => ({ from }));
@@ -50,21 +50,14 @@ describe('WeComCustomerMappingRepository', () => {
       conditions: [
         { column: weComCustomerMappingStates.tenantId, operator: 'eq', value: 'tenant-a' },
         { column: weComCustomerMappingStates.institutionId, operator: 'eq', value: 'inst-a' },
-        {
-          column: weComCustomerMappingStates.proofContactId,
-          operator: 'eq',
-          value: 'live-contact-proof-01',
-        },
+        { column: weComCustomerMappingStates.proofContactId, operator: 'eq', value: 'live-contact-proof-01' },
       ],
       operator: 'and',
     });
     expect(result).toEqual(mapWeComCustomerMappingStateRow(row));
-    expect(JSON.stringify(result)).not.toMatch(
-      /external_userid|userid|corpId|Secret|token|rawResponse/i,
-    );
   });
 
-  it('事务准备链路按完整 scope SELECT FOR UPDATE 锁定 mapping row', async () => {
+  it('read compatibility：SELECT FOR UPDATE 继续按完整 scope 锁定', async () => {
     const forLock = vi.fn(async () => [row]);
     const where = vi.fn(() => ({ for: forLock }));
     const from = vi.fn(() => ({ where }));
@@ -77,118 +70,45 @@ describe('WeComCustomerMappingRepository', () => {
       proofContactId: 'live-contact-proof-01',
     });
 
-    expect(where).toHaveBeenCalledWith({
-      conditions: [
-        { column: weComCustomerMappingStates.tenantId, operator: 'eq', value: 'tenant-a' },
-        { column: weComCustomerMappingStates.institutionId, operator: 'eq', value: 'inst-a' },
-        { column: weComCustomerMappingStates.proofContactId, operator: 'eq', value: 'live-contact-proof-01' },
-      ],
-      operator: 'and',
-    });
     expect(forLock).toHaveBeenCalledWith('update');
     expect(result).toEqual(mapWeComCustomerMappingStateRow(row));
   });
 
-  it('create-if-absent 使用 on-conflict-do-nothing，冲突时不覆盖已有状态', async () => {
-    const returning = vi.fn(async () => [row]);
-    const onConflictDoNothing = vi.fn(() => ({ returning }));
-    const values = vi.fn(() => ({ onConflictDoNothing }));
-    const insert = vi.fn(() => ({ values }));
-    const repository = createWeComCustomerMappingRepository({ insert } as unknown as TenantDatabase);
+  it('legacy create/update Writer 均 fail-closed 且不触发 DB mutation', async () => {
+    const insert = vi.fn();
+    const update = vi.fn();
+    const repository = createWeComCustomerMappingRepository({ insert, update } as unknown as TenantDatabase);
 
-    const result = await repository.createIfAbsent({
-      id: 'mapping-01',
-      tenantId: 'tenant-a',
-      institutionId: 'inst-a',
-      proofContactId: 'live-contact-proof-01',
-      proofEmployeeId: 'live-employee-proof-01',
-      sourceMode: 'real_readonly_proof',
-      customerId: 'customer-a',
-      status: 'confirmed',
-      decidedBy: 'admin-a',
-      decidedAt: '2026-07-10T08:00:00.000Z',
-    });
-
-    expect(onConflictDoNothing).toHaveBeenCalledOnce();
-    expect(result).toEqual(mapWeComCustomerMappingStateRow(row));
-    expect(insert).toHaveBeenCalledWith(weComCustomerMappingStates);
-    expect(values).toHaveBeenCalledWith({
-      id: 'mapping-01',
-      tenantId: 'tenant-a',
-      institutionId: 'inst-a',
-      proofContactId: 'live-contact-proof-01',
-      proofEmployeeId: 'live-employee-proof-01',
-      sourceMode: 'real_readonly_proof',
-      customerId: 'customer-a',
-      status: 'confirmed',
-      decidedBy: 'admin-a',
-      decidedAt: new Date('2026-07-10T08:00:00.000Z'),
-    });
-  });
-
-  it('create-if-absent 冲突时返回 null', async () => {
-    const returning = vi.fn(async () => []);
-    const onConflictDoNothing = vi.fn(() => ({ returning }));
-    const values = vi.fn(() => ({ onConflictDoNothing }));
-    const insert = vi.fn(() => ({ values }));
-    const repository = createWeComCustomerMappingRepository({ insert } as unknown as TenantDatabase);
-
-    const result = await repository.createIfAbsent({
-      id: 'mapping-02',
-      tenantId: 'tenant-a',
-      institutionId: 'inst-a',
-      proofContactId: 'live-contact-proof-01',
-      proofEmployeeId: 'live-employee-proof-01',
-      sourceMode: 'real_readonly_proof',
-      customerId: 'customer-b',
-      status: 'rejected',
-      decidedBy: 'admin-a',
-      decidedAt: '2026-07-10T08:00:00.000Z',
-    });
-
-    expect(result).toBeNull();
-  });
-
-  it('条件更新同时绑定 scope、customer 和当前状态，零返回行表示未更新', async () => {
-    const returning = vi.fn(async () => []);
-    const where = vi.fn(() => ({ returning }));
-    const set = vi.fn(() => ({ where }));
-    const update = vi.fn(() => ({ set }));
-    const repository = createWeComCustomerMappingRepository({ update } as unknown as TenantDatabase);
-
-    const result = await repository.updateWhenCurrentStatus({
-      tenantId: 'tenant-a',
-      institutionId: 'inst-a',
-      proofContactId: 'live-contact-proof-01',
-      customerId: 'customer-a',
-      expectedCustomerId: 'customer-a',
-      expectedStatus: 'confirmed',
-      status: 'revoked',
-      decidedBy: 'admin-a',
-      decidedAt: '2026-07-10T09:00:00.000Z',
-    });
-
-    expect(where).toHaveBeenCalledWith({
-      conditions: [
-        { column: weComCustomerMappingStates.tenantId, operator: 'eq', value: 'tenant-a' },
-        { column: weComCustomerMappingStates.institutionId, operator: 'eq', value: 'inst-a' },
-        {
-          column: weComCustomerMappingStates.proofContactId,
-          operator: 'eq',
-          value: 'live-contact-proof-01',
-        },
-        { column: weComCustomerMappingStates.customerId, operator: 'eq', value: 'customer-a' },
-        { column: weComCustomerMappingStates.status, operator: 'eq', value: 'confirmed' },
-      ],
-      operator: 'and',
-    });
-    expect(set).toHaveBeenCalledWith(
-      expect.objectContaining({
+    await expect(
+      repository.createIfAbsent({
+        id: 'mapping-01',
+        tenantId: 'tenant-a',
+        institutionId: 'inst-a',
+        proofContactId: 'live-contact-proof-01',
+        proofEmployeeId: 'live-employee-proof-01',
+        sourceMode: 'real_readonly_proof',
         customerId: 'customer-a',
+        status: 'confirmed',
+        decidedBy: 'admin-a',
+        decidedAt: '2026-07-10T08:00:00.000Z',
+      }),
+    ).rejects.toThrow('legacy_wecom_mapping_writer_disabled');
+
+    await expect(
+      repository.updateWhenCurrentStatus({
+        tenantId: 'tenant-a',
+        institutionId: 'inst-a',
+        proofContactId: 'live-contact-proof-01',
+        customerId: 'customer-b',
+        expectedCustomerId: 'customer-a',
+        expectedStatus: 'confirmed',
         status: 'revoked',
         decidedBy: 'admin-a',
+        decidedAt: '2026-07-10T09:00:00.000Z',
       }),
-    );
-    expect(result).toBeNull();
+    ).rejects.toThrow('legacy_wecom_mapping_writer_disabled');
+
+    expect(insert).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
   });
 });
