@@ -3,29 +3,36 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## W1A Customers Core Business Writer 准入
+## W1A Customers Core 完成状态
 
 - 更新日期：2026-08-08
-- BASE-02：complete
-- W1A Admission PR #1078：`cacd724d8db2f0e5e3751c1a06475aaaab92cf9a`
-- W1A Review PR #1079：`46fa8b0bb8ee061750efcaca364900db99428791`
-- W1 coarse candidates：12
-- true DB Writer files：7
-- false positives：5
-- exact allowlist files：6
-- Runtime implementation：not authorized
-- Reader/Capability：closed
+- Implementation PR #1081：`44c10fd548ae1881033ed0dc5f8947178be2edcc`
+- Independent Review PR #1082：`849571c10ed56b8797cea758416289870d92262c`
+- exact Runtime files：6
+- Customers canonical application service：complete
+- Customers canonical Writer repository：complete
+- tenantId + institutionId attribution：enforced
+- cross-institution mutation：fail-closed
+- nullable institution row：fail-closed
+- legacy customer parallel Writer：disabled
+- Customers Route：capability-off
+- Reader / Capability：closed
+- Schema / Migration / FK VALIDATE：unchanged
 
 ```text
-w1_symbol_audit=passed
-w1a_customers_core_admission=passed
-w1a_exact_allowlist=frozen
-w1a_runtime_implementation_authorized=false
+w1a_customers_core_runtime_implementation=passed
+w1a_runtime_independent_review=passed
+w1a_customers_core_complete=true
+business_writer_phase_complete=false
+reader_release=false
+capability_release=false
+schema_change=false
+fk_validate=false
 ```
 
 ### 唯一下一任务
 
-`W1A Customers Core exact allowlist Runtime implementation explicit authorization`
+`W1B Customer Channel / WeCom Mapping Writer symbol audit + exact implementation allowlist admission`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 

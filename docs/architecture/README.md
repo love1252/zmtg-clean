@@ -1,4 +1,30 @@
 # 智美天工架构文档索引
+<!-- BASE02_W1A_CUSTOMERS_CORE_RUNTIME_CLOSURE_START -->
+
+## W1A Customers Core Runtime Closure（2026-08-08）
+
+```text
+implementation_pr=1081
+implementation_merge=44c10fd548ae1881033ed0dc5f8947178be2edcc
+independent_review_pr=1082
+independent_review_merge=849571c10ed56b8797cea758416289870d92262c
+exact_file_count=6
+customers_canonical_application_service=true
+customers_canonical_writer_repository=true
+tenant_institution_attribution_enforced=true
+cross_institution_mutation_fail_closed=true
+legacy_customer_parallel_writer_disabled=true
+w1a_customers_core_complete=true
+business_writer_phase_complete=false
+customers_route_capability_off=true
+reader_release=false
+capability_release=false
+```
+
+下一任务：`W1B Customer Channel / WeCom Mapping Writer symbol audit + exact implementation allowlist admission`
+
+<!-- BASE02_W1A_CUSTOMERS_CORE_RUNTIME_CLOSURE_END -->
+
 <!-- BASE02_W1A_CUSTOMERS_CORE_ADMISSION_START -->
 
 ## W1A Customers Core Writer Admission（2026-08-08）
