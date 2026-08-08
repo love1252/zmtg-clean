@@ -1,5 +1,20 @@
 # 项目重构历史
 
+## 2026-08-08：W1A Customers Core Runtime 完成
+
+- PR #1081 完成 exact 6-file Runtime implementation；
+- Customers canonical application service / Writer repository 建立；
+- tenantId + institutionId attribution 强制；
+- update 同时约束 tenant + institution + customer；
+- nullable institution row fail-closed；
+- legacy tenant-business customer parallel Writer 已禁用；
+- Independent Review PR #1082 通过；
+- W1A Customers Core complete=true；
+- Customers Route、Reader、Capability 继续关闭；
+- Business Writer phase 尚未完成；
+- 下一 vertical slice：W1B Customer Channel / WeCom Mapping。
+
+
 ## 2026-08-08：W1A Customers Core Writer 准入
 
 - W1_CUSTOMERS_MESSAGING 完成逐符号复核；
