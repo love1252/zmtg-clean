@@ -1,20 +1,20 @@
-import {
-  createAuditEventRepository,
-  type AuditEventRepository,
+
+import type {
+  AuditEventRepository,
 } from '@/modules/audit/server/audit-event-repository';
-import {
-  createTenantBusinessRepository,
-  type TenantBusinessRepository,
+import type {
+  TenantBusinessRepository,
 } from '@/modules/institution/server/tenant-business-repository';
-import {
-  createTrustedReachOutSafetyRepository,
-  type TrustedReachOutSafetyRepository,
+import type {
+  TrustedReachOutSafetyRepository,
 } from '@/modules/institution/server/trusted-reachout-safety-repository';
-import {
-  createWeComCustomerMappingRepository,
-  type WeComCustomerMappingRepository,
+import type {
+  WeComCustomerMappingRepository,
 } from '@/modules/institution/server/wecom-customer-mapping-repository';
 import type { TenantDatabase } from '@/server/db/client';
+import {
+  runWeComReachOutTransaction,
+} from '@/server/orchestration/wecom-reachout-transaction';
 
 type WeComControlledReachOutTransactionDependencies = {
   repository: TenantBusinessRepository;
@@ -25,15 +25,15 @@ type WeComControlledReachOutTransactionDependencies = {
 
 export async function runWeComControlledReachOutTransaction<T>(
   database: TenantDatabase,
-  operation: (dependencies: WeComControlledReachOutTransactionDependencies) => Promise<T>,
+  operation: (
+    dependencies: WeComControlledReachOutTransactionDependencies,
+  ) => Promise<T>,
 ) {
-  return database.transaction(async (transactionDatabase) => {
-    const transactionDb = transactionDatabase as unknown as TenantDatabase;
-    return operation({
-      repository: createTenantBusinessRepository(transactionDb),
-      mappingRepository: createWeComCustomerMappingRepository(transactionDb),
-      safetyRepository: createTrustedReachOutSafetyRepository(transactionDb),
-      auditRepository: createAuditEventRepository(transactionDb),
-    });
-  });
+  return runWeComReachOutTransaction(database, (dependencies) =>
+    operation({
+      repository: dependencies.customerRepository,
+      mappingRepository: dependencies.mappingRepository,
+      safetyRepository: dependencies.safetyRepository,
+      auditRepository: dependencies.auditRepository,
+    }));
 }

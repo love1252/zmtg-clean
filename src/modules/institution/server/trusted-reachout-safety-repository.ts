@@ -1,4 +1,4 @@
-import { and, eq, lt, or, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type {
   WeComReachOutConsentSourceType,
   WeComReachOutConsentStatus,
@@ -151,41 +151,9 @@ export function createTrustedReachOutSafetyRepository(database: TenantDatabase) 
       recordedBy: string;
       recordedAt: Date;
       expectedVersion: number | null;
-    }) {
-      if (input.expectedVersion === null) {
-        const [row] = await database
-          .insert(customerChannelContactConsents)
-          .values({
-            id: input.id,
-            tenantId: input.tenantId,
-            institutionId: input.institutionId,
-            customerId: input.customerId,
-            channelType: 'wechat_work',
-            status: input.status,
-            sourceType: input.sourceType,
-            evidenceRef: input.evidenceRef,
-            recordedBy: input.recordedBy,
-            recordedAt: input.recordedAt,
-          })
-          .onConflictDoNothing()
-          .returning();
-        return row ? mapConsent(row) : null;
-      }
-
-      const [row] = await database
-        .update(customerChannelContactConsents)
-        .set({
-          status: input.status,
-          sourceType: input.sourceType,
-          evidenceRef: input.evidenceRef,
-          recordedBy: input.recordedBy,
-          recordedAt: input.recordedAt,
-          version: input.expectedVersion + 1,
-          updatedAt: input.recordedAt,
-        })
-        .where(and(customerScopeWhere(input), eq(customerChannelContactConsents.version, input.expectedVersion)))
-        .returning();
-      return row ? mapConsent(row) : null;
+    }): Promise<CustomerChannelContactConsent | null> {
+      void input;
+      throw new Error('legacy_wecom_reachout_safety_writer_disabled');
     },
 
     async findFrequency(scope: WeComReachOutSafetyScope) {
@@ -201,27 +169,9 @@ export function createTrustedReachOutSafetyRepository(database: TenantDatabase) 
       operationRef: string;
       now: Date;
       windowEndsAt: Date;
-    }) {
-      const [row] = await database
-        .insert(customerChannelFrequencyStates)
-        .values({
-          id: input.id,
-          tenantId: input.tenantId,
-          institutionId: input.institutionId,
-          customerId: input.customerId,
-          channelType: 'wechat_work',
-          windowStartedAt: input.now,
-          windowEndsAt: input.windowEndsAt,
-          preparedCount: 1,
-          completedCount: 0,
-          maxPreparedCount: 1,
-          maxCompletedCount: 1,
-          nextAllowedAt: input.windowEndsAt,
-          lastPreparedRef: input.operationRef,
-        })
-        .onConflictDoNothing()
-        .returning();
-      return row ? mapFrequency(row) : null;
+    }): Promise<CustomerChannelFrequencyState | null> {
+      void input;
+      throw new Error('legacy_wecom_reachout_safety_writer_disabled');
     },
 
     async updateFrequencyWhenVersion(input: WeComReachOutSafetyScope & {
@@ -233,27 +183,9 @@ export function createTrustedReachOutSafetyRepository(database: TenantDatabase) 
       completedCount: number;
       nextAllowedAt: Date;
       expectedVersion: number;
-    }) {
-      const [row] = await database
-        .update(customerChannelFrequencyStates)
-        .set({
-          windowStartedAt: input.windowStartedAt,
-          windowEndsAt: input.windowEndsAt,
-          preparedCount: input.preparedCount,
-          completedCount: input.completedCount,
-          maxPreparedCount: 1,
-          maxCompletedCount: 1,
-          nextAllowedAt: input.nextAllowedAt,
-          lastPreparedRef: input.operationRef,
-          version: input.expectedVersion + 1,
-          updatedAt: input.now,
-        })
-        .where(and(
-          frequencyScopeWhere(input),
-          eq(customerChannelFrequencyStates.version, input.expectedVersion),
-        ))
-        .returning();
-      return row ? mapFrequency(row) : null;
+    }): Promise<CustomerChannelFrequencyState | null> {
+      void input;
+      throw new Error('legacy_wecom_reachout_safety_writer_disabled');
     },
 
     async findDryRunSnapshot(input: { tenantId: string; institutionId: string }) {
@@ -273,67 +205,13 @@ export function createTrustedReachOutSafetyRepository(database: TenantDatabase) 
       return row ? mapSnapshot(row) : null;
     },
 
-    async upsertDryRunSnapshot(input: Omit<InstitutionChannelDryRunSnapshot, 'version' | 'evaluatedAt'> & { evaluatedAt: Date }) {
-      const newerEvaluation = lt(
-        institutionChannelDryRunSnapshots.evaluatedAt,
-        input.evaluatedAt,
-      );
-      const updateCondition = input.configStatus === 'dry_run_ready'
-        ? newerEvaluation
-        : or(
-            newerEvaluation,
-            and(
-              eq(institutionChannelDryRunSnapshots.evaluatedAt, input.evaluatedAt),
-              eq(institutionChannelDryRunSnapshots.configStatus, 'dry_run_ready'),
-            ),
-          );
-
-      const [row] = await database
-        .insert(institutionChannelDryRunSnapshots)
-        .values({
-          id: input.id,
-          tenantId: input.tenantId,
-          institutionId: input.institutionId,
-          channelType: 'wechat_work',
-          officialRoute: input.officialRoute,
-          proofInstitutionRef: input.proofInstitutionRef,
-          callbackPlaceholderRef: input.callbackPlaceholderRef,
-          configStatus: input.configStatus,
-          preflightStatus: input.preflightStatus,
-          proofEligibleMock: input.proofEligibleMock,
-          evaluatedBy: input.evaluatedBy,
-          evaluatedAt: input.evaluatedAt,
-          allowRealSend: false,
-          externalChannelEnabled: false,
-          realSendAllowed: false,
-          dryRunOnly: true,
-        })
-        .onConflictDoUpdate({
-          target: [
-            institutionChannelDryRunSnapshots.tenantId,
-            institutionChannelDryRunSnapshots.institutionId,
-            institutionChannelDryRunSnapshots.channelType,
-          ],
-          set: {
-            officialRoute: input.officialRoute,
-            proofInstitutionRef: input.proofInstitutionRef,
-            callbackPlaceholderRef: input.callbackPlaceholderRef,
-            configStatus: input.configStatus,
-            preflightStatus: input.preflightStatus,
-            proofEligibleMock: input.proofEligibleMock,
-            evaluatedBy: input.evaluatedBy,
-            evaluatedAt: input.evaluatedAt,
-            allowRealSend: false,
-            externalChannelEnabled: false,
-            realSendAllowed: false,
-            dryRunOnly: true,
-            version: sql`${institutionChannelDryRunSnapshots.version} + 1`,
-            updatedAt: input.evaluatedAt,
-          },
-          setWhere: updateCondition,
-        })
-        .returning();
-      return row ? mapSnapshot(row) : null;
+    async upsertDryRunSnapshot(
+      input: Omit<InstitutionChannelDryRunSnapshot, 'version' | 'evaluatedAt'> & {
+        evaluatedAt: Date;
+      },
+    ): Promise<InstitutionChannelDryRunSnapshot | null> {
+      void input;
+      throw new Error('legacy_wecom_reachout_safety_writer_disabled');
     },
   };
 }

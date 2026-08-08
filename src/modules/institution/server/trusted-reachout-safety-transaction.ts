@@ -1,16 +1,17 @@
-import {
-  createAuditEventRepository,
-  type AuditEventRepository,
+
+import type {
+  AuditEventRepository,
 } from '@/modules/audit/server/audit-event-repository';
-import {
-  createTenantBusinessRepository,
-  type TenantBusinessRepository,
+import type {
+  TenantBusinessRepository,
 } from '@/modules/institution/server/tenant-business-repository';
-import {
-  createTrustedReachOutSafetyRepository,
-  type TrustedReachOutSafetyRepository,
+import type {
+  TrustedReachOutSafetyRepository,
 } from '@/modules/institution/server/trusted-reachout-safety-repository';
 import type { TenantDatabase } from '@/server/db/client';
+import {
+  runWeComReachOutTransaction,
+} from '@/server/orchestration/wecom-reachout-transaction';
 
 type TrustedReachOutSafetyTransactionDependencies = {
   customerRepository: TenantBusinessRepository;
@@ -20,14 +21,14 @@ type TrustedReachOutSafetyTransactionDependencies = {
 
 export async function runTrustedReachOutSafetyTransaction<T>(
   database: TenantDatabase,
-  operation: (dependencies: TrustedReachOutSafetyTransactionDependencies) => Promise<T>,
+  operation: (
+    dependencies: TrustedReachOutSafetyTransactionDependencies,
+  ) => Promise<T>,
 ) {
-  return database.transaction(async (transactionDatabase) => {
-    const transactionDb = transactionDatabase as unknown as TenantDatabase;
-    return operation({
-      customerRepository: createTenantBusinessRepository(transactionDb),
-      safetyRepository: createTrustedReachOutSafetyRepository(transactionDb),
-      auditRepository: createAuditEventRepository(transactionDb),
-    });
-  });
+  return runWeComReachOutTransaction(database, (dependencies) =>
+    operation({
+      customerRepository: dependencies.customerRepository,
+      safetyRepository: dependencies.safetyRepository,
+      auditRepository: dependencies.auditRepository,
+    }));
 }
