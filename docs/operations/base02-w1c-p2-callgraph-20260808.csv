@@ -1,0 +1,10 @@
+path,matched_symbols,role,runtime_authorized
+src/modules/institution/server/trusted-reachout-safety-repository.ts,safety_repository_factory,legacy_safety_writer_definition,false
+src/modules/institution/server/trusted-reachout-safety-service.ts,frequency_reservation,production_reference_review,false
+src/modules/institution/server/trusted-reachout-safety-transaction.ts,safety_repository_factory|safety_transaction,legacy_safety_transaction_composition,false
+src/modules/institution/server/wecom-controlled-reachout-service.ts,frequency_reservation,production_reference_review,false
+src/modules/institution/server/wecom-controlled-reachout-transaction.ts,safety_repository_factory|controlled_transaction,legacy_controlled_transaction_composition,false
+src/modules/institution/server/wecom-dry-run-snapshot-service.ts,dryrun_snapshot_write,production_reference_review,false
+src/modules/institution/server/wecom-real-send-execution-shell-service.ts,real_send_service,production_reference_review,false
+src/modules/institution/server/wecom-real-send-proof-repository.ts,real_send_repository_factory,legacy_real_send_transaction_writer_definition,false
+src/modules/institution/server/wecom-real-send-proof-service.ts,real_send_service,production_reference_review,false

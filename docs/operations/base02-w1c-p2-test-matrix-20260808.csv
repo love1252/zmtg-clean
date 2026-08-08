@@ -1,0 +1,15 @@
+test_id,scope,required_assertion,runtime_authorized
+P2-T01,canonical_writer,customerChannelFrequencyStates has exactly one direct Runtime Writer file,false
+P2-T02,canonical_writer,consent write is tenant+institution+customer scoped with optimistic version guard,false
+P2-T03,canonical_writer,frequency reserve and completion share the same canonical repository,false
+P2-T04,canonical_writer,dry-run snapshot write remains tenant+institution+channel scoped,false
+P2-T05,real_send,proof operation create/update remain tenant+institution+operation scoped,false
+P2-T06,real_send,confirmation stale consumed expired and cross-scope paths fail closed,false
+P2-T07,audit,auditEvents direct writes remain owned only by audit repository,false
+P2-T08,atomicity,real-send operation frequency completion and audit evidence use one transaction database,false
+P2-T09,atomicity,transaction callback failure rolls back all canonical fact writes,false
+P2-T10,legacy_safety,legacy safety direct Writer methods fail closed while reads remain,false
+P2-T11,legacy_real_send,legacy real-send compatibility delegates and performs no direct frequency/audit write,false
+P2-T12,legacy_transactions,safety and controlled-reachout compatibility transactions delegate to top-level composition root,false
+P2-T13,routes,all W1C routes remain capability-off,false
+P2-T14,boundary,no real WeCom provider or production connection is introduced,false
