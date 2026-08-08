@@ -199,92 +199,13 @@ export function createWeComCustomerBroadcastTaskOutcomeRepository(
     },
 
     async createNotStarted(input) {
-      const occurredAt = new Date(input.occurredAt);
-      const [row] = await database
-        .insert(weComCustomerBroadcastTaskProviderAttempts)
-        .values({
-          id: input.id,
-          operationId: input.operationId,
-          operationRef: input.operationRef,
-          tenantId: input.tenantId,
-          institutionId: input.institutionId,
-          customerId: input.customerId,
-          capabilityKind: 'customer_broadcast_task',
-          providerKind: 'wecom_official_customer_broadcast',
-          dispatchState: 'not_started',
-          dispatchCount: 0,
-          memberConfirmationRequired: true,
-          sendResultStatus: 'not_checked',
-          finalizeState: 'not_finalized',
-          reconciliationState: 'none',
-          manualReviewRequired: false,
-          automaticRetryAllowed: false,
-          version: 1,
-          createdAt: occurredAt,
-          updatedAt: occurredAt,
-        })
-        .onConflictDoNothing()
-        .returning();
-      return row ? mapWeComCustomerBroadcastTaskProviderAttemptRow(row) : null;
+      void input;
+      throw new Error('legacy_wecom_broadcast_outcome_writer_disabled');
     },
 
     async updateWhenVersionMatches(input) {
-      if (!outcomeScopeMatches(input)) return null;
-      const outcome = input.outcome;
-      const [row] = await database
-        .update(weComCustomerBroadcastTaskProviderAttempts)
-        .set({
-          dispatchState: outcome.dispatchState,
-          dispatchCount: outcome.dispatchCount,
-          dispatchStartedAt: outcome.dispatchStartedAt
-            ? new Date(outcome.dispatchStartedAt)
-            : null,
-          dispatchTerminalAt: outcome.dispatchTerminalAt
-            ? new Date(outcome.dispatchTerminalAt)
-            : null,
-          taskRefDigest: outcome.taskRefDigest,
-          memberConfirmationRequired: true,
-          providerResultCategory: outcome.providerResultCategory,
-          sendResultStatus: outcome.sendResultStatus,
-          sendResultCheckedAt: outcome.sendResultCheckedAt
-            ? new Date(outcome.sendResultCheckedAt)
-            : null,
-          finalizeState: outcome.finalizeState,
-          reconciliationState: outcome.reconciliationState,
-          manualReviewRequired: outcome.manualReviewRequired,
-          automaticRetryAllowed: false,
-          version: outcome.version,
-          updatedAt: new Date(outcome.updatedAt),
-        })
-        .where(and(
-          eq(weComCustomerBroadcastTaskProviderAttempts.tenantId, input.tenantId),
-          eq(
-            weComCustomerBroadcastTaskProviderAttempts.institutionId,
-            input.institutionId,
-          ),
-          eq(
-            weComCustomerBroadcastTaskProviderAttempts.operationRef,
-            input.operationRef,
-          ),
-          eq(
-            weComCustomerBroadcastTaskProviderAttempts.customerId,
-            input.customerId,
-          ),
-          eq(
-            weComCustomerBroadcastTaskProviderAttempts.operationId,
-            input.operationId,
-          ),
-          eq(
-            weComCustomerBroadcastTaskProviderAttempts.version,
-            input.expectedVersion,
-          ),
-          eq(
-            weComCustomerBroadcastTaskProviderAttempts.finalizeState,
-            'not_finalized',
-          ),
-        ))
-        .returning();
-      return row ? mapWeComCustomerBroadcastTaskProviderAttemptRow(row) : null;
+      void input;
+      throw new Error('legacy_wecom_broadcast_outcome_writer_disabled');
     },
   };
 }

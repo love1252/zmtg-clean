@@ -317,7 +317,7 @@ describe('WeCom customer broadcast task outcome sidecar', () => {
     })).toEqual({ kind: 'blocked', reason: 'invalid_transition' });
   });
 
-  it('concrete repository 的读取绑定 scope，更新额外绑定 expectedVersion CAS', async () => {
+  it('concrete repository 保留 scoped read，legacy update Writer fail-closed', async () => {
     const current = attempt();
     const row = {
       ...current,
@@ -330,19 +330,10 @@ describe('WeCom customer broadcast task outcome sidecar', () => {
     const readLimit = vi.fn().mockResolvedValue([row]);
     const readWhere = vi.fn().mockReturnValue({ limit: readLimit });
     const readFrom = vi.fn().mockReturnValue({ where: readWhere });
-    const updateReturning = vi.fn().mockResolvedValue([{
-      ...row,
-      dispatchState: 'task_create_attempted',
-      dispatchCount: 1,
-      dispatchStartedAt: new Date(later),
-      version: 2,
-      updatedAt: new Date(later),
-    }]);
-    const updateWhere = vi.fn().mockReturnValue({ returning: updateReturning });
-    const updateSet = vi.fn().mockReturnValue({ where: updateWhere });
+    const update = vi.fn();
     const database = {
       select: vi.fn().mockReturnValue({ from: readFrom }),
-      update: vi.fn().mockReturnValue({ set: updateSet }),
+      update,
     } as unknown as TenantDatabase;
     const repository = createWeComCustomerBroadcastTaskOutcomeRepository(database);
 
@@ -364,35 +355,16 @@ describe('WeCom customer broadcast task outcome sidecar', () => {
       operationRef: current.operationRef,
       expectedVersion: current.version,
       outcome: next,
-    })).resolves.toMatchObject({
-      dispatchState: 'task_create_attempted',
-      dispatchCount: 1,
-      version: 2,
-    });
-    expect(updateSet).toHaveBeenCalledWith(expect.objectContaining({
-      automaticRetryAllowed: false,
-      version: 2,
-    }));
-    expect(updateWhere).toHaveBeenCalledTimes(1);
+    })).rejects.toThrow('legacy_wecom_broadcast_outcome_writer_disabled');
+    expect(update).not.toHaveBeenCalled();
   });
 
-  it('concrete repository 只创建 scoped not_started sidecar', async () => {
+  it('legacy create Writer fail-closed 且不发出 insert', async () => {
     const current = attempt();
-    const row = {
-      ...current,
-      dispatchStartedAt: null,
-      dispatchTerminalAt: null,
-      sendResultCheckedAt: null,
-      createdAt: new Date(current.createdAt),
-      updatedAt: new Date(current.updatedAt),
-    };
-    const returning = vi.fn().mockResolvedValue([row]);
-    const onConflictDoNothing = vi.fn().mockReturnValue({ returning });
-    const values = vi.fn().mockReturnValue({ onConflictDoNothing });
-    const database = {
-      insert: vi.fn().mockReturnValue({ values }),
-    } as unknown as TenantDatabase;
-    const repository = createWeComCustomerBroadcastTaskOutcomeRepository(database);
+    const insert = vi.fn();
+    const repository = createWeComCustomerBroadcastTaskOutcomeRepository({
+      insert,
+    } as unknown as TenantDatabase);
 
     await expect(repository.createNotStarted({
       id: current.id,
@@ -402,26 +374,12 @@ describe('WeCom customer broadcast task outcome sidecar', () => {
       institutionId: current.institutionId,
       customerId: current.customerId,
       occurredAt: current.createdAt,
-    })).resolves.toMatchObject({
-      dispatchState: 'not_started',
-      dispatchCount: 0,
-      automaticRetryAllowed: false,
-      version: 1,
-    });
-    expect(values).toHaveBeenCalledWith(expect.objectContaining({
-      operationId: current.operationId,
-      operationRef: current.operationRef,
-      tenantId: current.tenantId,
-      institutionId: current.institutionId,
-      customerId: current.customerId,
-      dispatchState: 'not_started',
-      dispatchCount: 0,
-      automaticRetryAllowed: false,
-    }));
-    expect(onConflictDoNothing).toHaveBeenCalledTimes(1);
+    })).rejects.toThrow('legacy_wecom_broadcast_outcome_writer_disabled');
+
+    expect(insert).not.toHaveBeenCalled();
   });
 
-  it('concrete repository 在 outcome scope/version 不匹配时不发出 update', async () => {
+  it('legacy update 对 stale/cross-scope/finalized 输入统一 fail-closed', async () => {
     const update = vi.fn();
     const repository = createWeComCustomerBroadcastTaskOutcomeRepository({
       update,
@@ -437,7 +395,8 @@ describe('WeCom customer broadcast task outcome sidecar', () => {
       operationRef: current.operationRef,
       expectedVersion: 99,
       outcome: next,
-    })).resolves.toBeNull();
+    })).rejects.toThrow('legacy_wecom_broadcast_outcome_writer_disabled');
+
     await expect(repository.updateWhenVersionMatches({
       tenantId: current.tenantId,
       institutionId: current.institutionId,
@@ -446,7 +405,8 @@ describe('WeCom customer broadcast task outcome sidecar', () => {
       operationRef: current.operationRef,
       expectedVersion: current.version,
       outcome: { ...next, finalizeState: 'success_recorded' },
-    })).resolves.toBeNull();
+    })).rejects.toThrow('legacy_wecom_broadcast_outcome_writer_disabled');
+
     expect(update).not.toHaveBeenCalled();
   });
 
@@ -454,6 +414,7 @@ describe('WeCom customer broadcast task outcome sidecar', () => {
     const source = [
       '../domain/wecom-customer-broadcast-task-outcome.ts',
       '../server/wecom-customer-broadcast-task-outcome-repository.ts',
+      '../../messaging/server/wecom-customer-broadcast-task-outcome-command-repository.ts',
       '../server/wecom-customer-broadcast-task-outcome-service.ts',
     ].map((path) => readFileSync(
       resolve(dirname(fileURLToPath(import.meta.url)), path),
