@@ -1,5 +1,18 @@
 # 项目重构历史
 
+## 2026-08-08：W1B WeCom Mapping Writer 准入
+
+- W1A Customers Core complete=true；
+- W1B symbol/callgraph audit passed；
+- canonical Owner=messaging；
+- exact 6-file Runtime allowlist frozen；
+- Mapping Route capability-off；
+- W1C read consumer protected；
+- Admission PR #1084；
+- Independent Review PR #1085；
+- W1B Runtime implementation 未授权。
+
+
 ## 2026-08-08：W1A Customers Core Runtime 完成
 
 - PR #1081 完成 exact 6-file Runtime implementation；

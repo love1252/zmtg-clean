@@ -3,69 +3,51 @@
 ## 唯一下一任务
 
 ```text
-W1B Customer Channel / WeCom Mapping Writer symbol audit + exact implementation allowlist admission
+W1B WeCom Mapping exact 6-file Runtime implementation explicit authorization
 ```
 
-## 已完成
+## Runtime implementation 只能修改
 
-- BASE-02 complete=true；
-- Business Writer Admission passed；
-- W1 symbol audit passed；
-- W1A Customers Core admission passed；
-- W1A exact 6-file Runtime implementation merged；
-- W1A Independent Review passed；
-- W1A Customers Core complete=true；
-- Customers canonical application service/repository 已建立；
-- tenantId + institutionId attribution 已强制；
-- cross-institution mutation fail-closed；
-- legacy customer parallel Writer 已关闭。
+`docs/operations/base02-w1b-wecom-mapping-implementation-exact-allowlist-20260808.csv`
 
-## W1B 范围
-
-W1B 只处理：
+中的 exact 6 files：
 
 ```text
-Customer Channel
-+
-WeCom Customer Mapping
+1. src/modules/messaging/application/wecom-customer-mapping-command-service.ts
+2. src/modules/messaging/server/wecom-customer-mapping-command-repository.ts
+3. src/modules/messaging/tests/WeComCustomerMappingCommandService.test.ts
+4. src/modules/messaging/tests/WeComCustomerMappingCommandRepository.test.ts
+5. src/modules/institution/server/wecom-customer-mapping-repository.ts
+6. src/modules/institution/tests/WeComCustomerMappingRepository.test.ts
 ```
 
-首要现有真实 Writer 候选：
+## Runtime 目标
 
-```text
-src/modules/institution/server/wecom-customer-mapping-repository.ts
-```
-
-下一任务必须先完成：
-
-1. 逐符号重新核验 WeCom mapping 的真实 insert/update；
-2. 枚举实际 production callers / services / routes；
-3. 确认 Customers/Messaging canonical Owner；
-4. 冻结 tenantId + institutionId attribution contract；
-5. 区分 current canonical candidate 与 legacy/bypass；
-6. 冻结 exact implementation file allowlist；
-7. 冻结 targeted / negative tests；
-8. 得到明确 Runtime implementation 授权后才能改代码。
-
-## 明确不属于 W1B
-
-以下留给 W1C，不得混入：
-
-```text
-trusted-reachout-safety-repository.ts
-wecom-customer-broadcast-task-outcome-repository.ts
-wecom-real-send-proof-repository.ts
-```
-
-W1C = Trusted Reach-out / Broadcast / Real-send evidence。
+- Messaging canonical WeCom Mapping command Owner；
+- 同一 `weComCustomerMappingStates`，不创建第二事实源；
+- create/update 强制 tenant + institution + proofContact scope；
+- stale/cross-scope mutation fail-closed；
+- legacy mapping read compatibility 保留；
+- legacy mapping write methods fail-closed；
+- W1C controlled-reachout consumer 不修改；
+- Mapping Route 继续 capability-off。
 
 ## 当前仍禁止
 
-- W1B Runtime 未授权；
-- 不连接数据库；
-- 不执行 DDL/DML/Migration/Seed/FK VALIDATE；
-- 不修改 Schema；
-- Customers Route/Reader/Capability 不开放；
-- 不扩展 Care/Audit；
-- 不执行 W1C Runtime；
-- 不做生产变更。
+```text
+w1b_runtime_implementation_authorized=false
+database_connection=false
+ddl=false
+dml=false
+migration=false
+seed=false
+fk_validate=false
+schema_change=false
+route_change=false
+reader_release=false
+capability_release=false
+w1c_runtime_change=false
+production_change=false
+```
+
+如实现证明需要第 7 个文件，必须立即停止并重新准入。

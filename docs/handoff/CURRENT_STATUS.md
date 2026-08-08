@@ -3,36 +3,37 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## W1A Customers Core 完成状态
+## W1B WeCom Mapping Writer 准入状态
 
-- 更新日期：2026-08-08
-- Implementation PR #1081：`44c10fd548ae1881033ed0dc5f8947178be2edcc`
-- Independent Review PR #1082：`849571c10ed56b8797cea758416289870d92262c`
-- exact Runtime files：6
-- Customers canonical application service：complete
-- Customers canonical Writer repository：complete
-- tenantId + institutionId attribution：enforced
-- cross-institution mutation：fail-closed
-- nullable institution row：fail-closed
-- legacy customer parallel Writer：disabled
-- Customers Route：capability-off
-- Reader / Capability：closed
-- Schema / Migration / FK VALIDATE：unchanged
+- W1A Customers Core：complete
+- W1B Admission PR #1084：`9aaca4e03ea42b480ae1dee03044c2da64e2352f`
+- W1B Independent Review PR #1085：`a1c360877857615c7e94bfcbade2998e527093cd`
+- canonical Owner：messaging
+- exact Runtime allowlist：6 files
+- Mapping Route：capability-off
+- W1C read consumer：protected
+- Runtime implementation：not authorized
 
 ```text
-w1a_customers_core_runtime_implementation=passed
-w1a_runtime_independent_review=passed
 w1a_customers_core_complete=true
+
+w1b_symbol_audit=passed
+w1b_callgraph_audit=passed
+w1b_admission=passed
+w1b_admission_independent_review=passed
+w1b_canonical_owner=messaging
+w1b_exact_allowlist=frozen
+w1b_exact_allowlist_file_count=6
+w1b_runtime_implementation_authorized=false
+
 business_writer_phase_complete=false
 reader_release=false
 capability_release=false
-schema_change=false
-fk_validate=false
 ```
 
 ### 唯一下一任务
 
-`W1B Customer Channel / WeCom Mapping Writer symbol audit + exact implementation allowlist admission`
+`W1B WeCom Mapping exact 6-file Runtime implementation explicit authorization`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 

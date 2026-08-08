@@ -1,4 +1,25 @@
 # 智美天工架构文档索引
+<!-- BASE02_W1B_WECOM_MAPPING_ADMISSION_START -->
+
+## W1B WeCom Mapping Writer Admission（2026-08-08）
+
+```text
+w1b_symbol_audit=passed
+w1b_callgraph_audit=passed
+w1b_canonical_owner=messaging
+w1b_exact_allowlist_file_count=6
+w1b_exact_allowlist=frozen
+w1b_runtime_implementation_authorized=false
+mapping_route_capability_off=true
+w1c_read_consumer_protected=true
+schema_change_required=false
+migration_required=false
+```
+
+下一任务：`W1B WeCom Mapping exact 6-file Runtime implementation explicit authorization`
+
+<!-- BASE02_W1B_WECOM_MAPPING_ADMISSION_END -->
+
 <!-- BASE02_W1A_CUSTOMERS_CORE_RUNTIME_CLOSURE_START -->
 
 ## W1A Customers Core Runtime Closure（2026-08-08）
