@@ -1,4 +1,37 @@
 # 智美天工架构文档索引
+<!-- BASE02_W1B_WECOM_MAPPING_RUNTIME_CLOSURE_START -->
+
+## W1B WeCom Mapping Runtime Closure（2026-08-08）
+
+```text
+implementation_pr=1087
+implementation_merge=7caab67f111737607d918cb6f8b4e0e27de10d34
+independent_review_pr=1088
+independent_review_merge=6683f94899920e1e5d4eac916a6d8d2afcbd046b
+
+exact_file_count=6
+canonical_owner=messaging
+same_fact_source=weComCustomerMappingStates
+tenant_institution_proof_scope_enforced=true
+expected_customer_status_guard_enforced=true
+legacy_mapping_read_compatibility=retained
+legacy_mapping_parallel_writer=blocked
+
+w1b_complete=true
+business_writer_phase_complete=false
+
+mapping_route_capability_off=true
+reader_release=false
+capability_release=false
+w1c_runtime_change=false
+```
+
+下一任务：
+
+`W1C Trusted Reach-out / Broadcast / Real-send evidence Writer symbol audit + exact implementation allowlist admission`
+
+<!-- BASE02_W1B_WECOM_MAPPING_RUNTIME_CLOSURE_END -->
+
 <!-- BASE02_W1B_WECOM_MAPPING_ADMISSION_START -->
 
 ## W1B WeCom Mapping Writer Admission（2026-08-08）

@@ -3,39 +3,51 @@
 ## 唯一下一任务
 
 ```text
-W1B WeCom Mapping exact 6-file Runtime implementation explicit authorization
+W1C Trusted Reach-out / Broadcast / Real-send evidence Writer symbol audit + exact implementation allowlist admission
 ```
 
-## Runtime implementation 只能修改
+## 已完成
 
-`docs/operations/base02-w1b-wecom-mapping-implementation-exact-allowlist-20260808.csv`
+- BASE-02 complete=true；
+- W1A Customers Core complete=true；
+- W1B WeCom Mapping admission passed；
+- W1B exact 6-file Runtime implementation merged；
+- W1B Independent Review passed；
+- W1B complete=true；
+- Messaging canonical Mapping command service/repository 已建立；
+- `weComCustomerMappingStates` 仍为唯一事实源；
+- tenantId + institutionId + proofContactId scope 已强制；
+- expectedCustomerId + expectedStatus guard 已强制；
+- legacy Mapping read compatibility 保留；
+- legacy Mapping parallel Writer 已关闭；
+- Mapping Route 继续 capability-off。
 
-中的 exact 6 files：
+## W1C 首批既定 Writer 候选
 
 ```text
-1. src/modules/messaging/application/wecom-customer-mapping-command-service.ts
-2. src/modules/messaging/server/wecom-customer-mapping-command-repository.ts
-3. src/modules/messaging/tests/WeComCustomerMappingCommandService.test.ts
-4. src/modules/messaging/tests/WeComCustomerMappingCommandRepository.test.ts
-5. src/modules/institution/server/wecom-customer-mapping-repository.ts
-6. src/modules/institution/tests/WeComCustomerMappingRepository.test.ts
+src/modules/institution/server/trusted-reachout-safety-repository.ts
+src/modules/institution/server/wecom-customer-broadcast-task-outcome-repository.ts
+src/modules/institution/server/wecom-real-send-proof-repository.ts
 ```
 
-## Runtime 目标
+## W1C 下一任务必须先完成
 
-- Messaging canonical WeCom Mapping command Owner；
-- 同一 `weComCustomerMappingStates`，不创建第二事实源；
-- create/update 强制 tenant + institution + proofContact scope；
-- stale/cross-scope mutation fail-closed；
-- legacy mapping read compatibility 保留；
-- legacy mapping write methods fail-closed；
-- W1C controlled-reachout consumer 不修改；
-- Mapping Route 继续 capability-off。
+1. 逐符号核验三类 repository 的真实 insert/update；
+2. 枚举 production callers / services / transactions / routes；
+3. 区分 Trusted Reach-out、Broadcast outcome、Real-send evidence 的事实所有权；
+4. 确认 Messaging canonical Owner 与必要的 application/transaction boundary；
+5. 核对 tenantId + institutionId attribution；
+6. 核对频控、安全快照、provider attempt、real-send proof、audit evidence 之间的原子性边界；
+7. 冻结 legacy/bypass blockade 方案；
+8. 冻结 exact implementation file allowlist；
+9. 冻结 targeted / negative tests；
+10. 如需要 Schema/Migration 或范围扩张，必须单独重新准入；
+11. 获得明确 W1C Runtime implementation 授权后才能修改 Runtime。
 
 ## 当前仍禁止
 
 ```text
-w1b_runtime_implementation_authorized=false
+w1c_runtime_implementation_authorized=false
 database_connection=false
 ddl=false
 dml=false
@@ -43,11 +55,11 @@ migration=false
 seed=false
 fk_validate=false
 schema_change=false
-route_change=false
+mapping_route_change=false
 reader_release=false
 capability_release=false
-w1c_runtime_change=false
+real_wecom_provider_call=false
+care_expansion=false
+audit_expansion=false
 production_change=false
 ```
-
-如实现证明需要第 7 个文件，必须立即停止并重新准入。
