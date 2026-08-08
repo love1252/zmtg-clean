@@ -1,77 +1,66 @@
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  createAuditRepository: vi.fn(),
-  createCustomerRepository: vi.fn(),
-  createSafetyRepository: vi.fn(),
+  runReachOutTransaction: vi.fn(),
 }));
 
-vi.mock('@/modules/audit/server/audit-event-repository', () => ({
-  createAuditEventRepository: mocks.createAuditRepository,
-}));
-vi.mock('@/modules/institution/server/tenant-business-repository', () => ({
-  createTenantBusinessRepository: mocks.createCustomerRepository,
-}));
-vi.mock('@/modules/institution/server/trusted-reachout-safety-repository', () => ({
-  createTrustedReachOutSafetyRepository: mocks.createSafetyRepository,
+vi.mock('@/server/orchestration/wecom-reachout-transaction', () => ({
+  runWeComReachOutTransaction: mocks.runReachOutTransaction,
 }));
 
-import { runTrustedReachOutSafetyTransaction } from '@/modules/institution/server/trusted-reachout-safety-transaction';
+import {
+  runTrustedReachOutSafetyTransaction,
+} from '@/modules/institution/server/trusted-reachout-safety-transaction';
 
-describe('trusted reachout safety transaction', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('consent、frequency 与 audit repository 均绑定同一个 transaction database', async () => {
-    const transactionDatabase = { transaction: 'same-db' };
-    const customerRepository = { kind: 'customer' };
-    const safetyRepository = { kind: 'safety' };
-    const auditRepository = { kind: 'audit' };
-    mocks.createCustomerRepository.mockReturnValue(customerRepository);
-    mocks.createSafetyRepository.mockReturnValue(safetyRepository);
-    mocks.createAuditRepository.mockReturnValue(auditRepository);
-    const database = {
-      transaction: vi.fn(async (operation) => operation(transactionDatabase)),
-    };
-
-    const result = await runTrustedReachOutSafetyTransaction(database as never, async (repositories) => repositories);
-
-    expect(mocks.createCustomerRepository).toHaveBeenCalledWith(transactionDatabase);
-    expect(mocks.createSafetyRepository).toHaveBeenCalledWith(transactionDatabase);
-    expect(mocks.createAuditRepository).toHaveBeenCalledWith(transactionDatabase);
-    expect(result).toEqual({ customerRepository, safetyRepository, auditRepository });
+describe('trusted reachout safety transaction compatibility', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('audit 失败时 transaction 不提交已修改的状态或频控计数', async () => {
-    let committedCount = 0;
-    mocks.createCustomerRepository.mockReturnValue({});
-    mocks.createSafetyRepository.mockImplementation((transactionDatabase) => ({
-      increment: () => {
-        (transactionDatabase as { count: number }).count += 1;
-      },
-    }));
-    mocks.createAuditRepository.mockReturnValue({
-      record: async () => {
-        throw new Error('audit unavailable');
-      },
+  it('委托 top-level canonical orchestration 并只投影 Safety 所需依赖', async () => {
+    const database = { kind: 'database' };
+    const customerRepository = { kind: 'customer' };
+    const mappingRepository = { kind: 'mapping' };
+    const safetyRepository = { kind: 'canonical-safety' };
+    const auditRepository = { kind: 'audit' };
+
+    mocks.runReachOutTransaction.mockImplementation(
+      async (_database, operation) =>
+        operation({
+          customerRepository,
+          mappingRepository,
+          safetyRepository,
+          auditRepository,
+        }),
+    );
+
+    const result = await runTrustedReachOutSafetyTransaction(
+      database as never,
+      async (dependencies) => dependencies,
+    );
+
+    expect(mocks.runReachOutTransaction).toHaveBeenCalledWith(
+      database,
+      expect.any(Function),
+    );
+    expect(result).toEqual({
+      customerRepository,
+      safetyRepository,
+      auditRepository,
     });
-    const database = {
-      transaction: async (operation: (database: { count: number }) => Promise<unknown>) => {
-        const transactionDatabase = { count: committedCount };
-        const result = await operation(transactionDatabase);
-        committedCount = transactionDatabase.count;
-        return result;
-      },
-    };
+  });
 
-    await expect(runTrustedReachOutSafetyTransaction(database as never, async (repositories) => {
-      const transactionRepositories = repositories as unknown as {
-        safetyRepository: { increment: () => void };
-        auditRepository: { record: () => Promise<void> };
-      };
-      transactionRepositories.safetyRepository.increment();
-      await transactionRepositories.auditRepository.record();
-    })).rejects.toThrow('audit unavailable');
+  it('canonical orchestration 失败时原样传播，不回退 legacy transaction', async () => {
+    mocks.runReachOutTransaction.mockRejectedValue(
+      new Error('canonical-transaction-failed'),
+    );
 
-    expect(committedCount).toBe(0);
+    await expect(
+      runTrustedReachOutSafetyTransaction(
+        {} as never,
+        async () => 'never',
+      ),
+    ).rejects.toThrow('canonical-transaction-failed');
   });
 });

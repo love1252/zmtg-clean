@@ -1,6 +1,6 @@
-import type { SQL } from 'drizzle-orm';
-import { PgDialect } from 'drizzle-orm/pg-core';
+
 import { describe, expect, it, vi } from 'vitest';
+
 import {
   createTrustedReachOutSafetyRepository,
   type InstitutionChannelDryRunSnapshot,
@@ -11,7 +11,12 @@ import {
   institutionChannelDryRunSnapshots,
 } from '@/server/db/schema';
 
-const scope = { tenantId: 'tenant-1', institutionId: 'institution-1', customerId: 'customer-1' };
+const scope = {
+  tenantId: 'tenant-1',
+  institutionId: 'institution-1',
+  customerId: 'customer-1',
+};
+
 const consentRow = {
   id: 'consent-1',
   ...scope,
@@ -26,7 +31,10 @@ const consentRow = {
   updatedAt: new Date('2026-07-11T00:00:00.000Z'),
 } satisfies typeof customerChannelContactConsents.$inferSelect;
 
-const snapshotInput: Omit<InstitutionChannelDryRunSnapshot, 'version' | 'evaluatedAt'> & { evaluatedAt: Date } = {
+const snapshotInput: Omit<
+  InstitutionChannelDryRunSnapshot,
+  'version' | 'evaluatedAt'
+> & { evaluatedAt: Date } = {
   id: 'snapshot-1',
   tenantId: 'tenant-1',
   institutionId: 'institution-1',
@@ -44,6 +52,7 @@ const snapshotInput: Omit<InstitutionChannelDryRunSnapshot, 'version' | 'evaluat
   realSendAllowed: false,
   dryRunOnly: true,
 };
+
 const snapshotRow = {
   ...snapshotInput,
   version: 1,
@@ -51,89 +60,93 @@ const snapshotRow = {
   updatedAt: new Date('2026-07-11T02:00:00.000Z'),
 } satisfies typeof institutionChannelDryRunSnapshots.$inferSelect;
 
-describe('TrustedReachOutSafetyRepository', () => {
-  it('事务写链路通过 SELECT FOR UPDATE 锁定 consent row', async () => {
+describe('TrustedReachOutSafetyRepository legacy compatibility', () => {
+  it('保留 consent SELECT FOR UPDATE read compatibility', async () => {
     const forLock = vi.fn(async () => [consentRow]);
     const where = vi.fn(() => ({ for: forLock }));
     const from = vi.fn(() => ({ where }));
     const select = vi.fn(() => ({ from }));
-    const repository = createTrustedReachOutSafetyRepository({ select } as unknown as TenantDatabase);
+    const repository = createTrustedReachOutSafetyRepository(
+      { select } as unknown as TenantDatabase,
+    );
 
-    const result = await repository.findConsentForUpdate(scope);
-
+    await expect(repository.findConsentForUpdate(scope)).resolves.toMatchObject({
+      status: 'consented',
+      version: 1,
+    });
     expect(forLock).toHaveBeenCalledWith('update');
-    expect(result).toEqual(expect.objectContaining({ status: 'consented', version: 1 }));
   });
 
-  it('受控触达事务通过 SELECT FOR UPDATE 锁定 dry-run snapshot', async () => {
+  it('保留 dry-run snapshot SELECT FOR UPDATE read compatibility', async () => {
     const forLock = vi.fn(async () => [snapshotRow]);
     const where = vi.fn(() => ({ for: forLock }));
     const from = vi.fn(() => ({ where }));
     const select = vi.fn(() => ({ from }));
-    const repository = createTrustedReachOutSafetyRepository({ select } as unknown as TenantDatabase);
+    const repository = createTrustedReachOutSafetyRepository(
+      { select } as unknown as TenantDatabase,
+    );
 
-    const result = await repository.findDryRunSnapshotForUpdate({
-      tenantId: 'tenant-1', institutionId: 'institution-1',
+    await expect(
+      repository.findDryRunSnapshotForUpdate({
+        tenantId: 'tenant-1',
+        institutionId: 'institution-1',
+      }),
+    ).resolves.toMatchObject({
+      configStatus: 'dry_run_ready',
+      version: 1,
     });
-
     expect(forLock).toHaveBeenCalledWith('update');
-    expect(result).toEqual(expect.objectContaining({
-      configStatus: 'dry_run_ready', officialRoute: 'official_wecom_self_built', version: 1,
-    }));
   });
 
-  it('incoming ready 的冲突条件只编码较新 evaluatedAt', async () => {
-    const returning = vi.fn(async () => []);
-    const onConflictDoUpdate = vi.fn((_config: unknown) => ({ returning }));
-    const values = vi.fn(() => ({ onConflictDoUpdate }));
-    const insert = vi.fn(() => ({ values }));
-    const repository = createTrustedReachOutSafetyRepository({ insert } as unknown as TenantDatabase);
+  it('legacy Safety direct Writer 全部 fail-closed 且不触发 insert/update', async () => {
+    const insert = vi.fn();
+    const update = vi.fn();
+    const repository = createTrustedReachOutSafetyRepository(
+      { insert, update } as unknown as TenantDatabase,
+    );
 
-    const result = await repository.upsertDryRunSnapshot(snapshotInput);
-    const conflict = onConflictDoUpdate.mock.calls[0][0] as {
-      setWhere: SQL;
-      set: { version: SQL };
-    };
-    const query = new PgDialect().sqlToQuery(conflict.setWhere);
+    await expect(
+      repository.upsertConsent({
+        ...scope,
+        id: 'consent-2',
+        status: 'consented',
+        sourceType: 'customer_explicit_written',
+        evidenceRef: 'evidence-a',
+        recordedBy: 'admin-a',
+        recordedAt: new Date(),
+        expectedVersion: null,
+      }),
+    ).rejects.toThrow('legacy_wecom_reachout_safety_writer_disabled');
 
-    expect(insert).toHaveBeenCalledWith(institutionChannelDryRunSnapshots);
-    expect(query.sql).toContain('"evaluated_at" < $1');
-    expect(query.sql).not.toContain('"evaluated_at" =');
-    expect(query.sql).not.toContain('"config_status"');
-    expect(query.params).toEqual(['2026-07-11T02:00:00.000Z']);
-    expect(query.params.every(parameter => !(parameter instanceof Date))).toBe(true);
-    expect(conflict.set.version).toBeDefined();
-    expect(result).toBeNull();
-  });
+    await expect(
+      repository.createFrequencyIfAbsent({
+        ...scope,
+        id: 'frequency-a',
+        operationRef: 'wrop-a',
+        now: new Date(),
+        windowEndsAt: new Date(Date.now() + 60_000),
+      }),
+    ).rejects.toThrow('legacy_wecom_reachout_safety_writer_disabled');
 
-  it('incoming blocked 的冲突条件编码较新评估与同时间 ready → blocked', async () => {
-    const returning = vi.fn(async () => []);
-    const onConflictDoUpdate = vi.fn((_config: unknown) => ({ returning }));
-    const values = vi.fn(() => ({ onConflictDoUpdate }));
-    const insert = vi.fn(() => ({ values }));
-    const repository = createTrustedReachOutSafetyRepository({ insert } as unknown as TenantDatabase);
+    await expect(
+      repository.updateFrequencyWhenVersion({
+        ...scope,
+        operationRef: 'wrop-a',
+        now: new Date(),
+        windowStartedAt: new Date(),
+        windowEndsAt: new Date(Date.now() + 60_000),
+        preparedCount: 1,
+        completedCount: 0,
+        nextAllowedAt: new Date(Date.now() + 60_000),
+        expectedVersion: 1,
+      }),
+    ).rejects.toThrow('legacy_wecom_reachout_safety_writer_disabled');
 
-    const result = await repository.upsertDryRunSnapshot({
-      ...snapshotInput,
-      configStatus: 'blocked_missing_callback_url',
-    });
-    const conflict = onConflictDoUpdate.mock.calls[0][0] as {
-      setWhere: SQL;
-      set: { version: SQL };
-    };
-    const query = new PgDialect().sqlToQuery(conflict.setWhere);
+    await expect(
+      repository.upsertDryRunSnapshot(snapshotInput),
+    ).rejects.toThrow('legacy_wecom_reachout_safety_writer_disabled');
 
-    expect(insert).toHaveBeenCalledWith(institutionChannelDryRunSnapshots);
-    expect(query.sql).toContain('"evaluated_at" < $1');
-    expect(query.sql).toContain('"evaluated_at" = $2');
-    expect(query.sql).toContain('"config_status" = $3');
-    expect(query.params).toEqual([
-      '2026-07-11T02:00:00.000Z',
-      '2026-07-11T02:00:00.000Z',
-      'dry_run_ready',
-    ]);
-    expect(query.params.every(parameter => !(parameter instanceof Date))).toBe(true);
-    expect(conflict.set.version).toBeDefined();
-    expect(result).toBeNull();
+    expect(insert).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,10 @@
-import { and, desc, eq, gt, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, or } from 'drizzle-orm';
 
 import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
+import type {
+  WeComReachOutCommandWriter,
+  WeComRealSendProofOperationCreateInput,
+} from '@/modules/messaging/application/wecom-reachout-command-port';
 import {
   isEligibleControlledReachOutMockDelivery,
   readWeComControlledReachOutMetadata,
@@ -14,7 +18,6 @@ import type {
 } from '@/modules/institution/domain/wecom-real-send-proof';
 import type { TenantDatabase } from '@/server/db/client';
 import {
-  auditEvents,
   customerChannelContactConsents,
   customerChannelFrequencyStates,
   followUpMessageDrafts,
@@ -57,24 +60,13 @@ function mapAttestation(
   };
 }
 
-function mapAuditEventToInsert(event: TenantAuditEvent): typeof auditEvents.$inferInsert {
-  return {
-    eventId: event.eventId,
-    actorId: event.actorId,
-    actorRole: event.actorRole,
-    tenantId: event.tenantId,
-    scope: event.scope,
-    resource: event.resource,
-    resourceId: event.resourceId ?? null,
-    action: event.action,
-    result: event.result,
-    reason: event.reason,
-    occurredAt: new Date(event.occurredAt),
-    source: event.source,
-  };
-}
-
-function createTransactionRepository(database: TenantDatabase) {
+export function createWeComRealSendProofTransactionRepository(
+  database: TenantDatabase,
+  writer: WeComReachOutCommandWriter,
+  auditRepository: Readonly<{
+    record(event: TenantAuditEvent): Promise<void>;
+  }>,
+) {
   return {
     async loadReadySource(input: {
       tenantId: string;
@@ -301,13 +293,8 @@ function createTransactionRepository(database: TenantDatabase) {
       return row ? mapOperation(row) : null;
     },
 
-    async createOperation(input: typeof weComRealSendProofOperations.$inferInsert) {
-      const [row] = await database
-        .insert(weComRealSendProofOperations)
-        .values(input)
-        .onConflictDoNothing()
-        .returning();
-      return row ? mapOperation(row) : null;
+    async createOperation(input: WeComRealSendProofOperationCreateInput) {
+      return writer.createRealSendOperation(input);
     },
 
     async consumeConfirmation(input: {
@@ -318,29 +305,7 @@ function createTransactionRepository(database: TenantDatabase) {
       operatorId: string;
       now: Date;
     }) {
-      const [row] = await database
-        .update(weComRealSendProofOperations)
-        .set({
-          confirmationConsumedAt: input.now,
-          attemptedAt: input.now,
-          attemptCount: 1,
-          status: 'attempted',
-          version: sql`${weComRealSendProofOperations.version} + 1`,
-          updatedAt: input.now,
-        })
-        .where(and(
-          eq(weComRealSendProofOperations.operationRef, input.operationRef),
-          eq(weComRealSendProofOperations.tenantId, input.tenantId),
-          eq(weComRealSendProofOperations.institutionId, input.institutionId),
-          eq(weComRealSendProofOperations.confirmationTokenDigest, input.tokenDigest),
-          eq(weComRealSendProofOperations.operatorId, input.operatorId),
-          eq(weComRealSendProofOperations.status, 'requested'),
-          isNull(weComRealSendProofOperations.confirmationConsumedAt),
-          lt(weComRealSendProofOperations.confirmationIssuedAt, input.now),
-          gt(weComRealSendProofOperations.confirmationExpiresAt, input.now),
-        ))
-        .returning();
-      return row ? mapOperation(row) : null;
+      return writer.consumeRealSendConfirmation(input);
     },
 
     async abortOperation(input: {
@@ -350,23 +315,7 @@ function createTransactionRepository(database: TenantDatabase) {
       operatorId: string;
       now: Date;
     }) {
-      const [row] = await database
-        .update(weComRealSendProofOperations)
-        .set({
-          status: 'aborted',
-          terminalAt: input.now,
-          version: sql`${weComRealSendProofOperations.version} + 1`,
-          updatedAt: input.now,
-        })
-        .where(and(
-          eq(weComRealSendProofOperations.operationRef, input.operationRef),
-          eq(weComRealSendProofOperations.tenantId, input.tenantId),
-          eq(weComRealSendProofOperations.institutionId, input.institutionId),
-          eq(weComRealSendProofOperations.operatorId, input.operatorId),
-          eq(weComRealSendProofOperations.status, 'requested'),
-        ))
-        .returning();
-      return row ? mapOperation(row) : null;
+      return writer.abortRealSendOperation(input);
     },
 
     async finalizeNonSuccess(input: {
@@ -375,31 +324,14 @@ function createTransactionRepository(database: TenantDatabase) {
       institutionId: string;
       operatorId: string;
       status: 'failed' | 'unknown_outcome';
-      providerResultCategory: 'rejected' | 'transport_error' | 'timeout' | 'indeterminate';
+      providerResultCategory:
+        | 'rejected'
+        | 'transport_error'
+        | 'timeout'
+        | 'indeterminate';
       now: Date;
     }) {
-      const categoryMatchesStatus = input.status === 'failed'
-        ? input.providerResultCategory === 'rejected'
-        : ['transport_error', 'timeout', 'indeterminate'].includes(input.providerResultCategory);
-      if (!categoryMatchesStatus) return null;
-      const [row] = await database
-        .update(weComRealSendProofOperations)
-        .set({
-          status: input.status,
-          providerResultCategory: input.providerResultCategory,
-          terminalAt: input.now,
-          version: sql`${weComRealSendProofOperations.version} + 1`,
-          updatedAt: input.now,
-        })
-        .where(and(
-          eq(weComRealSendProofOperations.operationRef, input.operationRef),
-          eq(weComRealSendProofOperations.tenantId, input.tenantId),
-          eq(weComRealSendProofOperations.institutionId, input.institutionId),
-          eq(weComRealSendProofOperations.operatorId, input.operatorId),
-          eq(weComRealSendProofOperations.status, 'attempted'),
-        ))
-        .returning();
-      return row ? mapOperation(row) : null;
+      return writer.finalizeRealSendNonSuccess(input);
     },
 
     async lockOperation(input: {
@@ -423,48 +355,7 @@ function createTransactionRepository(database: TenantDatabase) {
       operation: WeComRealSendProofOperation;
       now: Date;
     }) {
-      if (
-        input.operation.status !== 'attempted' ||
-        input.operation.attemptCount !== 1 ||
-        !input.operation.confirmationConsumedAt
-      ) return null;
-      const [frequency] = await database
-        .select()
-        .from(customerChannelFrequencyStates)
-        .where(and(
-          eq(customerChannelFrequencyStates.id, input.operation.frequencyStateId),
-          eq(customerChannelFrequencyStates.tenantId, input.operation.tenantId),
-          eq(customerChannelFrequencyStates.institutionId, input.operation.institutionId),
-          eq(customerChannelFrequencyStates.customerId, input.operation.customerId),
-          eq(customerChannelFrequencyStates.channelType, input.operation.channelType),
-        ))
-        .for('update');
-      if (
-        !frequency ||
-        frequency.lastPreparedRef !== input.operation.operationRef ||
-        frequency.completedCount >= frequency.maxCompletedCount ||
-        frequency.completedCount >= frequency.preparedCount
-      ) return null;
-
-      const [updated] = await database
-        .update(customerChannelFrequencyStates)
-        .set({
-          completedCount: frequency.completedCount + 1,
-          lastCompletedRef: input.operation.operationRef,
-          version: frequency.version + 1,
-          updatedAt: input.now,
-        })
-        .where(and(
-          eq(customerChannelFrequencyStates.id, frequency.id),
-          eq(customerChannelFrequencyStates.tenantId, input.operation.tenantId),
-          eq(customerChannelFrequencyStates.institutionId, input.operation.institutionId),
-          eq(customerChannelFrequencyStates.customerId, input.operation.customerId),
-          eq(customerChannelFrequencyStates.channelType, input.operation.channelType),
-          eq(customerChannelFrequencyStates.lastPreparedRef, input.operation.operationRef),
-          eq(customerChannelFrequencyStates.version, frequency.version),
-        ))
-        .returning();
-      return updated ?? null;
+      return writer.recordCompletedFrequency(input);
     },
 
     async markSucceeded(input: {
@@ -475,35 +366,16 @@ function createTransactionRepository(database: TenantDatabase) {
       completedFrequencyRef: string;
       now: Date;
     }) {
-      if (input.completedFrequencyRef !== input.operationRef) return null;
-      const [row] = await database
-        .update(weComRealSendProofOperations)
-        .set({
-          status: 'succeeded',
-          providerResultCategory: 'accepted',
-          completedFrequencyRef: input.completedFrequencyRef,
-          terminalAt: input.now,
-          version: sql`${weComRealSendProofOperations.version} + 1`,
-          updatedAt: input.now,
-        })
-        .where(and(
-          eq(weComRealSendProofOperations.operationRef, input.operationRef),
-          eq(weComRealSendProofOperations.tenantId, input.tenantId),
-          eq(weComRealSendProofOperations.institutionId, input.institutionId),
-          eq(weComRealSendProofOperations.operatorId, input.operatorId),
-          eq(weComRealSendProofOperations.status, 'attempted'),
-        ))
-        .returning();
-      return row ? mapOperation(row) : null;
+      return writer.markRealSendSucceeded(input);
     },
 
     async recordAudit(event: TenantAuditEvent) {
-      await database.insert(auditEvents).values(mapAuditEventToInsert(event));
+      await auditRepository.record(event);
     },
   };
 }
 
-export type WeComRealSendProofTransactionRepository = ReturnType<typeof createTransactionRepository>;
+export type WeComRealSendProofTransactionRepository = ReturnType<typeof createWeComRealSendProofTransactionRepository>;
 
 export type WeComRealSendProofRepository = {
   runInTransaction<T>(
@@ -516,8 +388,10 @@ export function createWeComRealSendProofRepository(
 ): WeComRealSendProofRepository {
   return {
     async runInTransaction(operation) {
-      return database.transaction((transactionDatabase) =>
-        operation(createTransactionRepository(transactionDatabase as unknown as TenantDatabase)));
+      const { runWeComRealSendProofTransaction } = await import(
+        '@/server/orchestration/wecom-reachout-transaction'
+      );
+      return runWeComRealSendProofTransaction(database, operation);
     },
   };
 }
