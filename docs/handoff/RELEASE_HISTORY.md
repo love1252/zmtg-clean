@@ -1,5 +1,15 @@
 # 项目重构历史
 
+## 2026-08-08：W1C-P1 Broadcast Outcome Runtime 完成
+
+- Implementation PR #1093：`24e5c44888963e1a2de00cd2093a2d619385b419`；
+- Independent Review PR #1094：`45b433013d237f74ce0e3d8df385ed8bbc80fac2`；
+- W1C-P1 complete=true；
+- W1C complete=false；
+- W1C-P2 Runtime 尚未授权；
+- 下一任务：W1C-P2 Safety + Real-send atomicity / Owner decision admission。
+
+
 ## 2026-08-08：W1C Writer 准入完成
 
 - W1B complete=true；

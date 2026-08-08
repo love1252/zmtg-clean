@@ -1,4 +1,33 @@
 # 智美天工架构文档索引
+<!-- BASE02_W1C_P1_BROADCAST_RUNTIME_CLOSURE_START -->
+
+## W1C-P1 Broadcast Outcome Runtime Closure（2026-08-08）
+
+```text
+implementation_pr=1093
+implementation_merge=24e5c44888963e1a2de00cd2093a2d619385b419
+independent_review_pr=1094
+independent_review_merge=45b433013d237f74ce0e3d8df385ed8bbc80fac2
+exact_file_count=6
+canonical_owner=messaging
+same_fact_source=weComCustomerBroadcastTaskProviderAttempts
+full_scope_attribution_enforced=true
+expected_version_cas_enforced=true
+not_finalized_guard_enforced=true
+legacy_read_draft_scope_compatibility=retained
+legacy_parallel_writer=blocked
+w1c_p1_complete=true
+w1c_complete=false
+business_writer_phase_complete=false
+w1c_p2_runtime_authorized=false
+reader_release=false
+capability_release=false
+```
+
+下一任务：`W1C-P2 Safety + Real-send atomicity / Owner decision admission`
+
+<!-- BASE02_W1C_P1_BROADCAST_RUNTIME_CLOSURE_END -->
+
 <!-- BASE02_W1C_WRITER_ADMISSION_START -->
 
 ## W1C Writer Admission（2026-08-08）
