@@ -1,0 +1,13 @@
+path,role,change_kind,required,implementation_authorized
+src/modules/messaging/application/wecom-reachout-command-port.ts,canonical_reachout_persistence_port,create,true,false
+src/modules/messaging/server/wecom-reachout-command-repository.ts,single_messaging_writer_for_consent_frequency_snapshot_real_send_operations,create,true,false
+src/modules/messaging/tests/WeComReachOutCommandRepository.test.ts,canonical_writer_scope_cas_atomicity_negative_tests,create,true,false
+src/server/orchestration/wecom-reachout-transaction.ts,cross_module_transaction_composition_root,create,true,false
+src/server/orchestration/wecom-reachout-transaction.test.ts,transaction_same_db_and_owner_delegation_tests,create,true,false
+src/modules/institution/server/trusted-reachout-safety-repository.ts,legacy_read_compatibility_and_writer_blockade,modify,true,false
+src/modules/institution/tests/TrustedReachOutSafetyRepository.test.ts,legacy_safety_read_and_writer_blockade_tests,modify,true,false
+src/modules/institution/server/trusted-reachout-safety-transaction.ts,delegate_legacy_safety_transaction_to_canonical_orchestration,modify,true,false
+src/modules/institution/tests/TrustedReachOutSafetyTransaction.test.ts,legacy_safety_transaction_delegation_tests,modify,true,false
+src/modules/institution/server/wecom-controlled-reachout-transaction.ts,delegate_controlled_reachout_to_canonical_orchestration,modify,true,false
+src/modules/institution/server/wecom-real-send-proof-repository.ts,legacy_real_send_compatibility_delegate_and_direct_writer_removal,modify,true,false
+src/modules/institution/tests/WeComRealSendProofRepository.test.ts,real_send_compatibility_and_no_direct_frequency_audit_writer_tests,modify,true,false
