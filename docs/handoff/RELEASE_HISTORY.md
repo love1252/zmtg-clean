@@ -1,5 +1,21 @@
 # 项目重构历史
 
+## 2026-08-08：W1B WeCom Mapping Runtime 完成
+
+- PR #1087 完成 exact 6-file Runtime implementation；
+- Messaging canonical Mapping command service / Writer repository 建立；
+- 同一 `weComCustomerMappingStates` 事实源保持不变；
+- tenant + institution + proofContact scope 强制；
+- expectedCustomerId + expectedStatus stale guard 强制；
+- legacy Mapping read compatibility 保留；
+- legacy Mapping parallel Writer 已关闭；
+- Independent Review PR #1088 通过；
+- W1B complete=true；
+- Mapping Route、Reader、Capability 继续关闭；
+- W1C Runtime 尚未授权；
+- 下一 vertical slice：W1C Trusted Reach-out / Broadcast / Real-send evidence Writer admission。
+
+
 ## 2026-08-08：W1B WeCom Mapping Writer 准入
 
 - W1A Customers Core complete=true；
