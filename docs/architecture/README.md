@@ -1,4 +1,31 @@
 # 智美天工架构文档索引
+<!-- BASE02_W1C_WRITER_ADMISSION_START -->
+
+## W1C Writer Admission（2026-08-08）
+
+```text
+w1c_symbol_audit=passed
+w1c_callgraph_audit=passed
+w1c_atomicity_audit=passed
+w1c_runtime_decomposition=frozen
+
+w1c_p1_broadcast_exact_allowlist=frozen
+w1c_p1_broadcast_exact_allowlist_file_count=6
+w1c_p1_broadcast_runtime_authorized=false
+
+w1c_p2_safety_real_send_blocked_pending_decision=true
+w1c_p2_exact_runtime_allowlist_not_frozen=true
+w1c_p2_runtime_authorized=false
+```
+
+关键原因：
+
+`customerChannelFrequencyStates` 当前同时由 Safety 与 Real-send 写入；Real-send 还直接写 `auditEvents`，因此 P2 必须先冻结单一 Owner 与 transaction atomicity。
+
+下一任务：`W1C-P1 Broadcast Outcome exact 6-file Runtime implementation explicit authorization`
+
+<!-- BASE02_W1C_WRITER_ADMISSION_END -->
+
 <!-- BASE02_W1B_WECOM_MAPPING_RUNTIME_CLOSURE_START -->
 
 ## W1B WeCom Mapping Runtime Closure（2026-08-08）

@@ -3,40 +3,44 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## W1B WeCom Mapping Runtime 完成状态
+## W1C Writer Admission 状态
 
 - 更新日期：2026-08-08
 - W1A Customers Core：complete
-- W1B Implementation PR #1087：`7caab67f111737607d918cb6f8b4e0e27de10d34`
-- W1B Independent Review PR #1088：`6683f94899920e1e5d4eac916a6d8d2afcbd046b`
-- canonical Owner：messaging
-- exact Runtime files：6
-- same fact source：weComCustomerMappingStates
-- tenant + institution + proofContact scope：enforced
-- expected customer/status guard：enforced
-- legacy mapping read compatibility：retained
-- legacy mapping parallel Writer：blocked
-- Mapping Route：capability-off
-- Reader / Capability：closed
-- W1C Runtime：not authorized
+- W1B WeCom Mapping：complete
+- W1C Admission PR #1090：`a5649b67b002c57a4b10ef627376abb0403ce695`
+- W1C Independent Review PR #1091：`543f205c821be40f1e81b9f055181b2d29f7b27c`
+- candidate Writer files：3
+- P1 Broadcast Outcome：independent / exact 6-file allowlist frozen
+- P2 Safety + Real-send：blocked pending atomicity / Owner decision
+- Runtime implementation：not authorized
+- Route / Reader / Capability：closed
 
 ```text
-w1a_customers_core_complete=true
-w1b_runtime_implementation=passed
-w1b_runtime_independent_review=passed
 w1b_complete=true
 
-business_writer_phase_complete=false
+w1c_symbol_audit=passed
+w1c_callgraph_audit=passed
+w1c_atomicity_audit=passed
+w1c_admission=passed
+w1c_admission_independent_review=passed
 
-mapping_route_change=false
+w1c_p1_broadcast_exact_allowlist=frozen
+w1c_p1_broadcast_exact_allowlist_file_count=6
+w1c_p1_broadcast_runtime_authorized=false
+
+w1c_p2_safety_real_send_blocked_pending_decision=true
+w1c_p2_exact_runtime_allowlist_not_frozen=true
+w1c_p2_runtime_authorized=false
+
+business_writer_phase_complete=false
 reader_release=false
 capability_release=false
-w1c_runtime_change=false
 ```
 
 ### 唯一下一任务
 
-`W1C Trusted Reach-out / Broadcast / Real-send evidence Writer symbol audit + exact implementation allowlist admission`
+`W1C-P1 Broadcast Outcome exact 6-file Runtime implementation explicit authorization`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 

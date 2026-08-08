@@ -1,5 +1,15 @@
 # 项目重构历史
 
+## 2026-08-08：W1C Writer 准入完成
+
+- W1B complete=true；
+- W1C 3 个候选 Writer 完成 symbol/callgraph/atomicity audit；
+- P1 Broadcast Outcome 独立 exact 6-file allowlist frozen；
+- P2 Safety + Real-send 因 shared frequency Writer 与 direct Audit write 进入 blocker；
+- W1C Runtime 尚未授权；
+- 下一任务：W1C-P1 Broadcast Outcome exact 6-file Runtime implementation explicit authorization。
+
+
 ## 2026-08-08：W1B WeCom Mapping Runtime 完成
 
 - PR #1087 完成 exact 6-file Runtime implementation；
