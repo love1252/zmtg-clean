@@ -1,0 +1,7 @@
+path,role,change_kind,required,implementation_authorized
+src/modules/messaging/application/wecom-customer-broadcast-task-outcome-command-service.ts,new_messaging_broadcast_outcome_command_owner,create,true,false
+src/modules/messaging/server/wecom-customer-broadcast-task-outcome-command-repository.ts,new_messaging_broadcast_outcome_canonical_writer,create,true,false
+src/modules/messaging/tests/WeComCustomerBroadcastTaskOutcomeCommandService.test.ts,broadcast_command_scope_contract_tests,create,true,false
+src/modules/messaging/tests/WeComCustomerBroadcastTaskOutcomeCommandRepository.test.ts,broadcast_writer_scope_cas_negative_tests,create,true,false
+src/modules/institution/server/wecom-customer-broadcast-task-outcome-repository.ts,legacy_broadcast_writer_blockade_retain_reads,modify,true,false
+src/modules/institution/tests/WeComCustomerBroadcastTaskOutcome.test.ts,legacy_broadcast_writer_blockade_read_compat_tests,modify,true,false

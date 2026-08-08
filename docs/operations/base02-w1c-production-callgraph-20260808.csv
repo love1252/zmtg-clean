@@ -1,0 +1,13 @@
+path,matched_symbols,role,runtime_authorized
+src/modules/institution/domain/wecom-controlled-reachout.ts,safety_repo_path,production_reference_review,false
+src/modules/institution/server/trusted-reachout-safety-repository.ts,safety_repo_factory,candidate_writer_definition,false
+src/modules/institution/server/trusted-reachout-safety-service.ts,safety_repo_path,production_reference_review,false
+src/modules/institution/server/trusted-reachout-safety-transaction.ts,safety_repo_factory|safety_repo_path|safety_tx,safety_transaction_composition,false
+src/modules/institution/server/wecom-controlled-reachout-service.ts,safety_repo_path,production_reference_review,false
+src/modules/institution/server/wecom-controlled-reachout-transaction.ts,safety_repo_factory|safety_repo_path|controlled_tx,controlled_reachout_transaction_composition,false
+src/modules/institution/server/wecom-customer-broadcast-task-outcome-repository.ts,broadcast_repo_factory,candidate_writer_definition,false
+src/modules/institution/server/wecom-customer-broadcast-task-outcome-service.ts,broadcast_repo_path,production_reference_review,false
+src/modules/institution/server/wecom-dry-run-snapshot-service.ts,safety_repo_path,production_reference_review,false
+src/modules/institution/server/wecom-real-send-execution-shell-service.ts,broadcast_repo_path|real_send_repo_path,production_reference_review,false
+src/modules/institution/server/wecom-real-send-proof-repository.ts,real_send_repo_factory,candidate_writer_definition,false
+src/modules/institution/server/wecom-real-send-proof-service.ts,real_send_repo_path,production_reference_review,false
