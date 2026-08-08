@@ -28,9 +28,9 @@ NEXT_WRITER_SLICE=W2_CARE
 
 W1 原符号审计已经明确：
 
-- ：true Writer，；
-- ：Customers core 已收口，但 mixed legacy aggregate 的 Care / Follow-up residual Writer 仍需后续拆分；
-- ：；
+- `treatment-summary-repository.ts`：true Writer，`reassign_W2_CARE`；
+- `tenant-business-repository.ts`：Customers core 已收口，但 mixed legacy aggregate 的 Care / Follow-up residual Writer 仍需后续拆分；
+- `trial-provisioning-service.ts`：`separate_provisioning_review`；
 - W3 Knowledge、W5 Analytics、W6 Institution System 的 baseline candidate surfaces 尚未完成各自逐符号准入。
 
 因此不能把 W1C 完成错误等价为 Business Writer phase 完成。
@@ -48,6 +48,6 @@ src/modules/institution/server/tenant-business-repository.ts
 src/modules/institution/server/treatment-summary-repository.ts
 ```
 
- 保留独立 Provisioning review，不在未准入前并入 W2 Runtime。
+`trial-provisioning-service.ts` 保留独立 Provisioning review，不在未准入前并入 W2 Runtime。
 
 本次仅决定下一准入任务，不授权 W2 Runtime。

@@ -31,7 +31,7 @@ real_send_operation_writer_owner=messaging
 frequency_single_direct_writer=true
 ```
 
-、、、 的 direct Runtime Writer 已收口到 Messaging canonical repository。
+`customerChannelContactConsents`、`customerChannelFrequencyStates`、`institutionChannelDryRunSnapshots`、`weComRealSendProofOperations` 的 direct Runtime Writer 已收口到 Messaging canonical repository。
 
 ## 3. Audit Owner 与 atomicity
 
@@ -40,7 +40,7 @@ audit_event_owner=audit
 operation_frequency_audit_same_transaction=true
 ```
 
- 在同一个  中组装 Messaging canonical Writer 与 Audit canonical repository。
+`src/server/orchestration/wecom-reachout-transaction.ts` 在同一个 `TenantDatabase.transaction(...)` 中组装 Messaging canonical Writer 与 Audit canonical repository。
 
 Real-send success path 的：
 
@@ -66,7 +66,7 @@ legacy_real_send_transaction_delegation=true
 
 ## 5. Route / schema boundary
 
-所有相关 W1C Route 继续 ，PR #1099 未修改 Schema 或 Audit canonical repository。
+所有相关 W1C Route 继续 `capability_disabled`，PR #1099 未修改 Schema 或 Audit canonical repository。
 
 ```text
 schema_change=false
