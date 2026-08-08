@@ -3,30 +3,33 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## W1C-P1 Broadcast Outcome Runtime 完成状态
+## W1C-P2 Owner / Atomicity Admission 状态
 
 - 更新日期：2026-08-08
-- W1A Customers Core：complete
-- W1B WeCom Mapping：complete
-- W1C Admission：passed
-- W1C-P1 Implementation PR #1093：`24e5c44888963e1a2de00cd2093a2d619385b419`
-- W1C-P1 Independent Review PR #1094：`45b433013d237f74ce0e3d8df385ed8bbc80fac2`
-- W1C-P1 canonical Owner：messaging
-- W1C-P1 exact Runtime files：6
-- W1C-P1 complete：true
-- W1C-P2 Safety + Real-send：blocked pending atomicity / Owner decision
+- W1C-P1 Broadcast Outcome：complete
+- W1C-P2 Admission PR #1096：`c66065762cda1c67874df3cc00e53cc773f9fd2b`
+- W1C-P2 Independent Review PR #1097：`437108309149ab7fdae3491ad47eaeed78210ca9`
+- reach-out fact Writer Owner：messaging
+- auditEvents Writer Owner：audit
+- customerChannelFrequencyStates direct Writer：single
+- transaction composition root：src/server/orchestration/wecom-reachout-transaction.ts
+- exact Runtime allowlist：12 files
+- Runtime implementation：not authorized
 - Route / Reader / Capability：closed
 
 ```text
-w1b_complete=true
-w1c_admission=passed
-w1c_p1_broadcast_runtime_implementation=passed
-w1c_p1_broadcast_runtime_independent_review=passed
 w1c_p1_complete=true
-w1c_complete=false
-w1c_p2_safety_real_send_blocked_pending_decision=true
-w1c_p2_exact_runtime_allowlist_not_frozen=true
+w1c_p2_owner_decision=frozen
+w1c_p2_atomicity_decision=frozen
+w1c_p2_frequency_single_writer_decision=frozen
+w1c_p2_audit_owner_decision=frozen
+w1c_p2_legacy_rewire_decision=frozen
+w1c_p2_exact_runtime_allowlist=frozen
+w1c_p2_exact_runtime_allowlist_file_count=12
+w1c_p2_admission=passed
+w1c_p2_admission_independent_review=passed
 w1c_p2_runtime_authorized=false
+w1c_complete=false
 business_writer_phase_complete=false
 reader_release=false
 capability_release=false
@@ -34,7 +37,7 @@ capability_release=false
 
 ### 唯一下一任务
 
-`W1C-P2 Safety + Real-send atomicity / Owner decision admission`
+`W1C-P2 Safety + Real-send exact 12-file Runtime implementation explicit authorization`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
