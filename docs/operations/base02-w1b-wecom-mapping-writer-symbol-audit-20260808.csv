@@ -1,0 +1,5 @@
+path,actual_db_mutation,mutation_methods,table_symbol,tenant_institution_scope,classification,canonical_owner,proposed_action,runtime_change_authorized
+src/modules/institution/server/wecom-customer-mapping-repository.ts,true,insert|update,weComCustomerMappingStates,present,legacy_mapping_writer,messaging,retain_reads_disable_legacy_writes,false
+src/modules/institution/server/wecom-customer-mapping-service.ts,false,repository_command,none,present,legacy_mapping_service_dormant,messaging,leave_unchanged_in_minimal_writer_slice,false
+src/modules/institution/server/wecom-customer-mapping-transaction.ts,false,transaction_composition,none,delegated,legacy_mapping_transaction_dormant,messaging,leave_unchanged_route_off,false
+src/app/api/institution/wecom-customer-mapping/route.ts,false,none,none,not_consumed,capability_off_route,route_excluded,keep_capability_disabled,false
