@@ -1,5 +1,18 @@
 # 项目重构历史
 
+## 2026-08-09：W1C Customers / Messaging Writer 完成
+
+- W1C-P2 Implementation PR #1099：`d189ffe0998bf30ba32a47ed47a5c078614004e0`；
+- W1C-P2 Independent Review PR #1100：`1b2bd20c00537dc5ee527bc8a206f1b3a0aae3f0`；
+- W1C-P2 complete=true；
+- W1C complete=true；
+- W1 Customers / Messaging complete=true；
+- Business Writer inventory 已重新审计；
+- Business Writer phase complete=false；
+- post-W1C pending review files=18；
+- 下一任务：W2 Care Writer symbol/callgraph audit + exact implementation allowlist admission。
+
+
 ## 2026-08-08：W1C-P2 Owner / Atomicity 准入完成
 
 - Admission PR #1096：`c66065762cda1c67874df3cc00e53cc773f9fd2b`；
