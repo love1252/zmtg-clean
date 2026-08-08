@@ -1,4 +1,34 @@
 # 智美天工架构文档索引
+<!-- BASE02_W1C_P2_OWNER_ATOMICITY_ADMISSION_START -->
+
+## W1C-P2 Owner / Atomicity Admission（2026-08-08）
+
+```text
+admission_pr=1096
+admission_merge=c66065762cda1c67874df3cc00e53cc773f9fd2b
+independent_review_pr=1097
+independent_review_merge=437108309149ab7fdae3491ad47eaeed78210ca9
+
+reachout_fact_owner=messaging
+audit_event_owner=audit
+frequency_single_writer=true
+frequency_writer_path=src/modules/messaging/server/wecom-reachout-command-repository.ts
+
+transaction_composition_root=src/server/orchestration/wecom-reachout-transaction.ts
+operation_frequency_audit_same_transaction=true
+
+exact_runtime_allowlist_file_count=12
+w1c_p2_runtime_authorized=false
+w1c_complete=false
+business_writer_phase_complete=false
+```
+
+下一任务：
+
+`W1C-P2 Safety + Real-send exact 12-file Runtime implementation explicit authorization`
+
+<!-- BASE02_W1C_P2_OWNER_ATOMICITY_ADMISSION_END -->
+
 <!-- BASE02_W1C_P1_BROADCAST_RUNTIME_CLOSURE_START -->
 
 ## W1C-P1 Broadcast Outcome Runtime Closure（2026-08-08）

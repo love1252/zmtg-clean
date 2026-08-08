@@ -1,5 +1,18 @@
 # 项目重构历史
 
+## 2026-08-08：W1C-P2 Owner / Atomicity 准入完成
+
+- Admission PR #1096：`c66065762cda1c67874df3cc00e53cc773f9fd2b`；
+- Independent Review PR #1097：`437108309149ab7fdae3491ad47eaeed78210ca9`；
+- Messaging 冻结为 reach-out fact Writer Owner；
+- Audit 保持 auditEvents 唯一 Writer Owner；
+- customerChannelFrequencyStates 冻结为单一 canonical Writer；
+- top-level transaction composition root 冻结；
+- exact Runtime allowlist=12 files；
+- W1C-P2 Runtime 尚未授权；
+- 下一任务：W1C-P2 Safety + Real-send exact 12-file Runtime implementation explicit authorization。
+
+
 ## 2026-08-08：W1C-P1 Broadcast Outcome Runtime 完成
 
 - Implementation PR #1093：`24e5c44888963e1a2de00cd2093a2d619385b419`；
