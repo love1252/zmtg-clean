@@ -71,9 +71,7 @@ export function mapWeComCustomerMappingStateRow(
 
 export function createWeComCustomerMappingRepository(database: TenantDatabase) {
   return {
-    async findByScope(
-      input: WeComCustomerMappingScope,
-    ): Promise<WeComCustomerMappingState | null> {
+    async findByScope(input: WeComCustomerMappingScope): Promise<WeComCustomerMappingState | null> {
       const [row] = await database
         .select()
         .from(weComCustomerMappingStates)
@@ -84,13 +82,10 @@ export function createWeComCustomerMappingRepository(database: TenantDatabase) {
             eq(weComCustomerMappingStates.proofContactId, input.proofContactId),
           ),
         );
-
       return row ? mapWeComCustomerMappingStateRow(row) : null;
     },
 
-    async findByScopeForUpdate(
-      input: WeComCustomerMappingScope,
-    ): Promise<WeComCustomerMappingState | null> {
+    async findByScopeForUpdate(input: WeComCustomerMappingScope): Promise<WeComCustomerMappingState | null> {
       const [row] = await database
         .select()
         .from(weComCustomerMappingStates)
@@ -102,58 +97,17 @@ export function createWeComCustomerMappingRepository(database: TenantDatabase) {
           ),
         )
         .for('update');
-
       return row ? mapWeComCustomerMappingStateRow(row) : null;
     },
 
-    async createIfAbsent(
-      input: CreateWeComCustomerMappingStateInput,
-    ): Promise<WeComCustomerMappingState | null> {
-      const [row] = await database
-        .insert(weComCustomerMappingStates)
-        .values({
-          id: input.id,
-          tenantId: input.tenantId,
-          institutionId: input.institutionId,
-          proofContactId: input.proofContactId,
-          proofEmployeeId: input.proofEmployeeId,
-          sourceMode: input.sourceMode,
-          customerId: input.customerId,
-          status: input.status,
-          decidedBy: input.decidedBy,
-          decidedAt: new Date(input.decidedAt),
-        })
-        .onConflictDoNothing()
-        .returning();
-
-      return row ? mapWeComCustomerMappingStateRow(row) : null;
+    async createIfAbsent(input: CreateWeComCustomerMappingStateInput): Promise<WeComCustomerMappingState | null> {
+      void input;
+      throw new Error('legacy_wecom_mapping_writer_disabled');
     },
 
-    async updateWhenCurrentStatus(
-      input: UpdateWeComCustomerMappingStateInput,
-    ): Promise<WeComCustomerMappingState | null> {
-      const decidedAt = new Date(input.decidedAt);
-      const [row] = await database
-        .update(weComCustomerMappingStates)
-        .set({
-          customerId: input.customerId,
-          status: input.status,
-          decidedBy: input.decidedBy,
-          decidedAt,
-          updatedAt: decidedAt,
-        })
-        .where(
-          and(
-            eq(weComCustomerMappingStates.tenantId, input.tenantId),
-            eq(weComCustomerMappingStates.institutionId, input.institutionId),
-            eq(weComCustomerMappingStates.proofContactId, input.proofContactId),
-            eq(weComCustomerMappingStates.customerId, input.expectedCustomerId),
-            eq(weComCustomerMappingStates.status, input.expectedStatus),
-          ),
-        )
-        .returning();
-
-      return row ? mapWeComCustomerMappingStateRow(row) : null;
+    async updateWhenCurrentStatus(input: UpdateWeComCustomerMappingStateInput): Promise<WeComCustomerMappingState | null> {
+      void input;
+      throw new Error('legacy_wecom_mapping_writer_disabled');
     },
   };
 }
