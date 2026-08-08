@@ -3,60 +3,48 @@
 ## 唯一下一任务
 
 ```text
-W1C-P1 Broadcast Outcome exact 6-file Runtime implementation explicit authorization
+W1C-P2 Safety + Real-send atomicity / Owner decision admission
 ```
 
-## W1C Admission 已完成
+## W1C-P1 已完成
 
-- W1C 三个候选 Writer 已逐符号复核；
-- production callgraph 已复核；
-- 相关 formal Route 均保持 capability-off；
-- W1C 已拆成 P1 与 P2；
-- P1 Broadcast Outcome 可独立迁移；
-- P2 Safety + Real-send 存在 shared frequency Writer 与 Audit atomicity blocker。
+- Broadcast Outcome exact 6-file Runtime implementation merged；
+- Independent Review passed；
+- W1C-P1 complete=true；
+- canonical Owner=messaging；
+- same fact source=`weComCustomerBroadcastTaskProviderAttempts`；
+- full scope attribution enforced；
+- expectedVersion CAS enforced；
+- `not_finalized` guard enforced；
+- legacy read / draft-scope compatibility retained；
+- legacy parallel Writer blocked；
+- Broadcast Route 继续 capability-off。
 
-## W1C-P1 exact 6-file Runtime allowlist
-
-`docs/operations/base02-w1c-p1-broadcast-outcome-exact-allowlist-20260808.csv`
+## W1C-P2 已知 blocker
 
 ```text
-1. src/modules/messaging/application/wecom-customer-broadcast-task-outcome-command-service.ts
-2. src/modules/messaging/server/wecom-customer-broadcast-task-outcome-command-repository.ts
-3. src/modules/messaging/tests/WeComCustomerBroadcastTaskOutcomeCommandService.test.ts
-4. src/modules/messaging/tests/WeComCustomerBroadcastTaskOutcomeCommandRepository.test.ts
-5. src/modules/institution/server/wecom-customer-broadcast-task-outcome-repository.ts
-6. src/modules/institution/tests/WeComCustomerBroadcastTaskOutcome.test.ts
+1. Safety + Real-send both write customerChannelFrequencyStates
+2. Real-send directly writes auditEvents
+3. operation + frequency + audit evidence require atomic transaction ownership
+4. legacy transaction composition needs explicit rewire/retirement decision
 ```
 
-## P1 Runtime 目标
+## 本任务只允许做 P2 admission
 
-- Messaging canonical Broadcast Outcome command Owner；
-- 同一 `weComCustomerBroadcastTaskProviderAttempts` 事实源；
-- create 强制 tenant + institution + customer + operationId + operationRef；
-- update 强制完整 scope + expectedVersion CAS + `not_finalized`；
-- stale / cross-scope / finalized mutation fail-closed；
-- legacy read / draft scope lookup compatibility retained；
-- legacy createNotStarted / updateWhenVersionMatches parallel Writer blocked；
-- Broadcast Route 继续 capability-off；
-- 不接真实 WeCom provider。
+必须先冻结：
 
-## W1C-P2 明确不进入 P1
+1. `customerChannelFrequencyStates` 单一 canonical Writer Owner；
+2. consent / frequency / dry-run snapshot / real-send operation / audit evidence Owner 边界；
+3. Real-send transaction atomicity；
+4. Audit evidence 接入 port / orchestration 边界；
+5. legacy safety / controlled-reachout transaction rewire 或 fail-closed retirement；
+6. production callers / routes / services；
+7. P2 exact Runtime allowlist；
+8. concurrency / atomicity / negative tests。
 
-P2 blocker：
-
-```text
-Safety + Real-send both write customerChannelFrequencyStates
-Real-send directly writes auditEvents
-operation + frequency + audit evidence require atomic transaction ownership
-legacy transaction composition needs explicit rewire/retirement decision
-```
-
-P2 必须后续单独做 atomicity / Owner decision，当前没有 exact Runtime allowlist。
-
-## 当前仍禁止
+当前仍禁止：
 
 ```text
-w1c_p1_broadcast_runtime_authorized=false
 w1c_p2_runtime_authorized=false
 database_connection=false
 ddl=false
@@ -69,9 +57,10 @@ route_change=false
 reader_release=false
 capability_release=false
 real_wecom_provider_call=false
+frequency_writer_change=false
 audit_runtime_change=false
 care_expansion=false
 production_change=false
 ```
 
-如 P1 实现需要第 7 个文件，必须立即停止并重新准入。
+不得把 P2 admission 解释为 P2 Runtime 授权。

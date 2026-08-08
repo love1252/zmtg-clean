@@ -3,36 +3,30 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## W1C Writer Admission 状态
+## W1C-P1 Broadcast Outcome Runtime 完成状态
 
 - 更新日期：2026-08-08
 - W1A Customers Core：complete
 - W1B WeCom Mapping：complete
-- W1C Admission PR #1090：`a5649b67b002c57a4b10ef627376abb0403ce695`
-- W1C Independent Review PR #1091：`543f205c821be40f1e81b9f055181b2d29f7b27c`
-- candidate Writer files：3
-- P1 Broadcast Outcome：independent / exact 6-file allowlist frozen
-- P2 Safety + Real-send：blocked pending atomicity / Owner decision
-- Runtime implementation：not authorized
+- W1C Admission：passed
+- W1C-P1 Implementation PR #1093：`24e5c44888963e1a2de00cd2093a2d619385b419`
+- W1C-P1 Independent Review PR #1094：`45b433013d237f74ce0e3d8df385ed8bbc80fac2`
+- W1C-P1 canonical Owner：messaging
+- W1C-P1 exact Runtime files：6
+- W1C-P1 complete：true
+- W1C-P2 Safety + Real-send：blocked pending atomicity / Owner decision
 - Route / Reader / Capability：closed
 
 ```text
 w1b_complete=true
-
-w1c_symbol_audit=passed
-w1c_callgraph_audit=passed
-w1c_atomicity_audit=passed
 w1c_admission=passed
-w1c_admission_independent_review=passed
-
-w1c_p1_broadcast_exact_allowlist=frozen
-w1c_p1_broadcast_exact_allowlist_file_count=6
-w1c_p1_broadcast_runtime_authorized=false
-
+w1c_p1_broadcast_runtime_implementation=passed
+w1c_p1_broadcast_runtime_independent_review=passed
+w1c_p1_complete=true
+w1c_complete=false
 w1c_p2_safety_real_send_blocked_pending_decision=true
 w1c_p2_exact_runtime_allowlist_not_frozen=true
 w1c_p2_runtime_authorized=false
-
 business_writer_phase_complete=false
 reader_release=false
 capability_release=false
@@ -40,7 +34,7 @@ capability_release=false
 
 ### 唯一下一任务
 
-`W1C-P1 Broadcast Outcome exact 6-file Runtime implementation explicit authorization`
+`W1C-P2 Safety + Real-send atomicity / Owner decision admission`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
