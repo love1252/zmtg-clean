@@ -1,4 +1,39 @@
 # 智美天工架构文档索引
+<!-- BASE02_W1C_COMPLETE_START -->
+
+## W1C Customers / Messaging Writer Closure（2026-08-09）
+
+```text
+implementation_pr=1099
+implementation_merge=d189ffe0998bf30ba32a47ed47a5c078614004e0
+independent_review_pr=1100
+independent_review_merge=1b2bd20c00537dc5ee527bc8a206f1b3a0aae3f0
+
+w1c_p2_complete=true
+w1c_complete=true
+w1_customers_messaging_complete=true
+
+frequency_single_direct_writer=true
+audit_event_owner=audit
+operation_frequency_audit_same_transaction=true
+legacy_safety_direct_writer=blocked
+legacy_real_send_direct_frequency_audit_writer=removed
+
+business_writer_phase_complete=false
+business_writer_post_w1c_pending_review_files=18
+
+next_writer_slice=W2_CARE
+w2_care_runtime_authorized=false
+reader_release=false
+capability_release=false
+```
+
+下一任务：
+
+`W2 Care Writer symbol/callgraph audit + exact implementation allowlist admission`
+
+<!-- BASE02_W1C_COMPLETE_END -->
+
 <!-- BASE02_W1C_P2_OWNER_ATOMICITY_ADMISSION_START -->
 
 ## W1C-P2 Owner / Atomicity Admission（2026-08-08）

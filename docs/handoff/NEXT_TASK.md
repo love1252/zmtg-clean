@@ -3,62 +3,88 @@
 ## 唯一下一任务
 
 ```text
-W1C-P2 Safety + Real-send exact 12-file Runtime implementation explicit authorization
+W2 Care Writer symbol/callgraph audit + exact implementation allowlist admission
 ```
 
-## W1C-P2 Admission 已完成
-
-已冻结：
+## W1 Customers / Messaging 已完成
 
 ```text
-reachout_fact_owner=messaging
-audit_event_owner=audit
-customerChannelFrequencyStates_single_writer=true
-transaction_composition_root=src/server/orchestration/wecom-reachout-transaction.ts
-operation_frequency_audit_same_transaction=true
-legacy_safety_writer_blockade_required=true
-legacy_real_send_direct_writer_removal_required=true
-legacy_transaction_delegation_required=true
-exact_runtime_allowlist_file_count=12
+w1a_complete=true
+w1b_complete=true
+w1c_p1_complete=true
+w1c_p2_complete=true
+w1c_complete=true
+w1_customers_messaging_complete=true
 ```
 
-## Exact Runtime allowlist
+W1C-P2 已完成：
 
-`docs/operations/base02-w1c-p2-exact-runtime-allowlist-20260808.csv`
+- Messaging canonical reach-out persistence port / Writer；
+- customerChannelFrequencyStates single direct Writer；
+- Audit canonical Owner；
+- Real-send operation + frequency completion + audit evidence same-transaction；
+- legacy Safety direct Writer blockade；
+- legacy Real-send direct frequency/audit Writer removal；
+- legacy transaction canonical orchestration delegation；
+- W1C Routes 继续 capability-off。
+
+## Business Writer inventory 重新审计
 
 ```text
-1. src/modules/messaging/application/wecom-reachout-command-port.ts
-2. src/modules/messaging/server/wecom-reachout-command-repository.ts
-3. src/modules/messaging/tests/WeComReachOutCommandRepository.test.ts
-4. src/server/orchestration/wecom-reachout-transaction.ts
-5. src/server/orchestration/wecom-reachout-transaction.test.ts
-6. src/modules/institution/server/trusted-reachout-safety-repository.ts
-7. src/modules/institution/tests/TrustedReachOutSafetyRepository.test.ts
-8. src/modules/institution/server/trusted-reachout-safety-transaction.ts
-9. src/modules/institution/tests/TrustedReachOutSafetyTransaction.test.ts
-10. src/modules/institution/server/wecom-controlled-reachout-transaction.ts
-11. src/modules/institution/server/wecom-real-send-proof-repository.ts
-12. src/modules/institution/tests/WeComRealSendProofRepository.test.ts
+business_writer_baseline_surface_files=27
+business_writer_post_w1c_closed_or_terminal_files=9
+business_writer_post_w1c_pending_review_files=18
+
+w2_care_pending_files=2
+provisioning_review_pending_files=1
+w3_knowledge_pending_files=9
+w5_analytics_pending_files=1
+w6_institution_system_pending_files=5
+
+business_writer_phase_complete=false
 ```
 
-## Runtime 必须满足
+证据：
 
-- `customerChannelFrequencyStates` 只保留一个 direct Writer；
-- consent / frequency / snapshot / real-send operation Writer 归 Messaging；
-- `auditEvents` 只能由 Audit repository 直接写；
-- Real-send operation + frequency completion + audit evidence 同事务提交或回滚；
-- legacy safety direct Writer fail-closed；
-- legacy real-send direct frequency/audit Writer 删除；
-- legacy safety / controlled transaction 委托 top-level composition root；
-- 所有 W1C Route 继续 capability-off；
-- 不接真实 WeCom provider；
-- 不连接数据库执行写入；
-- 不做 Schema/Migration。
+`docs/operations/base02-business-writer-post-w1c-inventory-audit-20260809.csv`
 
-## 当前授权状态
+## 为什么下一任务是 W2 Care
+
+W1 symbol audit 已明确：
 
 ```text
-w1c_p2_runtime_authorized=false
+src/modules/institution/server/treatment-summary-repository.ts
+  classification=real_writer_wrong_slice
+  proposed_owner=Care
+  proposed_action=reassign_W2_CARE
+```
+
+同时：
+
+`src/modules/institution/server/tenant-business-repository.ts`
+
+虽然 Customers core 已完成 canonical Writer 收口，但仍属于 mixed legacy aggregate，需要在 W2 对 Care / Follow-up residual direct Writer 做逐符号拆分审查。
+
+`src/modules/institution/server/trial-provisioning-service.ts` 保留独立 Provisioning review，不自动并入 W2 Runtime。
+
+## W2 本轮只做 admission
+
+必须：
+
+1. 对 Care / Follow-up mutation symbols 逐方法复核；
+2. 枚举 production callers / routes / services / transactions；
+3. 分离 tenant-business residual Care Writer；
+4. 确认 treatment-summary canonical Owner；
+5. 识别并关闭 old Writer / dual-write / bypass；
+6. 冻结 exact Runtime implementation allowlist；
+7. 冻结 negative / tenant+institution / CAS / atomicity tests；
+8. 如需要 Schema/Migration，单独重新准入。
+
+当前仍禁止：
+
+```text
+w2_care_runtime_authorized=false
+business_writer_phase_complete=false
 database_connection=false
 ddl=false
 dml=false
@@ -69,8 +95,7 @@ schema_change=false
 route_change=false
 reader_release=false
 capability_release=false
-real_wecom_provider_call=false
 production_change=false
 ```
 
-如实现需要第 13 个文件，立即停止并重新准入。
+本任务不是 W2 Runtime 授权。

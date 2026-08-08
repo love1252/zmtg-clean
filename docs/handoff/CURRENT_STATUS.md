@@ -3,33 +3,38 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## W1C-P2 Owner / Atomicity Admission 状态
+## W1C Business Writer 完成状态
 
-- 更新日期：2026-08-08
+- 更新日期：2026-08-09
+- W1A Customers Core：complete
+- W1B WeCom Mapping：complete
 - W1C-P1 Broadcast Outcome：complete
-- W1C-P2 Admission PR #1096：`c66065762cda1c67874df3cc00e53cc773f9fd2b`
-- W1C-P2 Independent Review PR #1097：`437108309149ab7fdae3491ad47eaeed78210ca9`
-- reach-out fact Writer Owner：messaging
-- auditEvents Writer Owner：audit
-- customerChannelFrequencyStates direct Writer：single
-- transaction composition root：src/server/orchestration/wecom-reachout-transaction.ts
-- exact Runtime allowlist：12 files
-- Runtime implementation：not authorized
-- Route / Reader / Capability：closed
+- W1C-P2 Safety + Real-send：complete
+- W1C-P2 Implementation PR #1099：`d189ffe0998bf30ba32a47ed47a5c078614004e0`
+- W1C-P2 Independent Review PR #1100：`1b2bd20c00537dc5ee527bc8a206f1b3a0aae3f0`
+- W1 Customers / Messaging：complete
+- Business Writer phase：not complete
+- Reader / Capability：closed
 
 ```text
+w1a_complete=true
+w1b_complete=true
 w1c_p1_complete=true
-w1c_p2_owner_decision=frozen
-w1c_p2_atomicity_decision=frozen
-w1c_p2_frequency_single_writer_decision=frozen
-w1c_p2_audit_owner_decision=frozen
-w1c_p2_legacy_rewire_decision=frozen
-w1c_p2_exact_runtime_allowlist=frozen
-w1c_p2_exact_runtime_allowlist_file_count=12
-w1c_p2_admission=passed
-w1c_p2_admission_independent_review=passed
-w1c_p2_runtime_authorized=false
-w1c_complete=false
+w1c_p2_runtime_implementation=passed
+w1c_p2_runtime_independent_review=passed
+w1c_p2_complete=true
+w1c_complete=true
+w1_customers_messaging_complete=true
+
+business_writer_baseline_surface_files=27
+business_writer_post_w1c_closed_or_terminal_files=9
+business_writer_post_w1c_pending_review_files=18
+w2_care_pending_files=2
+provisioning_review_pending_files=1
+w3_knowledge_pending_files=9
+w5_analytics_pending_files=1
+w6_institution_system_pending_files=5
+
 business_writer_phase_complete=false
 reader_release=false
 capability_release=false
@@ -37,7 +42,7 @@ capability_release=false
 
 ### 唯一下一任务
 
-`W1C-P2 Safety + Real-send exact 12-file Runtime implementation explicit authorization`
+`W2 Care Writer symbol/callgraph audit + exact implementation allowlist admission`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
