@@ -3,49 +3,105 @@
 ## 唯一下一任务
 
 ```text
-W2-P2 Care / Follow-up residual Writer transaction/callgraph admission
+W2-P2A Appointments exact 6-file Runtime implementation explicit authorization
 ```
 
-## W2-P1 已完成
+## W2-P2 Admission 已完成
 
 ```text
-implementation_pr=1106
-implementation_merge=3679122f2ea11079660cc16a7d9871f619c81386
-independent_review_pr=1107
-independent_review_merge=ac66266c78c9e1263959812cbcfc8b7ac9bc632d
-w2_p1_complete=true
+admission_pr=1110
+admission_merge=762aa5e4cb0f22c8b296d366be51363e9bf508a5
+independent_review_pr=1111
+independent_review_merge=0f5afa641ce276839a45fb2c8ec440233c1c9134
+
+w2_p2_admission=passed
+w2_p2_admission_independent_review=passed
+w2_p2_decomposition_frozen=true
+transaction_groups=14
 ```
 
-W2-P1 已完成 Care canonical Treatment Summary Writer、tenant + institution attribution、customer / appointment ownership、fail-closed、legacy Writer blockade 与 read/list compatibility；三个 mutation Route 继续 capability-off。
-
-## W2-P2 当前事实
+Fresh facts：
 
 ```text
-w2_p2_residual_mutation_calls=15
-w2_p2_residual_writer_methods=15
-w2_p2_production_callers=5
-w2_p2_residual_fact_tables=6
-w2_p2_runtime_allowlist_frozen=false
-w2_p2_runtime_authorized=false
+residual_mutation_calls=15
+residual_writer_methods=15
+residual_fact_tables=6
+production_caller_files=5
+canonical_owner=care
 ```
 
-下一 admission 必须冻结 Owner、transaction/rollback grouping、timeline evidence Owner、tenant + institution attribution、5 个 production caller rewire、legacy blockade、exact Runtime allowlist 与 atomicity tests。
+## Runtime decomposition
+
+### P2A Appointments
+
+`docs/operations/base02-w2-p2a-appointments-exact-runtime-allowlist-20260809.csv`
+
+```text
+exact_file_count=6
+runtime_authorized=false
+7th_file_requires_stop_and_readmission=true
+```
+
+### P2B Follow-up Task / Path / Timeline
+
+`docs/operations/base02-w2-p2b-followup-path-timeline-exact-runtime-allowlist-20260809.csv`
+
+```text
+exact_file_count=12
+runtime_authorized=false
+13th_file_requires_stop_and_readmission=true
+```
+
+### P2C Message Draft / Controlled Reach-out
+
+`docs/operations/base02-w2-p2c-message-draft-exact-runtime-allowlist-20260809.csv`
+
+```text
+exact_file_count=17
+runtime_authorized=false
+18th_file_requires_stop_and_readmission=true
+```
+
+Aggregate unique future Runtime set：
+
+```text
+28 files
+29th unique file requires stop and re-admission
+```
+
+禁止一次性实施 aggregate 28-file Runtime；必须 P2A → P2B → P2C 逐片授权。
 
 ## Trial Provisioning
 
-`src/modules/institution/server/trial-provisioning-service.ts` 的 `treatmentSummaries` insert 保持独立 Provisioning review：
-
 ```text
 classification=separate_provisioning_review
+w2_p2_direct_mutations=2
 ordinary_business_dual_write=false
-provisioning_treatment_summary_writer_review_pending=true
+trial_provisioning_change=false
 ```
 
-不得混入 W2-P2，也不得未经单独准入修改。
+当前两条 provisioning mutation 为 `appointments` / `followUpTasks` insert；不得混入 P2A/P2B/P2C。
+
+## 当前边界
 
 ```text
+w2_p1_complete=true
+w2_p2_runtime_authorized=false
 w2_care_complete=false
 business_writer_phase_complete=false
+
+database_connection=false
+runtime_change=false
+ddl=false
+dml=false
+migration=false
+seed=false
+fk_validate=false
+schema_change=false
+route_change=false
 reader_release=false
 capability_release=false
+audit_owner_change=false
+trial_provisioning_change=false
+production_change=false
 ```

@@ -3,30 +3,57 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## W2-P1 Treatment Summary Runtime Closure 状态
+## W2-P2 Care / Follow-up Writer Admission 状态
 
 - 更新日期：2026-08-09
-- W2-P1 Implementation PR #1106：`3679122f2ea11079660cc16a7d9871f619c81386`
-- W2-P1 Independent Review PR #1107：`ac66266c78c9e1263959812cbcfc8b7ac9bc632d`
-- W2-P1：complete
-- W2-P2：admission pending
-- Trial Provisioning Treatment Summary Writer：separate review pending
+- W2-P1 Treatment Summary：complete
+- W2-P2 Admission PR #1110：`762aa5e4cb0f22c8b296d366be51363e9bf508a5`
+- W2-P2 Independent Review PR #1111：`0f5afa641ce276839a45fb2c8ec440233c1c9134`
+- W2-P2 decomposition：P2A / P2B / P2C frozen
+- Canonical Owner：Care
+- Trial Provisioning：separate review pending
 - W2 Care：not complete
 - Business Writer phase：not complete
 - Reader / Capability：closed
 
 ```text
-w2_p1_runtime_implementation=passed
-w2_p1_runtime_independent_review=passed
 w2_p1_complete=true
+
+w2_p2_fresh_symbol_audit=passed
+w2_p2_fresh_callgraph_audit=passed
+w2_p2_admission=passed
+w2_p2_admission_independent_review=passed
+w2_p2_decomposition_frozen=true
+
 w2_p2_residual_mutation_calls=15
 w2_p2_residual_writer_methods=15
-w2_p2_production_callers=5
 w2_p2_residual_fact_tables=6
-w2_p2_runtime_allowlist_frozen=false
+w2_p2_production_callers=5
+w2_p2_transaction_groups=14
+
+w2_p2_canonical_owner=care
+w2_p2_timeline_evidence_owner=care
+audit_owner_unchanged=true
+messaging_reachout_owner_unchanged=true
+
+w2_p2a_exact_runtime_allowlist_file_count=6
+w2_p2b_exact_runtime_allowlist_file_count=12
+w2_p2c_exact_runtime_allowlist_file_count=17
+w2_p2_aggregate_unique_runtime_allowlist_file_count=28
+
+w2_p2a_runtime_authorized=false
+w2_p2b_runtime_authorized=false
+w2_p2c_runtime_authorized=false
 w2_p2_runtime_authorized=false
-provisioning_treatment_summary_writer_review_pending=true
+
+schema_change_required=false
+migration_required=false
+
+trial_provisioning_classification=separate_provisioning_review
+trial_provisioning_w2_p2_direct_mutations=2
+trial_provisioning_change=false
 ordinary_business_dual_write=false
+
 w2_care_complete=false
 business_writer_phase_complete=false
 reader_release=false
@@ -35,7 +62,7 @@ capability_release=false
 
 ### 唯一下一任务
 
-`W2-P2 Care / Follow-up residual Writer transaction/callgraph admission`
+`W2-P2A Appointments exact 6-file Runtime implementation explicit authorization`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
