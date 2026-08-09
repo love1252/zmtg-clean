@@ -1,0 +1,7 @@
+path,role,change_kind,runtime_authorized
+src/modules/care/application/appointment-command-service.ts,care_appointment_application_owner,create,false
+src/modules/care/server/appointment-command-repository.ts,care_appointment_canonical_writer,create,false
+src/modules/care/tests/AppointmentCommandService.test.ts,appointment_application_scope_cas_tests,create,false
+src/modules/care/tests/AppointmentCommandRepository.test.ts,appointment_writer_scope_cas_tests,create,false
+src/modules/institution/server/tenant-business-repository.ts,legacy_appointment_writer_blockade_read_compatibility,modify,false
+src/modules/institution/tests/TenantBusinessRepository.test.ts,legacy_appointment_blockade_regression,modify,false

@@ -1,0 +1,34 @@
+test_id,slice,required_assertion,runtime_authorized
+W2-P2A-T01,W2_P2A_APPOINTMENTS,appointment create requires server-side tenantId institutionId and customer ownership,false
+W2-P2A-T02,W2_P2A_APPOINTMENTS,appointment create cross-institution customer fails closed,false
+W2-P2A-T03,W2_P2A_APPOINTMENTS,appointment update binds tenant institution appointment customer and expectedUpdatedAt,false
+W2-P2A-T04,W2_P2A_APPOINTMENTS,appointment stale update returns conflict without mutation,false
+W2-P2A-T05,W2_P2A_APPOINTMENTS,legacy createAppointment and updateAppointment writers fail closed after P2A,false
+W2-P2A-T06,W2_P2A_APPOINTMENTS,appointments route remains capability-off,false
+W2-P2B-T01,W2_P2B_FOLLOWUP_PATH_TIMELINE,source task validates tenant institution customer treatment summary scope,false
+W2-P2B-T02,W2_P2B_FOLLOWUP_PATH_TIMELINE,active source unique conflict is deterministic under concurrency,false
+W2-P2B-T03,W2_P2B_FOLLOWUP_PATH_TIMELINE,manual task validates tenant institution customer scope,false
+W2-P2B-T04,W2_P2B_FOLLOWUP_PATH_TIMELINE,task transition uses status plus observed updatedAt CAS and stale conflict,false
+W2-P2B-T05,W2_P2B_FOLLOWUP_PATH_TIMELINE,path enrollment create validates tenant institution customer treatment summary scope,false
+W2-P2B-T06,W2_P2B_FOLLOWUP_PATH_TIMELINE,path enrollment tasks stages required timeline commit atomically,false
+W2-P2B-T07,W2_P2B_FOLLOWUP_PATH_TIMELINE,any path bundle write failure rolls back all prior bundle writes,false
+W2-P2B-T08,W2_P2B_FOLLOWUP_PATH_TIMELINE,path cancel and required timeline evidence commit atomically,false
+W2-P2B-T09,W2_P2B_FOLLOWUP_PATH_TIMELINE,timeline evidence is idempotent by source event unique key,false
+W2-P2B-T10,W2_P2B_FOLLOWUP_PATH_TIMELINE,typed timeline source cross-institution mismatch fails closed,false
+W2-P2B-T11,W2_P2B_FOLLOWUP_PATH_TIMELINE,three production callers rewire to Care application ports and transaction boundary,false
+W2-P2B-T12,W2_P2B_FOLLOWUP_PATH_TIMELINE,legacy task path timeline writers fail closed while reads remain compatible,false
+W2-P2C-T01,W2_P2C_MESSAGE_DRAFT,draft create locks scoped follow-up task before active draft check and insert,false
+W2-P2C-T02,W2_P2C_MESSAGE_DRAFT,draft create validates tenant institution task enrollment stage customer scope,false
+W2-P2C-T03,W2_P2C_MESSAGE_DRAFT,draft edit uses status plus expectedUpdatedAt CAS,false
+W2-P2C-T04,W2_P2C_MESSAGE_DRAFT,approve reject mark_sent each use expectedUpdatedAt and legal status CAS,false
+W2-P2C-T05,W2_P2C_MESSAGE_DRAFT,draft lifecycle write and required Care timeline evidence are same transaction,false
+W2-P2C-T06,W2_P2C_MESSAGE_DRAFT,approve plus delivery timeline evidence plus Audit evidence are same commit or rollback,false
+W2-P2C-T07,W2_P2C_MESSAGE_DRAFT,Audit remains canonical owner and audit failure rolls back high-risk approval bundle,false
+W2-P2C-T08,W2_P2C_MESSAGE_DRAFT,controlled reachout draft CAS stays inside existing Messaging frequency plus Audit transaction,false
+W2-P2C-T09,W2_P2C_MESSAGE_DRAFT,controlled reachout CAS enforces approved status expectedUpdatedAt expectedMetadataJson,false
+W2-P2C-T10,W2_P2C_MESSAGE_DRAFT,message draft and controlled reachout production callers rewire without Route changes,false
+W2-P2C-T11,W2_P2C_MESSAGE_DRAFT,legacy six draft direct writers fail closed while read compatibility remains,false
+W2-P2C-T12,W2_P2C_MESSAGE_DRAFT,message draft and controlled reachout routes remain capability-off and no real send occurs,false
+W2-P2-X01,ALL,all six canonical fact writers require non-null server-side institution attribution,false
+W2-P2-X02,ALL,trial provisioning remains separate_provisioning_review and is never counted as ordinary business dual-write,false
+W2-P2-X03,ALL,no Schema Migration DB execution Route Reader Capability or production change,false
