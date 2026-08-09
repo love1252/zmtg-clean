@@ -1,4 +1,59 @@
 # 智美天工架构文档索引
+<!-- BASE02_W2_P2B_FOLLOWUP_PATH_TIMELINE_RUNTIME_START -->
+
+## W2-P2B Follow-up Task / Path / Timeline Runtime（2026-08-10）
+
+```text
+implementation_pr=1116
+runtime_head=36a1c4744dadd9b5d888d7fbafa08f9cabc37cef
+implementation_head=022b3ae2a831e8f912d4cbc0144d63450411945b
+implementation_merge=615793eb4e5e741490553461e0accc23ef74b174
+independent_review_pr=1117
+independent_review_merge=01730361655939aa741c73e57ff5b770fba20407
+
+w2_p2b_runtime_implementation=passed
+w2_p2b_aq004_governance_recovery=passed
+w2_p2b_runtime_independent_review=passed
+w2_p2b_complete=true
+
+runtime_file_count=12
+governance_exception_file_count=1
+total_changed_file_count=13
+thirteenth_runtime_file_change=false
+
+aq004_exception_path=src/modules/institution/server/followup-path-enrollment-transaction.ts
+aq004_exception_owner=care
+aq004_exception_review_condition=remove_when_legacy_institution_compatibility_delegate_exits
+
+canonical_owner=care
+server_side_tenant_institution_scope=true
+task_transition_status_observed_updated_at_cas=true
+path_cancel_active_observed_updated_at_cas=true
+path_bundle_atomicity=true
+required_timeline_atomicity=true
+typed_timeline_source_guard=true
+legacy_p2b_writers=blocked
+
+post_p2b_residual_mutation_calls=6
+post_p2b_residual_writer_methods=6
+post_p2b_residual_fact_tables=1
+
+p2c_exact_runtime_file_count=17
+p2c_runtime_authorized=false
+
+trial_provisioning_classification=separate_provisioning_review
+ordinary_business_dual_write=false
+
+w2_care_complete=false
+business_writer_phase_complete=false
+```
+
+下一任务：
+
+`W2-P2C Message Draft / Controlled Reach-out exact 17-file Runtime implementation explicit authorization`
+
+<!-- BASE02_W2_P2B_FOLLOWUP_PATH_TIMELINE_RUNTIME_END -->
+
 <!-- BASE02_W2_P2A_APPOINTMENTS_RUNTIME_START -->
 
 ## W2-P2A Appointments Runtime（2026-08-09）

@@ -3,15 +3,14 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## W2-P2A Appointments Runtime 状态
+## W2-P2B Follow-up Task / Path / Timeline Runtime 状态
 
-- 更新日期：2026-08-09
+- 更新日期：2026-08-10
 - W2-P1 Treatment Summary：complete
-- W2-P2 Admission：complete
-- W2-P2A Implementation PR #1113：`25ae7a47f466255590cbe20f35d4243f9145442e`
-- W2-P2A Independent Review PR #1114：`a40fb54fe7b8816df8ad07d69cecd737ca9385fa`
-- W2-P2A：complete
-- W2-P2B：not authorized
+- W2-P2A Appointments：complete
+- W2-P2B Implementation PR #1116：`615793eb4e5e741490553461e0accc23ef74b174`
+- W2-P2B Independent Review PR #1117：`01730361655939aa741c73e57ff5b770fba20407`
+- W2-P2B：complete
 - W2-P2C：not authorized
 - Trial Provisioning：separate review pending
 - W2 Care：not complete
@@ -20,40 +19,48 @@
 
 ```text
 w2_p1_complete=true
-w2_p2_admission=passed
-w2_p2_admission_independent_review=passed
-w2_p2_decomposition_frozen=true
-
-w2_p2a_implementation_pr=1113
-w2_p2a_implementation_head=3b32f624c254610ecddcf0b662af2420f31a5df5
-w2_p2a_implementation_merge=25ae7a47f466255590cbe20f35d4243f9145442e
-w2_p2a_runtime_implementation=passed
-w2_p2a_runtime_independent_review=passed
-w2_p2a_runtime_authorization_consumed=true
 w2_p2a_complete=true
 
-w2_p2a_care_canonical_writer=true
-w2_p2a_server_side_tenant_institution_scope=true
-w2_p2a_create_customer_ownership_guard=true
-w2_p2a_update_appointment_customer_ownership_guard=true
-w2_p2a_expected_updated_at_cas=true
-w2_p2a_stale_update_fail_closed=true
-w2_p2a_legacy_writer=blocked
-w2_p2a_legacy_read_compatibility=retained
-w2_p2a_appointments_route_capability_off=true
+w2_p2b_implementation_pr=1116
+w2_p2b_runtime_head=36a1c4744dadd9b5d888d7fbafa08f9cabc37cef
+w2_p2b_implementation_head=022b3ae2a831e8f912d4cbc0144d63450411945b
+w2_p2b_implementation_merge=615793eb4e5e741490553461e0accc23ef74b174
+w2_p2b_runtime_implementation=passed
+w2_p2b_aq004_governance_recovery=passed
+w2_p2b_runtime_independent_review=passed
+w2_p2b_runtime_authorization_consumed=true
+w2_p2b_complete=true
 
-post_p2a_residual_mutation_calls=13
-post_p2a_residual_writer_methods=13
-post_p2a_residual_fact_tables=5
+w2_p2b_runtime_file_count=12
+w2_p2b_governance_exception_file_count=1
+w2_p2b_total_changed_file_count=13
+w2_p2b_thirteenth_runtime_file_change=false
 
-w2_p2b_exact_runtime_allowlist_file_count=12
+w2_p2b_aq004_exception_registered=true
+w2_p2b_aq004_exception_path=src/modules/institution/server/followup-path-enrollment-transaction.ts
+w2_p2b_aq004_exception_owner=care
+w2_p2b_aq004_exception_review_condition=remove_when_legacy_institution_compatibility_delegate_exits
+
+care_followup_task_path_timeline_canonical_writer=true
+server_side_tenant_institution_scope=true
+task_transition_status_observed_updated_at_cas=true
+path_cancel_active_observed_updated_at_cas=true
+path_bundle_atomicity=true
+required_timeline_atomicity=true
+typed_timeline_source_guard=true
+legacy_p2b_writers=blocked
+legacy_read_compatibility=retained
+
+post_p2b_residual_mutation_calls=6
+post_p2b_residual_writer_methods=6
+post_p2b_residual_fact_tables=1
+
 w2_p2c_exact_runtime_allowlist_file_count=17
-w2_p2b_runtime_authorized=false
 w2_p2c_runtime_authorized=false
 w2_p2_runtime_authorized=false
 
 trial_provisioning_classification=separate_provisioning_review
-trial_provisioning_appointment_writer_review_pending=true
+trial_provisioning_followup_task_writer_review_pending=true
 ordinary_business_dual_write=false
 
 w2_care_complete=false
@@ -64,7 +71,7 @@ capability_release=false
 
 ### 唯一下一任务
 
-`W2-P2B Follow-up Task / Path / Timeline exact 12-file Runtime implementation explicit authorization`
+`W2-P2C Message Draft / Controlled Reach-out exact 17-file Runtime implementation explicit authorization`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 

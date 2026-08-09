@@ -1,5 +1,26 @@
 # 项目重构历史
 
+## 2026-08-10：W2-P2B Follow-up Task / Path / Timeline Runtime 完成
+
+- Implementation PR #1116：`615793eb4e5e741490553461e0accc23ef74b174`；
+- Runtime Head：`36a1c4744dadd9b5d888d7fbafa08f9cabc37cef`；
+- Independent Review PR #1117：`01730361655939aa741c73e57ff5b770fba20407`；
+- exact 12 Runtime files；
+- 额外 1 个 governance file：`scripts/verify/architecture-quality-rules.json`；
+- total changed files = 13，但第 13 个文件不是 Runtime；
+- AQ004 仅登记 `src/modules/institution/server/followup-path-enrollment-transaction.ts` 精确例外；
+- 该 exception 在 legacy Institution compatibility delegate 退出时删除；
+- Care 成为 Follow-up Task / Path / Timeline 普通业务 canonical Writer；
+- server-side tenant + institution、task/path CAS、B1-B6 atomicity 已锁定；
+- 七个 legacy P2B direct Writer 已阻断，read/list compatibility 保留；
+- P2B 后 residual = 6 mutations / 6 Writer methods / 1 fact table；
+- Trial Provisioning followUpTasks insert 继续 separate review；
+- P2C Runtime 未授权；
+- W2 Care complete=false；
+- Business Writer phase complete=false；
+- 下一任务：W2-P2C Message Draft / Controlled Reach-out exact 17-file Runtime implementation explicit authorization。
+
+
 ## 2026-08-09：W2-P2A Appointments Runtime 完成
 
 - Implementation PR #1113：`25ae7a47f466255590cbe20f35d4243f9145442e`；
