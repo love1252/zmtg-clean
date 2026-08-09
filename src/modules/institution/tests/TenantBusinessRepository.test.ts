@@ -862,4 +862,25 @@ describe('租户业务仓储映射', () => {
     expect(mutation.insert).not.toHaveBeenCalled(); expect(mutation.update).not.toHaveBeenCalled(); expect(mutation.values).not.toHaveBeenCalled(); expect(mutation.set).not.toHaveBeenCalled();
   });
 
+
+  it('legacy P2C message draft / controlled reach-out Writers 全部 fail-closed', async () => {
+    const mutation = createMutationDatabase(followUpTaskRow);
+    const repository = createTenantBusinessRepository(mutation.database);
+    const baseDraft = {
+      id: 'draft-a', tenantId: 'demo-tenant-001', institutionId: 'inst-001', followUpTaskId: 'fu_001',
+      enrollmentId: null, stageId: null, customerId: 'cust_001', templateId: null, channelType: 'manual' as const,
+      status: 'draft' as const, draftContent: '低敏草稿', editedContent: null, safePreview: '低敏草稿', approvedBy: null,
+      approvedAt: null, rejectedBy: null, rejectedAt: null, markedSentBy: null, markedSentAt: null,
+      safeReasonCode: 'fallback_generated' as const, metadataJson: {}, createdAt: '2026-08-10T00:00:00.000Z', updatedAt: '2026-08-10T00:00:00.000Z',
+    };
+    await expect(repository.createFollowUpMessageDraft(baseDraft)).rejects.toThrow('legacy_follow_up_message_draft_writer_disabled');
+    await expect(repository.updateFollowUpMessageDraftContent({ tenantId: 'demo-tenant-001', institutionId: 'inst-001', draftId: 'draft-a', editedContent: '低敏', safePreview: '低敏', safeReasonCode: 'draft_content_updated', occurredAt: '2026-08-10T00:05:00.000Z' })).rejects.toThrow('legacy_follow_up_message_draft_writer_disabled');
+    await expect(repository.approveFollowUpMessageDraft({ tenantId: 'demo-tenant-001', institutionId: 'inst-001', draftId: 'draft-a', actorId: 'admin-a', occurredAt: '2026-08-10T00:05:00.000Z' })).rejects.toThrow('legacy_follow_up_message_draft_writer_disabled');
+    await expect(repository.rejectFollowUpMessageDraft({ tenantId: 'demo-tenant-001', institutionId: 'inst-001', draftId: 'draft-a', actorId: 'admin-a', occurredAt: '2026-08-10T00:05:00.000Z' })).rejects.toThrow('legacy_follow_up_message_draft_writer_disabled');
+    await expect(repository.markFollowUpMessageDraftAsSent({ tenantId: 'demo-tenant-001', institutionId: 'inst-001', draftId: 'draft-a', actorId: 'admin-a', occurredAt: '2026-08-10T00:05:00.000Z' })).rejects.toThrow('legacy_follow_up_message_draft_writer_disabled');
+    await expect(repository.updateFollowUpMessageDraftControlledReachOut({ tenantId: 'demo-tenant-001', institutionId: 'inst-001', draftId: 'draft-a', expectedUpdatedAt: '2026-08-10T00:00:00.000Z', expectedMetadataJson: {}, metadataJson: { weComControlledReachOut: { status: 'ready_no_send' } }, occurredAt: '2026-08-10T00:05:00.000Z' })).rejects.toThrow('legacy_follow_up_message_draft_writer_disabled');
+    expect(mutation.insert).not.toHaveBeenCalled();
+    expect(mutation.update).not.toHaveBeenCalled();
+  });
+
 });

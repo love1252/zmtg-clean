@@ -728,21 +728,6 @@ function buildFollowUpTaskListWhere(input: {
   return conditions.length === 1 ? conditions[0] : and(...conditions);
 }
 
-function normalizeDateInput(input: string | Date | null | undefined) {
-  if (!input) return null;
-  return input instanceof Date ? input : new Date(input);
-}
-
-function followUpMessageDraftInsertValues(input: CreateFollowUpMessageDraftInput) {
-  return {
-    ...input,
-    createdAt: new Date(input.createdAt),
-    updatedAt: new Date(input.updatedAt),
-    approvedAt: normalizeDateInput(input.approvedAt),
-    rejectedAt: normalizeDateInput(input.rejectedAt),
-    markedSentAt: normalizeDateInput(input.markedSentAt),
-  };
-}
 
 function createWeComAuthorizationForOperationsSnapshot(input: {
   tenantId: string;
@@ -1544,101 +1529,14 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
     async updateFollowUpMessageDraftControlledReachOut(
       input: UpdateFollowUpMessageDraftControlledReachOutInput,
     ): Promise<UpdateFollowUpMessageDraftControlledReachOutResult> {
-      const [row] = await database
-        .update(followUpMessageDrafts)
-        .set({
-          metadataJson: input.metadataJson,
-          updatedAt: new Date(input.occurredAt),
-        })
-        .where(
-          and(
-            eq(followUpMessageDrafts.tenantId, input.tenantId),
-            eq(followUpMessageDrafts.institutionId, input.institutionId),
-            eq(followUpMessageDrafts.id, input.draftId),
-            eq(followUpMessageDrafts.status, 'approved'),
-            eq(followUpMessageDrafts.updatedAt, new Date(input.expectedUpdatedAt)),
-            eq(followUpMessageDrafts.metadataJson, input.expectedMetadataJson),
-          ),
-        )
-        .returning();
-
-      if (!row) return { kind: 'conflict', resourceId: input.draftId, reason: 'conflict' };
-      const [taskResult] = await database
-        .select({ task: followUpTasks })
-        .from(followUpTasks)
-        .innerJoin(
-          customers,
-          and(
-            eq(followUpTasks.tenantId, customers.tenantId),
-            eq(followUpTasks.customerId, customers.id),
-          ),
-        )
-        .where(
-          and(
-            eq(followUpTasks.tenantId, input.tenantId),
-            eq(followUpTasks.id, row.followUpTaskId),
-            eq(followUpTasks.customerId, row.customerId),
-            eq(customers.tenantId, input.tenantId),
-            eq(customers.institutionId, input.institutionId),
-            eq(customers.id, row.customerId),
-          ),
-        );
-      const taskRow = taskResult?.task;
-
-      return taskRow
-        ? { kind: 'updated', draft: mapFollowUpMessageDraftRowToRecord({ row, task: taskRow }) }
-        : { kind: 'conflict', resourceId: input.draftId, reason: 'conflict' };
+      void input;
+      throw new Error('legacy_follow_up_message_draft_writer_disabled');
     },
     async createFollowUpMessageDraft(
       input: CreateFollowUpMessageDraftInput,
     ): Promise<CreateFollowUpMessageDraftResult> {
-      const existing = await database
-        .select()
-        .from(followUpMessageDrafts)
-        .where(
-          and(
-            eq(followUpMessageDrafts.tenantId, input.tenantId),
-            eq(followUpMessageDrafts.followUpTaskId, input.followUpTaskId),
-          ),
-        );
-      const activeDraft = existing.find((row) => row.status !== 'cancelled');
-      if (activeDraft) {
-        return {
-          kind: 'conflict',
-          resourceId: activeDraft.id,
-          reason: 'follow_up_message_draft_exists',
-        };
-      }
-
-      const [row] = await database
-        .insert(followUpMessageDrafts)
-        .values(followUpMessageDraftInsertValues(input))
-        .returning();
-      const draft = await this.getFollowUpMessageDraftByTenant({
-        tenantId: input.tenantId,
-        institutionId: input.institutionId,
-        draftId: row.id,
-      });
-
-      if (draft) {
-        return { kind: 'created', draft };
-      }
-
-      const [taskRow] = await database
-        .select()
-        .from(followUpTasks)
-        .where(
-          and(
-            eq(followUpTasks.tenantId, input.tenantId),
-            eq(followUpTasks.id, input.followUpTaskId),
-          ),
-        );
-
-      if (!taskRow) {
-        throw new Error('follow_up_task_missing_after_message_draft_insert');
-      }
-
-      return { kind: 'created', draft: mapFollowUpMessageDraftRowToRecord({ row, task: taskRow }) };
+      void input;
+      throw new Error('legacy_follow_up_message_draft_writer_disabled');
     },
     async updateFollowUpMessageDraftContent(input: {
       tenantId: string;
@@ -1649,134 +1547,26 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
       safeReasonCode: FollowUpMessageSafeReasonCode;
       occurredAt: string;
     }): Promise<UpdateFollowUpMessageDraftContentResult> {
-      const current = await this.getFollowUpMessageDraftByTenant(input);
-      if (!current) return { kind: 'not_found' };
-      if (current.status !== 'draft') {
-        return { kind: 'conflict', resourceId: current.id, reason: 'follow_up_message_draft_not_draft' };
-      }
-
-      const [row] = await database
-        .update(followUpMessageDrafts)
-        .set({
-          editedContent: input.editedContent,
-          safePreview: input.safePreview,
-          safeReasonCode: input.safeReasonCode,
-          updatedAt: new Date(input.occurredAt),
-        })
-        .where(
-          and(
-            eq(followUpMessageDrafts.tenantId, input.tenantId),
-            eq(followUpMessageDrafts.id, input.draftId),
-            eq(followUpMessageDrafts.status, 'draft'),
-          ),
-        )
-        .returning();
-
-      if (!row) return { kind: 'conflict', resourceId: current.id, reason: 'follow_up_message_draft_not_draft' };
-      const draft = await this.getFollowUpMessageDraftByTenant(input);
-      return draft ? { kind: 'updated', draft } : { kind: 'not_found' };
+      void input;
+      throw new Error('legacy_follow_up_message_draft_writer_disabled');
     },
     async approveFollowUpMessageDraft(input: {
-      tenantId: string;
-      institutionId?: string | null;
-      draftId: string;
-      actorId: string;
-      occurredAt: string;
+      tenantId: string; institutionId?: string | null; draftId: string; actorId: string; occurredAt: string;
     }): Promise<FollowUpMessageDraftTransitionResult> {
-      const current = await this.getFollowUpMessageDraftByTenant(input);
-      if (!current) return { kind: 'not_found' };
-      if (current.status !== 'draft') {
-        return { kind: 'conflict', resourceId: current.id, reason: 'follow_up_message_draft_not_draft' };
-      }
-
-      const [row] = await database
-        .update(followUpMessageDrafts)
-        .set({
-          status: 'approved',
-          approvedBy: input.actorId,
-          approvedAt: new Date(input.occurredAt),
-          safeReasonCode: 'draft_approved',
-          updatedAt: new Date(input.occurredAt),
-        })
-        .where(
-          and(
-            eq(followUpMessageDrafts.tenantId, input.tenantId),
-            eq(followUpMessageDrafts.id, input.draftId),
-            eq(followUpMessageDrafts.status, 'draft'),
-          ),
-        )
-        .returning();
-      if (!row) return { kind: 'conflict', resourceId: current.id, reason: 'follow_up_message_draft_not_draft' };
-      const draft = await this.getFollowUpMessageDraftByTenant(input);
-      return draft ? { kind: 'updated', draft } : { kind: 'not_found' };
+      void input;
+      throw new Error('legacy_follow_up_message_draft_writer_disabled');
     },
     async rejectFollowUpMessageDraft(input: {
-      tenantId: string;
-      institutionId?: string | null;
-      draftId: string;
-      actorId: string;
-      occurredAt: string;
+      tenantId: string; institutionId?: string | null; draftId: string; actorId: string; occurredAt: string;
     }): Promise<FollowUpMessageDraftTransitionResult> {
-      const current = await this.getFollowUpMessageDraftByTenant(input);
-      if (!current) return { kind: 'not_found' };
-      if (current.status !== 'draft') {
-        return { kind: 'conflict', resourceId: current.id, reason: 'follow_up_message_draft_not_draft' };
-      }
-
-      const [row] = await database
-        .update(followUpMessageDrafts)
-        .set({
-          status: 'rejected',
-          rejectedBy: input.actorId,
-          rejectedAt: new Date(input.occurredAt),
-          safeReasonCode: 'draft_rejected',
-          updatedAt: new Date(input.occurredAt),
-        })
-        .where(
-          and(
-            eq(followUpMessageDrafts.tenantId, input.tenantId),
-            eq(followUpMessageDrafts.id, input.draftId),
-            eq(followUpMessageDrafts.status, 'draft'),
-          ),
-        )
-        .returning();
-      if (!row) return { kind: 'conflict', resourceId: current.id, reason: 'follow_up_message_draft_not_draft' };
-      const draft = await this.getFollowUpMessageDraftByTenant(input);
-      return draft ? { kind: 'updated', draft } : { kind: 'not_found' };
+      void input;
+      throw new Error('legacy_follow_up_message_draft_writer_disabled');
     },
     async markFollowUpMessageDraftAsSent(input: {
-      tenantId: string;
-      institutionId?: string | null;
-      draftId: string;
-      actorId: string;
-      occurredAt: string;
+      tenantId: string; institutionId?: string | null; draftId: string; actorId: string; occurredAt: string;
     }): Promise<FollowUpMessageDraftTransitionResult> {
-      const current = await this.getFollowUpMessageDraftByTenant(input);
-      if (!current) return { kind: 'not_found' };
-      if (current.status !== 'approved') {
-        return { kind: 'conflict', resourceId: current.id, reason: 'follow_up_message_draft_not_approved' };
-      }
-
-      const [row] = await database
-        .update(followUpMessageDrafts)
-        .set({
-          status: 'marked_sent',
-          markedSentBy: input.actorId,
-          markedSentAt: new Date(input.occurredAt),
-          safeReasonCode: 'draft_marked_sent',
-          updatedAt: new Date(input.occurredAt),
-        })
-        .where(
-          and(
-            eq(followUpMessageDrafts.tenantId, input.tenantId),
-            eq(followUpMessageDrafts.id, input.draftId),
-            eq(followUpMessageDrafts.status, 'approved'),
-          ),
-        )
-        .returning();
-      if (!row) return { kind: 'conflict', resourceId: current.id, reason: 'follow_up_message_draft_not_approved' };
-      const draft = await this.getFollowUpMessageDraftByTenant(input);
-      return draft ? { kind: 'updated', draft } : { kind: 'not_found' };
+      void input;
+      throw new Error('legacy_follow_up_message_draft_writer_disabled');
     },
     async listFollowUpOperationsSnapshot(input: {
       tenantId: string;

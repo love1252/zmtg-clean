@@ -36,9 +36,24 @@ type TimelineWriteRepository = Pick<
   'getCustomerByTenant' | 'recordFollowUpCustomerTimelineEvent' | 'runCareFollowUpTransaction'
 >;
 
+type CareTimelineEvidencePort = {
+  recordTimelineEvidence(input: {
+    attribution: { tenantId: string; institutionId: string };
+    event: {
+      id: string; customerId: string; sourceType: FollowUpCustomerTimelineSourceType; sourceId: string;
+      eventType: FollowUpCustomerTimelineEventType; eventTitle: string; safeSummary: string; riskLevel: FollowUpRiskLevel | null;
+      occurredAt: string; safeActorRole: string | null; safeReasonCode: string; metadataJson: Record<string, unknown>;
+    };
+  }): Promise<
+    | { kind: 'created' | 'exists'; event: FollowUpCustomerTimelineEvent }
+    | { kind: 'not_found_or_not_owned' }
+  >;
+};
+
 export type RecordFollowUpTimelineEventInput = {
   context: AccessContext;
   tenantBusinessRepository: TimelineWriteRepository;
+  careTimelineEvidencePort?: CareTimelineEvidencePort;
   customerId: string;
   sourceType: FollowUpCustomerTimelineSourceType;
   sourceId: string;
@@ -134,15 +149,21 @@ export async function recordFollowUpTimelineEvent(
   if (!decision.allowed) return { kind: 'forbidden', reason: decision.reason };
   if (!hasTenant(input.context)) return { kind: 'forbidden', reason: 'missing_tenant' };
   const tenantId=input.context.tenantId;
-  const customer = await getVisibleCustomer({ context: input.context, tenantBusinessRepository: input.tenantBusinessRepository, customerId: input.customerId });
-  if (!customer) return { kind: 'not_found' };
   const eventId = globalThis.crypto.randomUUID();
   const evidence = { id:eventId, customerId:input.customerId, sourceType:input.sourceType, sourceId:safeSourceId(input.sourceId), eventType:input.eventType,
     eventTitle:visibleEventTitle(input.eventTitle), safeSummary:visibleEventSummary(input.safeSummary), riskLevel:input.riskLevel??null, occurredAt:input.occurredAt,
     safeActorRole:input.context.role, safeReasonCode:sanitizeFollowUpTimelineText(input.safeReasonCode,'follow_up_timeline_event',96), metadataJson:safeMetadata(input.metadataJson) };
+  const institutionId=input.context.institutionId??null;
+  if(input.careTimelineEvidencePort){
+    if(!institutionId) return {kind:'forbidden',reason:'missing_institution'};
+    const result=await input.careTimelineEvidencePort.recordTimelineEvidence({attribution:{tenantId,institutionId},event:evidence});
+    if(result.kind==='not_found_or_not_owned') return {kind:'not_found'};
+    return {kind:'recorded',event:mapFollowUpCustomerTimelineEventToDto(result.event),deduped:result.kind==='exists'};
+  }
+  const customer = await getVisibleCustomer({ context: input.context, tenantBusinessRepository: input.tenantBusinessRepository, customerId: input.customerId });
+  if (!customer) return { kind: 'not_found' };
   const runner=input.tenantBusinessRepository.runCareFollowUpTransaction;
   if(typeof runner==='function'){
-    const institutionId=input.context.institutionId??null;
     if(!institutionId) return {kind:'forbidden',reason:'missing_institution'};
     const result=await runner(({commandService})=>commandService.recordTimelineEvidence({attribution:{tenantId,institutionId},event:evidence}));
     if(result.kind==='not_found_or_not_owned') return {kind:'not_found'};
@@ -291,6 +312,7 @@ export function recordMessageDraftTimelineEvent(input: {
 export async function recordMessageDeliveryTimelineEvents(input: {
   context: AccessContext;
   tenantBusinessRepository: TimelineWriteRepository;
+  careTimelineEvidencePort?: CareTimelineEvidencePort;
   delivery: MessageDelivery;
   occurredAt: string;
 }) {
@@ -328,9 +350,10 @@ export async function recordMessageDeliveryTimelineEvents(input: {
   const weComMetadataJson = input.delivery.weComMockReachOut ? weComMockReachOutToTimelineMetadata(input.delivery.weComMockReachOut) : null;
   const baseSummary = `发送记录 ${input.delivery.id}：${statusSummary[input.delivery.status]} 内容快照：${input.delivery.contentSnapshot}`;
 
-  await recordFollowUpTimelineEvent({
+  const timelineResult = await recordFollowUpTimelineEvent({
     context: input.context,
     tenantBusinessRepository: input.tenantBusinessRepository,
+    careTimelineEvidencePort: input.careTimelineEvidencePort,
     customerId: input.delivery.customerId,
     sourceType: 'message_draft',
     sourceId: `${input.delivery.id}:created`,
@@ -342,11 +365,13 @@ export async function recordMessageDeliveryTimelineEvents(input: {
     safeReasonCode: 'message_delivery_created',
     metadataJson,
   });
+  if (timelineResult.kind !== 'recorded') throw new Error('required_timeline_evidence_failed');
 
   if (weComMetadataJson) {
-    await recordFollowUpTimelineEvent({
+    const weComTimelineResult = await recordFollowUpTimelineEvent({
       context: input.context,
       tenantBusinessRepository: input.tenantBusinessRepository,
+      careTimelineEvidencePort: input.careTimelineEvidencePort,
       customerId: input.delivery.customerId,
       sourceType: 'message_draft',
       sourceId: `${input.delivery.id}:wecom_mock_reachout_created`,
@@ -358,13 +383,15 @@ export async function recordMessageDeliveryTimelineEvents(input: {
       safeReasonCode: 'wecom_mock_reachout_created',
       metadataJson: weComMetadataJson,
     });
+    if (weComTimelineResult.kind !== 'recorded') throw new Error('required_timeline_evidence_failed');
   }
 
   if (input.delivery.status === 'pending') return;
 
-  await recordFollowUpTimelineEvent({
+  const statusTimelineResult = await recordFollowUpTimelineEvent({
     context: input.context,
     tenantBusinessRepository: input.tenantBusinessRepository,
+    careTimelineEvidencePort: input.careTimelineEvidencePort,
     customerId: input.delivery.customerId,
     sourceType: 'message_draft',
     sourceId: `${input.delivery.id}:${input.delivery.status}`,
@@ -376,6 +403,7 @@ export async function recordMessageDeliveryTimelineEvents(input: {
     safeReasonCode: input.delivery.weComMockReachOut?.auditReason ?? input.delivery.failureReason ?? `message_delivery_${input.delivery.status}`,
     metadataJson,
   });
+  if (statusTimelineResult.kind !== 'recorded') throw new Error('required_timeline_evidence_failed');
 }
 
 export async function listCustomerFollowUpTimelineEvents(input: {

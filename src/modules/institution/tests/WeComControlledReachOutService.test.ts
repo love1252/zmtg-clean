@@ -97,7 +97,9 @@ function dependencies() {
     getFollowUpMessageDraftByTenantAndInstitution: vi.fn(async () => draft() as FollowUpMessageDraft | null),
     listMessageDeliveriesForDraft: vi.fn(async () => [delivery()] as MessageDelivery[]),
     getCustomerByTenantAndInstitution: vi.fn(async () => customer() as CustomerRecordSummary | null),
-    updateFollowUpMessageDraftControlledReachOut: vi.fn(async (input: { metadataJson: Record<string, unknown>; occurredAt: string }): Promise<
+  };
+  const careMessageDraftCommandService = {
+    updateControlledReachOutMetadata: vi.fn(async (input: { metadataJson: Record<string, unknown>; occurredAt: string }): Promise<
       | { kind: 'updated'; draft: FollowUpMessageDraft }
       | { kind: 'conflict'; resourceId: string; reason: 'conflict' }
     > => ({
@@ -120,7 +122,7 @@ function dependencies() {
   };
   const auditRepository = { record: vi.fn(async () => undefined) };
   return {
-    repository, mappingRepository, safetyRepository, auditRepository,
+    repository, careMessageDraftCommandService, mappingRepository, safetyRepository, auditRepository,
     occurredAt: '2026-07-11T09:00:00.000Z', createId: () => 'generated-low-sensitive-id',
   };
 }
@@ -163,7 +165,7 @@ describe('weComControlledReachOut service', () => {
 
     expect(result).toEqual({ kind: 'failed', reason: expected });
     expect(deps.safetyRepository.createFrequencyIfAbsent).not.toHaveBeenCalled();
-    expect(deps.repository.updateFollowUpMessageDraftControlledReachOut).not.toHaveBeenCalled();
+    expect(deps.careMessageDraftCommandService.updateControlledReachOutMetadata).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -204,7 +206,7 @@ describe('weComControlledReachOut service', () => {
     const consentLockOrder = deps.safetyRepository.findConsentForUpdate.mock.invocationCallOrder[0]!;
     const frequencyOrder = deps.safetyRepository.createFrequencyIfAbsent.mock.invocationCallOrder[0]!;
     const snapshotLockOrder = deps.safetyRepository.findDryRunSnapshotForUpdate.mock.invocationCallOrder[0]!;
-    const draftCasOrder = deps.repository.updateFollowUpMessageDraftControlledReachOut.mock.invocationCallOrder[0]!;
+    const draftCasOrder = deps.careMessageDraftCommandService.updateControlledReachOutMetadata.mock.invocationCallOrder[0]!;
     expect(mappingLockOrder).toBeLessThan(consentLockOrder);
     expect(consentLockOrder).toBeLessThan(frequencyOrder);
     expect(frequencyOrder).toBeLessThan(snapshotLockOrder);
@@ -237,7 +239,7 @@ describe('weComControlledReachOut service', () => {
 
     expect(result).toEqual({ kind: 'failed', reason: 'delivery_not_internal_mock' });
     expect(deps.safetyRepository.findConsentForUpdate).not.toHaveBeenCalled();
-    expect(deps.repository.updateFollowUpMessageDraftControlledReachOut).not.toHaveBeenCalled();
+    expect(deps.careMessageDraftCommandService.updateControlledReachOutMetadata).not.toHaveBeenCalled();
   });
 
   it('pending delivery 仅作为兼容只读状态，不能证明 ready_no_send 成功路径', async () => {
@@ -276,7 +278,7 @@ describe('weComControlledReachOut service', () => {
     expect(result).toMatchObject({ kind: 'ready', idempotent: true });
     expect(deps.safetyRepository.createFrequencyIfAbsent).not.toHaveBeenCalled();
     expect(deps.auditRepository.record).not.toHaveBeenCalled();
-    expect(deps.repository.updateFollowUpMessageDraftControlledReachOut).not.toHaveBeenCalled();
+    expect(deps.careMessageDraftCommandService.updateControlledReachOutMetadata).not.toHaveBeenCalled();
   });
 
   it('已存在但无法解析的 controlled metadata 失败关闭且不 reserve', async () => {
@@ -312,7 +314,7 @@ describe('weComControlledReachOut service', () => {
     const result = await prepareWeComControlledReachOut({ context, draftId: 'draft-a', ...deps });
 
     expect(result).toEqual({ kind: 'failed', reason: 'frequency_cap_reached' });
-    expect(deps.repository.updateFollowUpMessageDraftControlledReachOut).not.toHaveBeenCalled();
+    expect(deps.careMessageDraftCommandService.updateControlledReachOutMetadata).not.toHaveBeenCalled();
   });
 
   it('dry-run missing / blocked / wrong route / wrong preflight 在 reserve 后触发事务回滚信号', async () => {
@@ -328,13 +330,13 @@ describe('weComControlledReachOut service', () => {
 
       await expect(prepareWeComControlledReachOut({ context, draftId: 'draft-a', ...deps }))
         .rejects.toMatchObject({ reason: 'dry_run_not_ready' });
-      expect(deps.repository.updateFollowUpMessageDraftControlledReachOut).not.toHaveBeenCalled();
+      expect(deps.careMessageDraftCommandService.updateControlledReachOutMetadata).not.toHaveBeenCalled();
     }
   });
 
   it('CAS conflict 在 frequency reserved 后触发事务回滚信号', async () => {
     const deps = dependencies();
-    deps.repository.updateFollowUpMessageDraftControlledReachOut.mockResolvedValue({
+    deps.careMessageDraftCommandService.updateControlledReachOutMetadata.mockResolvedValue({
       kind: 'conflict', resourceId: 'draft-a', reason: 'conflict',
     });
 
@@ -345,7 +347,7 @@ describe('weComControlledReachOut service', () => {
   it('frequency 幂等时 CAS 后置映射冲突仍触发事务回滚', async () => {
     const deps = dependencies();
     deps.safetyRepository.findFrequency.mockResolvedValue(frequency());
-    deps.repository.updateFollowUpMessageDraftControlledReachOut.mockResolvedValue({
+    deps.careMessageDraftCommandService.updateControlledReachOutMetadata.mockResolvedValue({
       kind: 'conflict', resourceId: 'draft-a', reason: 'conflict',
     });
 
@@ -360,6 +362,6 @@ describe('weComControlledReachOut service', () => {
 
     await expect(prepareWeComControlledReachOut({ context, draftId: 'draft-a', ...deps }))
       .rejects.toThrow('audit unavailable');
-    expect(deps.repository.updateFollowUpMessageDraftControlledReachOut).not.toHaveBeenCalled();
+    expect(deps.careMessageDraftCommandService.updateControlledReachOutMetadata).not.toHaveBeenCalled();
   });
 });

@@ -1,22 +1,45 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  followUpRepository: vi.fn(() => ({})),
+  messageDraftRepository: vi.fn(() => ({})),
+  auditRepository: vi.fn(() => ({ record: vi.fn(async () => undefined) })),
+}));
+vi.mock('@/modules/care/server/follow-up-command-repository', () => ({ createFollowUpCommandRepository: mocks.followUpRepository }));
+vi.mock('@/modules/care/server/follow-up-message-draft-command-repository', () => ({ createFollowUpMessageDraftCommandRepository: mocks.messageDraftRepository }));
+vi.mock('@/modules/audit/server/audit-event-repository', () => ({ createAuditEventRepository: mocks.auditRepository }));
+
 import { runCareFollowUpTransaction } from '@/server/orchestration/care-follow-up-transaction';
 import type { TenantDatabase } from '@/server/db/client';
 
-describe('care-follow-up transaction orchestration',()=>{
-  it('creates one transaction-bound Care service',async()=>{
-    const transactionDb={} as TenantDatabase; const transaction=vi.fn(async(operation:(database:TenantDatabase)=>Promise<string>)=>operation(transactionDb));
-    const result=await runCareFollowUpTransaction({transaction} as unknown as TenantDatabase,async({commandService})=>{expect(commandService.createPathEnrollmentBundle).toBeTypeOf('function');expect(commandService.transitionTaskWithTimeline).toBeTypeOf('function');expect(commandService.cancelPathEnrollmentWithTimeline).toBeTypeOf('function');return 'committed';});
-    expect(result).toBe('committed'); expect(transaction).toHaveBeenCalledTimes(1);
+describe('care-follow-up transaction orchestration', () => {
+  it('binds task/path, message draft and Audit owners to one transaction database', async () => {
+    const transactionDb = { kind: 'care-transaction-db' } as unknown as TenantDatabase;
+    const transaction = vi.fn(async (operation: (database: TenantDatabase) => Promise<string>) => operation(transactionDb));
+    const result = await runCareFollowUpTransaction({ transaction } as unknown as TenantDatabase, async (deps) => {
+      expect(deps.commandService.createPathEnrollmentBundle).toBeTypeOf('function');
+      expect(deps.messageDraftCommandService.createDraftWithTimeline).toBeTypeOf('function');
+      expect(deps.messageDraftCommandService.updateControlledReachOutMetadata).toBeTypeOf('function');
+      expect(deps.auditRepository.record).toBeTypeOf('function');
+      return 'committed';
+    });
+    expect(result).toBe('committed');
+    expect(mocks.followUpRepository).toHaveBeenCalledWith(transactionDb);
+    expect(mocks.messageDraftRepository).toHaveBeenCalledWith(transactionDb);
+    expect(mocks.auditRepository).toHaveBeenCalledWith(transactionDb);
+    expect(transaction).toHaveBeenCalledTimes(1);
   });
-  it('operation failure propagates to transaction rollback boundary',async()=>{
-    const transaction=vi.fn(async(operation:(database:TenantDatabase)=>Promise<unknown>)=>operation({} as TenantDatabase));
-    await expect(runCareFollowUpTransaction({transaction} as unknown as TenantDatabase,async()=>{throw new Error('required_timeline_evidence_failed');})).rejects.toThrow('required_timeline_evidence_failed');
-  });
-  it('institution delegate imports orchestration, not care server',()=>{
-    const delegate=readFileSync(resolve(process.cwd(),'src/modules/institution/server/followup-path-enrollment-transaction.ts'),'utf8');
-    const orchestration=readFileSync(resolve(process.cwd(),'src/server/orchestration/care-follow-up-transaction.ts'),'utf8');
-    expect(delegate).toContain('@/server/orchestration/care-follow-up-transaction'); expect(delegate).not.toContain('@/modules/care/server/'); expect(orchestration).toContain('@/modules/care/server/follow-up-command-repository'); expect(orchestration).toContain('database.transaction');
+
+  it('operation or Audit failure propagates to the transaction rollback boundary', async () => {
+    const transaction = vi.fn(async (operation: (database: TenantDatabase) => Promise<unknown>) => operation({} as TenantDatabase));
+    await expect(runCareFollowUpTransaction({ transaction } as unknown as TenantDatabase, async () => {
+      throw new Error('required_timeline_evidence_failed');
+    })).rejects.toThrow('required_timeline_evidence_failed');
+
+    mocks.auditRepository.mockReturnValueOnce({ record: vi.fn(async () => { throw new Error('audit_unavailable'); }) });
+    await expect(runCareFollowUpTransaction({ transaction } as unknown as TenantDatabase, async ({ auditRepository }) => {
+      await auditRepository.record({} as never);
+      return 'unreachable';
+    })).rejects.toThrow('audit_unavailable');
   });
 });

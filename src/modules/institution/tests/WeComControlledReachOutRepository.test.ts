@@ -208,47 +208,15 @@ describe('WeCom controlled reach-out repository', () => {
     });
   });
 
-  it('draft CAS 同时绑定完整 scope、approved、expectedUpdatedAt 与 expectedMetadataJson', async () => {
-    const returning = vi.fn(async () => []);
-    const where = vi.fn(() => ({ returning }));
-    let writtenValues: Record<string, unknown> | null = null;
-    const set = vi.fn((values: Record<string, unknown>) => {
-      writtenValues = values;
-      return { where };
-    });
-    const update = vi.fn(() => ({ set }));
+  it('legacy controlled reach-out draft Writer fail-closed，不再直接更新 followUpMessageDrafts', async () => {
+    const update = vi.fn();
     const repository = createTenantBusinessRepository({ update } as unknown as TenantDatabase);
-    const expectedMetadataJson = { existing: 'low-sensitive' };
-    const metadataJson = { ...expectedMetadataJson, weComControlledReachOut: { status: 'ready_no_send' } };
-
-    const result = await repository.updateFollowUpMessageDraftControlledReachOut({
-      tenantId: 'tenant-a',
-      institutionId: 'inst-a',
-      draftId: 'draft-a',
-      expectedUpdatedAt: '2026-07-11T08:00:00.000Z',
-      expectedMetadataJson,
-      metadataJson,
+    await expect(repository.updateFollowUpMessageDraftControlledReachOut({
+      tenantId: 'tenant-a', institutionId: 'inst-a', draftId: 'draft-a',
+      expectedUpdatedAt: '2026-07-11T08:00:00.000Z', expectedMetadataJson: { existing: 'low-sensitive' },
+      metadataJson: { existing: 'low-sensitive', weComControlledReachOut: { status: 'ready_no_send' } },
       occurredAt: '2026-07-11T09:00:00.000Z',
-    });
-
-    expect(result).toEqual({ kind: 'conflict', resourceId: 'draft-a', reason: 'conflict' });
-    expect(set).toHaveBeenCalledWith({
-      metadataJson,
-      updatedAt: new Date('2026-07-11T09:00:00.000Z'),
-    });
-    expect(where).toHaveBeenCalledWith({
-      conditions: [
-        { column: followUpMessageDrafts.tenantId, operator: 'eq', value: 'tenant-a' },
-        { column: followUpMessageDrafts.institutionId, operator: 'eq', value: 'inst-a' },
-        { column: followUpMessageDrafts.id, operator: 'eq', value: 'draft-a' },
-        { column: followUpMessageDrafts.status, operator: 'eq', value: 'approved' },
-        { column: followUpMessageDrafts.updatedAt, operator: 'eq', value: new Date('2026-07-11T08:00:00.000Z') },
-        { column: followUpMessageDrafts.metadataJson, operator: 'eq', value: expectedMetadataJson },
-      ],
-      operator: 'and',
-    });
-    expect(writtenValues).not.toHaveProperty('status');
-    expect(writtenValues).not.toHaveProperty('markedSentAt');
-    expect(writtenValues).not.toHaveProperty('markedSentBy');
+    })).rejects.toThrow('legacy_follow_up_message_draft_writer_disabled');
+    expect(update).not.toHaveBeenCalled();
   });
 });
