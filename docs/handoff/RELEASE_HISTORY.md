@@ -1,5 +1,22 @@
 # 项目重构历史
 
+## 2026-08-09：W2-P2A Appointments Runtime 完成
+
+- Implementation PR #1113：`25ae7a47f466255590cbe20f35d4243f9145442e`；
+- Independent Review PR #1114：`a40fb54fe7b8816df8ad07d69cecd737ca9385fa`；
+- exact 6-file Runtime；
+- Care 成为 appointments 普通业务 canonical Writer；
+- tenant + institution ownership 与 expectedUpdatedAt CAS 已锁定；
+- legacy appointment Writer 已阻断，read/list compatibility 保留；
+- appointments Route 继续 capability-off；
+- Trial Provisioning 继续 separate review；
+- P2A 后 residual = 13 mutations / 13 Writer methods / 5 fact tables；
+- P2B/P2C Runtime 未授权；
+- W2 Care complete=false；
+- Business Writer phase complete=false；
+- 下一任务：W2-P2B Follow-up Task / Path / Timeline exact 12-file Runtime implementation explicit authorization。
+
+
 ## 2026-08-09：W2-P2 Care / Follow-up Writer 准入完成
 
 - Admission PR #1110：`762aa5e4cb0f22c8b296d366be51363e9bf508a5`；
