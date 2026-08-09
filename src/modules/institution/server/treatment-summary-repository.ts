@@ -123,30 +123,6 @@ export function mapTreatmentSummaryRowToRecord(row: TreatmentSummaryRow): Treatm
   };
 }
 
-function omitUndefinedValues<T extends Record<string, unknown>>(values: T): Partial<T> {
-  return Object.fromEntries(
-    Object.entries(values).filter(([, value]) => value !== undefined),
-  ) as Partial<T>;
-}
-
-function pickTreatmentSummaryUpdateValues(
-  values: UpdateTreatmentSummaryValues,
-): Partial<Omit<CreateTreatmentSummaryInput, 'id' | 'tenantId' | 'customerId'>> {
-  return omitUndefinedValues({
-    appointmentId: values.appointmentId,
-    treatmentDate: values.treatmentDate,
-    treatmentProject: values.treatmentProject,
-    treatmentCategory: values.treatmentCategory,
-    treatmentStage: values.treatmentStage,
-    recoveryStage: values.recoveryStage,
-    riskLevel: values.riskLevel,
-    ownerUserId: values.ownerUserId,
-    summary: values.summary,
-    nextCareAction: values.nextCareAction,
-    tags: values.tags,
-  });
-}
-
 async function checkAppointmentBelongsToTenantAndCustomer(
   database: TenantDatabase,
   input: TreatmentSummaryAppointmentOwnershipInput,
@@ -265,31 +241,8 @@ export function createTreatmentSummaryRepository(database: TenantDatabase) {
     async createTreatmentSummary(
       input: CreateTreatmentSummaryInput,
     ): Promise<TreatmentSummaryRecord> {
-      const [row] = await database
-        .insert(treatmentSummaries)
-        .values({
-          id: input.id,
-          tenantId: input.tenantId,
-          customerId: input.customerId,
-          appointmentId: input.appointmentId,
-          treatmentDate: input.treatmentDate,
-          treatmentProject: input.treatmentProject,
-          treatmentCategory: input.treatmentCategory,
-          treatmentStage: input.treatmentStage,
-          recoveryStage: input.recoveryStage,
-          riskLevel: input.riskLevel,
-          ownerUserId: input.ownerUserId,
-          summary: input.summary,
-          nextCareAction: input.nextCareAction,
-          tags: [...input.tags],
-        })
-        .returning();
-
-      if (!row) {
-        throw new Error('Failed to create treatment summary');
-      }
-
-      return mapTreatmentSummaryRowToRecord(row);
+      void input;
+      throw new Error('legacy_treatment_summary_writer_disabled');
     },
 
     async checkAppointmentBelongsToTenantAndCustomer(
@@ -366,114 +319,15 @@ export function createTreatmentSummaryRepository(database: TenantDatabase) {
     async updateTreatmentSummaryByTenant(
       input: UpdateTreatmentSummaryInput,
     ): Promise<UpdateTreatmentSummaryResult> {
-      const values = pickTreatmentSummaryUpdateValues(input.values);
-
-      if (typeof values.appointmentId === 'string') {
-        const [summary] = await database
-          .select({ customerId: treatmentSummaries.customerId })
-          .from(treatmentSummaries)
-          .where(
-            and(
-              eq(treatmentSummaries.tenantId, input.tenantId),
-              eq(treatmentSummaries.id, input.summaryId),
-            ),
-          );
-
-        if (!summary) {
-          return { kind: 'not_found_or_not_owned' };
-        }
-
-        const appointmentOwnership = await checkAppointmentBelongsToTenantAndCustomer(
-          database,
-          {
-            tenantId: input.tenantId,
-            customerId: summary.customerId,
-            appointmentId: values.appointmentId,
-          },
-        );
-
-        if (appointmentOwnership.kind !== 'matched') {
-          return {
-            kind: 'invalid_reference',
-            reason: appointmentOwnership.kind,
-          };
-        }
-      }
-
-      const [row] = await database
-        .update(treatmentSummaries)
-        .set({
-          ...values,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(treatmentSummaries.tenantId, input.tenantId),
-            eq(treatmentSummaries.id, input.summaryId),
-          ),
-        )
-        .returning();
-
-      if (!row) {
-        return { kind: 'not_found_or_not_owned' };
-      }
-
-      return { kind: 'updated', record: mapTreatmentSummaryRowToRecord(row) };
+      void input;
+      throw new Error('legacy_treatment_summary_writer_disabled');
     },
 
     async voidTreatmentSummaryByTenant(
       input: VoidTreatmentSummaryInput,
     ): Promise<VoidTreatmentSummaryResult> {
-      const rows = await database
-        .select()
-        .from(treatmentSummaries)
-        .where(
-          and(
-            eq(treatmentSummaries.tenantId, input.tenantId),
-            eq(treatmentSummaries.id, input.summaryId),
-          ),
-        );
-      const currentRow = rows.find(
-        (candidate) => candidate.tenantId === input.tenantId && candidate.id === input.summaryId,
-      );
-
-      if (!currentRow) {
-        return { kind: 'not_found_or_not_owned' };
-      }
-
-      if (currentRow.voidedAt) {
-        return {
-          kind: 'already_voided',
-          record: mapTreatmentSummaryRecordToListItem(mapTreatmentSummaryRowToRecord(currentRow)),
-        };
-      }
-
-      const now = new Date();
-      const [row] = await database
-        .update(treatmentSummaries)
-        .set({
-          voidedAt: now,
-          voidedBy: input.voidedBy,
-          voidReasonCode: input.reasonCode,
-          voidReason: input.reasonText,
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(treatmentSummaries.tenantId, input.tenantId),
-            eq(treatmentSummaries.id, input.summaryId),
-          ),
-        )
-        .returning();
-
-      if (!row) {
-        return { kind: 'not_found_or_not_owned' };
-      }
-
-      return {
-        kind: 'voided',
-        record: mapTreatmentSummaryRecordToListItem(mapTreatmentSummaryRowToRecord(row)),
-      };
+      void input;
+      throw new Error('legacy_treatment_summary_writer_disabled');
     },
 
     async listTreatmentSummariesByTenant(
