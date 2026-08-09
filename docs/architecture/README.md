@@ -1,4 +1,52 @@
 # 智美天工架构文档索引
+<!-- BASE02_W2_P2C_MESSAGE_DRAFT_CONTROLLED_REACHOUT_RUNTIME_START -->
+
+## W2-P2C Message Draft / Controlled Reach-out Runtime（2026-08-10）
+
+```text
+implementation_pr=1119
+implementation_head=94b86756b5e1db2515aec2de22082678422ed1d9
+implementation_merge=9ee6413b0b302d89cb1eaec9a9209373afb7697f
+independent_review_pr=1120
+independent_review_head=eb46fd5a41608f76ad37018f2e0eaf7e7e59f3d1
+independent_review_merge=2e7f0dd5f44c957d6aca204290852f254256f9e6
+
+w2_p2c_runtime_implementation=passed
+w2_p2c_runtime_independent_review=passed
+w2_p2c_complete=true
+
+runtime_file_count=17
+eighteenth_runtime_file_change=false
+governance_exception_change=false
+
+canonical_owner=care
+legacy_p2c_writers_blocked=6
+tenant_business_message_draft_direct_mutation=0
+server_side_tenant_institution_scope=true
+draft_create_task_for_update=true
+draft_lifecycle_expected_updated_at_cas=true
+controlled_reachout_expected_metadata_json_cas=true
+approval_timeline_audit_atomicity=true
+controlled_reachout_cross_owner_transaction=true
+real_wecom_send=false
+
+w2_p2a_complete=true
+w2_p2b_complete=true
+w2_p2c_complete=true
+w2_p2_complete=true
+w2_care_complete=true
+
+trial_provisioning_classification=separate_provisioning_review
+ordinary_business_dual_write=false
+business_writer_phase_complete=false
+```
+
+下一任务：
+
+`Post-W2 Care business-writer fresh residual recompute / next-slice admission`
+
+<!-- BASE02_W2_P2C_MESSAGE_DRAFT_CONTROLLED_REACHOUT_RUNTIME_END -->
+
 <!-- BASE02_W2_P2B_FOLLOWUP_PATH_TIMELINE_RUNTIME_START -->
 
 ## W2-P2B Follow-up Task / Path / Timeline Runtime（2026-08-10）
