@@ -690,24 +690,31 @@ describe('租户业务仓储映射', () => {
     expect(mutation.set).not.toHaveBeenCalled();
   });
 
-  it('创建预约写入调用方 tenantId 并映射 scheduledAt', async () => {
+  it('legacy appointment create/update Writer 均 fail-closed 且不再直接写 appointments', async () => {
     const mutation = createMutationDatabase(appointmentRow);
+    const repository = createTenantBusinessRepository(mutation.database);
 
-    const record = await createTenantBusinessRepository(mutation.database).createAppointment({
-      ...appointmentRow,
-      tenantId: 'demo-tenant-001',
-      createdAt: undefined,
-      updatedAt: undefined,
-    });
+    await expect(
+      repository.createAppointment({
+        ...appointmentRow,
+        createdAt: undefined,
+        updatedAt: undefined,
+      }),
+    ).rejects.toThrow('legacy_appointment_writer_disabled');
 
-    expect(mutation.insert).toHaveBeenCalledWith(appointments);
-    expect(mutation.values).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: 'demo-tenant-001' }),
-    );
-    expect(record).toEqual({
-      ...mapAppointmentRowToRecord(appointmentRow),
-      scheduledAt: '2026-06-01T02:30:00.000Z',
-    });
+    await expect(
+      repository.updateAppointment({
+        tenantId: 'demo-tenant-001',
+        id: 'appt_001',
+        status: 'confirmed',
+        note: '不应写入',
+      }),
+    ).rejects.toThrow('legacy_appointment_writer_disabled');
+
+    expect(mutation.insert).not.toHaveBeenCalled();
+    expect(mutation.update).not.toHaveBeenCalled();
+    expect(mutation.values).not.toHaveBeenCalled();
+    expect(mutation.set).not.toHaveBeenCalled();
   });
 
   it('按 tenantId + id 检查客户是否属于当前租户', async () => {
@@ -792,42 +799,6 @@ describe('租户业务仓储映射', () => {
       operator: 'and',
     });
     expect(followUpsResult).toEqual([mapFollowUpTaskRowToRecord(followUpTaskRow)]);
-  });
-
-  it('更新预约方法设置 appointments 状态和备注并返回映射记录', async () => {
-    const mutation = createMutationDatabase({
-      ...appointmentRow,
-      status: 'confirmed',
-      note: '已确认',
-    });
-
-    const record = await createTenantBusinessRepository(mutation.database).updateAppointment({
-      tenantId: 'demo-tenant-001',
-      id: 'appt_001',
-      status: 'confirmed',
-      note: '已确认',
-    });
-
-    expect(mutation.update).toHaveBeenCalledWith(appointments);
-    expect(mutation.set).toHaveBeenCalledWith({
-      status: 'confirmed',
-      note: '已确认',
-      updatedAt: expect.any(Date),
-    });
-    expect(mutation.where).toHaveBeenCalledWith({
-      conditions: [
-        { column: appointments.tenantId, operator: 'eq', value: 'demo-tenant-001' },
-        { column: appointments.id, operator: 'eq', value: 'appt_001' },
-      ],
-      operator: 'and',
-    });
-    expect(record).toEqual(
-      mapAppointmentRowToRecord({
-        ...appointmentRow,
-        status: 'confirmed',
-        note: '已确认',
-      }),
-    );
   });
 
   it('随访状态流转先按 tenantId + id 查询，查不到时返回未找到结果', async () => {

@@ -823,8 +823,8 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
       throw new Error('legacy_customer_writer_disabled');
     },
     async createAppointment(input: CreateAppointmentInput): Promise<AppointmentRecordSummary> {
-      const [row] = await database.insert(appointments).values(input).returning();
-      return mapAppointmentRowToRecord(row);
+      void input;
+      throw new Error('legacy_appointment_writer_disabled');
     },
     async createFollowUpTaskFromTreatmentSummarySuggestion(
       input: CreateFollowUpTaskFromTreatmentSummarySuggestionInput,
@@ -1078,17 +1078,8 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
     async updateAppointment(
       input: UpdateAppointmentInput,
     ): Promise<AppointmentRecordSummary | null> {
-      const [row] = await database
-        .update(appointments)
-        .set({
-          status: input.status,
-          note: input.note,
-          updatedAt: new Date(),
-        })
-        .where(and(eq(appointments.tenantId, input.tenantId), eq(appointments.id, input.id)))
-        .returning();
-
-      return row ? mapAppointmentRowToRecord(row) : null;
+      void input;
+      throw new Error('legacy_appointment_writer_disabled');
     },
     async transitionFollowUpTask(
       input: TransitionFollowUpTaskInput,
