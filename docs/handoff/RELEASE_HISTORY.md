@@ -1,5 +1,22 @@
 # 项目重构历史
 
+## 2026-08-09：W2-P2 Care / Follow-up Writer 准入完成
+
+- Admission PR #1110：`762aa5e4cb0f22c8b296d366be51363e9bf508a5`；
+- Independent Review PR #1111：`0f5afa641ce276839a45fb2c8ec440233c1c9134`；
+- fresh recompute：15 mutations / 15 Writer methods / 6 fact tables / 5 production callers；
+- transaction groups=14（A1-A2 / B1-B6 / C1-C6）；
+- Canonical Owner=Care；
+- P2A/P2B/P2C decomposition frozen；
+- exact Runtime allowlists：6 / 12 / 17 files；
+- aggregate unique future Runtime set=28 files，但禁止一次性实施；
+- Trial Provisioning 对 W2-P2 表保留 2 条独立 provisioning mutation，继续 separate review；
+- W2-P2 Runtime 未授权；
+- W2 Care complete=false；
+- Business Writer phase complete=false；
+- 下一任务：W2-P2A Appointments exact 6-file Runtime implementation explicit authorization。
+
+
 ## 2026-08-09：W2-P1 Treatment Summary Runtime 完成
 
 - Implementation PR #1106：`3679122f2ea11079660cc16a7d9871f619c81386`；

@@ -1,4 +1,47 @@
 # 智美天工架构文档索引
+<!-- BASE02_W2_P2_CARE_FOLLOWUP_ADMISSION_START -->
+
+## W2-P2 Care / Follow-up Writer Admission（2026-08-09）
+
+```text
+admission_pr=1110
+admission_merge=762aa5e4cb0f22c8b296d366be51363e9bf508a5
+independent_review_pr=1111
+independent_review_merge=0f5afa641ce276839a45fb2c8ec440233c1c9134
+
+fresh_mutations=15
+fresh_writer_methods=15
+fresh_fact_tables=6
+fresh_production_callers=5
+transaction_groups=14
+
+canonical_owner=care
+timeline_evidence_owner=care
+audit_owner_unchanged=true
+messaging_reachout_owner_unchanged=true
+
+p2a_exact_file_count=6
+p2b_exact_file_count=12
+p2c_exact_file_count=17
+aggregate_unique_file_count=28
+
+w2_p2_decomposition_frozen=true
+w2_p2_runtime_authorized=false
+
+trial_provisioning_classification=separate_provisioning_review
+trial_provisioning_w2_p2_direct_mutations=2
+ordinary_business_dual_write=false
+
+w2_care_complete=false
+business_writer_phase_complete=false
+```
+
+下一任务：
+
+`W2-P2A Appointments exact 6-file Runtime implementation explicit authorization`
+
+<!-- BASE02_W2_P2_CARE_FOLLOWUP_ADMISSION_END -->
+
 <!-- BASE02_W2_P1_TREATMENT_SUMMARY_RUNTIME_CLOSURE_START -->
 
 ## W2-P1 Treatment Summary Runtime Closure（2026-08-09）
