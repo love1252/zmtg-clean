@@ -1,0 +1,7 @@
+path,role,change_kind,required,implementation_authorized
+src/modules/care/application/treatment-summary-command-service.ts,care_treatment_summary_application_owner,create,true,false
+src/modules/care/server/treatment-summary-command-repository.ts,care_treatment_summary_canonical_writer,create,true,false
+src/modules/care/tests/TreatmentSummaryCommandService.test.ts,application_scope_fail_closed_tests,create,true,false
+src/modules/care/tests/TreatmentSummaryCommandRepository.test.ts,writer_attribution_cross_institution_negative_tests,create,true,false
+src/modules/institution/server/treatment-summary-repository.ts,legacy_treatment_summary_writer_blockade_read_compatibility,modify,true,false
+src/modules/institution/tests/TreatmentSummaryRepository.test.ts,legacy_writer_blockade_read_regression_tests,modify,true,false
