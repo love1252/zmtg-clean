@@ -30,8 +30,19 @@ export type WeComControlledReachOutRepository = Pick<
   | 'getFollowUpMessageDraftByTenantAndInstitution'
   | 'listMessageDeliveriesForDraft'
   | 'getCustomerByTenantAndInstitution'
-  | 'updateFollowUpMessageDraftControlledReachOut'
 >;
+
+export type WeComControlledReachOutCareDraftPort = {
+  updateControlledReachOutMetadata(input: {
+    attribution: { tenantId: string; institutionId: string };
+    draftId: string; expectedUpdatedAt: string; expectedMetadataJson: Record<string, unknown>;
+    metadataJson: Record<string, unknown>; occurredAt: string;
+  }): Promise<
+    | { kind: 'updated'; draft: FollowUpMessageDraft }
+    | { kind: 'not_found_or_not_owned' }
+    | { kind: 'conflict'; resourceId: string; reason: 'conflict' }
+  >;
+};
 
 export type WeComControlledReachOutMappingRepository = Pick<
   WeComCustomerMappingRepository,
@@ -267,6 +278,7 @@ export async function prepareWeComControlledReachOut(input: {
   mappingRepository: WeComControlledReachOutMappingRepository;
   safetyRepository: WeComControlledReachOutSafetyRepository;
   auditRepository: Pick<AuditEventRepository, 'record'>;
+  careMessageDraftCommandService: WeComControlledReachOutCareDraftPort;
   occurredAt: string;
   createId: () => string;
 }): Promise<PrepareWeComControlledReachOutResult> {
@@ -359,9 +371,8 @@ export async function prepareWeComControlledReachOut(input: {
     preparedBy: input.context.userId,
     preparedAt: input.occurredAt,
   });
-  const update = await input.repository.updateFollowUpMessageDraftControlledReachOut({
-    tenantId: input.context.tenantId,
-    institutionId: input.context.institutionId,
+  const update = await input.careMessageDraftCommandService.updateControlledReachOutMetadata({
+    attribution: { tenantId: input.context.tenantId, institutionId: input.context.institutionId },
     draftId: input.draftId,
     expectedUpdatedAt: loaded.draft.updatedAt,
     expectedMetadataJson: loaded.draft.metadataJson,
@@ -371,7 +382,7 @@ export async function prepareWeComControlledReachOut(input: {
     },
     occurredAt: input.occurredAt,
   });
-  if (update.kind === 'conflict') {
+  if (update.kind === 'conflict' || update.kind === 'not_found_or_not_owned') {
     throw new WeComControlledReachOutTransactionAbort('conflict');
   }
 
