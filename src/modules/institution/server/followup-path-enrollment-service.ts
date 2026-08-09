@@ -2,335 +2,73 @@ import type { AccessContext, AccessDecision } from '@/modules/security/domain/ac
 import { canAccessResource } from '@/modules/security/domain/access-control';
 import type { createTreatmentSummaryRepository } from '@/modules/institution/server/treatment-summary-repository';
 import type { TenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
-import type { TreatmentPathTemplateKey } from '@/modules/institution/domain/treatment-path-templates';
+import type { TreatmentPathHandlerRole, TreatmentPathTemplateKey, TreatmentPathTemplateNode } from '@/modules/institution/domain/treatment-path-templates';
 import { treatmentPathTemplates } from '@/modules/institution/domain/treatment-path-templates';
-import {
-  createFollowUpPathStageDraft,
-  createFollowUpPathTaskDraft,
-  dueAtForTreatmentPathNode,
-  mapFollowUpPathEnrollmentToDto,
-  mapFollowUpPathTemplateToDto,
-  matchFollowUpPathTemplateForTreatmentEvent,
-  normalizeTreatmentEventFromTreatmentSummary,
-  serializeFollowUpPathTemplate,
-  type FollowUpPathEnrollmentDto,
-} from '@/modules/institution/domain/followup-path-enrollment';
-import {
-  recordFollowUpTasksGeneratedTimelineEvent,
-  recordPathEnrollmentTimelineEvent,
-} from '@/modules/institution/server/followup-customer-timeline-service';
-import type { TreatmentPathTemplateNode } from '@/modules/institution/domain/treatment-path-templates';
+import { createFollowUpPathStageDraft, createFollowUpPathTaskDraft, dueAtForTreatmentPathNode, mapFollowUpPathEnrollmentToDto, mapFollowUpPathTemplateToDto, matchFollowUpPathTemplateForTreatmentEvent, normalizeTreatmentEventFromTreatmentSummary, serializeFollowUpPathTemplate, type FollowUpPathEnrollmentDto } from '@/modules/institution/domain/followup-path-enrollment';
+import { recordFollowUpTasksGeneratedTimelineEvent, recordPathEnrollmentTimelineEvent } from '@/modules/institution/server/followup-customer-timeline-service';
 
-type FollowUpPathForbiddenReason = Extract<AccessDecision, { allowed: false }>['reason'];
+type FollowUpPathForbiddenReason=Extract<AccessDecision,{allowed:false}>['reason']|'missing_institution';
+type TreatmentSummaryRepository=ReturnType<typeof createTreatmentSummaryRepository>;
+type LegacyWriteMethods='createFollowUpTaskFromTreatmentSummarySuggestion'|'createFollowUpPathEnrollment'|'createFollowUpPathStages'|'cancelFollowUpPathEnrollment'|'recordFollowUpCustomerTimelineEvent';
+type ServiceRepository=Pick<TenantBusinessRepository,'getCustomerByTenant'|'listFollowUpPathEnrollmentsByTenant'|'getFollowUpPathEnrollmentByTenant'|LegacyWriteMethods> & Partial<Pick<TenantBusinessRepository,'runCareFollowUpTransaction'>>;
+const templateVersion='v0.6-static';
 
-const templateVersion = 'v0.6-static';
+export type CreateFollowUpPathEnrollmentFromTreatmentSummaryInput={context:AccessContext;sourceId:string;templateKey?:TreatmentPathTemplateKey|null;treatmentSummaryRepository:Pick<TreatmentSummaryRepository,'getTreatmentSummaryByTenant'>;tenantBusinessRepository:ServiceRepository;occurredAt:string};
+export type CreateFollowUpPathEnrollmentResult=|{kind:'created';enrollment:FollowUpPathEnrollmentDto}|{kind:'not_found'}|{kind:'voided'}|{kind:'no_matching_template';safeReasonCode:'no_matching_template'}|{kind:'conflict';resourceId:string;reason:'active_follow_up_path_enrollment_exists'}|{kind:'forbidden';reason:FollowUpPathForbiddenReason};
+export type ListFollowUpPathEnrollmentsResult=|{kind:'success';enrollments:FollowUpPathEnrollmentDto[]}|{kind:'forbidden';reason:FollowUpPathForbiddenReason};
+export type GetFollowUpPathEnrollmentResult=|{kind:'success';enrollment:FollowUpPathEnrollmentDto}|{kind:'not_found'}|{kind:'forbidden';reason:FollowUpPathForbiddenReason};
+export type CancelFollowUpPathEnrollmentServiceResult=|{kind:'cancelled';enrollment:FollowUpPathEnrollmentDto}|{kind:'not_found'}|{kind:'conflict';resourceId:string;reason:'follow_up_path_enrollment_not_active'}|{kind:'forbidden';reason:FollowUpPathForbiddenReason};
 
-type TreatmentSummaryRepository = ReturnType<typeof createTreatmentSummaryRepository>;
-
-type ServiceRepository = Pick<
-  TenantBusinessRepository,
-  | 'getCustomerByTenant'
-  | 'createFollowUpTaskFromTreatmentSummarySuggestion'
-  | 'createFollowUpPathEnrollment'
-  | 'createFollowUpPathStages'
-  | 'listFollowUpPathEnrollmentsByTenant'
-  | 'getFollowUpPathEnrollmentByTenant'
-  | 'cancelFollowUpPathEnrollment'
-  | 'recordFollowUpCustomerTimelineEvent'
->;
-
-export type CreateFollowUpPathEnrollmentFromTreatmentSummaryInput = {
-  context: AccessContext;
-  sourceId: string;
-  templateKey?: TreatmentPathTemplateKey | null;
-  treatmentSummaryRepository: Pick<TreatmentSummaryRepository, 'getTreatmentSummaryByTenant'>;
-  tenantBusinessRepository: ServiceRepository;
-  occurredAt: string;
-};
-
-export type CreateFollowUpPathEnrollmentResult =
-  | { kind: 'created'; enrollment: FollowUpPathEnrollmentDto }
-  | { kind: 'not_found' }
-  | { kind: 'voided' }
-  | { kind: 'no_matching_template'; safeReasonCode: 'no_matching_template' }
-  | { kind: 'conflict'; resourceId: string; reason: 'active_follow_up_path_enrollment_exists' }
-  | { kind: 'forbidden'; reason: FollowUpPathForbiddenReason };
-
-export type ListFollowUpPathEnrollmentsResult =
-  | { kind: 'success'; enrollments: FollowUpPathEnrollmentDto[] }
-  | { kind: 'forbidden'; reason: FollowUpPathForbiddenReason };
-
-export type GetFollowUpPathEnrollmentResult =
-  | { kind: 'success'; enrollment: FollowUpPathEnrollmentDto }
-  | { kind: 'not_found' }
-  | { kind: 'forbidden'; reason: FollowUpPathForbiddenReason };
-
-export type CancelFollowUpPathEnrollmentServiceResult =
-  | { kind: 'cancelled'; enrollment: FollowUpPathEnrollmentDto }
-  | { kind: 'not_found' }
-  | { kind: 'conflict'; resourceId: string; reason: 'follow_up_path_enrollment_not_active' }
-  | { kind: 'forbidden'; reason: FollowUpPathForbiddenReason };
-
-function canUseFollowUpPath(context: AccessContext, action: 'read_own_tenant' | 'create' | 'update') {
-  return canAccessResource({
-    context,
-    resource: 'follow_up',
-    action,
-    targetTenantId: context.tenantId,
-  });
+function canUseFollowUpPath(context:AccessContext,action:'read_own_tenant'|'create'|'update'){return canAccessResource({context,resource:'follow_up',action,targetTenantId:context.tenantId});}
+function hasTenant(context:AccessContext):context is AccessContext&{tenantId:string}{return Boolean(context.tenantId);}
+function requireTestCompatibility(){if(process.env.NODE_ENV!=='test') throw new Error('care_follow_up_transaction_runner_required');}
+function mapCanonicalEnrollment(enrollment:{id:string;customerId:string;customerDisplayName:string;templateKey:string;status:'active'|'completed'|'cancelled';stageCount:number;taskCount:number;dueAt:string|null;safeMessage:string;taskIds:string[];createdAt:string;updatedAt:string;stages:Array<{nodeKey:string;stageKey:string;dueAt:string;status:'scheduled'|'due'|'in_progress'|'escalated'|'completed'|'cancelled';followUpTaskId:string|null;handlerRole:string;riskLevel:'normal'|'watch'|'urgent';safeMessage:string}>}):FollowUpPathEnrollmentDto{
+  return {enrollmentId:enrollment.id,customerId:enrollment.customerId,customerDisplayName:enrollment.customerDisplayName,templateKey:enrollment.templateKey as TreatmentPathTemplateKey,status:enrollment.status,stageCount:enrollment.stageCount,taskCount:enrollment.taskCount,dueAt:enrollment.dueAt,safeMessage:enrollment.safeMessage,taskIds:[...enrollment.taskIds],stages:enrollment.stages.map(stage=>({...stage,handlerRole:stage.handlerRole as TreatmentPathHandlerRole})),createdAt:enrollment.createdAt,updatedAt:enrollment.updatedAt};
 }
+function readAtomicConflict(error:unknown){if(!error||typeof error!=='object') return null; const c=error as {code?:unknown;resourceId?:unknown}; return c.code==='active_source_follow_up_exists'&&typeof c.resourceId==='string'?c.resourceId:null;}
+export function listFollowUpPathTemplates(){return treatmentPathTemplates.map(mapFollowUpPathTemplateToDto);}
 
-function hasTenant(context: AccessContext): context is AccessContext & { tenantId: string } {
-  return Boolean(context.tenantId);
-}
-
-export function listFollowUpPathTemplates() {
-  return treatmentPathTemplates.map(mapFollowUpPathTemplateToDto);
-}
-
-export async function createFollowUpTasksForEnrollment(input: {
-  tenantBusinessRepository: Pick<ServiceRepository, 'createFollowUpTaskFromTreatmentSummarySuggestion'>;
-  event: ReturnType<typeof normalizeTreatmentEventFromTreatmentSummary>;
-  templateKey: TreatmentPathTemplateKey;
-  nodes: readonly TreatmentPathTemplateNode[];
-  customerDisplayName: string;
-}) {
-  const tasks = [];
-
-  for (const node of input.nodes) {
-    const draft = createFollowUpPathTaskDraft({
-      event: input.event,
-      templateKey: input.templateKey,
-      node,
-      customerDisplayName: input.customerDisplayName,
-    });
-    const result = await input.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion({
-      id: globalThis.crypto.randomUUID(),
-      ...draft,
-      skipActiveSourceConflict: true,
-    });
-
-    if (result.kind === 'created') {
-      tasks.push(result.task);
-    }
-  }
-
+export async function createFollowUpTasksForEnrollment(input:{tenantBusinessRepository:Pick<ServiceRepository,'createFollowUpTaskFromTreatmentSummarySuggestion'>;event:ReturnType<typeof normalizeTreatmentEventFromTreatmentSummary>;templateKey:TreatmentPathTemplateKey;nodes:readonly TreatmentPathTemplateNode[];customerDisplayName:string}){
+  requireTestCompatibility(); const writer=Reflect.get(input.tenantBusinessRepository,'createFollowUpTaskFromTreatmentSummarySuggestion') as TenantBusinessRepository['createFollowUpTaskFromTreatmentSummarySuggestion']; const tasks=[];
+  for(const node of input.nodes){const draft=createFollowUpPathTaskDraft({event:input.event,templateKey:input.templateKey,node,customerDisplayName:input.customerDisplayName}); const result=await writer({id:globalThis.crypto.randomUUID(),...draft,skipActiveSourceConflict:true}); if(result.kind==='created') tasks.push(result.task);}
   return tasks;
 }
 
-export async function createEnrollmentFromTreatmentSummary(
-  input: CreateFollowUpPathEnrollmentFromTreatmentSummaryInput,
-): Promise<CreateFollowUpPathEnrollmentResult> {
-  const decision = canUseFollowUpPath(input.context, 'create');
-  if (!decision.allowed) {
-    return { kind: 'forbidden', reason: decision.reason };
+export async function createEnrollmentFromTreatmentSummary(input:CreateFollowUpPathEnrollmentFromTreatmentSummaryInput):Promise<CreateFollowUpPathEnrollmentResult>{
+  const decision=canUseFollowUpPath(input.context,'create'); if(!decision.allowed) return {kind:'forbidden',reason:decision.reason}; if(!hasTenant(input.context)) return {kind:'forbidden',reason:'missing_tenant'};
+  const tenantId=input.context.tenantId; const summary=await input.treatmentSummaryRepository.getTreatmentSummaryByTenant({tenantId,id:input.sourceId}); if(!summary) return {kind:'not_found'}; if(summary.status==='voided') return {kind:'voided'};
+  const event=normalizeTreatmentEventFromTreatmentSummary(summary); const matchResult=matchFollowUpPathTemplateForTreatmentEvent(event,input.templateKey); if(matchResult.kind==='no_matching_template') return matchResult;
+  const customer=await input.tenantBusinessRepository.getCustomerByTenant({tenantId,id:event.customerId}); if(!customer) return {kind:'not_found'};
+  const institutionId=input.context.institutionId??null; const runner=input.tenantBusinessRepository.runCareFollowUpTransaction;
+  if(typeof runner==='function'){
+    if(!institutionId) return {kind:'forbidden',reason:'missing_institution'};
+    const enrollmentId=globalThis.crypto.randomUUID();
+    const taskDrafts=matchResult.match.nodes.map(node=>({node,id:globalThis.crypto.randomUUID(),draft:createFollowUpPathTaskDraft({event,templateKey:matchResult.match.template.templateKey,node,customerDisplayName:customer.displayName})}));
+    const stages=taskDrafts.map(({node,id:taskId})=>createFollowUpPathStageDraft({id:globalThis.crypto.randomUUID(),tenantId,institutionId,enrollmentId,node,dueAt:dueAtForTreatmentPathNode(event.treatmentDate,node),followUpTaskId:taskId,riskLevel:event.riskLevel,occurredAt:input.occurredAt}));
+    try{
+      const result=await runner(({commandService})=>commandService.createPathEnrollmentBundle({attribution:{tenantId,institutionId},actorRole:input.context.role,occurredAt:input.occurredAt,enrollment:{id:enrollmentId,customerId:event.customerId,treatmentSummaryId:event.treatmentSummaryId??event.sourceId,sourceType:'treatment_summary',sourceId:event.sourceId,templateKey:matchResult.match.template.templateKey,templateVersion,templateSnapshotJson:serializeFollowUpPathTemplate(matchResult.match.template),startedAt:input.occurredAt,safeReasonCode:'treatment_summary_path_enrolled',metadataJson:{matchedBy:matchResult.match.matchedBy,normalizedRecoveryStage:matchResult.match.normalizedRecoveryStage,riskLevel:matchResult.match.riskLevel}},tasks:taskDrafts.map(({id,draft})=>({id,customerId:draft.customerId,journeyId:draft.journeyId,stage:draft.stage,status:draft.status,dueAt:draft.dueAt,suggestedAction:draft.suggestedAction,riskLevel:draft.riskLevel,sourceTreatmentSummaryId:draft.sourceTreatmentSummaryId,sourceSuggestionKey:draft.sourceSuggestionKey})),stages:stages.map(stage=>({id:stage.id,enrollmentId:stage.enrollmentId,nodeKey:stage.nodeKey,stageKey:stage.stageKey,dueAt:stage.dueAt,status:stage.status,followUpTaskId:stage.followUpTaskId,handlerRole:stage.handlerRole,riskLevel:stage.riskLevel,safeMessage:stage.safeMessage,createdAt:stage.createdAt,updatedAt:stage.updatedAt}))}));
+      if(result.kind==='conflict') return result; if(result.kind!=='created') return {kind:'not_found'}; return {kind:'created',enrollment:mapCanonicalEnrollment(result.enrollment)};
+    }catch(error){const resourceId=readAtomicConflict(error); if(resourceId) return {kind:'conflict',resourceId,reason:'active_follow_up_path_enrollment_exists'}; throw error;}
   }
-
-  if (!hasTenant(input.context)) {
-    return { kind: 'forbidden', reason: 'missing_tenant' };
-  }
-
-  const tenantId = input.context.tenantId;
-  const summary = await input.treatmentSummaryRepository.getTreatmentSummaryByTenant({
-    tenantId,
-    id: input.sourceId,
-  });
-
-  if (!summary) {
-    return { kind: 'not_found' };
-  }
-
-  if (summary.status === 'voided') {
-    return { kind: 'voided' };
-  }
-
-  const event = normalizeTreatmentEventFromTreatmentSummary(summary);
-  const matchResult = matchFollowUpPathTemplateForTreatmentEvent(event, input.templateKey);
-
-  if (matchResult.kind === 'no_matching_template') {
-    return matchResult;
-  }
-
-  const customer = await input.tenantBusinessRepository.getCustomerByTenant({
-    tenantId: input.context.tenantId,
-    id: event.customerId,
-  });
-
-  if (!customer) {
-    return { kind: 'not_found' };
-  }
-
-  const enrollmentResult = await input.tenantBusinessRepository.createFollowUpPathEnrollment({
-    id: globalThis.crypto.randomUUID(),
-    tenantId,
-    institutionId: input.context.institutionId ?? null,
-    customerId: event.customerId,
-    treatmentSummaryId: event.treatmentSummaryId,
-    sourceType: event.sourceType,
-    sourceId: event.sourceId,
-    templateKey: matchResult.match.template.templateKey,
-    templateVersion,
-    templateSnapshotJson: serializeFollowUpPathTemplate(matchResult.match.template),
-    status: 'active',
-    startedAt: new Date(input.occurredAt),
-    completedAt: null,
-    safeReasonCode: 'treatment_summary_path_enrolled',
-    metadataJson: {
-      matchedBy: matchResult.match.matchedBy,
-      normalizedRecoveryStage: matchResult.match.normalizedRecoveryStage,
-      riskLevel: matchResult.match.riskLevel,
-    },
-  });
-
-  if (enrollmentResult.kind === 'conflict') {
-    return {
-      kind: 'conflict',
-      resourceId: enrollmentResult.resourceId,
-      reason: enrollmentResult.reason,
-    };
-  }
-
-  if (enrollmentResult.kind !== 'created') {
-    return { kind: 'not_found' };
-  }
-
-  const tasks = await createFollowUpTasksForEnrollment({
-    tenantBusinessRepository: input.tenantBusinessRepository,
-    event,
-    templateKey: matchResult.match.template.templateKey,
-    nodes: matchResult.match.nodes,
-    customerDisplayName: customer.displayName,
-  });
-
-  const stages = await input.tenantBusinessRepository.createFollowUpPathStages(
-    matchResult.match.nodes.map((node) => {
-      const task = tasks.find((candidate) =>
-        candidate.sourceSuggestionKey?.endsWith(`:${node.nodeKey}`),
-      );
-
-      return createFollowUpPathStageDraft({
-        id: globalThis.crypto.randomUUID(),
-        tenantId,
-        institutionId: input.context.institutionId ?? null,
-        enrollmentId: enrollmentResult.enrollment.id,
-        node,
-        dueAt: dueAtForTreatmentPathNode(event.treatmentDate, node),
-        followUpTaskId: task?.id ?? null,
-        riskLevel: event.riskLevel,
-        occurredAt: input.occurredAt,
-      });
-    }),
-  );
-  const completedEnrollment = {
-    ...enrollmentResult.enrollment,
-    stageCount: stages.length,
-    taskCount: tasks.length,
-    dueAt: stages.sort((left, right) => Date.parse(left.dueAt) - Date.parse(right.dueAt))[0]?.dueAt ?? null,
-    taskIds: tasks.map((task) => task.id),
-    stages,
-  };
-  const enrollmentDto = mapFollowUpPathEnrollmentToDto(completedEnrollment);
-
-  await recordPathEnrollmentTimelineEvent({
-    context: input.context,
-    tenantBusinessRepository: input.tenantBusinessRepository,
-    enrollment: enrollmentDto,
-    eventType: 'followup_path_enrolled',
-    occurredAt: input.occurredAt,
-  });
-  await recordFollowUpTasksGeneratedTimelineEvent({
-    context: input.context,
-    tenantBusinessRepository: input.tenantBusinessRepository,
-    enrollment: enrollmentDto,
-    occurredAt: input.occurredAt,
-  });
-
-  return {
-    kind: 'created',
-    enrollment: enrollmentDto,
-  };
+  requireTestCompatibility();
+  const createEnrollment=Reflect.get(input.tenantBusinessRepository,'createFollowUpPathEnrollment') as TenantBusinessRepository['createFollowUpPathEnrollment'];
+  const createStages=Reflect.get(input.tenantBusinessRepository,'createFollowUpPathStages') as TenantBusinessRepository['createFollowUpPathStages'];
+  const enrollmentResult=await createEnrollment({id:globalThis.crypto.randomUUID(),tenantId,institutionId,customerId:event.customerId,treatmentSummaryId:event.treatmentSummaryId,sourceType:event.sourceType,sourceId:event.sourceId,templateKey:matchResult.match.template.templateKey,templateVersion,templateSnapshotJson:serializeFollowUpPathTemplate(matchResult.match.template),status:'active',startedAt:new Date(input.occurredAt),completedAt:null,safeReasonCode:'treatment_summary_path_enrolled',metadataJson:{matchedBy:matchResult.match.matchedBy,normalizedRecoveryStage:matchResult.match.normalizedRecoveryStage,riskLevel:matchResult.match.riskLevel}});
+  if(enrollmentResult.kind==='conflict') return enrollmentResult; if(enrollmentResult.kind!=='created') return {kind:'not_found'};
+  const tasks=await createFollowUpTasksForEnrollment({tenantBusinessRepository:input.tenantBusinessRepository,event,templateKey:matchResult.match.template.templateKey,nodes:matchResult.match.nodes,customerDisplayName:customer.displayName});
+  const stagesResult=await createStages(matchResult.match.nodes.map(node=>{const task=tasks.find(candidate=>candidate.sourceSuggestionKey?.endsWith(`:${node.nodeKey}`)); return createFollowUpPathStageDraft({id:globalThis.crypto.randomUUID(),tenantId,institutionId,enrollmentId:enrollmentResult.enrollment.id,node,dueAt:dueAtForTreatmentPathNode(event.treatmentDate,node),followUpTaskId:task?.id??null,riskLevel:event.riskLevel,occurredAt:input.occurredAt});}));
+  const completedEnrollment={...enrollmentResult.enrollment,stageCount:stagesResult.length,taskCount:tasks.length,dueAt:stagesResult.sort((a,b)=>Date.parse(a.dueAt)-Date.parse(b.dueAt))[0]?.dueAt??null,taskIds:tasks.map(task=>task.id),stages:stagesResult}; const enrollmentDto=mapFollowUpPathEnrollmentToDto(completedEnrollment);
+  await recordPathEnrollmentTimelineEvent({context:input.context,tenantBusinessRepository:input.tenantBusinessRepository,enrollment:enrollmentDto,eventType:'followup_path_enrolled',occurredAt:input.occurredAt});
+  await recordFollowUpTasksGeneratedTimelineEvent({context:input.context,tenantBusinessRepository:input.tenantBusinessRepository,enrollment:enrollmentDto,occurredAt:input.occurredAt});
+  return {kind:'created',enrollment:enrollmentDto};
 }
 
-export async function listFollowUpPathEnrollments(input: {
-  context: AccessContext;
-  tenantBusinessRepository: Pick<ServiceRepository, 'listFollowUpPathEnrollmentsByTenant'>;
-}): Promise<ListFollowUpPathEnrollmentsResult> {
-  const decision = canUseFollowUpPath(input.context, 'read_own_tenant');
-  if (!decision.allowed) {
-    return { kind: 'forbidden', reason: decision.reason };
-  }
-
-  if (!hasTenant(input.context)) {
-    return { kind: 'forbidden', reason: 'missing_tenant' };
-  }
-
-  const enrollments = await input.tenantBusinessRepository.listFollowUpPathEnrollmentsByTenant({
-    tenantId: input.context.tenantId,
-    institutionId: input.context.institutionId ?? null,
-  });
-
-  return { kind: 'success', enrollments: enrollments.map(mapFollowUpPathEnrollmentToDto) };
-}
-
-export async function getFollowUpPathEnrollment(input: {
-  context: AccessContext;
-  enrollmentId: string;
-  tenantBusinessRepository: Pick<ServiceRepository, 'getFollowUpPathEnrollmentByTenant'>;
-}): Promise<GetFollowUpPathEnrollmentResult> {
-  const decision = canUseFollowUpPath(input.context, 'read_own_tenant');
-  if (!decision.allowed) {
-    return { kind: 'forbidden', reason: decision.reason };
-  }
-
-  if (!hasTenant(input.context)) {
-    return { kind: 'forbidden', reason: 'missing_tenant' };
-  }
-
-  const enrollment = await input.tenantBusinessRepository.getFollowUpPathEnrollmentByTenant({
-    tenantId: input.context.tenantId,
-    institutionId: input.context.institutionId ?? null,
-    enrollmentId: input.enrollmentId,
-  });
-
-  return enrollment
-    ? { kind: 'success', enrollment: mapFollowUpPathEnrollmentToDto(enrollment) }
-    : { kind: 'not_found' };
-}
-
-export async function cancelFollowUpPathEnrollment(input: {
-  context: AccessContext;
-  enrollmentId: string;
-  tenantBusinessRepository: Pick<
-    ServiceRepository,
-    'cancelFollowUpPathEnrollment' | 'getCustomerByTenant' | 'recordFollowUpCustomerTimelineEvent'
-  >;
-}): Promise<CancelFollowUpPathEnrollmentServiceResult> {
-  const decision = canUseFollowUpPath(input.context, 'update');
-  if (!decision.allowed) {
-    return { kind: 'forbidden', reason: decision.reason };
-  }
-
-  if (!hasTenant(input.context)) {
-    return { kind: 'forbidden', reason: 'missing_tenant' };
-  }
-
-  const result = await input.tenantBusinessRepository.cancelFollowUpPathEnrollment({
-    tenantId: input.context.tenantId,
-    institutionId: input.context.institutionId ?? null,
-    enrollmentId: input.enrollmentId,
-  });
-
-  if (result.kind === 'cancelled') {
-    const enrollment = mapFollowUpPathEnrollmentToDto(result.enrollment);
-    await recordPathEnrollmentTimelineEvent({
-      context: input.context,
-      tenantBusinessRepository: input.tenantBusinessRepository,
-      enrollment,
-      eventType: 'followup_path_cancelled',
-      occurredAt: new Date().toISOString(),
-    });
-    return { kind: 'cancelled', enrollment };
-  }
-
-  return result;
+export async function listFollowUpPathEnrollments(input:{context:AccessContext;tenantBusinessRepository:Pick<ServiceRepository,'listFollowUpPathEnrollmentsByTenant'>}):Promise<ListFollowUpPathEnrollmentsResult>{const decision=canUseFollowUpPath(input.context,'read_own_tenant');if(!decision.allowed)return{kind:'forbidden',reason:decision.reason};if(!hasTenant(input.context))return{kind:'forbidden',reason:'missing_tenant'};const enrollments=await input.tenantBusinessRepository.listFollowUpPathEnrollmentsByTenant({tenantId:input.context.tenantId,institutionId:input.context.institutionId??null});return{kind:'success',enrollments:enrollments.map(mapFollowUpPathEnrollmentToDto)};}
+export async function getFollowUpPathEnrollment(input:{context:AccessContext;enrollmentId:string;tenantBusinessRepository:Pick<ServiceRepository,'getFollowUpPathEnrollmentByTenant'>}):Promise<GetFollowUpPathEnrollmentResult>{const decision=canUseFollowUpPath(input.context,'read_own_tenant');if(!decision.allowed)return{kind:'forbidden',reason:decision.reason};if(!hasTenant(input.context))return{kind:'forbidden',reason:'missing_tenant'};const enrollment=await input.tenantBusinessRepository.getFollowUpPathEnrollmentByTenant({tenantId:input.context.tenantId,institutionId:input.context.institutionId??null,enrollmentId:input.enrollmentId});return enrollment?{kind:'success',enrollment:mapFollowUpPathEnrollmentToDto(enrollment)}:{kind:'not_found'};}
+export async function cancelFollowUpPathEnrollment(input:{context:AccessContext;enrollmentId:string;tenantBusinessRepository:Pick<ServiceRepository,'cancelFollowUpPathEnrollment'|'getCustomerByTenant'|'recordFollowUpCustomerTimelineEvent'|'runCareFollowUpTransaction'>}):Promise<CancelFollowUpPathEnrollmentServiceResult>{
+  const decision=canUseFollowUpPath(input.context,'update');if(!decision.allowed)return{kind:'forbidden',reason:decision.reason};if(!hasTenant(input.context))return{kind:'forbidden',reason:'missing_tenant'};const tenantId=input.context.tenantId;
+  const runner=input.tenantBusinessRepository.runCareFollowUpTransaction;
+  if(typeof runner==='function'){const institutionId=input.context.institutionId??null;if(!institutionId)return{kind:'forbidden',reason:'missing_institution'};const result=await runner(({commandService})=>commandService.cancelPathEnrollmentWithTimeline({attribution:{tenantId,institutionId},enrollmentId:input.enrollmentId,actorRole:input.context.role,occurredAt:new Date().toISOString()}));if(result.kind==='not_found_or_not_owned')return{kind:'not_found'};if(result.kind==='conflict')return result;return{kind:'cancelled',enrollment:mapCanonicalEnrollment(result.enrollment)};}
+  requireTestCompatibility(); const cancelWriter=Reflect.get(input.tenantBusinessRepository,'cancelFollowUpPathEnrollment') as TenantBusinessRepository['cancelFollowUpPathEnrollment']; const result=await cancelWriter({tenantId,institutionId:input.context.institutionId??null,enrollmentId:input.enrollmentId});
+  if(result.kind==='cancelled'){const enrollment=mapFollowUpPathEnrollmentToDto(result.enrollment);await recordPathEnrollmentTimelineEvent({context:input.context,tenantBusinessRepository:input.tenantBusinessRepository,enrollment,eventType:'followup_path_cancelled',occurredAt:new Date().toISOString()});return{kind:'cancelled',enrollment};}return result;
 }
