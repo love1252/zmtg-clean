@@ -1,5 +1,19 @@
 # 项目重构历史
 
+## 2026-08-09：W2 Care Writer 准入完成
+
+- Evidence repair 已独立完成；
+- Admission PR #1103：`ee724072af16d75b834ed387c66805e4423809e8`；
+- Independent Review PR #1104：`db76e651475fab56f7fdd5af41622b2810846a14`；
+- W2 decomposition=frozen；
+- W2-P1 Treatment Summary exact Runtime allowlist=6 files；
+- W2-P1 Runtime 未授权；
+- W2-P2 residual 单独待准入；
+- W2 Care complete=false；
+- Business Writer phase complete=false；
+- 下一任务：W2-P1 Treatment Summary exact 6-file Runtime implementation explicit authorization。
+
+
 ## 2026-08-09：W1C Customers / Messaging Writer 完成
 
 - W1C-P2 Implementation PR #1099：`d189ffe0998bf30ba32a47ed47a5c078614004e0`；
