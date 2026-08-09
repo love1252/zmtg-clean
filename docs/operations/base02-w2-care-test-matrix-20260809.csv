@@ -1,0 +1,13 @@
+test_id,slice,required_assertion,runtime_authorized
+W2-P1-T01,W2_P1_TREATMENT_SUMMARY,create requires server-side tenantId institutionId customerId,false
+W2-P1-T02,W2_P1_TREATMENT_SUMMARY,customer must belong to tenant plus institution or fail closed,false
+W2-P1-T03,W2_P1_TREATMENT_SUMMARY,appointment must belong to same tenant institution customer,false
+W2-P1-T04,W2_P1_TREATMENT_SUMMARY,update cross-institution or missing attribution fails closed,false
+W2-P1-T05,W2_P1_TREATMENT_SUMMARY,void cross-institution fails closed and already-voided remains idempotent,false
+W2-P1-T06,W2_P1_TREATMENT_SUMMARY,legacy create update void Writer methods fail closed,false
+W2-P1-T07,W2_P1_TREATMENT_SUMMARY,legacy read and list compatibility retained,false
+W2-P1-T08,W2_P1_TREATMENT_SUMMARY,create update void Routes remain capability-off,false
+W2-P1-T09,W2_P1_TREATMENT_SUMMARY,no Schema Migration DB execution or Audit Owner change,false
+W2-P2-T01,W2_P2_CARE_FOLLOWUP_RESIDUAL,residual appointments and follow-up mutation symbols remain separately admitted,false
+W2-P2-T02,W2_P2_CARE_FOLLOWUP_RESIDUAL,multi-write transaction and timeline evidence ownership frozen before Runtime,false
+W2-P2-T03,W2_P2_CARE_FOLLOWUP_RESIDUAL,production callers rewired only after exact P2 allowlist,false
