@@ -1,4 +1,13 @@
 {
   "version": 1,
-  "exceptions": []
+  "exceptions": [
+    {
+      "ruleId": "AQ004_FROZEN_INSTITUTION_MODULE_NEW_FILE",
+      "taskId": "W2-P2B",
+      "reason": "W2-P2B Admission 已冻结的 Institution compatibility transaction delegate。",
+      "owner": "care",
+      "reviewCondition": "legacy Institution compatibility delegate 退出时删除该 exception。",
+      "path": "src/modules/institution/server/followup-path-enrollment-transaction.ts"
+    }
+  ]
 }

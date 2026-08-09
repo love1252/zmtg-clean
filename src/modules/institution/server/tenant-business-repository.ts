@@ -4,12 +4,11 @@ import type {
   AppointmentStatus,
 } from '@/modules/institution/domain/appointment-records';
 import type { CustomerRecordSummary } from '@/modules/institution/domain/customer-records';
-import {
-  transitionFollowUpTask as transitionFollowUpTaskDomain,
-  type FollowUpRiskLevel,
-  type FollowUpStatus,
-  type TenantFollowUpTaskFromTreatmentSummarySuggestion,
-  type TenantFollowUpTask,
+import type {
+  FollowUpRiskLevel,
+  FollowUpStatus,
+  TenantFollowUpTaskFromTreatmentSummarySuggestion,
+  TenantFollowUpTask,
 } from '@/modules/institution/domain/followup-workflow';
 import type {
   FollowUpPathEnrollment,
@@ -38,6 +37,10 @@ import type {
   FollowUpCustomerTimelineSourceType,
 } from '@/modules/institution/domain/followup-customer-timeline';
 import type { TenantDatabase } from '@/server/db/client';
+import {
+  runInstitutionCareFollowUpTransaction,
+  type InstitutionCareFollowUpTransactionOperation,
+} from '@/modules/institution/server/followup-path-enrollment-transaction';
 import type {
   CustomerObjectFactSourceCandidateV1,
   CustomerObjectFactSourceQueryV1,
@@ -327,12 +330,6 @@ type CustomerFollowUpTimelineLookupInput = {
   customerId: string;
 };
 
-const activeSourceFollowUpStatuses = new Set<FollowUpStatus>([
-  'scheduled',
-  'due',
-  'in_progress',
-  'escalated',
-]);
 
 function omitUndefinedValues<T extends Record<string, unknown>>(values: T): Partial<T> {
   return Object.fromEntries(
@@ -747,17 +744,6 @@ function followUpMessageDraftInsertValues(input: CreateFollowUpMessageDraftInput
   };
 }
 
-function followUpCustomerTimelineInsertValues(input: CreateFollowUpCustomerTimelineEventInput) {
-  const occurredAt = new Date(input.occurredAt);
-
-  return {
-    ...input,
-    occurredAt,
-    createdAt: input.createdAt ? new Date(input.createdAt) : occurredAt,
-    updatedAt: input.updatedAt ? new Date(input.updatedAt) : occurredAt,
-  };
-}
-
 function createWeComAuthorizationForOperationsSnapshot(input: {
   tenantId: string;
   institutionId: string | null;
@@ -814,6 +800,9 @@ function createWeComCustomerContactSeeds(input: {
 
 export function createTenantBusinessRepository(database: TenantDatabase) {
   return {
+    runCareFollowUpTransaction<T>(operation: InstitutionCareFollowUpTransactionOperation<T>) {
+      return runInstitutionCareFollowUpTransaction(database, operation);
+    },
     async createCustomer(input: CreateCustomerInput): Promise<CustomerRecordSummary> {
       void input;
       throw new Error('legacy_customer_writer_disabled');
@@ -829,106 +818,13 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
     async createFollowUpTaskFromTreatmentSummarySuggestion(
       input: CreateFollowUpTaskFromTreatmentSummarySuggestionInput,
     ): Promise<CreateFollowUpTaskFromTreatmentSummarySuggestionResult> {
-      const [sourceSummary] = await database
-        .select({ id: treatmentSummaries.id, customerId: treatmentSummaries.customerId })
-        .from(treatmentSummaries)
-        .where(
-          and(
-            eq(treatmentSummaries.tenantId, input.tenantId),
-            eq(treatmentSummaries.id, input.sourceTreatmentSummaryId),
-            eq(treatmentSummaries.customerId, input.customerId),
-          ),
-        );
-
-      if (!sourceSummary) {
-        return {
-          kind: 'invalid_source',
-          reason: 'source_treatment_summary_not_found_or_cross_tenant',
-        };
-      }
-
-      const existingSourceRows = input.skipActiveSourceConflict
-        ? []
-        : await database
-            .select()
-            .from(followUpTasks)
-            .where(
-              and(
-                eq(followUpTasks.tenantId, input.tenantId),
-                eq(followUpTasks.sourceTreatmentSummaryId, input.sourceTreatmentSummaryId),
-                eq(followUpTasks.sourceSuggestionKey, input.sourceSuggestionKey),
-              ),
-            );
-      const activeSourceTask = existingSourceRows.find(
-        (row) =>
-          row.tenantId === input.tenantId &&
-          row.sourceTreatmentSummaryId === input.sourceTreatmentSummaryId &&
-          row.sourceSuggestionKey === input.sourceSuggestionKey &&
-          activeSourceFollowUpStatuses.has(row.status),
-      );
-
-      if (activeSourceTask) {
-        return {
-          kind: 'conflict',
-          resourceId: activeSourceTask.id,
-          reason: 'active_source_follow_up_exists',
-        };
-      }
-
-      // Phase 15 PR3 只提供 repository 地基；真实 API 接入前必须单独决定 follow-up quota。
-      const [row] = await database
-        .insert(followUpTasks)
-        .values({
-          id: input.id,
-          tenantId: input.tenantId,
-          customerId: input.customerId,
-          customerDisplayName: input.customerDisplayName,
-          journeyId: input.journeyId,
-          stage: input.stage,
-          status: input.status ?? 'scheduled',
-          dueAt: new Date(input.dueAt),
-          suggestedAction: input.suggestedAction,
-          riskLevel: input.riskLevel,
-          sourceTreatmentSummaryId: input.sourceTreatmentSummaryId,
-          sourceSuggestionKey: input.sourceSuggestionKey,
-        })
-        .returning();
-
-      return { kind: 'created', task: mapFollowUpTaskSourceRowToRecord(row) };
+      void input;
+      // follow-up quota remains outside this legacy Writer; canonical Care owns P2B mutation.
+      throw new Error('legacy_follow_up_writer_disabled');
     },
-    async createManualFollowUpTask(
-      input: CreateManualFollowUpTaskInput,
-    ): Promise<CreateManualFollowUpTaskResult> {
-      const customerExists = await database
-        .select({ id: customers.id })
-        .from(customers)
-        .where(and(eq(customers.tenantId, input.tenantId), eq(customers.id, input.customerId)))
-        .limit(1);
-
-      if (customerExists.length === 0) {
-        return { kind: 'customer_not_found' };
-      }
-
-      // 手动创建随访：不关联治疗摘要来源，source 字段为 null
-      const [row] = await database
-        .insert(followUpTasks)
-        .values({
-          id: input.id,
-          tenantId: input.tenantId,
-          customerId: input.customerId,
-          customerDisplayName: input.customerDisplayName,
-          journeyId: `manual-${Date.now()}`,
-          stage: input.stage,
-          status: input.status,
-          dueAt: new Date(input.dueAt),
-          suggestedAction: input.suggestedAction,
-          riskLevel: input.riskLevel,
-          sourceTreatmentSummaryId: null,
-          sourceSuggestionKey: null,
-        })
-        .returning();
-
-      return { kind: 'created', task: mapFollowUpTaskRowToRecord(row) };
+    async createManualFollowUpTask(input: CreateManualFollowUpTaskInput): Promise<CreateManualFollowUpTaskResult> {
+      void input;
+      throw new Error('legacy_follow_up_writer_disabled');
     },
     async customerExistsByTenant(input: CustomerLookupInput): Promise<boolean> {
       const [row] = await database
@@ -1081,53 +977,9 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
       void input;
       throw new Error('legacy_appointment_writer_disabled');
     },
-    async transitionFollowUpTask(
-      input: TransitionFollowUpTaskInput,
-    ): Promise<TransitionFollowUpTaskPersistenceResult> {
-      const [currentRow] = await database
-        .select()
-        .from(followUpTasks)
-        .where(and(eq(followUpTasks.tenantId, input.tenantId), eq(followUpTasks.id, input.id)));
-
-      if (!currentRow) {
-        return { kind: 'not_found' };
-      }
-
-      const transition = transitionFollowUpTaskDomain({
-        task: mapFollowUpTaskRowToRecord(currentRow),
-        nextStatus: input.nextStatus,
-        actorId: input.actorId,
-        occurredAt: input.occurredAt,
-      });
-
-      if (!transition.allowed) {
-        return {
-          kind: 'invalid_transition',
-          resourceId: currentRow.id,
-          from: transition.from,
-          to: transition.to,
-        };
-      }
-
-      const [updatedRow] = await database
-        .update(followUpTasks)
-        .set({
-          status: transition.task.status,
-          updatedBy: transition.task.updatedBy,
-          updatedAt: transition.task.updatedAt ? new Date(transition.task.updatedAt) : null,
-        })
-        .where(
-          and(
-            eq(followUpTasks.tenantId, input.tenantId),
-            eq(followUpTasks.id, input.id),
-            eq(followUpTasks.status, currentRow.status),
-          ),
-        )
-        .returning();
-
-      return updatedRow
-        ? { kind: 'updated', task: mapFollowUpTaskRowToRecord(updatedRow) }
-        : { kind: 'conflict', resourceId: currentRow.id, reason: 'stale_transition' };
+    async transitionFollowUpTask(input: TransitionFollowUpTaskInput): Promise<TransitionFollowUpTaskPersistenceResult> {
+      void input;
+      throw new Error('legacy_follow_up_writer_disabled');
     },
     async listCustomersByTenant(tenantId: string) {
       const rows = await database.select().from(customers).where(eq(customers.tenantId, tenantId));
@@ -1261,80 +1113,13 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
         stagesByEnrollmentId,
       });
     },
-    async createFollowUpPathEnrollment(
-      input: CreateFollowUpPathEnrollmentInput,
-    ): Promise<CreateFollowUpPathEnrollmentResult> {
-      const existing = await this.findActiveFollowUpPathEnrollmentBySource({
-        tenantId: input.tenantId,
-        institutionId: input.institutionId,
-        sourceType: input.sourceType,
-        sourceId: input.sourceId,
-        templateKey: input.templateKey as TreatmentPathTemplateKey,
-      });
-
-      if (existing) {
-        return {
-          kind: 'conflict',
-          resourceId: existing.id,
-          reason: 'active_follow_up_path_enrollment_exists',
-        };
-      }
-
-      const [customer] = await database
-        .select()
-        .from(customers)
-        .where(and(eq(customers.tenantId, input.tenantId), eq(customers.id, input.customerId)));
-
-      if (!customer) {
-        return { kind: 'customer_not_found' };
-      }
-
-      if (input.sourceType === 'treatment_summary') {
-        const [summary] = await database
-          .select({ id: treatmentSummaries.id, customerId: treatmentSummaries.customerId })
-          .from(treatmentSummaries)
-          .where(
-            and(
-              eq(treatmentSummaries.tenantId, input.tenantId),
-              eq(treatmentSummaries.id, input.sourceId),
-              eq(treatmentSummaries.customerId, input.customerId),
-            ),
-          );
-
-        if (!summary) {
-          return {
-            kind: 'invalid_source',
-            reason: 'source_treatment_summary_not_found_or_cross_tenant',
-          };
-        }
-      }
-
-      const [row] = await database.insert(followUpPathEnrollments).values(input).returning();
-      const [enrollment] = await this.getHydratedFollowUpPathEnrollments({
-        tenantId: input.tenantId,
-        institutionId: input.institutionId,
-        rows: [row],
-      });
-
-      return { kind: 'created', enrollment: enrollment ?? createEmptyEnrollmentRecord(row) };
+    async createFollowUpPathEnrollment(input: CreateFollowUpPathEnrollmentInput): Promise<CreateFollowUpPathEnrollmentResult> {
+      void input;
+      throw new Error('legacy_follow_up_writer_disabled');
     },
-    async createFollowUpPathStages(
-      input: CreateFollowUpPathStageInput[],
-    ): Promise<FollowUpPathStageInstance[]> {
-      if (input.length === 0) return [];
-
-      const rows = await database
-        .insert(followUpPathStages)
-        .values(
-          input.map((stage) => ({
-            ...stage,
-            dueAt: new Date(stage.dueAt),
-            createdAt: new Date(stage.createdAt),
-            updatedAt: new Date(stage.updatedAt),
-          })),
-        )
-        .returning();
-      return rows.map(mapFollowUpPathStageRowToRecord);
+    async createFollowUpPathStages(input: CreateFollowUpPathStageInput[]): Promise<FollowUpPathStageInstance[]> {
+      void input;
+      throw new Error('legacy_follow_up_writer_disabled');
     },
     async listFollowUpPathEnrollmentsByTenant(
       input: ListFollowUpPathEnrollmentsByTenantInput,
@@ -1374,108 +1159,13 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
 
       return enrollment ?? null;
     },
-    async cancelFollowUpPathEnrollment(
-      input: FollowUpPathEnrollmentLookupInput,
-    ): Promise<CancelFollowUpPathEnrollmentResult> {
-      const current = await this.getFollowUpPathEnrollmentByTenant(input);
-      if (!current) {
-        return { kind: 'not_found' };
-      }
-
-      if (current.status !== 'active') {
-        return {
-          kind: 'conflict',
-          resourceId: current.id,
-          reason: 'follow_up_path_enrollment_not_active',
-        };
-      }
-
-      const now = new Date();
-      const [row] = await database
-        .update(followUpPathEnrollments)
-        .set({
-          status: 'cancelled',
-          completedAt: now,
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(followUpPathEnrollments.tenantId, input.tenantId),
-            eq(followUpPathEnrollments.id, input.enrollmentId),
-            eq(followUpPathEnrollments.status, 'active'),
-          ),
-        )
-        .returning();
-
-      if (!row) {
-        return {
-          kind: 'conflict',
-          resourceId: current.id,
-          reason: 'follow_up_path_enrollment_not_active',
-        };
-      }
-
-      const [enrollment] = await this.getHydratedFollowUpPathEnrollments({
-        tenantId: input.tenantId,
-        institutionId: input.institutionId,
-        rows: [row],
-      });
-
-      return { kind: 'cancelled', enrollment: enrollment ?? createEmptyEnrollmentRecord(row) };
+    async cancelFollowUpPathEnrollment(input: FollowUpPathEnrollmentLookupInput): Promise<CancelFollowUpPathEnrollmentResult> {
+      void input;
+      throw new Error('legacy_follow_up_writer_disabled');
     },
-    async recordFollowUpCustomerTimelineEvent(
-      input: CreateFollowUpCustomerTimelineEventInput,
-    ): Promise<RecordFollowUpCustomerTimelineEventResult> {
-      const customerExists = await this.customerExistsByTenant({
-        tenantId: input.tenantId,
-        id: input.customerId,
-      });
-
-      if (!customerExists) {
-        return { kind: 'customer_not_found' };
-      }
-
-      const [existing] = await database
-        .select()
-        .from(followUpCustomerTimelineEvents)
-        .where(
-          and(
-            eq(followUpCustomerTimelineEvents.tenantId, input.tenantId),
-            eq(followUpCustomerTimelineEvents.sourceType, input.sourceType),
-            eq(followUpCustomerTimelineEvents.sourceId, input.sourceId),
-            eq(followUpCustomerTimelineEvents.eventType, input.eventType),
-          ),
-        );
-
-      if (existing) {
-        return { kind: 'exists', event: mapFollowUpCustomerTimelineEventRowToRecord(existing) };
-      }
-
-      const [row] = await database
-        .insert(followUpCustomerTimelineEvents)
-        .values(followUpCustomerTimelineInsertValues(input))
-        .onConflictDoNothing()
-        .returning();
-
-      if (row) {
-        return { kind: 'created', event: mapFollowUpCustomerTimelineEventRowToRecord(row) };
-      }
-
-      const [createdByConcurrentRequest] = await database
-        .select()
-        .from(followUpCustomerTimelineEvents)
-        .where(
-          and(
-            eq(followUpCustomerTimelineEvents.tenantId, input.tenantId),
-            eq(followUpCustomerTimelineEvents.sourceType, input.sourceType),
-            eq(followUpCustomerTimelineEvents.sourceId, input.sourceId),
-            eq(followUpCustomerTimelineEvents.eventType, input.eventType),
-          ),
-        );
-
-      return createdByConcurrentRequest
-        ? { kind: 'exists', event: mapFollowUpCustomerTimelineEventRowToRecord(createdByConcurrentRequest) }
-        : { kind: 'customer_not_found' };
+    async recordFollowUpCustomerTimelineEvent(input: CreateFollowUpCustomerTimelineEventInput): Promise<RecordFollowUpCustomerTimelineEventResult> {
+      void input;
+      throw new Error('legacy_follow_up_writer_disabled');
     },
     async listCustomerFollowUpTimelineEvents(
       input: CustomerFollowUpTimelineLookupInput,

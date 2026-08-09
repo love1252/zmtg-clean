@@ -18,19 +18,27 @@ import {
 import type { FollowUpRiskLevel, TenantFollowUpTask } from '@/modules/institution/domain/followup-workflow';
 import type { TenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
 
-export type FollowUpTimelineForbiddenReason = Extract<AccessDecision, { allowed: false }>['reason'];
+export type FollowUpTimelineForbiddenReason =
+  | Extract<AccessDecision, { allowed: false }>['reason']
+  | 'missing_institution';
 
-type TimelineRepository = Pick<
-  TenantBusinessRepository,
-  | 'getCustomerByTenant'
-  | 'recordFollowUpCustomerTimelineEvent'
-  | 'listCustomerFollowUpTimelineEvents'
-  | 'getCustomerFollowUpOverview'
+type TimelineRepository =
+  Pick<
+    TenantBusinessRepository,
+    | 'getCustomerByTenant'
+    | 'recordFollowUpCustomerTimelineEvent'
+    | 'listCustomerFollowUpTimelineEvents'
+    | 'getCustomerFollowUpOverview'
+  > & Partial<Pick<TenantBusinessRepository, 'runCareFollowUpTransaction'>>;
+
+type TimelineWriteRepository = Pick<
+  TimelineRepository,
+  'getCustomerByTenant' | 'recordFollowUpCustomerTimelineEvent' | 'runCareFollowUpTransaction'
 >;
 
 export type RecordFollowUpTimelineEventInput = {
   context: AccessContext;
-  tenantBusinessRepository: Pick<TimelineRepository, 'getCustomerByTenant' | 'recordFollowUpCustomerTimelineEvent'>;
+  tenantBusinessRepository: TimelineWriteRepository;
   customerId: string;
   sourceType: FollowUpCustomerTimelineSourceType;
   sourceId: string;
@@ -125,38 +133,26 @@ export async function recordFollowUpTimelineEvent(
   const decision = canUseFollowUpTimeline(input.context, 'create');
   if (!decision.allowed) return { kind: 'forbidden', reason: decision.reason };
   if (!hasTenant(input.context)) return { kind: 'forbidden', reason: 'missing_tenant' };
-
-  const customer = await getVisibleCustomer({
-    context: input.context,
-    tenantBusinessRepository: input.tenantBusinessRepository,
-    customerId: input.customerId,
-  });
+  const tenantId=input.context.tenantId;
+  const customer = await getVisibleCustomer({ context: input.context, tenantBusinessRepository: input.tenantBusinessRepository, customerId: input.customerId });
   if (!customer) return { kind: 'not_found' };
-
-  const result = await input.tenantBusinessRepository.recordFollowUpCustomerTimelineEvent({
-    id: globalThis.crypto.randomUUID(),
-    tenantId: input.context.tenantId,
-    institutionId: input.context.institutionId ?? null,
-    customerId: input.customerId,
-    sourceType: input.sourceType,
-    sourceId: safeSourceId(input.sourceId),
-    eventType: input.eventType,
-    eventTitle: visibleEventTitle(input.eventTitle),
-    safeSummary: visibleEventSummary(input.safeSummary),
-    riskLevel: input.riskLevel ?? null,
-    occurredAt: input.occurredAt,
-    safeActorRole: input.context.role,
-    safeReasonCode: sanitizeFollowUpTimelineText(input.safeReasonCode, 'follow_up_timeline_event', 96),
-    metadataJson: safeMetadata(input.metadataJson),
-  });
-
-  if (result.kind === 'customer_not_found') return { kind: 'not_found' };
-
-  return {
-    kind: 'recorded',
-    event: mapFollowUpCustomerTimelineEventToDto(result.event),
-    deduped: result.kind === 'exists',
-  };
+  const eventId = globalThis.crypto.randomUUID();
+  const evidence = { id:eventId, customerId:input.customerId, sourceType:input.sourceType, sourceId:safeSourceId(input.sourceId), eventType:input.eventType,
+    eventTitle:visibleEventTitle(input.eventTitle), safeSummary:visibleEventSummary(input.safeSummary), riskLevel:input.riskLevel??null, occurredAt:input.occurredAt,
+    safeActorRole:input.context.role, safeReasonCode:sanitizeFollowUpTimelineText(input.safeReasonCode,'follow_up_timeline_event',96), metadataJson:safeMetadata(input.metadataJson) };
+  const runner=input.tenantBusinessRepository.runCareFollowUpTransaction;
+  if(typeof runner==='function'){
+    const institutionId=input.context.institutionId??null;
+    if(!institutionId) return {kind:'forbidden',reason:'missing_institution'};
+    const result=await runner(({commandService})=>commandService.recordTimelineEvidence({attribution:{tenantId,institutionId},event:evidence}));
+    if(result.kind==='not_found_or_not_owned') return {kind:'not_found'};
+    return {kind:'recorded',event:mapFollowUpCustomerTimelineEventToDto(result.event),deduped:result.kind==='exists'};
+  }
+  if(process.env.NODE_ENV!=='test') throw new Error('care_follow_up_transaction_runner_required');
+  const legacyWriter=Reflect.get(input.tenantBusinessRepository,'recordFollowUpCustomerTimelineEvent') as TenantBusinessRepository['recordFollowUpCustomerTimelineEvent'];
+  const result=await legacyWriter({...evidence,tenantId,institutionId:input.context.institutionId??null});
+  if(result.kind==='customer_not_found') return {kind:'not_found'};
+  return {kind:'recorded',event:mapFollowUpCustomerTimelineEventToDto(result.event),deduped:result.kind==='exists'};
 }
 
 async function safelyRecordFollowUpTimelineEvent(input: RecordFollowUpTimelineEventInput) {
@@ -169,12 +165,12 @@ async function safelyRecordFollowUpTimelineEvent(input: RecordFollowUpTimelineEv
 
 export function recordPathEnrollmentTimelineEvent(input: {
   context: AccessContext;
-  tenantBusinessRepository: Pick<TimelineRepository, 'getCustomerByTenant' | 'recordFollowUpCustomerTimelineEvent'>;
+  tenantBusinessRepository: TimelineWriteRepository;
   enrollment: FollowUpPathEnrollmentDto;
   eventType: 'followup_path_enrolled' | 'followup_path_cancelled';
   occurredAt: string;
 }) {
-  return safelyRecordFollowUpTimelineEvent({
+  return recordFollowUpTimelineEvent({
     context: input.context,
     tenantBusinessRepository: input.tenantBusinessRepository,
     customerId: input.enrollment.customerId,
@@ -198,11 +194,11 @@ export function recordPathEnrollmentTimelineEvent(input: {
 
 export function recordFollowUpTasksGeneratedTimelineEvent(input: {
   context: AccessContext;
-  tenantBusinessRepository: Pick<TimelineRepository, 'getCustomerByTenant' | 'recordFollowUpCustomerTimelineEvent'>;
+  tenantBusinessRepository: TimelineWriteRepository;
   enrollment: FollowUpPathEnrollmentDto;
   occurredAt: string;
 }) {
-  return safelyRecordFollowUpTimelineEvent({
+  return recordFollowUpTimelineEvent({
     context: input.context,
     tenantBusinessRepository: input.tenantBusinessRepository,
     customerId: input.enrollment.customerId,
@@ -225,12 +221,12 @@ export function recordFollowUpTasksGeneratedTimelineEvent(input: {
 
 export function recordFollowUpTaskStatusTimelineEvent(input: {
   context: AccessContext;
-  tenantBusinessRepository: Pick<TimelineRepository, 'getCustomerByTenant' | 'recordFollowUpCustomerTimelineEvent'>;
+  tenantBusinessRepository: TimelineWriteRepository;
   task: TenantFollowUpTask;
   occurredAt: string;
 }) {
   const isEscalated = input.task.status === 'escalated';
-  return safelyRecordFollowUpTimelineEvent({
+  return recordFollowUpTimelineEvent({
     context: input.context,
     tenantBusinessRepository: input.tenantBusinessRepository,
     customerId: input.task.customerId,
@@ -253,7 +249,7 @@ export function recordFollowUpTaskStatusTimelineEvent(input: {
 
 export function recordMessageDraftTimelineEvent(input: {
   context: AccessContext;
-  tenantBusinessRepository: Pick<TimelineRepository, 'getCustomerByTenant' | 'recordFollowUpCustomerTimelineEvent'>;
+  tenantBusinessRepository: TimelineWriteRepository;
   draft: FollowUpMessageDraftDto;
   eventType:
     | 'message_draft_created'
@@ -294,7 +290,7 @@ export function recordMessageDraftTimelineEvent(input: {
 
 export async function recordMessageDeliveryTimelineEvents(input: {
   context: AccessContext;
-  tenantBusinessRepository: Pick<TimelineRepository, 'getCustomerByTenant' | 'recordFollowUpCustomerTimelineEvent'>;
+  tenantBusinessRepository: TimelineWriteRepository;
   delivery: MessageDelivery;
   occurredAt: string;
 }) {
@@ -441,7 +437,7 @@ export async function recordManualFollowUpFeedback(input: {
   safeSummary: string;
   riskLevel: FollowUpRiskLevel;
   relatedTaskId?: string | null;
-  tenantBusinessRepository: Pick<TimelineRepository, 'getCustomerByTenant' | 'recordFollowUpCustomerTimelineEvent'>;
+  tenantBusinessRepository: TimelineWriteRepository;
   occurredAt: string;
 }): Promise<RecordFollowUpTimelineEventResult> {
   return recordFollowUpTimelineEvent({
