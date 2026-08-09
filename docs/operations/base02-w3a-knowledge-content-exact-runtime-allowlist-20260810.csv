@@ -1,0 +1,9 @@
+order,path,file_state,responsibility,runtime_authorized
+1,src/modules/knowledge/application/institution/knowledge-item-command-service.ts,new,Knowledge canonical institution content command service,false
+2,src/modules/knowledge/server/institution-knowledge-command-repository.ts,new,Knowledge canonical institution content transaction-bound repository,false
+3,src/modules/knowledge/tests/InstitutionKnowledgeCommandService.test.ts,new,canonical command validation and result tests,false
+4,src/modules/knowledge/tests/InstitutionKnowledgeCommandRepository.test.ts,new,scope CAS and atomic bundle repository tests,false
+5,src/server/orchestration/knowledge-institution-transaction.ts,new,cross-owner transaction composition for Knowledge content commands,false
+6,src/server/orchestration/knowledge-institution-transaction.test.ts,new,transaction binding and rollback tests,false
+7,src/modules/institution/server/institution-knowledge-write-repository.ts,existing,block four legacy content Writer methods while retaining read compatibility,false
+8,src/modules/institution/tests/InstitutionKnowledgeManagementReadonlyService.test.ts,existing,legacy Writer blockade plus compatibility service regression coverage,false
