@@ -3,61 +3,85 @@
 ## 唯一下一任务
 
 ```text
-W2-P1 Treatment Summary exact 6-file Runtime implementation explicit authorization
+W2-P2 Care / Follow-up residual Writer transaction/callgraph admission
 ```
 
-## W2 Care Admission 已完成
+## W2-P1 已完成
 
 ```text
-w2_care_symbol_audit=passed
-w2_care_callgraph_audit=passed
-w2_care_admission=passed
-w2_care_admission_independent_review=passed
-w2_decomposition_frozen=true
+implementation_pr=1106
+implementation_merge=3679122f2ea11079660cc16a7d9871f619c81386
+independent_review_pr=1107
+independent_review_merge=RUN=31309490891 POLL=1 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=2 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=3 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=4 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=5 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=6 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=7 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=8 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=9 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=10 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=11 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=12 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=13 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=14 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=15 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=16 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=17 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=18 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=19 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=20 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=21 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=22 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=23 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=24 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=25 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=26 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=27 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=28 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=29 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=30 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=31 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=32 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=33 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=34 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=35 STATUS=in_progress CONCLUSION=
+RUN=31309490891 POLL=36 STATUS=completed CONCLUSION=success
+ac66266c78c9e1263959812cbcfc8b7ac9bc632d
+w2_p1_complete=true
 ```
 
-## W2-P1 exact allowlist
+W2-P1 已完成 Care canonical Treatment Summary Writer、tenant + institution attribution、customer / appointment ownership、fail-closed、legacy Writer blockade 与 read/list compatibility；三个 mutation Route 继续 capability-off。
 
-`docs/operations/base02-w2-p1-treatment-summary-exact-runtime-allowlist-20260809.csv`
-
-```text
-1. src/modules/care/application/treatment-summary-command-service.ts
-2. src/modules/care/server/treatment-summary-command-repository.ts
-3. src/modules/care/tests/TreatmentSummaryCommandService.test.ts
-4. src/modules/care/tests/TreatmentSummaryCommandRepository.test.ts
-5. src/modules/institution/server/treatment-summary-repository.ts
-6. src/modules/institution/tests/TreatmentSummaryRepository.test.ts
-```
-
-P1 必须强制 server-side tenantId + institutionId、customer ownership、appointment ownership、cross-institution fail-closed、legacy Writer blockade，并保持 create/update/void Routes capability-off。
-
-## W2-P2
-
-tenant-business 的 appointments / follow-up mixed residual Writer 保持单独待准入：
+## W2-P2 当前事实
 
 ```text
+w2_p2_residual_mutation_calls=15
+w2_p2_residual_writer_methods=15
+w2_p2_production_callers=5
+w2_p2_residual_fact_tables=6
 w2_p2_runtime_allowlist_frozen=false
 w2_p2_runtime_authorized=false
 ```
 
-## 当前边界
+下一 admission 必须冻结 Owner、transaction/rollback grouping、timeline evidence Owner、tenant + institution attribution、5 个 production caller rewire、legacy blockade、exact Runtime allowlist 与 atomicity tests。
+
+## Trial Provisioning
+
+`src/modules/institution/server/trial-provisioning-service.ts` 的 `treatmentSummaries` insert 保持独立 Provisioning review：
 
 ```text
-w2_p1_runtime_authorized=false
-w2_p2_runtime_authorized=false
-w2_care_complete=false
-business_writer_phase_complete=false
-database_connection=false
-ddl=false
-dml=false
-migration=false
-seed=false
-fk_validate=false
-schema_change=false
-route_change=false
-reader_release=false
-capability_release=false
-production_change=false
+classification=separate_provisioning_review
+ordinary_business_dual_write=false
+provisioning_treatment_summary_writer_review_pending=true
 ```
 
-如 P1 需要第 7 个文件或 Schema/Migration，立即停止并重新准入。
+不得混入 W2-P2，也不得未经单独准入修改。
+
+```text
+w2_care_complete=false
+business_writer_phase_complete=false
+reader_release=false
+capability_release=false
+```
