@@ -1,4 +1,48 @@
 # 智美天工架构文档索引
+<!-- BASE02_W2_P2A_APPOINTMENTS_RUNTIME_START -->
+
+## W2-P2A Appointments Runtime（2026-08-09）
+
+```text
+implementation_pr=1113
+implementation_head=3b32f624c254610ecddcf0b662af2420f31a5df5
+implementation_merge=25ae7a47f466255590cbe20f35d4243f9145442e
+independent_review_pr=1114
+independent_review_merge=a40fb54fe7b8816df8ad07d69cecd737ca9385fa
+
+w2_p2a_runtime_implementation=passed
+w2_p2a_runtime_independent_review=passed
+w2_p2a_complete=true
+
+canonical_owner=care
+server_side_tenant_institution_scope=true
+expected_updated_at_cas=true
+legacy_appointment_writer=blocked
+legacy_read_compatibility=retained
+appointments_route_capability_off=true
+
+post_p2a_residual_mutation_calls=13
+post_p2a_residual_writer_methods=13
+post_p2a_residual_fact_tables=5
+
+p2b_exact_runtime_file_count=12
+p2b_runtime_authorized=false
+p2c_exact_runtime_file_count=17
+p2c_runtime_authorized=false
+
+trial_provisioning_classification=separate_provisioning_review
+ordinary_business_dual_write=false
+
+w2_care_complete=false
+business_writer_phase_complete=false
+```
+
+下一任务：
+
+`W2-P2B Follow-up Task / Path / Timeline exact 12-file Runtime implementation explicit authorization`
+
+<!-- BASE02_W2_P2A_APPOINTMENTS_RUNTIME_END -->
+
 <!-- BASE02_W2_P2_CARE_FOLLOWUP_ADMISSION_START -->
 
 ## W2-P2 Care / Follow-up Writer Admission（2026-08-09）
