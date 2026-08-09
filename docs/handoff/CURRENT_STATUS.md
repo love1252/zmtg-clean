@@ -3,75 +3,78 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## W2-P2B Follow-up Task / Path / Timeline Runtime 状态
+## W2-P2C Message Draft / Controlled Reach-out Runtime 状态
 
 - 更新日期：2026-08-10
 - W2-P1 Treatment Summary：complete
 - W2-P2A Appointments：complete
-- W2-P2B Implementation PR #1116：`615793eb4e5e741490553461e0accc23ef74b174`
-- W2-P2B Independent Review PR #1117：`01730361655939aa741c73e57ff5b770fba20407`
-- W2-P2B：complete
-- W2-P2C：not authorized
+- W2-P2B Follow-up Task / Path / Timeline：complete
+- W2-P2C Implementation PR #1119：`9ee6413b0b302d89cb1eaec9a9209373afb7697f`
+- W2-P2C Independent Review PR #1120：`2e7f0dd5f44c957d6aca204290852f254256f9e6`
+- W2-P2C：complete
+- W2-P2：complete
+- W2 Care：complete
 - Trial Provisioning：separate review pending
-- W2 Care：not complete
 - Business Writer phase：not complete
-- Reader / Capability：closed
 
 ```text
 w2_p1_complete=true
 w2_p2a_complete=true
-
-w2_p2b_implementation_pr=1116
-w2_p2b_runtime_head=36a1c4744dadd9b5d888d7fbafa08f9cabc37cef
-w2_p2b_implementation_head=022b3ae2a831e8f912d4cbc0144d63450411945b
-w2_p2b_implementation_merge=615793eb4e5e741490553461e0accc23ef74b174
-w2_p2b_runtime_implementation=passed
-w2_p2b_aq004_governance_recovery=passed
-w2_p2b_runtime_independent_review=passed
-w2_p2b_runtime_authorization_consumed=true
 w2_p2b_complete=true
 
-w2_p2b_runtime_file_count=12
-w2_p2b_governance_exception_file_count=1
-w2_p2b_total_changed_file_count=13
-w2_p2b_thirteenth_runtime_file_change=false
+w2_p2c_implementation_pr=1119
+w2_p2c_implementation_head=94b86756b5e1db2515aec2de22082678422ed1d9
+w2_p2c_implementation_merge=9ee6413b0b302d89cb1eaec9a9209373afb7697f
+w2_p2c_independent_review_pr=1120
+w2_p2c_independent_review_head=eb46fd5a41608f76ad37018f2e0eaf7e7e59f3d1
+w2_p2c_independent_review_merge=2e7f0dd5f44c957d6aca204290852f254256f9e6
+w2_p2c_runtime_implementation=passed
+w2_p2c_runtime_independent_review=passed
+w2_p2c_runtime_authorization_consumed=true
+w2_p2c_complete=true
 
-w2_p2b_aq004_exception_registered=true
-w2_p2b_aq004_exception_path=src/modules/institution/server/followup-path-enrollment-transaction.ts
-w2_p2b_aq004_exception_owner=care
-w2_p2b_aq004_exception_review_condition=remove_when_legacy_institution_compatibility_delegate_exits
+w2_p2_complete=true
+w2_care_complete=true
 
-care_followup_task_path_timeline_canonical_writer=true
+w2_p2c_runtime_file_count=17
+w2_p2c_eighteenth_runtime_file_change=false
+w2_p2c_legacy_writers_blocked=6
+w2_care_ordinary_business_direct_mutation_residual=0
+
+care_message_draft_canonical_writer=true
 server_side_tenant_institution_scope=true
-task_transition_status_observed_updated_at_cas=true
-path_cancel_active_observed_updated_at_cas=true
-path_bundle_atomicity=true
-required_timeline_atomicity=true
-typed_timeline_source_guard=true
-legacy_p2b_writers=blocked
-legacy_read_compatibility=retained
+draft_create_task_for_update=true
+draft_lifecycle_expected_updated_at_cas=true
+controlled_reachout_expected_metadata_json_cas=true
+approval_timeline_audit_atomicity=true
+controlled_reachout_cross_owner_transaction=true
 
-post_p2b_residual_mutation_calls=6
-post_p2b_residual_writer_methods=6
-post_p2b_residual_fact_tables=1
-
-w2_p2c_exact_runtime_allowlist_file_count=17
-w2_p2c_runtime_authorized=false
-w2_p2_runtime_authorized=false
-
+p2b_aq004_exception_retained=true
 trial_provisioning_classification=separate_provisioning_review
 trial_provisioning_followup_task_writer_review_pending=true
 ordinary_business_dual_write=false
 
-w2_care_complete=false
 business_writer_phase_complete=false
+
+database_connection=false
+ddl=false
+dml=false
+migration=false
+seed=false
+fk_validate=false
+schema_change=false
+route_change=false
 reader_release=false
 capability_release=false
+audit_owner_change=false
+trial_provisioning_change=false
+real_wecom_send=false
+production_change=false
 ```
 
 ### 唯一下一任务
 
-`W2-P2C Message Draft / Controlled Reach-out exact 17-file Runtime implementation explicit authorization`
+`Post-W2 Care business-writer fresh residual recompute / next-slice admission`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 

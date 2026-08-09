@@ -1,5 +1,27 @@
 # 项目重构历史
 
+## 2026-08-10：W2-P2C Message Draft / Controlled Reach-out Runtime 完成
+
+- Implementation PR #1119：`9ee6413b0b302d89cb1eaec9a9209373afb7697f`；
+- Implementation Head：`94b86756b5e1db2515aec2de22082678422ed1d9`；
+- Independent Review PR #1120：`2e7f0dd5f44c957d6aca204290852f254256f9e6`；
+- Independent Review Head：`eb46fd5a41608f76ad37018f2e0eaf7e7e59f3d1`；
+- exact 17 Runtime files，第 18 个 Runtime file 未发生；
+- Care 成为 `followUpMessageDrafts` 普通业务 canonical Writer；
+- draft create 使用 scoped follow-up task `FOR UPDATE` 后检查 active draft；
+- draft edit / approve / reject / mark-sent 使用 legal status + `expectedUpdatedAt` CAS；
+- approval + delivery timeline evidence + Audit evidence 同 transaction / rollback；
+- Controlled Reach-out 的 Care draft CAS 继续与 Messaging frequency reservation + Audit 处于既有 WeCom transaction；
+- `approved + expectedUpdatedAt + expectedMetadataJson` CAS 保持；
+- 6 个 Institution legacy P2C direct Writer 已 fail-closed，read compatibility 保留；
+- W2 Care 六张事实表在 `tenant-business-repository.ts` 的普通业务 direct mutation residual = 0；
+- P2A / P2B / P2C 均 complete，W2-P2 complete=true，W2 Care complete=true；
+- P2B AQ004 exact exception 继续保留，待 legacy compatibility delegate 退出时删除；
+- Trial Provisioning 继续 `separate_provisioning_review`，本 Handoff 不改 Runtime；
+- Business Writer phase complete=false；
+- 下一任务：Post-W2 Care business-writer fresh residual recompute / next-slice admission。
+
+
 ## 2026-08-10：W2-P2B Follow-up Task / Path / Timeline Runtime 完成
 
 - Implementation PR #1116：`615793eb4e5e741490553461e0accc23ef74b174`；
