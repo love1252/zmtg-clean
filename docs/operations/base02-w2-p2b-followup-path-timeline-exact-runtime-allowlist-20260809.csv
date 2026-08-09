@@ -1,0 +1,13 @@
+path,role,change_kind,runtime_authorized
+src/modules/care/application/follow-up-command-service.ts,care_followup_task_path_timeline_application_owner,create,false
+src/modules/care/server/follow-up-command-repository.ts,care_followup_task_path_timeline_canonical_writer,create,false
+src/modules/care/tests/FollowUpCommandService.test.ts,followup_application_atomicity_scope_tests,create,false
+src/modules/care/tests/FollowUpCommandRepository.test.ts,followup_writer_scope_cas_idempotency_tests,create,false
+src/server/orchestration/care-follow-up-transaction.ts,care_cross_repository_transaction_composition_root,create,false
+src/server/orchestration/care-follow-up-transaction.test.ts,care_transaction_commit_rollback_tests,create,false
+src/modules/institution/server/followup-path-enrollment-transaction.ts,legacy_compatibility_transaction_delegate,create,false
+src/modules/institution/server/tenant-business-repository.ts,legacy_task_path_timeline_writer_blockade_read_compatibility,modify,false
+src/modules/institution/tests/TenantBusinessRepository.test.ts,legacy_task_path_timeline_blockade_regression,modify,false
+src/modules/institution/server/followup-path-enrollment-service.ts,production_caller_rewire_path_bundle,modify,false
+src/modules/institution/server/treatment-followup-confirmation.ts,production_caller_rewire_source_task,modify,false
+src/modules/institution/server/followup-customer-timeline-service.ts,production_caller_rewire_care_evidence,modify,false

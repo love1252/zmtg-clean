@@ -1,0 +1,16 @@
+slice,path,method,mutation_kind,table_symbol,current_tenant_signal,current_institution_signal,current_customer_signal,current_cas_signal,runtime_authorized
+W2_P2A_APPOINTMENTS,src/modules/institution/server/tenant-business-repository.ts,createAppointment,insert,appointments,missing,missing,missing,none,false
+W2_P2A_APPOINTMENTS,src/modules/institution/server/tenant-business-repository.ts,updateAppointment,update,appointments,present,missing,missing,none,false
+W2_P2B_FOLLOWUP_PATH_TIMELINE,src/modules/institution/server/tenant-business-repository.ts,cancelFollowUpPathEnrollment,update,followUpPathEnrollments,present,present,missing,present,false
+W2_P2B_FOLLOWUP_PATH_TIMELINE,src/modules/institution/server/tenant-business-repository.ts,createFollowUpPathEnrollment,insert,followUpPathEnrollments,present,present,present,none,false
+W2_P2B_FOLLOWUP_PATH_TIMELINE,src/modules/institution/server/tenant-business-repository.ts,createFollowUpPathStages,insert,followUpPathStages,missing,missing,missing,none,false
+W2_P2B_FOLLOWUP_PATH_TIMELINE,src/modules/institution/server/tenant-business-repository.ts,createFollowUpTaskFromTreatmentSummarySuggestion,insert,followUpTasks,present,missing,present,none,false
+W2_P2B_FOLLOWUP_PATH_TIMELINE,src/modules/institution/server/tenant-business-repository.ts,createManualFollowUpTask,insert,followUpTasks,present,missing,present,none,false
+W2_P2B_FOLLOWUP_PATH_TIMELINE,src/modules/institution/server/tenant-business-repository.ts,recordFollowUpCustomerTimelineEvent,insert,followUpCustomerTimelineEvents,present,missing,present,present,false
+W2_P2B_FOLLOWUP_PATH_TIMELINE,src/modules/institution/server/tenant-business-repository.ts,transitionFollowUpTask,update,followUpTasks,present,missing,missing,present,false
+W2_P2C_MESSAGE_DRAFT,src/modules/institution/server/tenant-business-repository.ts,approveFollowUpMessageDraft,update,followUpMessageDrafts,present,present,missing,present,false
+W2_P2C_MESSAGE_DRAFT,src/modules/institution/server/tenant-business-repository.ts,createFollowUpMessageDraft,insert,followUpMessageDrafts,present,present,missing,none,false
+W2_P2C_MESSAGE_DRAFT,src/modules/institution/server/tenant-business-repository.ts,markFollowUpMessageDraftAsSent,update,followUpMessageDrafts,present,present,missing,present,false
+W2_P2C_MESSAGE_DRAFT,src/modules/institution/server/tenant-business-repository.ts,rejectFollowUpMessageDraft,update,followUpMessageDrafts,present,present,missing,present,false
+W2_P2C_MESSAGE_DRAFT,src/modules/institution/server/tenant-business-repository.ts,updateFollowUpMessageDraftContent,update,followUpMessageDrafts,present,present,missing,present,false
+W2_P2C_MESSAGE_DRAFT,src/modules/institution/server/tenant-business-repository.ts,updateFollowUpMessageDraftControlledReachOut,update,followUpMessageDrafts,present,present,present,present,false
