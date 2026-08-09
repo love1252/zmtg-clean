@@ -1,4 +1,27 @@
 # 智美天工架构文档索引
+<!-- BASE02_W2_CARE_WRITER_ADMISSION_START -->
+
+## W2 Care Writer Admission（2026-08-09）
+
+```text
+admission_pr=1103
+admission_merge=ee724072af16d75b834ed387c66805e4423809e8
+independent_review_pr=1104
+independent_review_merge=db76e651475fab56f7fdd5af41622b2810846a14
+w2_decomposition_frozen=true
+w2_p1_owner=care
+w2_p1_exact_runtime_allowlist_file_count=6
+w2_p1_runtime_authorized=false
+w2_p2_runtime_allowlist_frozen=false
+w2_p2_runtime_authorized=false
+w2_care_complete=false
+business_writer_phase_complete=false
+```
+
+下一任务：`W2-P1 Treatment Summary exact 6-file Runtime implementation explicit authorization`
+
+<!-- BASE02_W2_CARE_WRITER_ADMISSION_END -->
+
 <!-- BASE02_W1C_COMPLETE_START -->
 
 ## W1C Customers / Messaging Writer Closure（2026-08-09）

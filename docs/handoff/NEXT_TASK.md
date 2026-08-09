@@ -3,87 +3,49 @@
 ## 唯一下一任务
 
 ```text
-W2 Care Writer symbol/callgraph audit + exact implementation allowlist admission
+W2-P1 Treatment Summary exact 6-file Runtime implementation explicit authorization
 ```
 
-## W1 Customers / Messaging 已完成
+## W2 Care Admission 已完成
 
 ```text
-w1a_complete=true
-w1b_complete=true
-w1c_p1_complete=true
-w1c_p2_complete=true
-w1c_complete=true
-w1_customers_messaging_complete=true
+w2_care_symbol_audit=passed
+w2_care_callgraph_audit=passed
+w2_care_admission=passed
+w2_care_admission_independent_review=passed
+w2_decomposition_frozen=true
 ```
 
-W1C-P2 已完成：
+## W2-P1 exact allowlist
 
-- Messaging canonical reach-out persistence port / Writer；
-- customerChannelFrequencyStates single direct Writer；
-- Audit canonical Owner；
-- Real-send operation + frequency completion + audit evidence same-transaction；
-- legacy Safety direct Writer blockade；
-- legacy Real-send direct frequency/audit Writer removal；
-- legacy transaction canonical orchestration delegation；
-- W1C Routes 继续 capability-off。
-
-## Business Writer inventory 重新审计
+`docs/operations/base02-w2-p1-treatment-summary-exact-runtime-allowlist-20260809.csv`
 
 ```text
-business_writer_baseline_surface_files=27
-business_writer_post_w1c_closed_or_terminal_files=9
-business_writer_post_w1c_pending_review_files=18
-
-w2_care_pending_files=2
-provisioning_review_pending_files=1
-w3_knowledge_pending_files=9
-w5_analytics_pending_files=1
-w6_institution_system_pending_files=5
-
-business_writer_phase_complete=false
+1. src/modules/care/application/treatment-summary-command-service.ts
+2. src/modules/care/server/treatment-summary-command-repository.ts
+3. src/modules/care/tests/TreatmentSummaryCommandService.test.ts
+4. src/modules/care/tests/TreatmentSummaryCommandRepository.test.ts
+5. src/modules/institution/server/treatment-summary-repository.ts
+6. src/modules/institution/tests/TreatmentSummaryRepository.test.ts
 ```
 
-证据：
+P1 必须强制 server-side tenantId + institutionId、customer ownership、appointment ownership、cross-institution fail-closed、legacy Writer blockade，并保持 create/update/void Routes capability-off。
 
-`docs/operations/base02-business-writer-post-w1c-inventory-audit-20260809.csv`
+## W2-P2
 
-## 为什么下一任务是 W2 Care
-
-W1 symbol audit 已明确：
+tenant-business 的 appointments / follow-up mixed residual Writer 保持单独待准入：
 
 ```text
-src/modules/institution/server/treatment-summary-repository.ts
-  classification=real_writer_wrong_slice
-  proposed_owner=Care
-  proposed_action=reassign_W2_CARE
+w2_p2_runtime_allowlist_frozen=false
+w2_p2_runtime_authorized=false
 ```
 
-同时：
-
-`src/modules/institution/server/tenant-business-repository.ts`
-
-虽然 Customers core 已完成 canonical Writer 收口，但仍属于 mixed legacy aggregate，需要在 W2 对 Care / Follow-up residual direct Writer 做逐符号拆分审查。
-
-`src/modules/institution/server/trial-provisioning-service.ts` 保留独立 Provisioning review，不自动并入 W2 Runtime。
-
-## W2 本轮只做 admission
-
-必须：
-
-1. 对 Care / Follow-up mutation symbols 逐方法复核；
-2. 枚举 production callers / routes / services / transactions；
-3. 分离 tenant-business residual Care Writer；
-4. 确认 treatment-summary canonical Owner；
-5. 识别并关闭 old Writer / dual-write / bypass；
-6. 冻结 exact Runtime implementation allowlist；
-7. 冻结 negative / tenant+institution / CAS / atomicity tests；
-8. 如需要 Schema/Migration，单独重新准入。
-
-当前仍禁止：
+## 当前边界
 
 ```text
-w2_care_runtime_authorized=false
+w2_p1_runtime_authorized=false
+w2_p2_runtime_authorized=false
+w2_care_complete=false
 business_writer_phase_complete=false
 database_connection=false
 ddl=false
@@ -98,4 +60,4 @@ capability_release=false
 production_change=false
 ```
 
-本任务不是 W2 Runtime 授权。
+如 P1 需要第 7 个文件或 Schema/Migration，立即停止并重新准入。

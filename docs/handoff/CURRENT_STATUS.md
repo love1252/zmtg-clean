@@ -3,38 +3,35 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## W1C Business Writer 完成状态
+## W2 Care Writer Admission 状态
 
 - 更新日期：2026-08-09
-- W1A Customers Core：complete
-- W1B WeCom Mapping：complete
-- W1C-P1 Broadcast Outcome：complete
-- W1C-P2 Safety + Real-send：complete
-- W1C-P2 Implementation PR #1099：`d189ffe0998bf30ba32a47ed47a5c078614004e0`
-- W1C-P2 Independent Review PR #1100：`1b2bd20c00537dc5ee527bc8a206f1b3a0aae3f0`
 - W1 Customers / Messaging：complete
+- W2 Care Admission PR #1103：`ee724072af16d75b834ed387c66805e4423809e8`
+- W2 Care Independent Review PR #1104：`db76e651475fab56f7fdd5af41622b2810846a14`
+- W2 decomposition：frozen
+- W2-P1 Treatment Summary exact Runtime allowlist：6 files
+- W2-P2 Care / Follow-up residual：separate admission required
 - Business Writer phase：not complete
 - Reader / Capability：closed
 
 ```text
-w1a_complete=true
-w1b_complete=true
-w1c_p1_complete=true
-w1c_p2_runtime_implementation=passed
-w1c_p2_runtime_independent_review=passed
-w1c_p2_complete=true
 w1c_complete=true
 w1_customers_messaging_complete=true
-
-business_writer_baseline_surface_files=27
-business_writer_post_w1c_closed_or_terminal_files=9
-business_writer_post_w1c_pending_review_files=18
-w2_care_pending_files=2
-provisioning_review_pending_files=1
-w3_knowledge_pending_files=9
-w5_analytics_pending_files=1
-w6_institution_system_pending_files=5
-
+w2_care_symbol_audit=passed
+w2_care_callgraph_audit=passed
+w2_caller_aware_audit=passed
+w2_care_admission=passed
+w2_care_admission_independent_review=passed
+w2_decomposition_frozen=true
+w2_p1_owner=care
+w2_p1_actual_production_writer_callers=0
+w2_p1_exact_runtime_allowlist=frozen
+w2_p1_exact_runtime_allowlist_file_count=6
+w2_p1_runtime_authorized=false
+w2_p2_runtime_allowlist_frozen=false
+w2_p2_runtime_authorized=false
+w2_care_complete=false
 business_writer_phase_complete=false
 reader_release=false
 capability_release=false
@@ -42,7 +39,7 @@ capability_release=false
 
 ### 唯一下一任务
 
-`W2 Care Writer symbol/callgraph audit + exact implementation allowlist admission`
+`W2-P1 Treatment Summary exact 6-file Runtime implementation explicit authorization`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
