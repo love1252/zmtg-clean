@@ -1,0 +1,24 @@
+test_id,slice,required_assertion,runtime_authorized
+W3A-T01,W3A_KNOWLEDGE_CONTENT,canonical content commands require server-side tenantId and non-null institutionId,false
+W3A-T02,W3A_KNOWLEDGE_CONTENT,create validates institution scope and creates source document visibility in one transaction,false
+W3A-T03,W3A_KNOWLEDGE_CONTENT,any create bundle failure rolls back prior writes,false
+W3A-T04,W3A_KNOWLEDGE_CONTENT,update validates document source tenant institution relation and expectedUpdatedAt CAS,false
+W3A-T05,W3A_KNOWLEDGE_CONTENT,stale update returns conflict and rolls back source change,false
+W3A-T06,W3A_KNOWLEDGE_CONTENT,archive validates owned document and atomically updates document source and files with expectedUpdatedAt CAS,false
+W3A-T07,W3A_KNOWLEDGE_CONTENT,four legacy Institution content Writer methods fail closed while find/read compatibility remains,false
+W3A-T08,W3A_KNOWLEDGE_CONTENT,existing knowledge-base demo Writer and open-platform knowledge Writer remain Knowledge-owner-local and are not treated as cross-owner bypass,false
+W3A-T09,W3A_KNOWLEDGE_CONTENT,institution items and upload Routes remain 503 capability_disabled,false
+W3A-T10,W3A_KNOWLEDGE_CONTENT,no Schema Migration DB execution Reader Capability or production release,false
+W3B-T01,W3B_KNOWLEDGE_QUOTA,quota command uses explicit scope union: institution scope requires tenantId+institutionId; tenant scope intentionally persists institutionId null,false
+W3B-T02,W3B_KNOWLEDGE_QUOTA,quota append validates resource action status quantity safeReasonCode and actor identifier shape,false
+W3B-T03,W3B_KNOWLEDGE_QUOTA,canonical quota repository is append-only and does not mutate prior quota evidence,false
+W3B-T04,W3B_KNOWLEDGE_QUOTA,all three production runtime importers stop importing legacy Institution quota Writer,false
+W3B-T05,W3B_KNOWLEDGE_QUOTA,institution upload always uses institution scope with non-null institutionId,false
+W3B-T06,W3B_KNOWLEDGE_QUOTA,platform document parsing preserves nullable found knowledge institution scope without accidental fallback,false
+W3B-T07,W3B_KNOWLEDGE_QUOTA,platform indexing preserves explicit tenant-level versus institution-level quota scope,false
+W3B-T08,W3B_KNOWLEDGE_QUOTA,legacy knowledge quota direct Writer fails closed after caller rewire,false
+W3B-T09,W3B_KNOWLEDGE_QUOTA,Knowledge server repository is constructed only in server orchestration not directly inside Institution or Open Platform services,false
+W3B-T10,W3B_KNOWLEDGE_QUOTA,no Route Schema Migration DB execution Reader Capability or production release,false
+W3-X01,ALL,canonical_owner_is_knowledge_and_new_business_ownership_is_not_added_to_frozen_institution_or_open-platform_modules,false
+W3-X02,ALL,P2B_AQ004_exception_and_Trial_Provisioning_remain_unchanged,false
+W3-X03,ALL,W5_Analytics_and_W6_Institution_System_are_out_of_scope_and_remain_pending,false

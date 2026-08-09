@@ -3,78 +3,61 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## W2-P2C Message Draft / Controlled Reach-out Runtime 状态
+## W3 Knowledge Writer Admission 状态
 
 - 更新日期：2026-08-10
-- W2-P1 Treatment Summary：complete
-- W2-P2A Appointments：complete
-- W2-P2B Follow-up Task / Path / Timeline：complete
-- W2-P2C Implementation PR #1119：`9ee6413b0b302d89cb1eaec9a9209373afb7697f`
-- W2-P2C Independent Review PR #1120：`2e7f0dd5f44c957d6aca204290852f254256f9e6`
-- W2-P2C：complete
-- W2-P2：complete
 - W2 Care：complete
+- W3 Knowledge Admission：passed
+- W3A Knowledge Content：Runtime not authorized
+- W3B Knowledge Quota Usage：Runtime not authorized
+- W5 Analytics：pending
+- W6 Institution System：pending
 - Trial Provisioning：separate review pending
 - Business Writer phase：not complete
 
 ```text
-w2_p1_complete=true
-w2_p2a_complete=true
-w2_p2b_complete=true
-
-w2_p2c_implementation_pr=1119
-w2_p2c_implementation_head=94b86756b5e1db2515aec2de22082678422ed1d9
-w2_p2c_implementation_merge=9ee6413b0b302d89cb1eaec9a9209373afb7697f
-w2_p2c_independent_review_pr=1120
-w2_p2c_independent_review_head=eb46fd5a41608f76ad37018f2e0eaf7e7e59f3d1
-w2_p2c_independent_review_merge=2e7f0dd5f44c957d6aca204290852f254256f9e6
-w2_p2c_runtime_implementation=passed
-w2_p2c_runtime_independent_review=passed
-w2_p2c_runtime_authorization_consumed=true
-w2_p2c_complete=true
-
-w2_p2_complete=true
 w2_care_complete=true
 
-w2_p2c_runtime_file_count=17
-w2_p2c_eighteenth_runtime_file_change=false
-w2_p2c_legacy_writers_blocked=6
-w2_care_ordinary_business_direct_mutation_residual=0
+w3_knowledge_admission=passed
+w3_decomposition_frozen=true
 
-care_message_draft_canonical_writer=true
-server_side_tenant_institution_scope=true
-draft_create_task_for_update=true
-draft_lifecycle_expected_updated_at_cas=true
-controlled_reachout_expected_metadata_json_cas=true
-approval_timeline_audit_atomicity=true
-controlled_reachout_cross_owner_transaction=true
+w3a_legacy_direct_mutation_calls=8
+w3a_exact_runtime_file_count=8
+w3a_runtime_authorized=false
+
+w3b_legacy_direct_mutation_calls=1
+w3b_active_legacy_runtime_importers=3
+w3b_exact_runtime_file_count=13
+w3b_runtime_authorized=false
+
+w3_aggregate_unique_runtime_file_count=21
+w3_runtime_authorized=false
+
+knowledge_canonical_owner=knowledge
+institution_knowledge_write_routes_capability_off=true
+schema_change_required=false
+migration_required=false
 
 p2b_aq004_exception_retained=true
 trial_provisioning_classification=separate_provisioning_review
-trial_provisioning_followup_task_writer_review_pending=true
-ordinary_business_dual_write=false
+trial_provisioning_change=false
 
+w5_pending=true
+w6_pending=true
 business_writer_phase_complete=false
 
 database_connection=false
 ddl=false
 dml=false
-migration=false
-seed=false
-fk_validate=false
-schema_change=false
 route_change=false
 reader_release=false
 capability_release=false
-audit_owner_change=false
-trial_provisioning_change=false
-real_wecom_send=false
 production_change=false
 ```
 
 ### 唯一下一任务
 
-`Post-W2 Care business-writer fresh residual recompute / next-slice admission`
+`W3A Knowledge Content exact 8-file Runtime implementation explicit authorization`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 

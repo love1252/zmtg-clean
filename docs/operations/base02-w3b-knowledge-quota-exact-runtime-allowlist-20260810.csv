@@ -1,0 +1,14 @@
+order,path,file_state,responsibility,runtime_authorized
+1,src/modules/knowledge/application/quota/knowledge-quota-usage-command-service.ts,new,Knowledge canonical quota usage command service with explicit tenant or institution scope,false
+2,src/modules/knowledge/server/knowledge-quota-usage-command-repository.ts,new,Knowledge canonical append-only quota usage repository,false
+3,src/modules/knowledge/tests/KnowledgeQuotaUsageCommandService.test.ts,new,scope and input validation tests,false
+4,src/modules/knowledge/tests/KnowledgeQuotaUsageCommandRepository.test.ts,new,append persistence and attribution tests,false
+5,src/server/orchestration/knowledge-quota-writer.ts,new,cross-owner Knowledge quota writer composition,false
+6,src/server/orchestration/knowledge-quota-writer.test.ts,new,canonical repository binding tests,false
+7,src/modules/institution/server/knowledge-quota-usage-service.ts,existing,disable legacy quota direct Writer after caller rewire,false
+8,src/modules/institution/server/institution-knowledge-upload-service.ts,existing,rewire institution upload quota evidence to Knowledge canonical writer,false
+9,src/modules/institution/tests/InstitutionKnowledgeUploadService.test.ts,existing,institution quota attribution and caller rewire coverage,false
+10,src/modules/open-platform/server/platform-knowledge-document-parsing-service.ts,existing,rewire OCR quota evidence away from legacy Institution Writer,false
+11,src/modules/open-platform/tests/PlatformKnowledgeDocumentParsingService.test.ts,existing,nullable institution quota scope regression coverage,false
+12,src/modules/open-platform/server/platform-knowledge-indexing-job-service.ts,existing,rewire indexing quota evidence away from legacy Institution Writer,false
+13,src/modules/open-platform/tests/PlatformKnowledgeIndexingJobService.test.ts,existing,tenant or institution quota scope regression coverage,false

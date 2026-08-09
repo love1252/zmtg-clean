@@ -3,63 +3,55 @@
 ## 唯一下一任务
 
 ```text
-Post-W2 Care business-writer fresh residual recompute / next-slice admission
+W3A Knowledge Content exact 8-file Runtime implementation explicit authorization
 ```
 
-## W2 Care 已完成
+## 当前状态
 
 ```text
-w2_p1_complete=true
-w2_p2a_complete=true
-w2_p2b_complete=true
-w2_p2c_complete=true
-w2_p2_complete=true
 w2_care_complete=true
+w3_knowledge_admission=passed
+w3_decomposition_frozen=true
 
-p2c_implementation_pr=1119
-p2c_implementation_head=94b86756b5e1db2515aec2de22082678422ed1d9
-p2c_implementation_merge=9ee6413b0b302d89cb1eaec9a9209373afb7697f
-p2c_independent_review_pr=1120
-p2c_independent_review_head=eb46fd5a41608f76ad37018f2e0eaf7e7e59f3d1
-p2c_independent_review_merge=2e7f0dd5f44c957d6aca204290852f254256f9e6
+w3a_exact_runtime_file_count=8
+w3a_runtime_authorized=false
 
-p2c_runtime_file_count=17
-p2c_legacy_writer_methods_blocked=6
-w2_care_ordinary_business_direct_mutation_residual=0
-```
+w3b_exact_runtime_file_count=13
+w3b_runtime_authorized=false
 
-## 仍未完成
-
-```text
+w3_runtime_authorized=false
 business_writer_phase_complete=false
-trial_provisioning_classification=separate_provisioning_review
-trial_provisioning_review_pending=true
-ordinary_business_dual_write=false
-p2b_aq004_exception_retained=true
 ```
 
-## 下一任务边界
+## W3A 边界
 
-下一任务只做 fresh residual / caller / owner / attribution / bypass / Trial Provisioning 分类复算和下一切片准入。
+W3A 只处理 Institution legacy Knowledge Content direct Writer 的 canonical ownership / transaction / CAS / blockade。
 
-默认禁止：
+冻结事实：
 
 ```text
-runtime_change
-database_connection
-ddl
-dml
-migration
-seed
-fk_validate
-schema_change
-route_change
-reader_release
-capability_release
-audit_owner_change
-trial_provisioning_runtime_change
-real_wecom_send
-production_change
+knowledgeSources
+knowledgeDocuments
+platformKnowledgeInstitutionVisibility
+knowledgeDocumentFiles
 ```
 
-不得直接复用 `base02-post-closure-business-writer-slice-matrix-20260808.csv` 作为当前事实；必须从 `2e7f0dd5f44c957d6aca204290852f254256f9e6` 基线 fresh recompute 后再决定下一 Runtime slice。
+Institution items / upload Routes 继续 `503 capability_disabled`。
+
+明确禁止：
+
+```text
+W3B quota Runtime
+W5 Analytics
+W6 Institution System
+Trial Provisioning Runtime
+Schema
+Migration
+DB execution
+Route release
+Reader release
+Capability release
+Production change
+```
+
+第 9 个 W3A Runtime 文件必须 STOP / re-admit。
