@@ -1,13 +1,15 @@
-import { randomUUID } from 'node:crypto';
 import type {
   TenantQuotaDecision,
   TenantQuotaDenialReason,
   TenantQuotaResource,
 } from '@/modules/institution/domain/quota-enforcement';
 import type { TenantDatabase } from '@/server/db/client';
-import { knowledgeQuotaUsageRecords } from '@/server/db/schema';
 
-export type KnowledgeQuotaUsageStatus = 'allowed' | 'rejected' | 'succeeded' | 'failed';
+export type KnowledgeQuotaUsageStatus =
+  | 'allowed'
+  | 'rejected'
+  | 'succeeded'
+  | 'failed';
 
 export type KnowledgeQuotaUsageAction =
   | 'upload_file'
@@ -26,42 +28,37 @@ export type KnowledgeQuotaUsageRecordInput = {
   action: KnowledgeQuotaUsageAction;
   status: KnowledgeQuotaUsageStatus;
   quantity?: number | null;
-  safeReasonCode?: TenantQuotaDenialReason | 'allowed' | 'succeeded' | 'failed' | null;
+  safeReasonCode?:
+    | TenantQuotaDenialReason
+    | 'allowed'
+    | 'succeeded'
+    | 'failed'
+    | null;
 };
 
-function quotaUsageRecordId() {
-  return `kb-quota-usage-${randomUUID()}`;
-}
-
-function normalizeQuantity(value: number | null | undefined) {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 1;
-  return Math.max(1, Math.trunc(value));
-}
+export type KnowledgeQuotaUsageRepository = {
+  createKnowledgeQuotaUsageRecord(
+    input: KnowledgeQuotaUsageRecordInput,
+  ): Promise<void>;
+};
 
 function safeReasonFromDecision(decision: TenantQuotaDecision) {
   return decision.allowed ? 'allowed' : decision.reason;
 }
 
-export function createKnowledgeQuotaUsageRepository(database: TenantDatabase) {
-  return {
-    async createKnowledgeQuotaUsageRecord(input: KnowledgeQuotaUsageRecordInput) {
-      await database.insert(knowledgeQuotaUsageRecords).values({
-        id: quotaUsageRecordId(),
-        tenantId: input.tenantId,
-        institutionId: input.institutionId ?? null,
-        actorUserId: input.actorUserId ?? null,
-        resourceKey: input.resourceKey,
-        action: input.action,
-        status: input.status,
-        quantity: normalizeQuantity(input.quantity),
-        safeReasonCode: input.safeReasonCode ?? input.status,
-        createdAt: new Date(),
-      });
+export function createKnowledgeQuotaUsageRepository(
+  _database: TenantDatabase,
+): KnowledgeQuotaUsageRepository {
+  return Object.freeze({
+    async createKnowledgeQuotaUsageRecord(
+      _input: KnowledgeQuotaUsageRecordInput,
+    ) {
+      throw new Error(
+        'legacy_institution_knowledge_quota_writer_disabled',
+      );
     },
-  };
+  });
 }
-
-export type KnowledgeQuotaUsageRepository = ReturnType<typeof createKnowledgeQuotaUsageRepository>;
 
 export async function recordKnowledgeQuotaDecision(input: {
   repository: KnowledgeQuotaUsageRepository;

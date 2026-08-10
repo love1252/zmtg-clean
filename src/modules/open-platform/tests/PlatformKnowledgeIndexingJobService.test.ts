@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PlatformKnowledgeFileParseChunkRecord, PlatformKnowledgeFileParseRecord } from '@/modules/open-platform/server/platform-knowledge-document-parsing-service';
 import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import {
@@ -8,6 +8,7 @@ import {
   createAndRunRebuildKnowledgeIndexJob,
   createKnowledgeIndexingJob,
   listInstitutionKnowledgeIndexingJobs,
+  resolveKnowledgeIndexingQuotaScope,
   type KnowledgeIndexingJobRecord,
 } from '@/modules/open-platform/server/platform-knowledge-indexing-job-service';
 
@@ -15,6 +16,32 @@ import {
   createMockKnowledgeDocumentOcrProvider,
   disabledKnowledgeDocumentOcrProvider,
 } from '@/modules/open-platform/server/platform-knowledge-ocr-provider';
+
+const quotaWriterState = vi.hoisted(() => ({
+  recordDecision: vi.fn(async () => undefined),
+  recordOutcome: vi.fn(async () => undefined),
+}));
+
+vi.mock('@/server/orchestration/knowledge-quota-writer', () => ({
+  createKnowledgeQuotaWriter: vi.fn(() => quotaWriterState),
+}));
+
+vi.mock('@/modules/institution/server/tenant-quota-enforcement', () => ({
+  checkTenantKnowledgeOcrFeature: vi.fn(async () => ({
+    allowed: true,
+    current: 0,
+    limit: 1,
+    resource: 'knowledge_ocr_jobs_monthly',
+  })),
+  checkTenantQuotaForCreate: vi.fn(async (input: { resource: string }) => ({
+    allowed: true,
+    current: 0,
+    limit: 100,
+    resource: input.resource,
+  })),
+}));
+
+const quotaDatabase = {} as never;
 
 const now = new Date('2026-07-05T08:00:00.000Z');
 const encoder = new TextEncoder();
@@ -197,10 +224,16 @@ function createStorage(content = '术后护理需要冷敷。') {
 }
 
 describe('platform knowledge indexing job service', () => {
+  beforeEach(() => {
+    quotaWriterState.recordDecision.mockClear();
+    quotaWriterState.recordOutcome.mockClear();
+  });
+
   it('创建并执行 generate_embeddings job，返回低敏任务 DTO', async () => {
     const repository = createEmbeddingRepository();
 
     const result = await createAndRunGenerateEmbeddingsJob({
+      database: quotaDatabase,
       repository,
       input: {
         tenantId: 'tenant-a',
@@ -234,6 +267,29 @@ describe('platform knowledge indexing job service', () => {
     expect(repository.updateKnowledgeIndexingJob).toHaveBeenCalledWith(expect.objectContaining({
       patch: expect.objectContaining({ status: 'succeeded' }),
     }));
+    expect(quotaWriterState.recordDecision).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: {
+          kind: 'institution',
+          tenantId: 'tenant-a',
+          institutionId: 'inst-current',
+        },
+        resourceKey: 'knowledge_embedding_jobs_monthly',
+        action: 'generate_embeddings',
+      }),
+    );
+    expect(quotaWriterState.recordOutcome).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: {
+          kind: 'institution',
+          tenantId: 'tenant-a',
+          institutionId: 'inst-current',
+        },
+        resourceKey: 'knowledge_embedding_jobs_monthly',
+        action: 'generate_embeddings',
+        status: 'succeeded',
+      }),
+    );
     expect(serialized).not.toContain('embeddingVectorJson');
     expect(serialized).not.toMatch(/provider|model|token|cost|vendor|prompt|baseUrl|secret/i);
   });
@@ -528,4 +584,28 @@ describe('platform knowledge indexing job service', () => {
     expect(result.records).toHaveLength(1);
     expect(result.records[0]?.jobId).toBe('job-current');
   });
+
+  it('quota scope resolver preserves explicit tenant and institution modes', () => {
+    expect(
+      resolveKnowledgeIndexingQuotaScope({
+        tenantId: 'tenant-a',
+        institutionId: 'inst-a',
+      }),
+    ).toEqual({
+      kind: 'institution',
+      tenantId: 'tenant-a',
+      institutionId: 'inst-a',
+    });
+
+    expect(
+      resolveKnowledgeIndexingQuotaScope({
+        tenantId: 'tenant-a',
+        institutionId: null,
+      }),
+    ).toEqual({
+      kind: 'tenant',
+      tenantId: 'tenant-a',
+    });
+  });
+
 });

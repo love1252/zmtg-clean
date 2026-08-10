@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { deflateRawSync, deflateSync } from 'node:zlib';
 import {
   createMockKnowledgeDocumentOcrProvider,
@@ -24,6 +24,30 @@ import {
   getInstitutionKnowledgeDocumentFileParseStatusService,
 } from '@/modules/institution/server/institution-knowledge-file-parsing-service';
 import { v1KnowledgeBaseUploadParseChunkRuntimeMaxChars } from '@/modules/knowledge-base/server/v1-knowledge-base-upload-parse-chunk-runtime';
+
+const quotaWriterState = vi.hoisted(() => ({
+  recordDecision: vi.fn(async () => undefined),
+  recordOutcome: vi.fn(async () => undefined),
+}));
+
+vi.mock('@/server/orchestration/knowledge-quota-writer', () => ({
+  createKnowledgeQuotaWriter: vi.fn(() => quotaWriterState),
+}));
+
+vi.mock('@/modules/institution/server/tenant-quota-enforcement', () => ({
+  checkTenantKnowledgeOcrFeature: vi.fn(async () => ({
+    allowed: true,
+    current: 0,
+    limit: 1,
+    resource: 'knowledge_ocr_jobs_monthly',
+  })),
+  checkTenantQuotaForCreate: vi.fn(async (input: { resource: string }) => ({
+    allowed: true,
+    current: 0,
+    limit: 100,
+    resource: input.resource,
+  })),
+}));
 
 const now = new Date('2026-06-13T08:00:00.000Z');
 const encoder = new TextEncoder();
@@ -449,6 +473,11 @@ function createFixture(input: {
 }
 
 describe('知识库文档解析与文本抽取 service', () => {
+  beforeEach(() => {
+    quotaWriterState.recordDecision.mockClear();
+    quotaWriterState.recordOutcome.mockClear();
+  });
+
   it.each([
     ['file-a', 'txt'],
     ['file-md', 'md'],
@@ -1228,4 +1257,45 @@ describe('知识库文档解析与文本抽取 service', () => {
 
     expect(status).toEqual({ status: 'forbidden' });
   });
+
+  it('OCR quota preserves tenant scope when knowledge institutionId is null', async () => {
+    const { repository, storage } = createFixture();
+    repository.findKnowledgeItem.mockResolvedValueOnce({
+      ...knowledgeRecords[0],
+      institutionId: null,
+    } as unknown as PlatformKnowledgeRepositoryRecord);
+
+    const result = await parsePlatformKnowledgeDocumentFileService({
+      database: {} as never,
+      repository,
+      storage,
+      ocrProvider: createMockKnowledgeDocumentOcrProvider({
+        text: 'tenant scope OCR text',
+      }),
+      actorUserId: 'platform-user',
+      input: {
+        tenantId: 'tenant-a',
+        knowledgeId: 'knowledge-a',
+        fileId: 'file-png',
+      },
+    });
+
+    expect(result.status).toBe('succeeded');
+    expect(quotaWriterState.recordDecision).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: { kind: 'tenant', tenantId: 'tenant-a' },
+        resourceKey: 'knowledge_ocr_jobs_monthly',
+        action: 'ocr_file',
+      }),
+    );
+    expect(quotaWriterState.recordOutcome).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: { kind: 'tenant', tenantId: 'tenant-a' },
+        resourceKey: 'knowledge_ocr_jobs_monthly',
+        action: 'ocr_file',
+        status: 'succeeded',
+      }),
+    );
+  });
+
 });

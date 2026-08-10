@@ -1,9 +1,19 @@
 import type { KnowledgeIndexingJobRecord } from '@/modules/open-platform/server/platform-knowledge-indexing-job-service';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   uploadAndParseInstitutionKnowledgeFileService,
   INSTITUTION_KNOWLEDGE_FILE_MAX_BYTES,
 } from '@/modules/institution/server/institution-knowledge-upload-service';
+import { createKnowledgeQuotaUsageRepository } from '@/modules/institution/server/knowledge-quota-usage-service';
+
+const quotaWriterState = vi.hoisted(() => ({
+  recordDecision: vi.fn(async () => undefined),
+  recordOutcome: vi.fn(async () => undefined),
+}));
+
+vi.mock('@/server/orchestration/knowledge-quota-writer', () => ({
+  createKnowledgeQuotaWriter: vi.fn(() => quotaWriterState),
+}));
 
 vi.mock('@/modules/institution/server/tenant-quota-enforcement', () => ({
   checkTenantQuotaForCreate: vi.fn(async (input: { resource: string }) => ({
@@ -20,15 +30,12 @@ vi.mock('@/modules/institution/server/tenant-quota-enforcement', () => ({
   })),
 }));
 
-vi.mock('@/modules/institution/server/knowledge-quota-usage-service', () => ({
-  createKnowledgeQuotaUsageRepository: vi.fn(() => ({
-    createKnowledgeQuotaUsageRecord: vi.fn(async () => undefined),
-  })),
-  recordKnowledgeQuotaDecision: vi.fn(async () => undefined),
-  recordKnowledgeQuotaOutcome: vi.fn(async () => undefined),
-}));
-
 const quotaDatabase = {} as never;
+
+beforeEach(() => {
+  quotaWriterState.recordDecision.mockClear();
+  quotaWriterState.recordOutcome.mockClear();
+});
 
 const validFile = (name = 'notes.txt') => ({
   name,
@@ -192,6 +199,47 @@ describe('机构知识库上传解析 service', () => {
       sourceId: 'inst-src-test',
       title: 'notes.txt',
     });
+    expect(quotaWriterState.recordDecision).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: {
+          kind: 'institution',
+          tenantId: 'tenant-001',
+          institutionId: 'inst-001',
+        },
+        action: 'upload_file',
+      }),
+    );
+    expect(quotaWriterState.recordOutcome).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: {
+          kind: 'institution',
+          tenantId: 'tenant-001',
+          institutionId: 'inst-001',
+        },
+        action: 'upload_file',
+      }),
+    );
+  });
+
+  it('legacy Institution quota Writer fail-closed before database mutation', async () => {
+    const repository = createKnowledgeQuotaUsageRepository(
+      {} as never,
+    );
+
+    await expect(
+      repository.createKnowledgeQuotaUsageRecord({
+        tenantId: 'tenant-a',
+        institutionId: 'inst-a',
+        actorUserId: 'user-a',
+        resourceKey: 'knowledge_files',
+        action: 'upload_file',
+        status: 'allowed',
+        quantity: 1,
+        safeReasonCode: 'allowed',
+      }),
+    ).rejects.toThrow(
+      'legacy_institution_knowledge_quota_writer_disabled',
+    );
   });
 
   it('缺少 tenantId 返回 validation_failed', async () => {
