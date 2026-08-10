@@ -3,53 +3,60 @@
 ## 唯一下一任务
 
 ```text
-W3B Knowledge Quota Usage exact 13-file Runtime implementation explicit authorization
+W5 Analytics Writer symbol/callgraph audit + exact implementation allowlist admission
 ```
 
 ## 当前状态
 
 ```text
 w2_care_complete=true
-w3_knowledge_admission=passed
-w3_decomposition_frozen=true
-
-w3a_runtime_implementation=passed
-w3a_runtime_independent_review=passed
 w3a_complete=true
+w3b_complete=true
+w3_knowledge_complete=true
 
-w3b_exact_runtime_file_count=13
-w3b_runtime_authorized=false
+w5_analytics_state=pending_symbol_callgraph_admission
+w5_runtime_authorized=false
 
-w3_knowledge_complete=false
+w6_institution_system=pending
+trial_provisioning_classification=separate_provisioning_review
 business_writer_phase_complete=false
 ```
 
-## W3B 边界
+## W5 当前冻结前证据
 
-W3B 仅处理 `knowledgeQuotaUsageRecords` 的 canonical Knowledge Writer、显式 tenant-level / institution-level scope、三个 production caller rewire，以及 legacy Institution quota Writer blockade。
-
-冻结 exact Runtime allowlist：
-
-`docs/operations/base02-w3b-knowledge-quota-exact-runtime-allowlist-20260810.csv`
+Post-W1C inventory 只有一个 W5 Analytics baseline Writer candidate：
 
 ```text
-exact_runtime_file_count=13
-14th_runtime_file_requires_stop_and_readmission=true
+src/modules/institution/server/institution-ai-call-usage-repository.ts
 ```
 
-Quota scope：
+旧清单记录 direct mutation：
 
 ```text
-InstitutionQuotaScope = tenantId + non-null institutionId
-TenantQuotaScope      = tenantId + explicit tenant scope; persisted institutionId = null
+insert:aiCallUsageRecords
 ```
 
-明确禁止：
+该证据仍属于旧 baseline，不能直接视为 Runtime admission。
+
+W5 下一步必须先执行：
 
 ```text
-W3A Runtime change
-W5 Analytics
-W6 Institution System
+1. post-W3 current-main symbol re-audit
+2. direct mutation AST recompute
+3. production callgraph/importer recompute
+4. canonical owner / transaction boundary determination
+5. exact Runtime allowlist freeze
+6. test matrix freeze
+7. docs-only Formal Admission PR
+```
+
+只有 Admission 合并并收到新的明确 Runtime 授权后，才能实施 W5 Runtime。
+
+明确禁止在 W5 Admission 中执行：
+
+```text
+W5 Runtime mutation
+W6 Institution System Runtime
 Trial Provisioning Runtime
 Schema
 Migration
@@ -59,5 +66,3 @@ Reader release
 Capability release
 Production change
 ```
-
-W3B Runtime 当前仍未授权；必须收到明确授权后才可实施。

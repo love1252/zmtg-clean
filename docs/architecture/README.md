@@ -1,52 +1,48 @@
 # 智美天工架构文档索引
 
-<!-- BASE02_W3A_KNOWLEDGE_CONTENT_RUNTIME_START -->
+<!-- BASE02_W3_KNOWLEDGE_COMPLETE_START -->
 
-## W3A Knowledge Content Runtime（2026-08-10）
+## W3 Knowledge Writer 完成（2026-08-10）
 
 ```text
-implementation_pr=1123
-implementation_head=e336c2030e499a416114b129ea8716bee5374e45
-implementation_merge=6ada03297115716a1e5e17536a8902ac33e89aa5
-independent_review_pr=1124
-independent_review_head=6f236915d482e7f81a4e564b1b0b86f68e25cd35
-independent_review_merge=94d269fc4b76ceecc0c1ae782755634a7c998478
-
-w3a_runtime_implementation=passed
-w3a_runtime_independent_review=passed
+w3_knowledge_admission=passed
+w3_decomposition_frozen=true
 w3a_complete=true
 
-runtime_file_count=8
-ninth_runtime_file_change=false
-canonical_owner=knowledge
+w3b_implementation_pr=1126
+w3b_implementation_head=1e02824c969c81ce69208f68fb036ce0f5660951
+w3b_implementation_merge=1e078da73e5b215c58751d7913b0856def1bd620
+w3b_independent_review_pr=1127
+w3b_independent_review_head=c6f6d192f584ddaac388d295379de88d44792493
+w3b_independent_review_merge=8fb1abaffc43e7ccadbefc7f026cce938bd15b67
+w3b_complete=true
 
-server_side_tenant_institution_attribution=true
-create_active_institution_scope_validation=true
-update_archive_expected_updated_at_cas=true
-transaction_bound_c1_c2_c3=true
-legacy_content_writers_blocked=4
-legacy_content_direct_mutation=0
-legacy_read_compatibility_retained=true
-institution_knowledge_write_routes_capability_off=true
+knowledge_canonical_owner=knowledge
+w3b_runtime_file_count=13
+w3b_fourteenth_runtime_file_change=false
+w3b_explicit_tenant_institution_scope=true
+w3b_tenant_scope_persists_institution_id_null=true
+w3b_canonical_quota_append_only=true
+w3b_legacy_quota_writer_blocked=true
+w3b_legacy_quota_direct_mutation=0
+w3b_legacy_production_runtime_importers=0
+w3b_production_callers_rewired=3
 
-w3b_exact_runtime_file_count=13
-w3b_runtime_authorized=false
-w3_knowledge_complete=false
+w3_knowledge_complete=true
+
+w5_analytics_state=pending_symbol_callgraph_admission
+w5_baseline_candidate_count=1
+w5_runtime_authorized=false
+w6_institution_system=pending
+trial_provisioning_classification=separate_provisioning_review
 business_writer_phase_complete=false
-
-schema_change=false
-route_change=false
-reader_release=false
-capability_release=false
-trial_provisioning_change=false
-production_change=false
 ```
 
-下一任务：
+唯一下一任务：
 
-`W3B Knowledge Quota Usage exact 13-file Runtime implementation explicit authorization`
+`W5 Analytics Writer symbol/callgraph audit + exact implementation allowlist admission`
 
-<!-- BASE02_W3A_KNOWLEDGE_CONTENT_RUNTIME_END -->
+<!-- BASE02_W3_KNOWLEDGE_COMPLETE_END -->
 
 <!-- BASE02_W2_P2C_MESSAGE_DRAFT_CONTROLLED_REACHOUT_RUNTIME_START -->
 
