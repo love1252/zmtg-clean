@@ -44,7 +44,7 @@ export function createAiCallUsageRepository(database: TenantDatabase) {
       };
     },
 
-    async createUsageRecord(input: {
+    async createUsageRecord(_input: {
       id: string;
       tenantId: string;
       institutionId: string | null;
@@ -63,62 +63,7 @@ export function createAiCallUsageRepository(database: TenantDatabase) {
       meteringDetails: AiCreditMeteringDetails | null;
       metadata?: AiCallUsageMetadata;
     } & AiCallUsageServiceProject): Promise<AiCallUsageRecord> {
-      const rows = await database
-        .insert(aiCallUsageRecords)
-        .values({
-          id: input.id,
-          tenantId: input.tenantId,
-          institutionId: input.institutionId,
-          actorUserId: input.actorUserId,
-          provider: input.provider,
-          model: input.model,
-          promptTokens: input.promptTokens,
-          completionTokens: input.completionTokens,
-          totalTokens: input.totalTokens,
-          latencyMs: input.latencyMs,
-          status: input.status,
-          errorCode: input.errorCode,
-          aiCreditsConsumed: input.aiCreditsConsumed,
-          meteringStatus: input.meteringStatus,
-          meteringVersion: input.meteringVersion,
-          meteringDetails: input.meteringDetails,
-          serviceCategory: input.serviceCategory ?? null,
-          serviceName: input.serviceName ?? null,
-          serviceSource: input.serviceSource ?? null,
-          serviceAction: input.serviceAction ?? null,
-          serviceVersion: input.serviceVersion ?? null,
-          metadata: input.metadata ?? null,
-        })
-        .returning();
-
-      const row = rows[0];
-      if (!row) throw new Error('ai_call_usage_record_create_failed');
-
-      return {
-        id: row.id,
-        tenantId: row.tenantId,
-        institutionId: row.institutionId,
-        actorUserId: row.actorUserId,
-        provider: row.provider,
-        model: row.model,
-        promptTokens: row.promptTokens,
-        completionTokens: row.completionTokens,
-        totalTokens: row.totalTokens,
-        latencyMs: row.latencyMs,
-        status: row.status as AiCallUsageStatus,
-        errorCode: row.errorCode,
-        metadata: (row.metadata as AiCallUsageMetadata | null) ?? null,
-        aiCreditsConsumed: row.aiCreditsConsumed,
-        meteringStatus: row.meteringStatus as AiCreditMeteringStatus | null,
-        meteringVersion: row.meteringVersion,
-        meteringDetails: (row.meteringDetails as AiCreditMeteringDetails | null) ?? null,
-        serviceCategory: row.serviceCategory ?? null,
-        serviceName: row.serviceName ?? null,
-        serviceSource: row.serviceSource ?? null,
-        serviceAction: row.serviceAction ?? null,
-        serviceVersion: row.serviceVersion ?? null,
-        createdAt: row.createdAt,
-      };
+      throw new Error('legacy_institution_ai_call_usage_writer_disabled');
     },
 
     async listInstitutionUsageRecords(input: {
