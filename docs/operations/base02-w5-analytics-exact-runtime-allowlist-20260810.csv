@@ -1,0 +1,7 @@
+order,path,file_state,responsibility,runtime_authorized
+1,src/modules/analytics/application/ai-call-usage-command-service.ts,new,Analytics canonical append command with explicit tenant or institution scope,false
+2,src/modules/analytics/server/ai-call-usage-command-repository.ts,new,Analytics canonical append-only aiCallUsageRecords repository,false
+3,src/modules/analytics/tests/AiCallUsageCommandService.test.ts,new,scope identity status and numeric validation,false
+4,src/modules/analytics/tests/AiCallUsageCommandRepository.test.ts,new,append persistence nullable institution attribution and returned record,false
+5,src/modules/institution/server/institution-ai-call-usage-repository.ts,existing,disable legacy createUsageRecord Writer while preserving Readers,false
+6,src/modules/institution/tests/InstitutionAiCallUsageRepository.test.ts,existing,legacy Writer blockade plus Reader compatibility,false

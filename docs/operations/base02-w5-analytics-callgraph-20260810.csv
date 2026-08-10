@@ -1,0 +1,7 @@
+order,surface,symbol_or_edge,current_role,production_importers,w5_decision
+1,src/modules/institution/server/institution-ai-call-usage-repository.ts,createUsageRecord,direct insert(aiCallUsageRecords),0,fail-closed legacy Writer
+2,src/modules/institution/server/institution-ai-call-service.ts,requestInstitutionAiCallService,dormant Writer-capable service,0,no caller rewire
+3,src/modules/institution/server/institution-ai-call-service.ts,recordKnowledgeRagAnswerUsageSuccess,dormant Writer-capable helper,0,no caller rewire
+4,src/modules/institution/server/institution-ai-call-service.ts,recordAiCallQuotaRejection,dormant Writer-capable helper,0,no caller rewire
+5,src/app/api/v1/open-platform/ai-usage/route.ts,legacy repo -> listPlatformAiUsageSummaryService,active readonly importer,1,preserve Reader compatibility
+6,src/app/api/institution/knowledge-management/ai-call/route.ts,POST capability_disabled 503,write Route off,0,unchanged

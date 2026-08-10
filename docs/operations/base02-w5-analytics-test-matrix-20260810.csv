@@ -1,0 +1,7 @@
+order,test_path,state,required_assertion
+1,src/modules/analytics/tests/AiCallUsageCommandService.test.ts,new,explicit tenant and institution scope no institution fallback
+2,src/modules/analytics/tests/AiCallUsageCommandRepository.test.ts,new,append-only insert and nullable institution attribution
+3,src/modules/institution/tests/InstitutionAiCallUsageRepository.test.ts,existing,legacy createUsageRecord fails closed before DB mutation
+4,src/modules/institution/tests/InstitutionAiCallUsageRepository.test.ts,existing,vendor config and usage Readers remain compatible
+5,src/modules/institution/tests/InstitutionAiCallCapabilityRoute.test.ts,existing_unmodified,institution AI Route remains capability_disabled
+6,src/modules/institution/tests/InstitutionAiCallApiRoute.test.ts,existing_unmodified,AI usage readonly contracts remain low-sensitive
