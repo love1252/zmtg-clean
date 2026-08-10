@@ -3,11 +3,7 @@ import { type PlatformKnowledgeFileDto, type PlatformKnowledgeFileRepository, ty
 import { type PlatformKnowledgeDocumentParsingRepository, type PlatformKnowledgeFileParseDto, type PlatformKnowledgeFileParseRecord } from '@/modules/open-platform/server/platform-knowledge-document-parsing-service';
 import type { PlatformKnowledgeFileParseStatus } from '@/modules/open-platform/server/platform-knowledge-document-parsing-service';
 import { checkTenantQuotaForUsage } from '@/modules/institution/server/tenant-quota-enforcement';
-import {
-  createKnowledgeQuotaUsageRepository,
-  recordKnowledgeQuotaDecision,
-  recordKnowledgeQuotaOutcome,
-} from '@/modules/institution/server/knowledge-quota-usage-service';
+import { createKnowledgeQuotaWriter } from '@/server/orchestration/knowledge-quota-writer';
 import type { TenantDatabase } from '@/server/db/client';
 import {
   createAndRunParseFileJob,
@@ -173,7 +169,12 @@ export async function uploadAndParseInstitutionKnowledgeFileService(
     return { status: 'validation_failed', message: '文件内容不能为空' };
   }
 
-  const quotaUsageRepository = createKnowledgeQuotaUsageRepository(input.database);
+  const quotaWriter = createKnowledgeQuotaWriter(input.database);
+  const quotaScope = {
+    kind: 'institution' as const,
+    tenantId,
+    institutionId,
+  };
   const fileSizeMb = Math.max(1, Math.ceil(file.size / 1024 / 1024));
   const uploadQuotaChecks = [
     {
@@ -205,11 +206,9 @@ export async function uploadAndParseInstitutionKnowledgeFileService(
       resource: quotaCheck.resourceKey,
       quantity: quotaCheck.quantity,
     });
-    await recordKnowledgeQuotaDecision({
-      repository: quotaUsageRepository,
-      tenantId,
-      institutionId,
-      actorUserId: uploadedByUserId,
+    await quotaWriter.recordDecision({
+      scope: quotaScope,
+actorUserId: uploadedByUserId,
       resourceKey: quotaCheck.resourceKey,
       action: 'upload_file',
       decision,
@@ -245,11 +244,9 @@ export async function uploadAndParseInstitutionKnowledgeFileService(
         resource: quotaCheck.resourceKey,
         quantity: quotaCheck.quantity,
       });
-      await recordKnowledgeQuotaDecision({
-        repository: quotaUsageRepository,
-        tenantId,
-        institutionId,
-        actorUserId: uploadedByUserId,
+      await quotaWriter.recordDecision({
+      scope: quotaScope,
+actorUserId: uploadedByUserId,
         resourceKey: quotaCheck.resourceKey,
         action: 'upload_file',
         decision,
@@ -348,21 +345,17 @@ export async function uploadAndParseInstitutionKnowledgeFileService(
       fileId,
     },
   });
-  await recordKnowledgeQuotaOutcome({
-    repository: quotaUsageRepository,
-    tenantId,
-    institutionId,
-    actorUserId: uploadedByUserId,
+  await quotaWriter.recordOutcome({
+    scope: quotaScope,
+actorUserId: uploadedByUserId,
     resourceKey: 'knowledge_files',
     action: 'upload_file',
     status: 'succeeded',
     quantity: 1,
   });
-  await recordKnowledgeQuotaOutcome({
-    repository: quotaUsageRepository,
-    tenantId,
-    institutionId,
-    actorUserId: uploadedByUserId,
+  await quotaWriter.recordOutcome({
+    scope: quotaScope,
+actorUserId: uploadedByUserId,
     resourceKey: 'knowledge_total_storage_mb',
     action: 'upload_file',
     status: 'succeeded',

@@ -4,11 +4,10 @@ import {
   checkTenantQuotaForCreate,
 } from '@/modules/institution/server/tenant-quota-enforcement';
 import {
-  createKnowledgeQuotaUsageRepository,
-  recordKnowledgeQuotaDecision,
-  recordKnowledgeQuotaOutcome,
+  createKnowledgeQuotaWriter,
   type KnowledgeQuotaUsageAction,
-} from '@/modules/institution/server/knowledge-quota-usage-service';
+  type KnowledgeQuotaUsageScope,
+} from '@/server/orchestration/knowledge-quota-writer';
 import type { TenantQuotaResource } from '@/modules/institution/domain/quota-enforcement';
 import type { TenantDatabase } from '@/server/db/client';
 import { isKnowledgeVisibleToInstitution } from '@/modules/open-platform/server/platform-knowledge-file-management-service';
@@ -155,6 +154,19 @@ const safeGenericFailureMessage = '知识库索引任务执行失败，请稍后
 function normalizeString(value: string | null | undefined) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+export function resolveKnowledgeIndexingQuotaScope(input: {
+  tenantId: string;
+  institutionId: string | null;
+}): KnowledgeQuotaUsageScope {
+  return input.institutionId
+    ? {
+        kind: 'institution',
+        tenantId: input.tenantId,
+        institutionId: input.institutionId,
+      }
+    : { kind: 'tenant', tenantId: input.tenantId };
 }
 
 function nowDate() {
@@ -544,7 +556,11 @@ async function enforceKnowledgeJobQuota(input: {
   jobType: KnowledgeIndexingJobType;
 }) {
   if (!input.database) return { status: 'allowed' as const };
-  const quotaRepository = createKnowledgeQuotaUsageRepository(input.database);
+  const quotaWriter = createKnowledgeQuotaWriter(input.database);
+  const quotaScope = resolveKnowledgeIndexingQuotaScope({
+    tenantId: input.tenantId,
+    institutionId: input.institutionId,
+  });
   const resourceKey = quotaResourceForJobType(input.jobType);
   const action = quotaActionForJobType(input.jobType);
   if (input.jobType === 'ocr_file') {
@@ -552,11 +568,9 @@ async function enforceKnowledgeJobQuota(input: {
       database: input.database,
       tenantId: input.tenantId,
     });
-    await recordKnowledgeQuotaDecision({
-      repository: quotaRepository,
-      tenantId: input.tenantId,
-      institutionId: input.institutionId,
-      actorUserId: input.actorUserId,
+    await quotaWriter.recordDecision({
+      scope: quotaScope,
+actorUserId: input.actorUserId,
       resourceKey,
       action,
       decision: featureDecision,
@@ -572,11 +586,9 @@ async function enforceKnowledgeJobQuota(input: {
     tenantId: input.tenantId,
     resource: resourceKey,
   });
-  await recordKnowledgeQuotaDecision({
-    repository: quotaRepository,
-    tenantId: input.tenantId,
-    institutionId: input.institutionId,
-    actorUserId: input.actorUserId,
+  await quotaWriter.recordDecision({
+      scope: quotaScope,
+actorUserId: input.actorUserId,
     resourceKey,
     action,
     decision,
@@ -586,7 +598,7 @@ async function enforceKnowledgeJobQuota(input: {
     return { status: 'rejected' as const, message: '知识库任务额度已达到当前套餐上限，请联系平台管理员调整套餐' };
   }
 
-  return { status: 'allowed' as const, quotaRepository, resourceKey, action };
+  return { status: 'allowed' as const };
 }
 
 async function recordJobQuotaOutcome(input: {
@@ -598,11 +610,12 @@ async function recordJobQuotaOutcome(input: {
   status: 'succeeded' | 'failed';
 }) {
   if (!input.database) return;
-  await recordKnowledgeQuotaOutcome({
-    repository: createKnowledgeQuotaUsageRepository(input.database),
-    tenantId: input.tenantId,
-    institutionId: input.institutionId,
-    actorUserId: input.actorUserId,
+  await createKnowledgeQuotaWriter(input.database).recordOutcome({
+    scope: resolveKnowledgeIndexingQuotaScope({
+      tenantId: input.tenantId,
+      institutionId: input.institutionId,
+    }),
+actorUserId: input.actorUserId,
     resourceKey: quotaResourceForJobType(input.jobType),
     action: quotaActionForJobType(input.jobType),
     status: input.status,

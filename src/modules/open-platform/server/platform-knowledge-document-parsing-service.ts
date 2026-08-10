@@ -10,10 +10,9 @@ import {
 } from '@/modules/institution/server/tenant-quota-enforcement';
 import type { TenantDatabase } from '@/server/db/client';
 import {
-  createKnowledgeQuotaUsageRepository,
-  recordKnowledgeQuotaDecision,
-  recordKnowledgeQuotaOutcome,
-} from '@/modules/institution/server/knowledge-quota-usage-service';
+  createKnowledgeQuotaWriter,
+  type KnowledgeQuotaUsageScope,
+} from '@/server/orchestration/knowledge-quota-writer';
 import {
   dryRunKnowledgeDocumentOcrProvider,
   performKnowledgeDocumentOcr,
@@ -231,6 +230,15 @@ class SheetLimitExceededError extends Error {
 function normalizeRequired(value: string | null | undefined) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+function platformKnowledgeQuotaScope(
+  tenantId: string,
+  institutionId: string | null | undefined,
+): KnowledgeQuotaUsageScope {
+  return institutionId
+    ? { kind: 'institution', tenantId, institutionId }
+    : { kind: 'tenant', tenantId };
 }
 
 function extensionOf(filename: string) {
@@ -1008,14 +1016,16 @@ export async function parsePlatformKnowledgeDocumentFileService(input: ParseServ
     });
     if (documentParse.status === 'ocr_required') {
       if (input.database && !input.ocrQuotaAlreadyChecked) {
-        const quotaUsageRepository = createKnowledgeQuotaUsageRepository(input.database);
+        const quotaWriter = createKnowledgeQuotaWriter(input.database);
+        const quotaScope = platformKnowledgeQuotaScope(
+          tenantId,
+          found.knowledge.institutionId,
+        );
         const actorUserId = normalizeRequired(input.actorUserId);
         const featureDecision = await checkTenantKnowledgeOcrFeature({ database: input.database, tenantId });
-        await recordKnowledgeQuotaDecision({
-          repository: quotaUsageRepository,
-          tenantId,
-          institutionId: found.knowledge.institutionId,
-          actorUserId,
+        await quotaWriter.recordDecision({
+          scope: quotaScope,
+actorUserId,
           resourceKey: 'knowledge_ocr_jobs_monthly',
           action: 'ocr_file',
           decision: featureDecision,
@@ -1034,11 +1044,9 @@ export async function parsePlatformKnowledgeDocumentFileService(input: ParseServ
           tenantId,
           resource: 'knowledge_ocr_jobs_monthly',
         });
-        await recordKnowledgeQuotaDecision({
-          repository: quotaUsageRepository,
-          tenantId,
-          institutionId: found.knowledge.institutionId,
-          actorUserId,
+        await quotaWriter.recordDecision({
+          scope: quotaScope,
+actorUserId,
           resourceKey: 'knowledge_ocr_jobs_monthly',
           action: 'ocr_file',
           decision: quotaDecision,
@@ -1064,11 +1072,12 @@ export async function parsePlatformKnowledgeDocumentFileService(input: ParseServ
       }, input.ocrProvider ?? dryRunKnowledgeDocumentOcrProvider);
       if (ocrResult.status !== 'succeeded') {
         if (input.database && !input.ocrQuotaAlreadyChecked) {
-          await recordKnowledgeQuotaOutcome({
-            repository: createKnowledgeQuotaUsageRepository(input.database),
-            tenantId,
-            institutionId: found.knowledge.institutionId,
-            actorUserId: normalizeRequired(input.actorUserId),
+          await createKnowledgeQuotaWriter(input.database).recordOutcome({
+            scope: platformKnowledgeQuotaScope(
+              tenantId,
+              found.knowledge.institutionId,
+            ),
+actorUserId: normalizeRequired(input.actorUserId),
             resourceKey: 'knowledge_ocr_jobs_monthly',
             action: 'ocr_file',
             status: 'failed',
@@ -1116,11 +1125,12 @@ export async function parsePlatformKnowledgeDocumentFileService(input: ParseServ
         chunks,
       });
       if (input.database && !input.ocrQuotaAlreadyChecked) {
-        await recordKnowledgeQuotaOutcome({
-          repository: createKnowledgeQuotaUsageRepository(input.database),
-          tenantId,
-          institutionId: found.knowledge.institutionId,
-          actorUserId: normalizeRequired(input.actorUserId),
+        await createKnowledgeQuotaWriter(input.database).recordOutcome({
+            scope: platformKnowledgeQuotaScope(
+              tenantId,
+              found.knowledge.institutionId,
+            ),
+actorUserId: normalizeRequired(input.actorUserId),
           resourceKey: 'knowledge_ocr_jobs_monthly',
           action: 'ocr_file',
           status: 'succeeded',
