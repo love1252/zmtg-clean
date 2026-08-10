@@ -8,34 +8,28 @@
 - 更新日期：2026-08-10
 - W2 Care：complete
 - W3 Knowledge：complete
-- W3A Knowledge Content：complete
-- W3B Knowledge Quota Usage：complete
-- W5 Analytics：pending symbol/callgraph admission
+- W5 Analytics：Formal Admission passed / Runtime not authorized
 - W6 Institution System：pending
 - Trial Provisioning：separate review pending
 - Business Writer phase：not complete
 
 ```text
 w2_care_complete=true
-w3a_complete=true
-
-w3b_implementation_pr=1126
-w3b_implementation_head=1e02824c969c81ce69208f68fb036ce0f5660951
-w3b_implementation_merge=1e078da73e5b215c58751d7913b0856def1bd620
-w3b_independent_review_pr=1127
-w3b_independent_review_head=c6f6d192f584ddaac388d295379de88d44792493
-w3b_independent_review_merge=8fb1abaffc43e7ccadbefc7f026cce938bd15b67
-
-w3b_runtime_implementation=passed
-w3b_runtime_independent_review=passed
-w3b_runtime_authorization_consumed=true
-w3b_complete=true
 w3_knowledge_complete=true
 
-w5_analytics_state=pending_symbol_callgraph_admission
-w5_baseline_candidate_count=1
-w5_baseline_candidate=src/modules/institution/server/institution-ai-call-usage-repository.ts
-w5_baseline_direct_mutation=insert:aiCallUsageRecords
+w5_analytics_symbol_callgraph_audit=passed
+w5_analytics_admission=passed
+w5_canonical_owner=analytics
+w5_legacy_direct_insert_calls=1
+w5_active_production_writer_callers=0
+w5_legacy_active_production_importers=1
+w5_legacy_active_importer_mode=readonly_platform_summary
+w5_institution_ai_write_route_capability_off=true
+
+w5_exact_runtime_file_count=6
+w5_new_runtime_file_count=4
+w5_existing_runtime_file_count=2
+w5_seventh_runtime_file_requires_stop_and_readmission=true
 w5_runtime_authorized=false
 
 w6_institution_system=pending
@@ -43,8 +37,6 @@ trial_provisioning_classification=separate_provisioning_review
 business_writer_phase_complete=false
 
 database_connection=false
-ddl=false
-dml=false
 migration=false
 schema_change=false
 route_change=false
@@ -55,7 +47,7 @@ production_change=false
 
 ### 唯一下一任务
 
-`W5 Analytics Writer symbol/callgraph audit + exact implementation allowlist admission`
+`W5 Analytics exact 6-file Runtime implementation explicit authorization`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
