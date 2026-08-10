@@ -1,4 +1,53 @@
 # 智美天工架构文档索引
+
+<!-- BASE02_W3A_KNOWLEDGE_CONTENT_RUNTIME_START -->
+
+## W3A Knowledge Content Runtime（2026-08-10）
+
+```text
+implementation_pr=1123
+implementation_head=e336c2030e499a416114b129ea8716bee5374e45
+implementation_merge=6ada03297115716a1e5e17536a8902ac33e89aa5
+independent_review_pr=1124
+independent_review_head=6f236915d482e7f81a4e564b1b0b86f68e25cd35
+independent_review_merge=94d269fc4b76ceecc0c1ae782755634a7c998478
+
+w3a_runtime_implementation=passed
+w3a_runtime_independent_review=passed
+w3a_complete=true
+
+runtime_file_count=8
+ninth_runtime_file_change=false
+canonical_owner=knowledge
+
+server_side_tenant_institution_attribution=true
+create_active_institution_scope_validation=true
+update_archive_expected_updated_at_cas=true
+transaction_bound_c1_c2_c3=true
+legacy_content_writers_blocked=4
+legacy_content_direct_mutation=0
+legacy_read_compatibility_retained=true
+institution_knowledge_write_routes_capability_off=true
+
+w3b_exact_runtime_file_count=13
+w3b_runtime_authorized=false
+w3_knowledge_complete=false
+business_writer_phase_complete=false
+
+schema_change=false
+route_change=false
+reader_release=false
+capability_release=false
+trial_provisioning_change=false
+production_change=false
+```
+
+下一任务：
+
+`W3B Knowledge Quota Usage exact 13-file Runtime implementation explicit authorization`
+
+<!-- BASE02_W3A_KNOWLEDGE_CONTENT_RUNTIME_END -->
+
 <!-- BASE02_W2_P2C_MESSAGE_DRAFT_CONTROLLED_REACHOUT_RUNTIME_START -->
 
 ## W2-P2C Message Draft / Controlled Reach-out Runtime（2026-08-10）

@@ -1,5 +1,30 @@
 # 项目重构历史
 
+<!-- BASE02_W3A_KNOWLEDGE_CONTENT_HANDOFF_HISTORY -->
+
+## 2026-08-10：W3A Knowledge Content Runtime 完成
+
+- Formal Admission PR #1122 已先行冻结 W3A exact 8-file / W3B exact 13-file Runtime scope；
+- W3A Implementation PR #1123：`6ada03297115716a1e5e17536a8902ac33e89aa5`；
+- Implementation Head：`e336c2030e499a416114b129ea8716bee5374e45`；
+- W3A Independent Review PR #1124：`94d269fc4b76ceecc0c1ae782755634a7c998478`；
+- Independent Review Head：`6f236915d482e7f81a4e564b1b0b86f68e25cd35`；
+- exact 8 Runtime files，第 9 个 Runtime file 未发生；
+- Knowledge 成为 Institution Knowledge Content canonical Writer Owner；
+- Create 在任何内容 insert 前验证 active `institutionScopes(tenantId, institutionId)`；
+- C1 create source+document+visibility、C2 update document+source、C3 archive document+source+files 均通过 transaction-bound canonical repository；
+- Update / Archive 使用 database-level `expectedUpdatedAt` CAS；
+- document/source 使用 tenant+institution object ownership；
+- `knowledgeDocumentFiles` 的 institution scope 仅通过已验证 owned document/source 推导；
+- 4 个 Institution legacy Content Writers fail-closed，legacy read compatibility 保留；
+- legacy Institution Content direct mutation = 0；
+- Institution Knowledge write Routes 保持 `503 capability_disabled`；
+- targeted 32/32、full 6565/6565、typecheck、build、architecture unit 148、architecture incremental、Required Check 全部通过；
+- no Schema / Migration / DB execution / Route / Reader / Capability / Trial Provisioning / W3B / W5 / W6 / production change；
+- W3A complete=true；
+- W3 Knowledge complete=false；Business Writer phase complete=false；
+- 下一任务：W3B Knowledge Quota Usage exact 13-file Runtime implementation explicit authorization。
+
 ## 2026-08-10：W2-P2C Message Draft / Controlled Reach-out Runtime 完成
 
 - Implementation PR #1119：`9ee6413b0b302d89cb1eaec9a9209373afb7697f`；
