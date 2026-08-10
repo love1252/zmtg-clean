@@ -3,7 +3,7 @@
 ## 唯一下一任务
 
 ```text
-W3A Knowledge Content exact 8-file Runtime implementation explicit authorization
+W3B Knowledge Quota Usage exact 13-file Runtime implementation explicit authorization
 ```
 
 ## 当前状态
@@ -13,45 +13,51 @@ w2_care_complete=true
 w3_knowledge_admission=passed
 w3_decomposition_frozen=true
 
-w3a_exact_runtime_file_count=8
-w3a_runtime_authorized=false
+w3a_runtime_implementation=passed
+w3a_runtime_independent_review=passed
+w3a_complete=true
 
 w3b_exact_runtime_file_count=13
 w3b_runtime_authorized=false
 
-w3_runtime_authorized=false
+w3_knowledge_complete=false
 business_writer_phase_complete=false
 ```
 
-## W3A 边界
+## W3B 边界
 
-W3A 只处理 Institution legacy Knowledge Content direct Writer 的 canonical ownership / transaction / CAS / blockade。
+W3B 仅处理 `knowledgeQuotaUsageRecords` 的 canonical Knowledge Writer、显式 tenant-level / institution-level scope、三个 production caller rewire，以及 legacy Institution quota Writer blockade。
 
-冻结事实：
+冻结 exact Runtime allowlist：
+
+`docs/operations/base02-w3b-knowledge-quota-exact-runtime-allowlist-20260810.csv`
 
 ```text
-knowledgeSources
-knowledgeDocuments
-platformKnowledgeInstitutionVisibility
-knowledgeDocumentFiles
+exact_runtime_file_count=13
+14th_runtime_file_requires_stop_and_readmission=true
 ```
 
-Institution items / upload Routes 继续 `503 capability_disabled`。
+Quota scope：
+
+```text
+InstitutionQuotaScope = tenantId + non-null institutionId
+TenantQuotaScope      = tenantId + explicit tenant scope; persisted institutionId = null
+```
 
 明确禁止：
 
 ```text
-W3B quota Runtime
+W3A Runtime change
 W5 Analytics
 W6 Institution System
 Trial Provisioning Runtime
 Schema
 Migration
 DB execution
-Route release
+Route change
 Reader release
 Capability release
 Production change
 ```
 
-第 9 个 W3A Runtime 文件必须 STOP / re-admit。
+W3B Runtime 当前仍未授权；必须收到明确授权后才可实施。

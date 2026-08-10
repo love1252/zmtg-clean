@@ -3,12 +3,12 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## W3 Knowledge Writer Admission 状态
+## W3 Knowledge Writer 状态
 
 - 更新日期：2026-08-10
 - W2 Care：complete
 - W3 Knowledge Admission：passed
-- W3A Knowledge Content：Runtime not authorized
+- W3A Knowledge Content：complete
 - W3B Knowledge Quota Usage：Runtime not authorized
 - W5 Analytics：pending
 - W6 Institution System：pending
@@ -21,34 +21,44 @@ w2_care_complete=true
 w3_knowledge_admission=passed
 w3_decomposition_frozen=true
 
-w3a_legacy_direct_mutation_calls=8
-w3a_exact_runtime_file_count=8
-w3a_runtime_authorized=false
+w3a_implementation_pr=1123
+w3a_implementation_head=e336c2030e499a416114b129ea8716bee5374e45
+w3a_implementation_merge=6ada03297115716a1e5e17536a8902ac33e89aa5
+w3a_independent_review_pr=1124
+w3a_independent_review_head=6f236915d482e7f81a4e564b1b0b86f68e25cd35
+w3a_independent_review_merge=94d269fc4b76ceecc0c1ae782755634a7c998478
 
-w3b_legacy_direct_mutation_calls=1
-w3b_active_legacy_runtime_importers=3
+w3a_runtime_implementation=passed
+w3a_runtime_independent_review=passed
+w3a_runtime_authorization_consumed=true
+w3a_complete=true
+
+w3a_runtime_file_count=8
+w3a_ninth_runtime_file_change=false
+knowledge_canonical_owner=knowledge
+w3a_legacy_content_writers_blocked=4
+w3a_legacy_content_direct_mutation=0
+w3a_server_side_tenant_institution_attribution=true
+w3a_create_active_institution_scope_validation=true
+w3a_update_archive_expected_updated_at_cas=true
+w3a_transaction_bound_c1_c2_c3=true
+institution_knowledge_write_routes_capability_off=true
+
 w3b_exact_runtime_file_count=13
 w3b_runtime_authorized=false
 
-w3_aggregate_unique_runtime_file_count=21
-w3_runtime_authorized=false
-
-knowledge_canonical_owner=knowledge
-institution_knowledge_write_routes_capability_off=true
-schema_change_required=false
-migration_required=false
+w3_knowledge_complete=false
+business_writer_phase_complete=false
 
 p2b_aq004_exception_retained=true
 trial_provisioning_classification=separate_provisioning_review
 trial_provisioning_change=false
 
-w5_pending=true
-w6_pending=true
-business_writer_phase_complete=false
-
 database_connection=false
 ddl=false
 dml=false
+migration=false
+schema_change=false
 route_change=false
 reader_release=false
 capability_release=false
@@ -57,7 +67,7 @@ production_change=false
 
 ### 唯一下一任务
 
-`W3A Knowledge Content exact 8-file Runtime implementation explicit authorization`
+`W3B Knowledge Quota Usage exact 13-file Runtime implementation explicit authorization`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
