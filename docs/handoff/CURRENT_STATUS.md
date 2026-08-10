@@ -3,56 +3,44 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## W3 Knowledge Writer 状态
+## Business Writer 当前状态
 
 - 更新日期：2026-08-10
 - W2 Care：complete
-- W3 Knowledge Admission：passed
+- W3 Knowledge：complete
 - W3A Knowledge Content：complete
-- W3B Knowledge Quota Usage：Runtime not authorized
-- W5 Analytics：pending
+- W3B Knowledge Quota Usage：complete
+- W5 Analytics：pending symbol/callgraph admission
 - W6 Institution System：pending
 - Trial Provisioning：separate review pending
 - Business Writer phase：not complete
 
 ```text
 w2_care_complete=true
-
-w3_knowledge_admission=passed
-w3_decomposition_frozen=true
-
-w3a_implementation_pr=1123
-w3a_implementation_head=e336c2030e499a416114b129ea8716bee5374e45
-w3a_implementation_merge=6ada03297115716a1e5e17536a8902ac33e89aa5
-w3a_independent_review_pr=1124
-w3a_independent_review_head=6f236915d482e7f81a4e564b1b0b86f68e25cd35
-w3a_independent_review_merge=94d269fc4b76ceecc0c1ae782755634a7c998478
-
-w3a_runtime_implementation=passed
-w3a_runtime_independent_review=passed
-w3a_runtime_authorization_consumed=true
 w3a_complete=true
 
-w3a_runtime_file_count=8
-w3a_ninth_runtime_file_change=false
-knowledge_canonical_owner=knowledge
-w3a_legacy_content_writers_blocked=4
-w3a_legacy_content_direct_mutation=0
-w3a_server_side_tenant_institution_attribution=true
-w3a_create_active_institution_scope_validation=true
-w3a_update_archive_expected_updated_at_cas=true
-w3a_transaction_bound_c1_c2_c3=true
-institution_knowledge_write_routes_capability_off=true
+w3b_implementation_pr=1126
+w3b_implementation_head=1e02824c969c81ce69208f68fb036ce0f5660951
+w3b_implementation_merge=1e078da73e5b215c58751d7913b0856def1bd620
+w3b_independent_review_pr=1127
+w3b_independent_review_head=c6f6d192f584ddaac388d295379de88d44792493
+w3b_independent_review_merge=8fb1abaffc43e7ccadbefc7f026cce938bd15b67
 
-w3b_exact_runtime_file_count=13
-w3b_runtime_authorized=false
+w3b_runtime_implementation=passed
+w3b_runtime_independent_review=passed
+w3b_runtime_authorization_consumed=true
+w3b_complete=true
+w3_knowledge_complete=true
 
-w3_knowledge_complete=false
-business_writer_phase_complete=false
+w5_analytics_state=pending_symbol_callgraph_admission
+w5_baseline_candidate_count=1
+w5_baseline_candidate=src/modules/institution/server/institution-ai-call-usage-repository.ts
+w5_baseline_direct_mutation=insert:aiCallUsageRecords
+w5_runtime_authorized=false
 
-p2b_aq004_exception_retained=true
+w6_institution_system=pending
 trial_provisioning_classification=separate_provisioning_review
-trial_provisioning_change=false
+business_writer_phase_complete=false
 
 database_connection=false
 ddl=false
@@ -67,7 +55,7 @@ production_change=false
 
 ### 唯一下一任务
 
-`W3B Knowledge Quota Usage exact 13-file Runtime implementation explicit authorization`
+`W5 Analytics Writer symbol/callgraph audit + exact implementation allowlist admission`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 

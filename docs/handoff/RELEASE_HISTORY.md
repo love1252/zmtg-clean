@@ -1,5 +1,25 @@
 # 项目重构历史
 
+<!-- BASE02_W3B_KNOWLEDGE_QUOTA_HANDOFF_HISTORY -->
+
+## 2026-08-10：W3B Knowledge Quota Usage / W3 Knowledge 完成
+
+- W3A Knowledge Content 已完成；
+- W3B Implementation PR #1126：`1e078da73e5b215c58751d7913b0856def1bd620`；
+- W3B Independent Review PR #1127：`8fb1abaffc43e7ccadbefc7f026cce938bd15b67`；
+- exact 13 Runtime files，第 14 个 Runtime file 未发生；
+- Knowledge 成为 `knowledgeQuotaUsageRecords` canonical Writer Owner；
+- quota usage 使用显式 tenant / institution scope；
+- tenant scope 持久化 `institutionId=null`，无 first-institution fallback；
+- canonical repository append-only；
+- 3 个 production caller 已迁移；
+- legacy Institution quota Writer fail-closed，direct mutation=0，production runtime importer=0；
+- targeted 62/62、full 6580/6580、typecheck、build、architecture unit 148、architecture incremental、Required Check 全部通过；
+- W3B complete=true；
+- W3 Knowledge complete=true；
+- Business Writer phase complete=false；
+- 下一任务：W5 Analytics Writer symbol/callgraph audit + exact implementation allowlist admission。
+
 <!-- BASE02_W3A_KNOWLEDGE_CONTENT_HANDOFF_HISTORY -->
 
 ## 2026-08-10：W3A Knowledge Content Runtime 完成
