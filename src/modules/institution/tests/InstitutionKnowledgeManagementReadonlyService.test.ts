@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-management-repository';
-import type { InstitutionKnowledgeWriteRepository } from '@/modules/institution/server/institution-knowledge-write-repository';
+import { createInstitutionKnowledgeWriteRepository, type InstitutionKnowledgeWriteRepository } from '@/modules/institution/server/institution-knowledge-write-repository';
+import type { TenantDatabase } from '@/server/db/client';
 import {
   archiveInstitutionKnowledgeItemService,
   createInstitutionKnowledgeItemService,
@@ -378,6 +379,20 @@ describe('机构端知识库管理 V1 只读 service', () => {
       institutionId: 'inst-current',
       knowledgeId: 'knowledge-owned-a',
     });
+  });
+
+
+  it('legacy Institution content Writers fail closed while read compatibility remains', async () => {
+    const insert = vi.fn();
+    const update = vi.fn();
+    const repository = createInstitutionKnowledgeWriteRepository({ insert, update } as unknown as TenantDatabase);
+    expect(repository.findKnowledgeItem).toBeTypeOf('function');
+    await expect(repository.createInstitutionKnowledgeSource({ tenantId:'tenant-a', institutionId:'inst-current', sourceLabel:'分类' })).rejects.toThrow('legacy_institution_knowledge_content_writer_disabled');
+    await expect(repository.createInstitutionKnowledgeDocument({ tenantId:'tenant-a', institutionId:'inst-current', sourceId:'source-a', title:'标题', description:'v1' })).rejects.toThrow('legacy_institution_knowledge_content_writer_disabled');
+    await expect(repository.updateInstitutionKnowledgeDocument({ tenantId:'tenant-a', institutionId:'inst-current', knowledgeId:'knowledge-owned-a', title:'标题', category:'分类', description:'v2' })).rejects.toThrow('legacy_institution_knowledge_content_writer_disabled');
+    await expect(repository.archiveInstitutionKnowledgeDocument({ tenantId:'tenant-a', institutionId:'inst-current', knowledgeId:'knowledge-owned-a' })).rejects.toThrow('legacy_institution_knowledge_content_writer_disabled');
+    expect(insert).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
   });
 
 });
