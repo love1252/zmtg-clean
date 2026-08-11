@@ -498,3 +498,14 @@ describe('HIS 连接配置状态 service', () => {
     );
   });
 });
+
+describe('W6A default Writer construction', () => {
+  it('uses server orchestration for the default Writer', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'src/modules/institution/server/his-connection-status-service.ts'),
+      'utf8',
+    );
+    expect(source).toContain("@/server/orchestration/his-connection-writer");
+    expect(source).toContain('createHisConnectionWriter');
+  });
+});

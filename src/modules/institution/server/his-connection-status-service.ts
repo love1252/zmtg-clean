@@ -3,11 +3,11 @@ import {
   createAuditEventRepository,
   type AuditEventRepository,
 } from '@/modules/audit/server/audit-event-repository';
-import {
-  createHisConnectionRepository,
-  type HisConnectionRepository,
-  type HisConnectionStatusTransitionResult,
+import type {
+  HisConnectionRepository,
+  HisConnectionStatusTransitionResult,
 } from '@/modules/institution/server/his-connection-repository';
+import { createHisConnectionWriter } from '@/server/orchestration/his-connection-writer';
 import type { AccessContext, ProtectedAction } from '@/modules/security/domain/access-control';
 import type { TenantDatabase } from '@/server/db/client';
 
@@ -148,7 +148,7 @@ async function runHisConnectionStatusService(
   }
 
   const hisConnectionRepositoryFactory =
-    input.hisConnectionRepositoryFactory ?? createHisConnectionRepository;
+    input.hisConnectionRepositoryFactory ?? createHisConnectionWriter;
   const auditEventRepositoryFactory =
     input.auditEventRepositoryFactory ?? createAuditEventRepository;
 

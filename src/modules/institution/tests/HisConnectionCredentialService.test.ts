@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
 import type { HisConnectionCredentialReferenceResult } from '@/modules/institution/server/his-connection-repository';
@@ -692,5 +694,16 @@ describe('HIS 连接配置凭证 service 最小边界', () => {
     expect(result).toEqual({ status: 'service_unavailable' });
     expect(harness.auditEventRepository.record).not.toHaveBeenCalled();
     expectNoCredentialLeak(result);
+  });
+});
+
+describe('W6A default Writer construction', () => {
+  it('uses server orchestration for the default Writer', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'src/modules/institution/server/his-connection-credential-service.ts'),
+      'utf8',
+    );
+    expect(source).toContain("@/server/orchestration/his-connection-writer");
+    expect(source).toContain('createHisConnectionWriter');
   });
 });

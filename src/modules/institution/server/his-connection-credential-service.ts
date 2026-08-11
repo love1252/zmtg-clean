@@ -16,11 +16,11 @@ import {
   mapHisConnectionCredentialProviderFailureToServiceStatus,
   type HisConnectionCredentialProviderFailure,
 } from '@/modules/institution/server/his-connection-credential-provider-failure';
-import {
-  createHisConnectionRepository,
-  type HisConnectionCredentialReferenceResult,
-  type HisConnectionRepository,
+import type {
+  HisConnectionCredentialReferenceResult,
+  HisConnectionRepository,
 } from '@/modules/institution/server/his-connection-repository';
+import { createHisConnectionWriter } from '@/server/orchestration/his-connection-writer';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 import type { TenantDatabase } from '@/server/db/client';
 
@@ -145,7 +145,7 @@ function getRepository(
 ): HisConnectionCredentialRepository {
   return (
     input.hisConnectionRepository ??
-    (input.hisConnectionRepositoryFactory ?? createHisConnectionRepository)(database)
+    (input.hisConnectionRepositoryFactory ?? createHisConnectionWriter)(database)
   );
 }
 

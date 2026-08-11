@@ -11,6 +11,10 @@ import {
   type HisConnectionRepository,
 } from '@/modules/institution/server/his-connection-repository';
 import {
+  createHisConnectionWriter,
+  type HisConnectionWriter,
+} from '@/server/orchestration/his-connection-writer';
+import {
   runFakeHisConnectionTestProvider,
   type FakeHisConnectionTestProviderInput,
   type FakeHisConnectionTestProviderResult,
@@ -39,10 +43,9 @@ export type HisConnectionTestConnectionServiceResult =
   | { status: 'not_found' }
   | { status: 'service_unavailable' };
 
-export type HisConnectionTestConnectionRepository = Pick<
-  HisConnectionRepository,
-  'getHisConnectionByTenant' | 'writeHisConnectionHealthSummaryForTenant'
->;
+export type HisConnectionTestConnectionRepository =
+  Pick<HisConnectionRepository, 'getHisConnectionByTenant'> &
+  Pick<HisConnectionWriter, 'writeHisConnectionHealthSummaryForTenant'>;
 
 type HisConnectionTestConnectionAuditRepository = Pick<AuditEventRepository, 'record'>;
 
@@ -50,6 +53,9 @@ type HisConnectionTestConnectionServiceDependencies = {
   database: TenantDatabase;
   hisConnectionRepository?: HisConnectionTestConnectionRepository;
   hisConnectionRepositoryFactory?: (database: TenantDatabase) => HisConnectionTestConnectionRepository;
+  hisConnectionWriterFactory?: (
+    database: TenantDatabase,
+  ) => Pick<HisConnectionWriter, 'writeHisConnectionHealthSummaryForTenant'>;
   auditEventRepository?: HisConnectionTestConnectionAuditRepository;
   auditEventRepositoryFactory?: (database: TenantDatabase) => HisConnectionTestConnectionAuditRepository;
   fakeProvider?: (
@@ -114,13 +120,21 @@ function mapProviderResultToDto(
   });
 }
 
-function getRepository(
+function getRepositories(
   input: HisConnectionTestConnectionServiceDependencies,
-): HisConnectionTestConnectionRepository {
-  return (
+) {
+  const injected =
     input.hisConnectionRepository ??
-    (input.hisConnectionRepositoryFactory ?? createHisConnectionRepository)(input.database)
-  );
+    input.hisConnectionRepositoryFactory?.(input.database);
+
+  return {
+    reader: injected ?? createHisConnectionRepository(input.database),
+    writer:
+      injected ??
+      (input.hisConnectionWriterFactory ?? createHisConnectionWriter)(
+        input.database,
+      ),
+  };
 }
 
 function getAuditRepository(
@@ -217,7 +231,7 @@ export async function testHisConnectionForTenantService(
   }
 
   try {
-    const repository = getRepository(input);
+    const { reader: repository, writer } = getRepositories(input);
     const auditRepository = getAuditRepository(input);
 
     await recordTestConnectionAudit({
@@ -288,7 +302,7 @@ export async function testHisConnectionForTenantService(
 
     let writeResult: HisConnectionHealthSummaryWriteResult;
     try {
-      writeResult = await repository.writeHisConnectionHealthSummaryForTenant({
+      writeResult = await writer.writeHisConnectionHealthSummaryForTenant({
         tenantId,
         connectionId,
         healthStatus: providerResult.healthStatus,

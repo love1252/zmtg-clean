@@ -3,10 +3,8 @@ import {
   createAuditEventRepository,
   type AuditEventRepository,
 } from '@/modules/audit/server/audit-event-repository';
-import {
-  createHisConnectionRepository,
-  type HisConnectionRepository,
-} from '@/modules/institution/server/his-connection-repository';
+import type { HisConnectionRepository } from '@/modules/institution/server/his-connection-repository';
+import { createHisConnectionWriter } from '@/server/orchestration/his-connection-writer';
 import type {
   CreateHisConnectionInput,
   UpdateHisConnectionInput,
@@ -163,7 +161,7 @@ export async function createHisConnectionForTenantService(
   }
 
   const hisConnectionRepositoryFactory =
-    input.hisConnectionRepositoryFactory ?? createHisConnectionRepository;
+    input.hisConnectionRepositoryFactory ?? createHisConnectionWriter;
   const auditEventRepositoryFactory =
     input.auditEventRepositoryFactory ?? createAuditEventRepository;
   const metadata = pickCreateMetadata(input.metadata);
@@ -242,7 +240,7 @@ export async function updateHisConnectionForTenantService(
   }
 
   const hisConnectionRepositoryFactory =
-    input.hisConnectionRepositoryFactory ?? createHisConnectionRepository;
+    input.hisConnectionRepositoryFactory ?? createHisConnectionWriter;
   const auditEventRepositoryFactory =
     input.auditEventRepositoryFactory ?? createAuditEventRepository;
   const values = pickUpdateMetadata(input.metadata);
