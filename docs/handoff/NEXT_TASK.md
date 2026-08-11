@@ -3,62 +3,56 @@
 ## 唯一下一任务
 
 ```text
-Post-V2 roadmap re-baseline + next phase admission
+POST-V2-R1 Institution Readonly Reader/Capability Release Readiness Audit
 ```
 
-## Architecture V2 closure state
+## Admission state
 
 ```text
-directory_refactor_complete=true
-architecture_v2_document_views=6/6
-business_writer_phase_complete=true
-architecture_quality_gate=passed
+post_v2_roadmap_rebaseline=passed
+post_v2_r1_admission=passed
 
-architecture_v2_final_closure_audit=passed
-architecture_v2_refactor_complete=true
-architecture_v2_target_fully_realized=false
+capability_registry_count=36
+page_capability_count=26
+controlled_create_action_count=3
+owner_requirement_count=7
 
-architecture_quality_exception_count=1
-architecture_quality_active_governed_exception_count=1
-architecture_quality_stale_exception_count=0
+runtime_authorized=false
+reader_release_authorized=false
+capability_release_authorized=false
 
 reader_release=false
 capability_release=false
 production_ready_inferred=false
-production_deployment=false
 ```
 
-Final evidence:
+Admission:
 
-- `docs/architecture/architecture-v2-final-closure-audit-20260811.md`
-- `docs/operations/base02-business-writer-final-fresh-residual-recompute-20260811.md`
-- `docs/operations/base02-business-writer-final-fresh-residual-inventory-20260811.csv`
+`docs/operations/post-v2-r1-institution-readonly-release-readiness-admission-20260811.md`
 
-## 下一任务目标
+## Audit objective
 
-下一轮先做路线图重基线和下一阶段准入，不自动进入任何 Runtime。
-
-需要从 post-V2 backlog 中重新选择并冻结一个独立阶段，例如：
-
-- W2-P2B compatibility delegate / AQ004 exception 未来退役；
-- Reader / Capability 独立放行；
-- Platform / Audit / Workspace later-or-outside-phase review；
-- 真实 HIS / WeCom / AI / Storage / Jobs Adapter；
-- Test / Staging / Production readiness；
-- 七线正式发布与业务验收；
-- 其他 target 模块物理迁移。
-
-任何选项都必须重新定义：
+逐项审计 26 个 `kind=page` capability，并只输出：
 
 ```text
-goal
-base
-exact scope
-runtime authorization
-database / migration authorization
-external-system authorization
-validation
-stop conditions
+eligible_for_future_readonly_release_slice
+blocked
+outside_initial_readonly_release
 ```
 
-Architecture V2 本轮授权在最终 Closure 后结束，不得继承到 post-V2 Runtime。
+本 Audit 不允许输出正式 `released / operational / production_ready` 结论。
+
+明确排除：
+
+```text
+3 controlled-create actions
+Runtime implementation
+Route change
+Schema / Migration / DB
+real HIS / WeCom / AI / Storage / Jobs
+production deployment
+AQ004 retirement
+Platform / Audit / Workspace post-V2 review
+```
+
+Audit 完成后，如存在 eligible candidates，再单独冻结未来最小 readonly release slice；不得自动进入实现或放行。
