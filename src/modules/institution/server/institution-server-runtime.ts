@@ -11,9 +11,15 @@ import {
 } from '@/modules/access-control/application/authoritative-membership-reader';
 import { createIdentityAuthoritativeFormalSessionIdentityFactReaderV1 } from '@/modules/auth/application/authoritative-formal-session-identity-reader';
 import {
+  consumeFormalServerSessionVerifiedClaimsV1,
   createFormalServerSessionRequestOwnerV1,
   FORMAL_SERVER_SESSION_COOKIE_V1,
+  verifyFormalServerSessionCookieClaimsV1,
 } from '@/modules/auth/server/formal-server-session-provenance-owner';
+import {
+  isInstitutionNavigationSectionIdV1,
+  type InstitutionNavigationSectionIdV1,
+} from '@/modules/institution-contracts/v1/institution-navigation';
 import {
   createActiveInstitutionAnchorProviderV1,
 } from '@/modules/security/server/institution-anchor-provider';
@@ -401,6 +407,237 @@ export async function resolveInstitutionServerAuthorizationV1(): Promise<Institu
     return isInstitutionRequestAuthorizationV1(authorization)
       ? authorization
       : null;
+  } catch {
+    return null;
+  }
+}
+
+declare class InstitutionCapabilityAuthorityRuntimeContextSealV1 {
+  private readonly authorityContextSeal;
+}
+
+export type InstitutionCapabilityAuthorityRuntimeContextV1 =
+  InstitutionCapabilityAuthorityRuntimeContextSealV1 &
+    Readonly<{
+      kind: 'institution_capability_authority_runtime_context';
+    }>;
+
+export type InstitutionCapabilityAuthorityRuntimeContextConsumptionV1 =
+  Readonly<{
+    tenantId: string;
+    institutionId: string;
+    availableSectionIds: readonly InstitutionNavigationSectionIdV1[];
+    observedAt: string;
+  }>;
+
+const institutionCapabilityAuthorityRuntimeContextHandlesV1 =
+  new WeakSet<object>();
+const institutionCapabilityAuthorityRuntimeContextConsumptionsV1 =
+  new WeakMap<
+    object,
+    InstitutionCapabilityAuthorityRuntimeContextConsumptionV1
+  >();
+
+export function isInstitutionCapabilityAuthorityRuntimeContextV1(
+  value: unknown,
+): value is InstitutionCapabilityAuthorityRuntimeContextV1 {
+  try {
+    return (
+      value !== null &&
+      typeof value === 'object' &&
+      !isProxy(value) &&
+      institutionCapabilityAuthorityRuntimeContextHandlesV1.has(value)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function consumeInstitutionCapabilityAuthorityRuntimeContextV1(
+  value: unknown,
+): InstitutionCapabilityAuthorityRuntimeContextConsumptionV1 | null {
+  if (!isInstitutionCapabilityAuthorityRuntimeContextV1(value)) return null;
+
+  const consumption =
+    institutionCapabilityAuthorityRuntimeContextConsumptionsV1.get(value);
+  if (!consumption) return null;
+
+  institutionCapabilityAuthorityRuntimeContextConsumptionsV1.delete(value);
+  institutionCapabilityAuthorityRuntimeContextHandlesV1.delete(value);
+  return consumption;
+}
+
+function snapshotCanonicalNavigationSectionsV1(
+  value: unknown,
+): readonly InstitutionNavigationSectionIdV1[] | null {
+  const snapshot = snapshotFrozenDenseArray(value);
+  if (
+    !snapshot ||
+    snapshot.length === 0 ||
+    snapshot.some((sectionId) => !isInstitutionNavigationSectionIdV1(sectionId))
+  ) {
+    return null;
+  }
+
+  const sections = snapshot as readonly InstitutionNavigationSectionIdV1[];
+  if (
+    new Set(sections).size !== sections.length ||
+    !sections.some((sectionId) => sectionId === 'workbench')
+  ) {
+    return null;
+  }
+
+  return Object.freeze([...sections]);
+}
+
+/**
+ * Server-only current authority context for POST-V2-R1A orchestration.
+ *
+ * It resolves the same genuine request-bound Security authorization root, verifies the formal
+ * session scope independently, consumes one canonical Navigation Authorization, and mints a
+ * one-shot opaque context. No raw scope, role, release flag, capability dimension, or Route input
+ * is accepted.
+ */
+export async function resolveInstitutionCapabilityAuthorityRuntimeContextV1(): Promise<InstitutionCapabilityAuthorityRuntimeContextV1 | null> {
+  let runtimeConfig: AvailableRuntimeConfigV1 | null = null;
+  try {
+    runtimeConfig = snapshotAvailableRuntimeConfig(
+      resolveInstitutionGuardRuntimeConfigV1(),
+    );
+  } catch {
+    return null;
+  }
+  if (!runtimeConfig) return null;
+
+  let cookieHeader: string | null;
+  try {
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get(FORMAL_SERVER_SESSION_COOKIE_V1);
+    cookieHeader =
+      typeof sessionCookie?.value === 'string'
+        ? `${FORMAL_SERVER_SESSION_COOKIE_V1}=${sessionCookie.value}`
+        : null;
+  } catch {
+    return null;
+  }
+
+  try {
+    const now = () => new Date(Date.now());
+
+    const verifiedClaimsResolution =
+      verifyFormalServerSessionCookieClaimsV1({
+        cookieHeader,
+        sessionKeyRing: runtimeConfig.formalServerSessionKeyRing,
+        now,
+      });
+    if (verifiedClaimsResolution.kind !== 'verified') return null;
+
+    const customerObjectFactSource =
+      createCustomerObjectFactSourceV1({
+        async resolve(input) {
+          const repository = createTenantBusinessRepository(getDatabase());
+          return repository.getCustomerObjectFactSourceByScope(input);
+        },
+      });
+    const objectFactReader = createCustomerObjectFactReaderV1({
+      source: customerObjectFactSource,
+      now,
+    });
+    const referenceCodec = createInstitutionGuardReferenceCodecV1({
+      keyRing: runtimeConfig.institutionGuardReferenceKeyRing,
+      now,
+    });
+    const membershipFactReader =
+      createAccessControlAuthoritativeMembershipFactReaderV1();
+    const identityFactReader =
+      createIdentityAuthoritativeFormalSessionIdentityFactReaderV1();
+    const requestOwner = createFormalServerSessionRequestOwnerV1({
+      cookieHeader,
+      sessionKeyRing: runtimeConfig.formalServerSessionKeyRing,
+      identityFactReader,
+      membershipFactReader,
+      referenceCodec,
+      now,
+    });
+    const anchorFactReader =
+      createTenancyAuthoritativeInstitutionScopeFactReaderV1();
+    const anchorProvider = createActiveInstitutionAnchorProviderV1({
+      factReader: anchorFactReader,
+      referenceCodec,
+      now,
+    });
+    const authorization = createInstitutionRequestAuthorizationV1({
+      requestOwner,
+      anchorProvider,
+      referenceCodec,
+      now,
+      objectFactReader,
+    });
+    if (!isInstitutionRequestAuthorizationV1(authorization)) return null;
+
+    const navigation =
+      await authorization.authorizeCurrentInstitutionNavigationV1({
+        targetSectionId: 'workbench',
+      });
+
+    const navigationSnapshot = snapshotFrozenExactPlainRecord(
+      navigation,
+      [
+        'kind',
+        'targetSectionId',
+        'targetAccess',
+        'availableSectionIds',
+      ],
+    );
+    if (
+      !navigationSnapshot ||
+      navigationSnapshot.kind !== 'institution_navigation_authorization' ||
+      navigationSnapshot.targetSectionId !== 'workbench' ||
+      navigationSnapshot.targetAccess !== 'allowed'
+    ) {
+      return null;
+    }
+
+    const availableSectionIds = snapshotCanonicalNavigationSectionsV1(
+      navigationSnapshot.availableSectionIds,
+    );
+    if (!availableSectionIds) return null;
+
+    const scope = consumeFormalServerSessionVerifiedClaimsV1(
+      verifiedClaimsResolution.verifiedClaims,
+    );
+    if (
+      !scope ||
+      typeof scope.tenantId !== 'string' ||
+      scope.tenantId.length === 0 ||
+      typeof scope.institutionId !== 'string' ||
+      scope.institutionId.length === 0
+    ) {
+      return null;
+    }
+
+    const observedAtEpochMs = readCurrentEpochMs();
+    if (observedAtEpochMs === null) return null;
+    const observedAt = new Date(observedAtEpochMs).toISOString();
+
+    const consumption = Object.freeze({
+      tenantId: scope.tenantId,
+      institutionId: scope.institutionId,
+      availableSectionIds,
+      observedAt,
+    } satisfies InstitutionCapabilityAuthorityRuntimeContextConsumptionV1);
+
+    const context = Object.freeze({
+      kind: 'institution_capability_authority_runtime_context',
+    }) as unknown as InstitutionCapabilityAuthorityRuntimeContextV1;
+
+    institutionCapabilityAuthorityRuntimeContextHandlesV1.add(context);
+    institutionCapabilityAuthorityRuntimeContextConsumptionsV1.set(
+      context,
+      consumption,
+    );
+
+    return context;
   } catch {
     return null;
   }
