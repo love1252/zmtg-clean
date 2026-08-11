@@ -7,30 +7,36 @@
 
 - 更新日期：2026-08-11
 - Architecture V2 重构阶段：complete
-- Architecture V2 target fully realized：false
 - Post-V2 roadmap：re-baselined
-- 下一阶段：POST-V2-R1 Institution Readonly Reader/Capability Release Readiness Audit
+- POST-V2-R1 Readiness Audit：complete
+- 26 个 page capability：0 eligible / 26 blocked
 - Reader / Capability：仍未放行
+- 下一阶段：POST-V2-R1A Capability Authority Foundation Preflight
 
 ```text
-directory_refactor_complete=true
-architecture_v2_document_views=6/6
-base02_complete=true
-business_writer_phase_complete=true
-architecture_quality_gate=passed
-
-architecture_v2_final_closure_audit=passed
 architecture_v2_refactor_complete=true
 architecture_v2_target_fully_realized=false
 
 post_v2_roadmap_rebaseline=passed
-post_v2_next_phase=POST-V2-R1
 post_v2_r1_admission=passed
+post_v2_r1_readiness_audit=passed
+post_v2_r1_complete=true
+
 post_v2_r1_page_candidate_count=26
-post_v2_r1_action_release_in_scope=false
-post_v2_r1_runtime_authorized=false
-post_v2_r1_reader_release_authorized=false
-post_v2_r1_capability_release_authorized=false
+post_v2_r1_eligible_page_count=0
+post_v2_r1_blocked_page_count=26
+post_v2_r1_outside_initial_readonly_release_count=0
+
+post_v2_r1_workbench_capability_off_count=1
+post_v2_r1_catch_all_capability_off_count=25
+
+post_v2_r1_authority_bearing_evaluator_exists=false
+post_v2_r1_authority_bearing_reader_exists=false
+post_v2_r1_common_authority_foundation_required=true
+
+post_v2_r1_targeted_test_files=5_passed
+post_v2_r1_targeted_tests=126_passed
+post_v2_r1_typecheck=passed
 
 reader_release=false
 capability_release=false
@@ -38,12 +44,13 @@ production_ready_inferred=false
 production_deployment=false
 production_change=false
 
+post_v2_r1a_runtime_authorized=false
 post_v2_backlog_requires_separate_admission=true
 ```
 
 ### 唯一下一任务
 
-`POST-V2-R1 Institution Readonly Reader/Capability Release Readiness Audit`
+`POST-V2-R1A Institution Capability Authority Foundation Preflight + exact Runtime admission decision`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
