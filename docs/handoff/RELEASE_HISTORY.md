@@ -1,5 +1,23 @@
 # 项目重构历史
 
+<!-- POST_V2_ROADMAP_REBASELINE_HISTORY -->
+
+## 2026-08-11：Post-V2 Roadmap Re-baseline / R1 Admission
+
+- Architecture V2 final closure PR #1149 已合并，重构治理阶段正式结束；
+- target fully realized 继续为 false，Reader / Capability / Production 未由 Closure 放行；
+- post-V2 backlog 重新排序，不继承旧 V2 Runtime 授权；
+- P1 冻结为 `POST-V2-R1 Institution Readonly Reader/Capability Release Readiness Audit`；
+- 当前 public capability registry=36，其中 section=7、page=26、controlled-create action=3；
+- current Capability Evaluator / Reader 均保持 `non_authorizing_candidate`，不存在正式 release authority；
+- frozen owner requirements=7；
+- targeted capability contract tests=49/49，3 files；
+- POST-V2-R1 只审计 26 个 page capability，不包含 3 个 create action；
+- POST-V2-R1 Runtime / Reader release / Capability release authorization 均为 false；
+- AQ004 compatibility retirement、Platform/Audit/Workspace、真实 Adapter、生产 readiness 和七线正式发布继续留在后序独立阶段；
+- 本轮 docs-only，不修改 Runtime、DB、Schema、Migration、Route 或生产；
+- 下一任务：POST-V2-R1 Institution Readonly Reader/Capability Release Readiness Audit。
+
 <!-- ARCHITECTURE_V2_FINAL_CLOSURE_HISTORY -->
 
 ## 2026-08-11：Architecture V2 重构阶段最终闭环

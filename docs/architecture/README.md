@@ -1,5 +1,37 @@
 # 智美天工架构文档索引
 
+<!-- POST_V2_ROADMAP_REBASELINE_START -->
+
+## Post-V2 Roadmap Re-baseline（2026-08-11）
+
+```text
+architecture_v2_refactor_complete=true
+architecture_v2_target_fully_realized=false
+
+post_v2_roadmap_rebaseline=passed
+post_v2_priority_1=POST-V2-R1
+
+post_v2_r1_name=Institution Readonly Reader/Capability Release Readiness Audit
+post_v2_r1_runtime_authorized=false
+post_v2_r1_reader_release_authorized=false
+post_v2_r1_capability_release_authorized=false
+
+reader_release=false
+capability_release=false
+production_ready_inferred=false
+```
+
+Re-baseline：
+
+- `docs/architecture/post-v2-roadmap-rebaseline-20260811.md`
+- `docs/operations/post-v2-r1-institution-readonly-release-readiness-admission-20260811.md`
+
+唯一下一任务：
+
+`POST-V2-R1 Institution Readonly Reader/Capability Release Readiness Audit`
+
+<!-- POST_V2_ROADMAP_REBASELINE_END -->
+
 <!-- ARCHITECTURE_V2_FINAL_CLOSURE_START -->
 
 ## Architecture V2 重构阶段最终闭环（2026-08-11）

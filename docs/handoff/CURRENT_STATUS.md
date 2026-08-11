@@ -3,47 +3,34 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## Architecture V2 最终状态
+## Post-V2 当前状态
 
 - 更新日期：2026-08-11
-- Directory Refactor：complete
-- Architecture V2 六类文档：6/6
-- Business Writer phase：complete
-- Architecture Quality Gate：passed
 - Architecture V2 重构阶段：complete
 - Architecture V2 target fully realized：false
-- Reader / Capability / Production：未由本阶段放行
+- Post-V2 roadmap：re-baselined
+- 下一阶段：POST-V2-R1 Institution Readonly Reader/Capability Release Readiness Audit
+- Reader / Capability：仍未放行
 
 ```text
 directory_refactor_complete=true
 architecture_v2_document_views=6/6
 base02_complete=true
 business_writer_phase_complete=true
-
-business_writer_final_recompute=passed
-fresh_mutation_candidate_file_count=63
-fresh_direct_writer_file_count=30
-fresh_direct_mutation_call_count=130
-
-unclassified_business_writer_residual=0
-legacy_cross_owner_direct_writer_residual=0
-unexpected_production_writer_residual=0
-
 architecture_quality_gate=passed
-architecture_quality_unit_tests=148_passed
-architecture_quality_exception_count=1
-architecture_quality_active_governed_exception_count=1
-architecture_quality_stale_exception_count=0
-
-full_test_files=489_passed
-full_tests=6589_passed
-typecheck=passed
-lint=passed
-build=passed
 
 architecture_v2_final_closure_audit=passed
 architecture_v2_refactor_complete=true
 architecture_v2_target_fully_realized=false
+
+post_v2_roadmap_rebaseline=passed
+post_v2_next_phase=POST-V2-R1
+post_v2_r1_admission=passed
+post_v2_r1_page_candidate_count=26
+post_v2_r1_action_release_in_scope=false
+post_v2_r1_runtime_authorized=false
+post_v2_r1_reader_release_authorized=false
+post_v2_r1_capability_release_authorized=false
 
 reader_release=false
 capability_release=false
@@ -56,7 +43,7 @@ post_v2_backlog_requires_separate_admission=true
 
 ### 唯一下一任务
 
-`Post-V2 roadmap re-baseline + next phase admission`
+`POST-V2-R1 Institution Readonly Reader/Capability Release Readiness Audit`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
