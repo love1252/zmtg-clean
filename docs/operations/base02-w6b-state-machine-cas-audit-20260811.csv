@@ -1,0 +1,10 @@
+order,surface,current_concurrency_or_state_rule,w6b_required_preservation
+1,compensation operation create,unique violation 23505 -> conflict,preserve
+2,compensation operation transition,read current row then UPDATE WHERE tenant+connection+operation+current state,preserve current-state CAS exactly
+3,compensation operation retry count,only allowed failed/manual-review states,preserve legal state gate
+4,compensation job create,unique violation 23505 -> conflict,preserve
+5,compensation job claim/update,UPDATE WHERE tenant+connection+operation+current jobState+current claimVersion,preserve state+claimVersion CAS exactly
+6,compensation job lock,claimId/claimVersion/lockedUntil semantics,preserve
+7,compensation retry policy,requeue vs retry-exhausted dead-letter vs unsafe/manual-review behavior,preserve exact decision behavior
+8,compensation worker,coordinates two injected repositories without database.transaction,preserve non-atomic recovery-driven coordination; do not invent cross-repository transaction
+9,provider execution,current worker provider executor is injected and controlled,no real HIS activation; canonical worker remains unconstructed in production
