@@ -6,6 +6,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createAppointmentCommandRepository } from '@/modules/care/server/appointment-command-repository';
+import { provisionDemoDataForTenant } from '@/modules/institution/server/trial-provisioning-service';
 import type { TenantDatabase } from '@/server/db/client';
 import { appointments, customers } from '@/server/db/schema';
 
@@ -254,7 +255,7 @@ describe('AppointmentCommandRepository', () => {
     expect(db.update).toHaveBeenCalledWith(appointments);
   });
 
-  it('Care 是普通业务唯一 appointment Writer；Trial Provisioning 保持独立 exception', () => {
+  it('Care 是普通业务唯一 appointment Writer；Trial Provisioning legacy exception 已关闭', () => {
     const canonical = readFileSync(
       resolve(process.cwd(), 'src/modules/care/server/appointment-command-repository.ts'),
       'utf8',
@@ -274,7 +275,39 @@ describe('AppointmentCommandRepository', () => {
     expect(legacy).not.toContain('.insert(appointments)');
     expect(legacy).not.toContain('.update(appointments)');
     expect(legacy).toContain('legacy_appointment_writer_disabled');
-    expect(provisioning).toContain('.insert(appointments)');
+    expect(provisioning).not.toContain('.insert(appointments)');
+    expect(provisioning).toContain('legacy_institution_trial_provisioning_disabled');
+  });
+
+  it('Trial Provisioning 在任何 DB access 前 fail-closed', async () => {
+    const select = vi.fn();
+    const transaction = vi.fn();
+    const insert = vi.fn();
+    const update = vi.fn();
+    const deleteMutation = vi.fn();
+
+    const db = {
+      select,
+      transaction,
+      insert,
+      update,
+      delete: deleteMutation,
+    } as unknown as TenantDatabase;
+
+    await expect(
+      provisionDemoDataForTenant({
+        db,
+        tenantId: 'tenant-trial-blocked',
+        institutionId: 'institution-trial-blocked',
+        userId: 'user-trial-blocked',
+      }),
+    ).rejects.toThrow('legacy_institution_trial_provisioning_disabled');
+
+    expect(select).not.toHaveBeenCalled();
+    expect(transaction).not.toHaveBeenCalled();
+    expect(insert).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+    expect(deleteMutation).not.toHaveBeenCalled();
   });
 
   it('existing schema 已支持 appointment institution attribution 与 CAS', () => {
