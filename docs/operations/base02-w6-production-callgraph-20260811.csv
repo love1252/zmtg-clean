@@ -1,0 +1,9 @@
+order,surface,current_edge,current_role,w6_decision
+1,src/modules/institution/server/his-connection-write-service.ts,createHisConnectionRepository,active create/update Writer caller,W6A rewire construction through server/orchestration
+2,src/modules/institution/server/his-connection-status-service.ts,createHisConnectionRepository,active status Writer caller,W6A rewire construction through server/orchestration
+3,src/modules/institution/server/his-connection-credential-service.ts,createHisConnectionRepository,active credentialRef Writer caller,W6A rewire construction through server/orchestration
+4,src/modules/institution/server/his-connection-test-connection-service.ts,createHisConnectionRepository,active mixed Reader + health Writer caller,W6A split legacy Reader and canonical Writer construction without Route change
+5,src/modules/institution/server/his-connection-credential-compensation-worker.ts,operationRepository injected port,no factory construction,W6B no production caller rewire yet
+6,src/modules/institution/server/his-connection-credential-compensation-worker.ts,jobQueueRepository injected port,no factory construction,W6B no production caller rewire yet
+7,src/modules/institution/server/his-connection-credential-compensation-operation-repository.ts,legacy provider-failure server contract,owner/domain coupling,W6B blocked pending domain/port ownership admission
+8,src/modules/institution/server/his-connection-credential-compensation-job-queue-repository.ts,legacy provider-failure server contract,owner/domain coupling,W6B blocked pending domain/port ownership admission

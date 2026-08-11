@@ -1,0 +1,12 @@
+order,test_path,state,required_assertion
+1,src/modules/institution-system/tests/HisConnectionCommandService.test.ts,new,tenant identity exact validation writer inputs and current state transition semantics
+2,src/modules/institution-system/tests/HisConnectionCommandRepository.test.ts,new,canonical direct writer owns all six hisConnections mutation shapes with no cross-tenant fallback
+3,src/server/orchestration/his-connection-writer.test.ts,new,composition constructs only Institution System canonical Writer
+4,src/modules/institution/tests/HisConnectionRepository.test.ts,existing,legacy writer methods fail closed and list/get/credential-summary Readers remain compatible
+5,src/modules/institution/tests/HisConnectionWriteService.test.ts,existing,create/update canonical writer plus Audit remain one database transaction
+6,src/modules/institution/tests/HisConnectionStatusService.test.ts,existing,status canonical writer plus Audit remain one database transaction
+7,src/modules/institution/tests/HisConnectionCredentialService.test.ts,existing,synthetic provider behavior retained and DB writer plus allowed Audit remain one transaction
+8,src/modules/institution/tests/HisConnectionTestConnectionService.test.ts,existing,fake provider remains and health writer/audit sequencing does not silently become real-HIS or new atomicity
+9,src/modules/institution/tests/HisConnectionApiRoutes.test.ts,existing_unmodified,HIS connection API contracts unchanged
+10,src/modules/institution/tests/HisConnectionCredentialApiRoutes.test.ts,existing_unmodified,credential API contracts and low-sensitive payload unchanged
+11,src/modules/institution/tests/HisConnectionTestConnectionApiRoute.test.ts,existing_unmodified,test-connection Route remains fake-provider controlled
