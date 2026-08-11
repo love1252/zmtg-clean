@@ -3,28 +3,27 @@
 ## 唯一下一任务
 
 ```text
-W5 Analytics exact 6-file Runtime implementation explicit authorization
+W6 Institution System Writer symbol/callgraph audit + exact implementation allowlist admission
 ```
 
-## Admission
+## 当前状态
 
 ```text
+w2_care_complete=true
 w3_knowledge_complete=true
-w5_analytics_symbol_callgraph_audit=passed
-w5_analytics_admission=passed
-w5_canonical_owner=analytics
-w5_active_production_writer_callers=0
-w5_exact_runtime_file_count=6
-w5_runtime_authorized=false
+w5_complete=true
+
+w6_institution_system_state=pending_symbol_callgraph_admission
+w6_runtime_authorized=false
+
+trial_provisioning_classification=separate_provisioning_review
 business_writer_phase_complete=false
 ```
 
-冻结清单：
+## W6 当前冻结前证据
 
-`docs/operations/base02-w5-analytics-exact-runtime-allowlist-20260810.csv`
+旧 post-W1C inventory 有 5 个 W6 baseline candidate，其中 4 个带 direct mutation、1 个无 direct mutation UI candidate。
 
-W5 Runtime 仅允许建立 Analytics append Writer、阻断 legacy `createUsageRecord`，并保留现有 Readers。
+这些旧证据不构成 Runtime Admission。W6 必须先重新完成 current-main symbol audit、direct mutation AST、production callgraph、Owner/transaction boundary、exact allowlist 和 test matrix，再走 docs-only Formal Admission。
 
-不得修改 `institution-ai-call-service.ts`、机构 AI Route、平台 AI usage Route。不得释放 capability。
-
-必须收到明确 Runtime 授权后才可实施。
+在新的明确 Runtime 授权前，禁止 W6 Runtime、Trial Provisioning Runtime、Schema、Migration、DB execution、Route change、Reader/Capability release、真实 HIS 和 production change。
