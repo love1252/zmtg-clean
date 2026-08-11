@@ -1,5 +1,30 @@
 # 项目重构历史
 
+<!-- BASE02_TRIAL_PROVISIONING_HANDOFF_HISTORY -->
+
+## 2026-08-11：Trial Provisioning legacy Writer 完成
+
+- Formal Admission PR #1141 完成 fresh residual audit，确认 4 direct inserts / 1 legacy Writer / 4 fact tables / 0 production callers / 0 Route callers；
+- exact-2 首轮因既有 Appointment governance lock 停止，随后 PR #1142 re-admit exact-3；
+- exact-3 Runtime 逻辑与 30/30 targeted、6589 full tests 均通过，但新增 frozen Institution test file 触发 AQ004；
+- PR #1143 将最终 Runtime 收敛为 2 个既有文件 / 0 新文件，不新增 architecture exception；
+- Runtime Implementation PR #1144：`d1e56026be4f5fc7cea210a3b36860a4535ecd6c`；
+- Runtime Implementation Head：`22a1b625cf04083c672920bd18f1bf556dca5870`；
+- Runtime exact scope：`trial-provisioning-service.ts` + `AppointmentCommandRepository.test.ts`；
+- `provisionDemoDataForTenant` compatibility export 保留，但在任何 DB access 前固定 fail-closed；
+- legacy Trial Provisioning direct mutation calls=0，direct Writer files=0，DB access=0；
+- production callers=0，Route callers=0，production activation=0；
+- existing Care test 同时关闭历史 `.insert(appointments)` exception 并动态证明 select / transaction / insert / update / delete 均未触发；
+- Customers canonical Runtime、Care canonical Runtime、Tenancy provisioning 均未修改；
+- `architecture-quality-rules.json` 未修改，未新增 AQ004 exception；
+- Runtime targeted 30/30、full 6589/6589、typecheck、lint、build、architecture unit 148、architecture incremental、Required Check 全部通过；
+- Independent Review PR #1145：`9af2568bbae5fa3569a300bd5f69f7984c2cd57f`；
+- 原 Review 文档因 unquoted heredoc 导致 Markdown 证据污染，但 Review 执行验证有效；
+- Evidence Repair PR #1146：`c0f2ca0685898931cee7e0f32a9c772ff89e2c9a`，污染 marker 清零，Review 证据文档修复并再次确认 targeted 30/30、typecheck、Runtime architecture incremental；
+- Trial Provisioning complete=true；
+- Business Writer phase complete=false；
+- 下一任务：Full-repo Business Writer fresh residual recompute + phase completion decision。
+
 <!-- BASE02_W6B_CREDENTIAL_COMPENSATION_HANDOFF_HISTORY -->
 
 ## 2026-08-11：W6B Credential Compensation / W6 Institution System 完成

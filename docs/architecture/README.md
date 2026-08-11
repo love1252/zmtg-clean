@@ -1,5 +1,70 @@
 # 智美天工架构文档索引
 
+<!-- BASE02_TRIAL_PROVISIONING_COMPLETE_START -->
+
+## Trial Provisioning Writer 完成（2026-08-11）
+
+```text
+w6_institution_system_complete=true
+
+trial_provisioning_runtime_pr=1144
+trial_provisioning_runtime_head=22a1b625cf04083c672920bd18f1bf556dca5870
+trial_provisioning_runtime_merge=d1e56026be4f5fc7cea210a3b36860a4535ecd6c
+
+trial_provisioning_independent_review_pr=1145
+trial_provisioning_independent_review_head=eba692028df69eb553b4a600762fd31e49721b3c
+trial_provisioning_independent_review_merge=9af2568bbae5fa3569a300bd5f69f7984c2cd57f
+
+trial_provisioning_review_evidence_repair_pr=1146
+trial_provisioning_review_evidence_repair_head=31ebdecce33e061e2ddb56157749988336d7137b
+trial_provisioning_review_evidence_repair_merge=c0f2ca0685898931cee7e0f32a9c772ff89e2c9a
+
+trial_provisioning_runtime_implementation=passed
+trial_provisioning_runtime_independent_review=passed
+trial_provisioning_review_evidence_repaired=true
+
+trial_provisioning_runtime_file_count=2
+trial_provisioning_runtime_existing_file_count=2
+trial_provisioning_runtime_new_file_count=0
+
+trial_provisioning_direct_mutation_calls=0
+trial_provisioning_direct_writer_files=0
+trial_provisioning_db_access=0
+trial_provisioning_production_callers=0
+trial_provisioning_route_callers=0
+
+trial_provisioning_legacy_service_blocked=true
+trial_provisioning_dynamic_blockade_test_embedded=true
+trial_provisioning_canonical_migration_required=false
+trial_provisioning_production_activation=false
+
+customers_canonical_runtime_change=false
+care_canonical_runtime_change=false
+tenancy_provisioning_change=false
+architecture_rules_change=false
+architecture_exception_added=false
+
+trial_provisioning_targeted_test_files=4
+trial_provisioning_targeted_tests=30
+trial_provisioning_full_test_files=489
+trial_provisioning_full_tests=6589
+trial_provisioning_typecheck=passed
+trial_provisioning_lint=passed
+trial_provisioning_build=passed
+trial_provisioning_architecture_unit_tests=148
+trial_provisioning_architecture_incremental=passed
+trial_provisioning_required_check=passed
+
+trial_provisioning_complete=true
+business_writer_phase_complete=false
+```
+
+唯一下一任务：
+
+`Full-repo Business Writer fresh residual recompute + phase completion decision`
+
+<!-- BASE02_TRIAL_PROVISIONING_COMPLETE_END -->
+
 <!-- BASE02_W6B_CREDENTIAL_COMPENSATION_COMPLETE_START -->
 
 ## W6B Credential Compensation / W6 Institution System 完成（2026-08-11）
