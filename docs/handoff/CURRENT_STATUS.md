@@ -8,35 +8,34 @@
 - 更新日期：2026-08-11
 - Architecture V2 重构阶段：complete
 - POST-V2-R1 Readiness Audit：complete
-- POST-V2-R1A Authority Foundation Preflight：complete
-- R1A Runtime：尚未授权
+- POST-V2-R1A original Preflight：superseded by AQ007 re-admission
+- POST-V2-R1A failed exact-6 WIP：local-only / not pushed
+- POST-V2-R1A AQ007 Orchestration Re-admission：complete
+- Runtime：等待新的 exact-3 显式授权
 - Reader / Capability：仍未放行
 
 ```text
 architecture_v2_refactor_complete=true
-architecture_v2_target_fully_realized=false
 
-post_v2_r1_readiness_audit=passed
 post_v2_r1_complete=true
 post_v2_r1_eligible_page_count=0
 post_v2_r1_blocked_page_count=26
 
-post_v2_r1a_preflight=passed
+post_v2_r1a_original_preflight=completed_but_scope_superseded
 
-post_v2_r1a_capability_contract_change_required=false
-post_v2_r1a_existing_security_scope_authority=true
+post_v2_r1a_failed_exact6_wip_preserved=true
+post_v2_r1a_failed_exact6_remote_branch=false
+post_v2_r1a_failed_exact6_remote_pr=false
+post_v2_r1a_failed_exact6_aq007_count=4
 
-post_v2_r1a_exact_runtime_file_count=6
-post_v2_r1a_existing_runtime_file_count=6
-post_v2_r1a_new_runtime_file_count=0
+post_v2_r1a_aq007_readmission=passed
+
+post_v2_r1a_revised_exact_runtime_file_count=3
+post_v2_r1a_revised_existing_runtime_file_count=1
+post_v2_r1a_revised_new_runtime_file_count=2
+
+post_v2_r1a_cross_owner_composition=orchestration_only
 post_v2_r1a_architecture_exception_required=false
-
-post_v2_r1a_release_policy=hidden_only
-post_v2_r1a_page_release_count_after_runtime=0
-
-post_v2_r1a_baseline_targeted_test_files=4_passed
-post_v2_r1a_baseline_targeted_tests=92_passed
-post_v2_r1a_baseline_typecheck=passed
 
 post_v2_r1a_runtime_authorized=false
 
@@ -49,7 +48,7 @@ production_change=false
 
 ### 唯一下一任务
 
-`POST-V2-R1A exact 6-file Capability Authority Foundation Runtime implementation explicit authorization`
+`POST-V2-R1A revised exact 3-file orchestration Capability Authority Foundation Runtime explicit authorization`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
