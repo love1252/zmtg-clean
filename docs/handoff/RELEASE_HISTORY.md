@@ -1,5 +1,25 @@
 # 项目重构历史
 
+<!-- POST_V2_R1A_PREFLIGHT_HISTORY -->
+
+## 2026-08-11：POST-V2-R1A Capability Authority Foundation Preflight
+
+- R1 PR #1151 已合并，26 个 page capability 保持 0 eligible / 26 blocked；
+- common blocker 为 capability-off Route + 缺 authority-bearing CapabilityStatus；
+- 现有 Security `InstitutionRequestAuthorizationV1` 已承载 formal provenance / fresh membership / active anchor / trusted now，R1A 不重复实现；
+- Capability 层仍缺 authoritative owner facts / capability revision / diagnostic authority / authority-bearing evaluator & reader；
+- public `CapabilityStatusV1` contract 已存在，不需要修改；
+- R1A Runtime 冻结为 exact 6 existing files / 0 new files；
+- 不新增 architecture exception；
+- R1A Runtime 的 release policy 固定 `productionRelease=not_released`、decision=`hidden`；
+- 即使未来 R1A Runtime 完成，page release count 仍为 0；
+- baseline targeted tests=92/92，4 files；
+- typecheck=passed；
+- Runtime authorization=false；
+- Reader release=false；
+- Capability release=false；
+- 下一任务：POST-V2-R1A exact 6-file Capability Authority Foundation Runtime implementation explicit authorization。
+
 <!-- POST_V2_R1_READINESS_AUDIT_HISTORY -->
 
 ## 2026-08-11：POST-V2-R1 Readonly Release Readiness Audit

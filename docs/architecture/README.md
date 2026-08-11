@@ -1,5 +1,38 @@
 # 智美天工架构文档索引
 
+<!-- POST_V2_R1A_PREFLIGHT_START -->
+
+## POST-V2-R1A Capability Authority Foundation Preflight（2026-08-11）
+
+```text
+post_v2_r1a_preflight=passed
+
+scope_authority=existing_security_request_authorization
+capability_contract_change_required=false
+
+exact_runtime_file_count=6
+existing_runtime_file_count=6
+new_runtime_file_count=0
+architecture_exception_required=false
+
+r1a_release_policy=hidden_only
+reader_release=false
+capability_release=false
+
+runtime_authorized=false
+```
+
+证据：
+
+- `docs/operations/post-v2-r1a-capability-authority-foundation-preflight-20260811.md`
+- `docs/operations/post-v2-r1a-capability-authority-foundation-runtime-allowlist-20260811.csv`
+
+唯一下一任务：
+
+`POST-V2-R1A exact 6-file Capability Authority Foundation Runtime implementation explicit authorization`
+
+<!-- POST_V2_R1A_PREFLIGHT_END -->
+
 <!-- POST_V2_R1_READINESS_AUDIT_START -->
 
 ## POST-V2-R1 Readonly Release Readiness Audit（2026-08-11）
