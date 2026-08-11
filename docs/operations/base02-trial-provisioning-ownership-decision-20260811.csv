@@ -1,0 +1,5 @@
+fact_table,legacy_trial_writer,canonical_owner,finding,closure_action
+customers,src/modules/institution/server/trial-provisioning-service.ts,customers,cross_owner_direct_insert,block dormant legacy writer
+appointments,src/modules/institution/server/trial-provisioning-service.ts,care,cross_owner_direct_insert,block dormant legacy writer
+treatmentSummaries,src/modules/institution/server/trial-provisioning-service.ts,care,cross_owner_direct_insert,block dormant legacy writer
+followUpTasks,src/modules/institution/server/trial-provisioning-service.ts,care,cross_owner_direct_insert,block dormant legacy writer
