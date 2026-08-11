@@ -9,7 +9,7 @@
 - W2 Care：complete
 - W3 Knowledge：complete
 - W5 Analytics：complete
-- W6 Institution System：decomposed; W6A admitted / Runtime not authorized; W6B pending domain-port admission
+- W6 Institution System：W6A complete / W6B pending domain-port ownership admission
 - Trial Provisioning：separate review pending
 - Business Writer phase：not complete
 
@@ -23,28 +23,35 @@ w6_transaction_audit=passed
 w6_decomposition_frozen=true
 w6_canonical_owner=institution-system
 
-w6_fresh_direct_mutation_calls=10
-w6_fresh_direct_writer_files=3
-w6_fresh_fact_tables=3
-
 w6a_his_connection_core_admission=passed
-w6a_direct_mutation_calls=6
-w6a_active_production_factory_importers=4
-w6a_exact_runtime_file_count=16
-w6a_new_runtime_file_count=6
-w6a_existing_runtime_file_count=10
-w6a_seventeenth_runtime_file_requires_stop_and_readmission=true
-w6a_runtime_authorized=false
+w6a_runtime_implementation=passed
+w6a_runtime_independent_review=passed
+w6a_runtime_authorization_consumed=true
+w6a_complete=true
+w6a_implementation_pr=1134
+w6a_implementation_merge=f7a90c35c8b51c71d2978b0f844380e5b6b15103
+w6a_independent_review_pr=1135
+w6a_independent_review_merge=10ac1cb90187f46567db3473025c4428b371c7ff
+w6a_runtime_file_count=16
+w6a_production_his_connection_writer_files=1
+w6a_canonical_his_connection_mutation_calls=6
+w6a_legacy_his_connection_direct_mutations=0
+w6a_legacy_writer_blocked=true
+w6a_legacy_readers_preserved=3
+w6a_production_services_rewired=4
+w6a_test_connection_fake_provider_retained=true
 
 w6b_compensation_audit=passed
 w6b_direct_mutation_calls=4
 w6b_direct_writer_files=2
 w6b_active_production_factory_constructors=0
 w6b_worker_uses_injected_ports=true
+w6b_legacy_server_domain_coupling=true
 w6b_runtime_allowlist_frozen=false
 w6b_runtime_authorized=false
 w6b_blocked_pending_domain_port_ownership_admission=true
 
+w6_institution_system_complete=false
 trial_provisioning_classification=separate_provisioning_review
 business_writer_phase_complete=false
 
@@ -60,7 +67,7 @@ production_change=false
 
 ### 唯一下一任务
 
-`W6A HIS Connection Core exact 16-file Runtime implementation explicit authorization`
+`W6B Credential Compensation domain/port ownership audit + exact Runtime allowlist admission`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
