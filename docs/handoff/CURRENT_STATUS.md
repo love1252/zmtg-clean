@@ -10,7 +10,7 @@
 - W3 Knowledge：complete
 - W5 Analytics：complete
 - W6 Institution System：complete
-- Trial Provisioning：fresh audit passed / exact 2-file fail-closed Runtime admitted, not authorized
+- Trial Provisioning：exact-2 Runtime stopped by stale Appointment governance lock / exact-3 re-admitted, not authorized
 - Business Writer phase：not complete
 
 ```text
@@ -23,24 +23,25 @@ w6_institution_system_complete=true
 
 trial_provisioning_fresh_audit=passed
 trial_provisioning_classification=dormant_legacy_cross_owner_writer
-trial_provisioning_direct_mutation_calls=4
-trial_provisioning_direct_writer_files=1
-trial_provisioning_fact_tables=4
-trial_provisioning_production_callers=0
-trial_provisioning_route_callers=0
-trial_provisioning_db_transaction_boundary=1
-trial_provisioning_existing_customer_guard=tenant_only
-
 trial_provisioning_closure_decision=fail_closed_blockade_required
 trial_provisioning_canonical_migration_required=false
-trial_provisioning_exact_runtime_file_count=2
+
+trial_provisioning_exact2_runtime_attempt=stopped_at_targeted_tests
+trial_provisioning_exact2_targeted_test_files=5
+trial_provisioning_exact2_targeted_tests=30
+trial_provisioning_exact2_targeted_passed=29
+trial_provisioning_exact2_targeted_failed=1
+trial_provisioning_exact2_authorization_scope_exhausted=true
+
+trial_provisioning_readmission_reason=appointment_governance_lock
+trial_provisioning_exact_runtime_file_count=3
+trial_provisioning_existing_runtime_file_count=2
 trial_provisioning_new_runtime_file_count=1
-trial_provisioning_existing_runtime_file_count=1
-trial_provisioning_third_runtime_file_requires_stop_and_readmission=true
+trial_provisioning_fourth_runtime_file_requires_stop_and_readmission=true
 trial_provisioning_runtime_allowlist_frozen=true
 trial_provisioning_runtime_authorized=false
 trial_provisioning_production_activation=false
-trial_provisioning_review=admitted_runtime_pending
+trial_provisioning_review=readmitted_runtime_pending
 
 business_writer_phase_complete=false
 
@@ -57,7 +58,7 @@ production_change=false
 
 ### 唯一下一任务
 
-`Trial Provisioning exact 2-file fail-closed Runtime implementation explicit authorization`
+`Trial Provisioning exact 3-file fail-closed Runtime implementation explicit authorization`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
