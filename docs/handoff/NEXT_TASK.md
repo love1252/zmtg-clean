@@ -3,41 +3,71 @@
 ## 唯一下一任务
 
 ```text
-Trial Provisioning exact 3-file fail-closed Runtime implementation explicit authorization
+Trial Provisioning final exact 2-file no-new-file fail-closed Runtime implementation explicit authorization
 ```
 
-## Re-admission state
+## Final Re-admission state
 
 ```text
-trial_provisioning_exact2_runtime_attempt=stopped_at_targeted_tests
-trial_provisioning_exact2_targeted_tests=29_passed_1_failed
-trial_provisioning_exact2_authorization_scope_exhausted=true
+trial_provisioning_exact3_runtime_attempt=stopped_at_architecture_incremental
+trial_provisioning_exact3_runtime_head=a53b335bec70726d7393c7f7222f281f718e319f
 
-trial_provisioning_readmission_reason=appointment_governance_lock
+trial_provisioning_exact3_targeted_tests=30_passed
+trial_provisioning_exact3_typecheck=passed
+trial_provisioning_exact3_architecture_unit_tests=148_passed
+trial_provisioning_exact3_full_tests=6589_passed
+trial_provisioning_exact3_lint=passed
+trial_provisioning_exact3_build=passed
 
-trial_provisioning_exact_runtime_file_count=3
+trial_provisioning_exact3_architecture_incremental=failed_aq004_new_institution_test
+trial_provisioning_exact3_authorization_exhausted=true
+
+trial_provisioning_final_scope_reason=no_new_frozen_institution_test_file
+
+trial_provisioning_exact_runtime_file_count=2
+trial_provisioning_existing_runtime_file_count=2
+trial_provisioning_new_runtime_file_count=0
 trial_provisioning_runtime_allowlist_frozen=true
 trial_provisioning_runtime_authorized=false
+trial_provisioning_architecture_exception_required=false
 
 business_writer_phase_complete=false
 ```
 
-Exact 3：
+Final exact 2：
 
 ```text
 src/modules/institution/server/trial-provisioning-service.ts
-src/modules/institution/tests/TrialProvisioningService.test.ts
 src/modules/care/tests/AppointmentCommandRepository.test.ts
 ```
 
-第 3 个文件仅允许修正历史治理断言：
+最终方案：
 
 ```text
-Trial Provisioning direct appointment insert exception -> closed
+service direct mutation 4 -> 0
+service DB access -> 0
+legacy export preserved and fail-closed
+
+AppointmentCommandRepository.test.ts:
+- close historical Trial Provisioning insert exception
+- add dynamic no-DB-access blockade proof
 ```
 
-不得修改任何 Care Runtime、Customers Runtime 或 Tenancy provisioning Runtime。
+明确不新增：
 
-第 4 个 Runtime 文件必须 `STOP / re-admit`。
+```text
+src/modules/institution/tests/TrialProvisioningService.test.ts
+```
+
+明确不修改：
+
+```text
+scripts/verify/architecture-quality-rules.json
+Care Runtime
+Customers Runtime
+Tenancy provisioning Runtime
+```
+
+第 3 个 Runtime 文件必须 `STOP / re-admit`。
 
 需要新的明确 Runtime 授权。

@@ -10,7 +10,7 @@
 - W3 Knowledge：complete
 - W5 Analytics：complete
 - W6 Institution System：complete
-- Trial Provisioning：exact-2 Runtime stopped by stale Appointment governance lock / exact-3 re-admitted, not authorized
+- Trial Provisioning：exact-3 Runtime logic passed but stopped by AQ004 new Institution test file / final exact-2 no-new-file re-admitted, not authorized
 - Business Writer phase：not complete
 
 ```text
@@ -26,22 +26,30 @@ trial_provisioning_classification=dormant_legacy_cross_owner_writer
 trial_provisioning_closure_decision=fail_closed_blockade_required
 trial_provisioning_canonical_migration_required=false
 
-trial_provisioning_exact2_runtime_attempt=stopped_at_targeted_tests
-trial_provisioning_exact2_targeted_test_files=5
-trial_provisioning_exact2_targeted_tests=30
-trial_provisioning_exact2_targeted_passed=29
-trial_provisioning_exact2_targeted_failed=1
-trial_provisioning_exact2_authorization_scope_exhausted=true
+trial_provisioning_exact3_runtime_attempt=stopped_at_architecture_incremental
+trial_provisioning_exact3_runtime_head=a53b335bec70726d7393c7f7222f281f718e319f
+trial_provisioning_exact3_targeted_test_files=5
+trial_provisioning_exact3_targeted_tests=30
+trial_provisioning_exact3_targeted_passed=30
+trial_provisioning_exact3_typecheck=passed
+trial_provisioning_exact3_architecture_unit_tests=148_passed
+trial_provisioning_exact3_full_test_files=490
+trial_provisioning_exact3_full_tests=6589
+trial_provisioning_exact3_lint=passed
+trial_provisioning_exact3_build=passed
+trial_provisioning_exact3_architecture_incremental=failed_aq004_new_institution_test
+trial_provisioning_exact3_authorization_exhausted=true
 
-trial_provisioning_readmission_reason=appointment_governance_lock
-trial_provisioning_exact_runtime_file_count=3
+trial_provisioning_final_scope_reason=no_new_frozen_institution_test_file
+trial_provisioning_exact_runtime_file_count=2
 trial_provisioning_existing_runtime_file_count=2
-trial_provisioning_new_runtime_file_count=1
-trial_provisioning_fourth_runtime_file_requires_stop_and_readmission=true
+trial_provisioning_new_runtime_file_count=0
+trial_provisioning_third_runtime_file_requires_stop_and_readmission=true
 trial_provisioning_runtime_allowlist_frozen=true
 trial_provisioning_runtime_authorized=false
+trial_provisioning_architecture_exception_required=false
 trial_provisioning_production_activation=false
-trial_provisioning_review=readmitted_runtime_pending
+trial_provisioning_review=final_exact2_runtime_pending
 
 business_writer_phase_complete=false
 
@@ -58,7 +66,7 @@ production_change=false
 
 ### 唯一下一任务
 
-`Trial Provisioning exact 3-file fail-closed Runtime implementation explicit authorization`
+`Trial Provisioning final exact 2-file no-new-file fail-closed Runtime implementation explicit authorization`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
