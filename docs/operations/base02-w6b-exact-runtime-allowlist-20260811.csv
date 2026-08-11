@@ -1,0 +1,19 @@
+order,path,file_state,responsibility,runtime_authorized
+1,src/modules/institution-system/domain/his-connection-credential-compensation.ts,new,canonical compensation domain literals validation provider execution statuses and safe operation-id contract,false
+2,src/modules/institution-system/application/his-connection-credential-compensation-ports.ts,new,canonical operation/job repository ports and read/mutation result contracts,false
+3,src/modules/institution-system/application/his-connection-credential-compensation-retry-policy.ts,new,canonical retry requeue dead-letter decision policy,false
+4,src/modules/institution-system/application/his-connection-credential-compensation-worker.ts,new,canonical worker over injected ports with no DB transaction or production activation,false
+5,src/modules/institution-system/server/his-connection-credential-compensation-operation-repository.ts,new,canonical operation table Writer preserving current-state CAS,false
+6,src/modules/institution-system/server/his-connection-credential-compensation-job-queue-repository.ts,new,canonical job table Writer preserving state+claimVersion CAS,false
+7,src/modules/institution-system/tests/HisConnectionCredentialCompensationDomain.test.ts,new,domain validation and test-only parity lock against legacy shared provider-failure literals,false
+8,src/modules/institution-system/tests/HisConnectionCredentialCompensationPortsBoundary.test.ts,new,worker depends only canonical domain/ports/retry and not server or legacy runtime surfaces,false
+9,src/modules/institution-system/tests/HisConnectionCredentialCompensationRetryPolicy.test.ts,new,canonical retry behavior and test-only parity against legacy retry policy,false
+10,src/modules/institution-system/tests/HisConnectionCredentialCompensationWorker.test.ts,new,canonical worker full state coordination regression matrix,false
+11,src/modules/institution-system/tests/HisConnectionCredentialCompensationOperationRepository.test.ts,new,canonical operation create/read/transition/retry/state-CAS tests,false
+12,src/modules/institution-system/tests/HisConnectionCredentialCompensationJobQueueRepository.test.ts,new,canonical job create/list/claim/run/fail/requeue/dead-letter/lock/state+claimVersion-CAS tests,false
+13,src/modules/institution/server/his-connection-credential-compensation-operation-repository.ts,existing,remove direct DB mutations and fail closed legacy factory,false
+14,src/modules/institution/tests/HisConnectionCredentialCompensationOperationRepository.test.ts,existing,legacy operation factory blockade before DB mutation,false
+15,src/modules/institution/server/his-connection-credential-compensation-job-queue-repository.ts,existing,remove direct DB mutations and fail closed legacy factory,false
+16,src/modules/institution/tests/HisConnectionCredentialCompensationJobQueueRepository.test.ts,existing,legacy job factory blockade before DB mutation,false
+17,src/modules/institution/server/his-connection-credential-compensation-worker.ts,existing,fail closed legacy worker and remove legacy repository/retry ownership edges,false
+18,src/modules/institution/tests/HisConnectionCredentialCompensationWorker.test.ts,existing,legacy worker blockade and zero dependency execution,false

@@ -1,0 +1,9 @@
+order,symbol_or_edge,current_production_state,w6b_runtime_state
+1,createHisConnectionCredentialCompensationOperationRepository,0 external production constructors,canonical factory remains dormant with 0 production constructors
+2,createHisConnectionCredentialCompensationJobQueueRepository,0 external production constructors,canonical factory remains dormant with 0 production constructors
+3,createHisConnectionCredentialCompensationWorker,0 external production importers,canonical worker remains dormant with 0 production importers
+4,legacy worker -> legacy operation repository,type/port dependency only,replace with canonical application port dependency inside canonical worker
+5,legacy worker -> legacy job repository,type/port dependency only,replace with canonical application port dependency inside canonical worker
+6,legacy worker -> legacy retry policy,only production retry-policy importer,canonical worker uses canonical retry policy; legacy retry policy remains untouched with 0 production importers
+7,credential service -> provider-failure,active W6A production dependency,unchanged and explicitly excluded from W6B Runtime
+8,canonical W6B composition/Route/cron,none,do not add; future production activation requires separate Admission

@@ -3,39 +3,41 @@
 ## 唯一下一任务
 
 ```text
-W6B Credential Compensation domain/port ownership audit + exact Runtime allowlist admission
+W6B Credential Compensation exact 18-file Runtime implementation explicit authorization
 ```
 
-## 当前状态
+## W6B Formal Admission 状态
 
 ```text
-w2_care_complete=true
-w3_knowledge_complete=true
-w5_complete=true
 w6a_complete=true
 
-w6b_compensation_audit=passed
+w6b_domain_ownership_audit=passed
+w6b_port_ownership_audit=passed
+w6b_state_machine_cas_audit=passed
+w6b_coordination_boundary_audit=passed
+w6b_canonical_owner=institution-system
+
 w6b_direct_mutation_calls=4
 w6b_direct_writer_files=2
 w6b_active_production_factory_constructors=0
-w6b_worker_uses_injected_ports=true
-w6b_legacy_server_domain_coupling=true
-w6b_runtime_allowlist_frozen=false
+
+w6b_exact_runtime_file_count=18
+w6b_runtime_allowlist_frozen=true
 w6b_runtime_authorized=false
-w6b_blocked_pending_domain_port_ownership_admission=true
+w6b_canonical_production_activation=false
 
 w6_institution_system_complete=false
-trial_provisioning_classification=separate_provisioning_review
 business_writer_phase_complete=false
 ```
 
-W6B 只覆盖：
+冻结清单：
 
-```text
-hisConnectionCredentialCompensationOperations
-hisConnectionCredentialCompensationJobs
-```
+`docs/operations/base02-w6b-exact-runtime-allowlist-20260811.csv`
 
-下一步必须先完成 domain contract ownership、repository port ownership、worker import/type ownership、operation/job state-machine + CAS、coordination boundary、canonical destination、exact Runtime allowlist 和 test matrix 的 docs-only Formal Admission。
+第 19 个 Runtime 文件必须 `STOP / re-admit`。
 
-在 Formal Admission 合并并收到新的明确 Runtime 授权前，禁止 W6B Runtime、Trial Provisioning Runtime、Schema、Migration、DB execution、API Route change、Reader/Capability release、real HIS 和 production change。
+本 Runtime 只迁 compensation domain / ports / retry policy / worker / operation+job repositories 的 ownership，并阻断 legacy operation/job/worker surfaces。
+
+不包含 production worker activation、cron、Route、queue consumer、real provider executor、Schema、Migration、DB execution、W6A、Trial Provisioning。
+
+必须收到新的明确 Runtime 授权后才能实施 W6B。

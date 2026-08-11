@@ -1,0 +1,13 @@
+order,test_path,state,required_assertion
+1,src/modules/institution-system/tests/HisConnectionCredentialCompensationDomain.test.ts,new,canonical operation/job/provider-result literals safe-id validation and legacy-literal parity
+2,src/modules/institution-system/tests/HisConnectionCredentialCompensationPortsBoundary.test.ts,new,canonical worker imports domain ports retry only and canonical server repositories implement ports
+3,src/modules/institution-system/tests/HisConnectionCredentialCompensationRetryPolicy.test.ts,new,requeue exponential delay retry exhaustion dead-letter and unsafe result behavior parity
+4,src/modules/institution-system/tests/HisConnectionCredentialCompensationWorker.test.ts,new,claim recovery execute success retry dead-letter manual-review stale recovery and provider result matrix
+5,src/modules/institution-system/tests/HisConnectionCredentialCompensationOperationRepository.test.ts,new,create unique conflict readers legal transitions retry count and state CAS
+6,src/modules/institution-system/tests/HisConnectionCredentialCompensationJobQueueRepository.test.ts,new,create unique conflict due list claim lock heartbeat run success fail requeue dead-letter manual review cancel recovery and state+claimVersion CAS
+7,src/modules/institution/tests/HisConnectionCredentialCompensationOperationRepository.test.ts,existing,legacy operation repository factory fails closed before DB mutation
+8,src/modules/institution/tests/HisConnectionCredentialCompensationJobQueueRepository.test.ts,existing,legacy job queue repository factory fails closed before DB mutation
+9,src/modules/institution/tests/HisConnectionCredentialCompensationWorker.test.ts,existing,legacy worker fails closed before repository/provider execution
+10,src/modules/institution/tests/HisConnectionCredentialProviderFailure.test.ts,existing_unmodified,shared provider-failure contract remains compatible for active credential service
+11,src/modules/institution/tests/HisConnectionCredentialCompensationRetryPolicy.test.ts,existing_unmodified,legacy retry policy remains compatibility-only and canonical parity test locks behavior
+12,src/modules/institution/tests/HisConnectionCredentialService.test.ts,existing_unmodified,W6A credential provider-failure behavior is unchanged
