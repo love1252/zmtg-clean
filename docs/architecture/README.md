@@ -1,5 +1,50 @@
 # 智美天工架构文档索引
 
+<!-- BASE02_W5_ANALYTICS_COMPLETE_START -->
+
+## W5 Analytics Writer 完成（2026-08-11）
+
+```text
+w3_knowledge_complete=true
+
+w5_analytics_admission=passed
+w5_implementation_pr=1130
+w5_implementation_head=82e4cba5bfe81814dc9cef7a38eed8ebe4fb4c05
+w5_implementation_merge=182b9fb6e2fbd730153b5ce536e826141ab03bce
+w5_independent_review_pr=1131
+w5_independent_review_head=13b54011598ce9bf2ac4de2c52ede1a69bea6e12
+w5_independent_review_merge=0f4f62197ad2929653f4341d783e00f4a954505a
+
+w5_runtime_implementation=passed
+w5_runtime_independent_review=passed
+w5_complete=true
+
+w5_canonical_owner=analytics
+w5_runtime_file_count=6
+w5_canonical_direct_insert_calls=1
+w5_canonical_append_only=true
+w5_legacy_writer_blocked=true
+w5_legacy_direct_insert_calls=0
+w5_legacy_read_compatibility=true
+w5_active_production_writer_callers=0
+w5_caller_rewire_files=0
+w5_institution_ai_write_route_capability_off=true
+
+w6_institution_system_state=pending_symbol_callgraph_admission
+w6_baseline_candidate_count=5
+w6_baseline_writer_candidate_count=4
+w6_runtime_authorized=false
+
+trial_provisioning_classification=separate_provisioning_review
+business_writer_phase_complete=false
+```
+
+唯一下一任务：
+
+`W6 Institution System Writer symbol/callgraph audit + exact implementation allowlist admission`
+
+<!-- BASE02_W5_ANALYTICS_COMPLETE_END -->
+
 <!-- BASE02_W3_KNOWLEDGE_COMPLETE_START -->
 
 ## W3 Knowledge Writer 完成（2026-08-10）

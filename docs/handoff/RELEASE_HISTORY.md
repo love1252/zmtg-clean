@@ -1,5 +1,23 @@
 # 项目重构历史
 
+<!-- BASE02_W5_ANALYTICS_HANDOFF_HISTORY -->
+
+## 2026-08-11：W5 Analytics Writer 完成
+
+- Formal Admission PR #1129 已完成；
+- Runtime Implementation PR #1130：`182b9fb6e2fbd730153b5ce536e826141ab03bce`；
+- Independent Review PR #1131：`0f4f62197ad2929653f4341d783e00f4a954505a`；
+- exact Runtime scope=6 files；
+- Analytics 是 `aiCallUsageRecords` canonical Writer Owner；
+- canonical repository append-only，legacy Institution Writer fail-closed；
+- legacy Readers 保持兼容；
+- active production Writer callers=0，institution AI POST 保持 capability-off；
+- targeted 73/73、full 6595/6595、typecheck、build、architecture、Required Check 全部通过；
+- W5 complete=true；
+- Business Writer phase complete=false；
+- Trial Provisioning 继续 separate review；
+- 下一任务：W6 Institution System Writer symbol/callgraph audit + exact implementation allowlist admission。
+
 <!-- BASE02_W3B_KNOWLEDGE_QUOTA_HANDOFF_HISTORY -->
 
 ## 2026-08-10：W3B Knowledge Quota Usage / W3 Knowledge 完成
