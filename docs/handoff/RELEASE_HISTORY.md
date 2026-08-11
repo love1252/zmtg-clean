@@ -1,5 +1,30 @@
 # 项目重构历史
 
+<!-- BASE02_W6B_CREDENTIAL_COMPENSATION_HANDOFF_HISTORY -->
+
+## 2026-08-11：W6B Credential Compensation / W6 Institution System 完成
+
+- W6B Formal Admission PR #1137 完成 domain/port/state-machine/CAS/callgraph 审计，并冻结 exact 18-file Runtime scope；
+- Runtime Implementation PR #1138：`89f20a63b18f120c8bd430d3a4a6e8ac7d88e12c`；
+- Runtime Implementation Head：`d9d8df2056d8c843fe66f47d6964e9b36eb261d4`；
+- Independent Review PR #1139：`038e7665f21f4f78e868769d42371c3e09d61ca8`；
+- Independent Review Head：`8f46279745b08bbff3b682dad9cf116e22cc445d`；
+- exact Runtime scope=18 files，第 19 个 Runtime file 未发生；
+- Institution System 成为两张 Credential Compensation fact table 的 canonical Writer Owner；
+- canonical direct mutation calls=4，production Writer files=2；
+- legacy operation/job direct mutation=0；
+- legacy operation repository、job repository、worker 均 fail-closed；
+- operation current-state CAS 与 job state+claimVersion CAS 保持；
+- canonical worker 只依赖 canonical domain/application ports/retry，不拥有 DB client / transaction；
+- production activation 继续为 0，未创建 cron、Route、queue consumer 或 real provider executor；
+- shared provider-failure 与 legacy retry policy 保持不变；
+- targeted 160/160、full 6588/6588、typecheck、lint、build、architecture unit 148、architecture incremental、Required Check 全部通过；
+- W6B complete=true；
+- W6 Institution System complete=true；
+- Trial Provisioning 继续 separate review；
+- Business Writer phase complete=false；
+- 下一任务：Trial Provisioning Writer fresh residual audit + ownership classification / closure decision。
+
 <!-- BASE02_W6A_HIS_CONNECTION_CORE_HANDOFF_HISTORY -->
 
 ## 2026-08-11：W6A HIS Connection Core Writer 完成

@@ -1,5 +1,56 @@
 # 智美天工架构文档索引
 
+<!-- BASE02_W6B_CREDENTIAL_COMPENSATION_COMPLETE_START -->
+
+## W6B Credential Compensation / W6 Institution System 完成（2026-08-11）
+
+```text
+w6a_complete=true
+
+w6b_domain_ownership_audit=passed
+w6b_port_ownership_audit=passed
+w6b_state_machine_cas_audit=passed
+w6b_coordination_boundary_audit=passed
+
+w6b_implementation_pr=1138
+w6b_implementation_head=d9d8df2056d8c843fe66f47d6964e9b36eb261d4
+w6b_implementation_merge=89f20a63b18f120c8bd430d3a4a6e8ac7d88e12c
+w6b_independent_review_pr=1139
+w6b_independent_review_head=8f46279745b08bbff3b682dad9cf116e22cc445d
+w6b_independent_review_merge=038e7665f21f4f78e868769d42371c3e09d61ca8
+
+w6b_runtime_implementation=passed
+w6b_runtime_independent_review=passed
+w6b_complete=true
+
+w6b_runtime_file_count=18
+w6b_nineteenth_runtime_file_change=false
+w6b_canonical_owner=institution-system
+w6b_production_writer_files=2
+w6b_canonical_direct_mutation_calls=4
+w6b_legacy_direct_mutation_calls=0
+w6b_operation_state_cas=true
+w6b_job_state_and_claim_version_cas=true
+w6b_legacy_operation_factory_blocked=true
+w6b_legacy_job_factory_blocked=true
+w6b_legacy_worker_blocked=true
+w6b_canonical_worker_uses_ports=true
+w6b_canonical_worker_database_transaction=false
+w6b_canonical_production_activation=false
+
+w6_institution_system_complete=true
+
+trial_provisioning_classification=separate_provisioning_review
+trial_provisioning_review=pending
+business_writer_phase_complete=false
+```
+
+唯一下一任务：
+
+`Trial Provisioning Writer fresh residual audit + ownership classification / closure decision`
+
+<!-- BASE02_W6B_CREDENTIAL_COMPENSATION_COMPLETE_END -->
+
 <!-- BASE02_W6A_HIS_CONNECTION_CORE_COMPLETE_START -->
 
 ## W6A HIS Connection Core Writer 完成（2026-08-11）
