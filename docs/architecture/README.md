@@ -1,5 +1,35 @@
 # 智美天工架构文档索引
 
+<!-- POST_V2_R1_READINESS_AUDIT_START -->
+
+## POST-V2-R1 Readonly Release Readiness Audit（2026-08-11）
+
+```text
+post_v2_r1_readiness_audit=passed
+post_v2_r1_page_candidate_count=26
+
+post_v2_r1_eligible_page_count=0
+post_v2_r1_blocked_page_count=26
+post_v2_r1_outside_initial_readonly_release_count=0
+
+post_v2_r1_common_authority_foundation_required=true
+
+reader_release=false
+capability_release=false
+production_ready_inferred=false
+```
+
+证据：
+
+- `docs/operations/post-v2-r1-institution-readonly-release-readiness-audit-20260811.md`
+- `docs/operations/post-v2-r1-institution-readonly-release-readiness-matrix-20260811.csv`
+
+唯一下一任务：
+
+`POST-V2-R1A Institution Capability Authority Foundation Preflight + exact Runtime admission decision`
+
+<!-- POST_V2_R1_READINESS_AUDIT_END -->
+
 <!-- POST_V2_ROADMAP_REBASELINE_START -->
 
 ## Post-V2 Roadmap Re-baseline（2026-08-11）

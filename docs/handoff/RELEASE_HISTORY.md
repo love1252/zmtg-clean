@@ -1,5 +1,29 @@
 # 项目重构历史
 
+<!-- POST_V2_R1_READINESS_AUDIT_HISTORY -->
+
+## 2026-08-11：POST-V2-R1 Readonly Release Readiness Audit
+
+- R1 Admission PR #1150 已合并，base=`56df3fb0a465281ae6dff7e7b32a311f381aa46e`；
+- public capability registry 继续为 36：7 section / 26 page / 3 controlled-create action；
+- fresh audit 覆盖全部 26 个 page capability；
+- `/hospital` Workbench 当前 capability-off=1；
+- 其余 canonical page route catch-all capability-off=25；
+- current Evaluator / Reader 继续只产出 non-authorizing candidate；
+- authority-bearing Evaluator=不存在；
+- authority-bearing Reader=不存在；
+- owner authority requirements=7；
+- eligible page=0；
+- blocked page=26；
+- outside initial readonly release=0；
+- common blocker=`current_route_capability_off + authority_bearing_capability_status_missing`；
+- targeted tests=126/126，5 files；
+- typecheck=passed；
+- Reader release=false；
+- Capability release=false；
+- R1 complete=true；
+- 下一任务：POST-V2-R1A Institution Capability Authority Foundation Preflight + exact Runtime admission decision。
+
 <!-- POST_V2_ROADMAP_REBASELINE_HISTORY -->
 
 ## 2026-08-11：Post-V2 Roadmap Re-baseline / R1 Admission
