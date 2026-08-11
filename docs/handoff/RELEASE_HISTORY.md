@@ -1,5 +1,28 @@
 # 项目重构历史
 
+<!-- BASE02_W6A_HIS_CONNECTION_CORE_HANDOFF_HISTORY -->
+
+## 2026-08-11：W6A HIS Connection Core Writer 完成
+
+- W6 Formal Admission PR #1133 完成 fresh symbol/callgraph/transaction audit，并冻结 W6A exact 16-file Runtime scope；
+- Runtime Implementation PR #1134：`f7a90c35c8b51c71d2978b0f844380e5b6b15103`；
+- Runtime Implementation Head：`58ccffcd156f1f980a964558dc39f987c31f954a`；
+- Independent Review PR #1135：`10ac1cb90187f46567db3473025c4428b371c7ff`；
+- Independent Review Head：`9e6cbeb2b211b299b2169edc8c017990c8e1377c`；
+- exact Runtime scope=16 files，第 17 个 Runtime file 未发生；
+- Institution System 成为 `hisConnections` canonical Writer Owner；
+- production direct Writer file=1，canonical mutation calls=6；
+- legacy Institution direct mutation=0，legacy Writer fail-closed，3 个 Reader 保持兼容；
+- 4 个 production service 已通过 `src/server/orchestration/his-connection-writer.ts` 构造 canonical Writer；
+- test-connection 继续使用 fake provider，未启用真实 HIS；
+- targeted 76/76、full 6565/6565、typecheck、lint、build、architecture unit 148、architecture incremental、Required Check 全部通过；
+- W6B compensation 未变，仍为 4 direct mutation calls / 2 Writer files / 0 production factory constructors；
+- W6A complete=true；
+- W6 Institution System complete=false；
+- Business Writer phase complete=false；
+- Trial Provisioning 继续 separate review；
+- 下一任务：W6B Credential Compensation domain/port ownership audit + exact Runtime allowlist admission。
+
 <!-- BASE02_W5_ANALYTICS_HANDOFF_HISTORY -->
 
 ## 2026-08-11：W5 Analytics Writer 完成
