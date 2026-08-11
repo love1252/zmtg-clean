@@ -11,56 +11,28 @@
 - W5 Analytics：complete
 - W6 Institution System：complete
 - Trial Provisioning：complete
-- Business Writer phase：pending final full-repo fresh residual recompute
+- Business Writer phase：complete
+- 下一阶段：Architecture V2 final closure audit + handoff
 
 ```text
 w2_care_complete=true
 w3_knowledge_complete=true
 w5_complete=true
-w6a_complete=true
-w6b_complete=true
 w6_institution_system_complete=true
-
-trial_provisioning_fresh_audit=passed
-trial_provisioning_classification=dormant_legacy_cross_owner_writer
-trial_provisioning_closure_decision=fail_closed_blockade_required
-trial_provisioning_canonical_migration_required=false
-
-trial_provisioning_runtime_pr=1144
-trial_provisioning_runtime_head=22a1b625cf04083c672920bd18f1bf556dca5870
-trial_provisioning_runtime_merge=d1e56026be4f5fc7cea210a3b36860a4535ecd6c
-
-trial_provisioning_independent_review_pr=1145
-trial_provisioning_independent_review_merge=9af2568bbae5fa3569a300bd5f69f7984c2cd57f
-trial_provisioning_review_evidence_repair_pr=1146
-trial_provisioning_review_evidence_repair_merge=c0f2ca0685898931cee7e0f32a9c772ff89e2c9a
-
-trial_provisioning_runtime_file_count=2
-trial_provisioning_runtime_existing_file_count=2
-trial_provisioning_runtime_new_file_count=0
-
-trial_provisioning_direct_mutation_calls=0
-trial_provisioning_direct_writer_files=0
-trial_provisioning_db_access=0
-trial_provisioning_production_callers=0
-trial_provisioning_route_callers=0
-
-trial_provisioning_legacy_service_blocked=true
-trial_provisioning_dynamic_blockade_test_embedded=true
-
-customers_canonical_runtime_change=false
-care_canonical_runtime_change=false
-tenancy_provisioning_change=false
-architecture_rules_change=false
-architecture_exception_added=false
-
-trial_provisioning_runtime_implementation=passed
-trial_provisioning_runtime_independent_review=passed
-trial_provisioning_review_evidence_repaired=true
 trial_provisioning_complete=true
 
-business_writer_final_recompute=pending
-business_writer_phase_complete=false
+business_writer_final_recompute=passed
+business_writer_final_recompute_base=ca10b46c1938f29d192023e664a6f7933c5e4156
+
+fresh_mutation_candidate_file_count=63
+fresh_direct_writer_file_count=30
+fresh_direct_mutation_call_count=130
+
+unclassified_business_writer_residual=0
+legacy_cross_owner_direct_writer_residual=0
+unexpected_production_writer_residual=0
+
+business_writer_phase_complete=true
 
 database_connection=false
 migration=false
@@ -75,7 +47,7 @@ production_change=false
 
 ### 唯一下一任务
 
-`Full-repo Business Writer fresh residual recompute + phase completion decision`
+`Architecture V2 final closure audit + handoff`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 

@@ -1,5 +1,23 @@
 # 项目重构历史
 
+<!-- BASE02_BUSINESS_WRITER_FINAL_CLOSURE_HISTORY -->
+
+## 2026-08-11：Business Writer phase 完成
+
+- Trial Provisioning docs-only Handoff PR #1147 已完成，Trial Provisioning complete=true；
+- 从 `main=ca10b46c1938f29d192023e664a6f7933c5e4156` 重新执行全仓 fresh Writer residual recompute，不复用历史 residual 计数；
+- 以 2026-08-08 原始 75-file mutation inventory / 27-file Business Writer surface 作为历史分类证据，并叠加 W1 / W2 / W3 / W5 / W6 / Trial Provisioning 已合并 Runtime 证据；
+- fresh mutation candidate files=63；
+- fresh direct Writer files=30；
+- fresh direct mutation calls=130；
+- unclassified Business Writer residual=0；
+- legacy cross-owner direct Writer residual=0；
+- unexpected production Writer residual=0；
+- W2 Care / W3 Knowledge / W5 Analytics / W6 Institution System / Trial Provisioning 均保持 complete；
+- Business Writer phase complete=true；
+- 本次仅 docs-only audit / closure，不修改 Runtime、DB、Schema、Migration、Route、Reader、Capability、真实 HIS/WeCom 或生产；
+- 下一任务：Architecture V2 final closure audit + handoff。
+
 <!-- BASE02_TRIAL_PROVISIONING_HANDOFF_HISTORY -->
 
 ## 2026-08-11：Trial Provisioning legacy Writer 完成
