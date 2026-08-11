@@ -1,5 +1,37 @@
 # 智美天工架构文档索引
 
+<!-- POST_V2_R1A_AQ007_READMISSION_START -->
+
+## POST-V2-R1A AQ007 Orchestration Re-admission（2026-08-11）
+
+```text
+post_v2_r1a_aq007_readmission=passed
+
+failed_exact6_aq007_count=4
+
+revised_exact_runtime_file_count=3
+revised_existing_runtime_file_count=1
+revised_new_runtime_file_count=2
+
+cross_owner_composition=src/server/orchestration/**
+architecture_exception_required=false
+
+runtime_authorized=false
+reader_release=false
+capability_release=false
+```
+
+证据：
+
+- `docs/operations/post-v2-r1a-aq007-orchestration-readmission-20260811.md`
+- `docs/operations/post-v2-r1a-aq007-orchestration-exact-runtime-allowlist-20260811.csv`
+
+唯一下一任务：
+
+`POST-V2-R1A revised exact 3-file orchestration Capability Authority Foundation Runtime explicit authorization`
+
+<!-- POST_V2_R1A_AQ007_READMISSION_END -->
+
 <!-- POST_V2_R1A_PREFLIGHT_START -->
 
 ## POST-V2-R1A Capability Authority Foundation Preflight（2026-08-11）

@@ -3,62 +3,54 @@
 ## 唯一下一任务
 
 ```text
-POST-V2-R1A exact 6-file Capability Authority Foundation Runtime implementation explicit authorization
+POST-V2-R1A revised exact 3-file orchestration Capability Authority Foundation Runtime explicit authorization
 ```
 
-## R1A Admission state
+## Why the old exact-6 authorization ended
 
 ```text
-post_v2_r1a_preflight=passed
+old_exact6_targeted_tests=102_passed
+old_exact6_full_tests=6599_passed
+old_exact6_build=passed
 
-exact_runtime_file_count=6
-existing_runtime_file_count=6
-new_runtime_file_count=0
-
-architecture_exception_required=false
-capability_contract_change_required=false
-
-release_policy=hidden_only
-
-runtime_authorized=false
-reader_release=false
-capability_release=false
+old_exact6_architecture_incremental=blocked
+AQ007_CROSS_MODULE_SERVER_REPOSITORY=4
 ```
 
-Runtime allowlist：
+旧实现被保留为 local-only WIP，不会 push。
 
-1. `src/modules/institution/server/institution-capability-status-evaluator.ts`
-2. `src/modules/institution/server/institution-capability-status-reader.ts`
-3. `src/modules/institution/server/institution-server-runtime.ts`
-4. `src/modules/institution/tests/InstitutionCapabilityStatusEvaluator.test.ts`
-5. `src/modules/institution/tests/InstitutionCapabilityStatusReader.test.ts`
-6. `src/modules/institution/tests/InstitutionServerRuntime.test.ts`
+## Revised Runtime scope
 
-## Runtime 目标
+```text
+exact_runtime_file_count=3
+existing_runtime_file_count=1
+new_runtime_file_count=2
+architecture_exception_required=false
+```
 
-未来获批 Runtime 只建立 authority foundation。
+1. `src/modules/institution/server/institution-server-runtime.ts`
+2. `src/server/orchestration/institution-capability-authority.ts`
+3. `src/server/orchestration/institution-capability-authority.test.ts`
 
-所有 capability 必须继续：
+Cross-owner composition 只允许位于 `src/server/orchestration/**`。
+
+原 Institution capability evaluator / reader 继续保持 candidate-only，不进入新 Runtime scope。
+
+## Release boundary
 
 ```text
 productionRelease=not_released
 decision=hidden
-```
-
-因此不会改变：
-
-```text
-page release count=0
+page_release_count=0
 reader_release=false
 capability_release=false
+route_change=false
 ```
-
-第 7 个 Runtime 文件、新文件、Route、public contract、Security/Auth/Access Control/Tenancy、DB/Schema/Migration 或任何 `read_only/operational` 需求都必须 STOP / re-admit。
 
 只有用户重新明确授权：
 
 ```text
-授权执行 POST-V2-R1A exact 6-file Capability Authority Foundation Runtime implementation。
+授权执行 POST-V2-R1A revised exact 3-file orchestration Capability Authority Foundation Runtime。
 ```
 
-之后才可进入 Runtime。
+之后才能进入新的 Runtime implementation。

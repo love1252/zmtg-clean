@@ -1,0 +1,4 @@
+path,file_role,change_kind,new_file_allowed,cross_owner_rule
+src/modules/institution/server/institution-server-runtime.ts,existing same-module runtime context source,existing_runtime,false,no_new_cross_module_edge
+src/server/orchestration/institution-capability-authority.ts,cross-owner capability authority composition,new_runtime,true,orchestration_is_required_composition_surface
+src/server/orchestration/institution-capability-authority.test.ts,orchestration authority integration tests,new_test,true,test_only

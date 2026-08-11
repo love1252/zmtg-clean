@@ -1,5 +1,21 @@
 # 项目重构历史
 
+<!-- POST_V2_R1A_AQ007_READMISSION_HISTORY -->
+
+## 2026-08-11：POST-V2-R1A AQ007 Orchestration Re-admission
+
+- original exact-6 Runtime 在本地通过 targeted 102/102、typecheck、Architecture unit 148/148、full 6599/6599、lint、build；
+- commit 后 incremental Architecture Gate 报 4 个 AQ007 cross-module server dependency；
+- 失败 WIP commit 保留在本地旧分支，不 reset、不 push、不建 PR；
+- 不新增 AQ007 exception；
+- authority ownership 修正为 cross-owner composition only under `src/server/orchestration/**`；
+- revised Runtime scope 缩为 exact 3：1 existing + 2 new orchestration files；
+- Institution capability evaluator / reader 恢复 candidate-only，不再进入 Runtime scope；
+- Runtime authorization 已因 scope change 失效，必须重新取得显式授权；
+- Reader release=false；
+- Capability release=false；
+- 下一任务：POST-V2-R1A revised exact 3-file orchestration Capability Authority Foundation Runtime explicit authorization。
+
 <!-- POST_V2_R1A_PREFLIGHT_HISTORY -->
 
 ## 2026-08-11：POST-V2-R1A Capability Authority Foundation Preflight
