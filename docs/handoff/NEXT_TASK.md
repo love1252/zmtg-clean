@@ -3,49 +3,62 @@
 ## 唯一下一任务
 
 ```text
-Architecture V2 final closure audit + handoff
+Post-V2 roadmap re-baseline + next phase admission
 ```
 
-## Current state
+## Architecture V2 closure state
 
 ```text
-w2_care_complete=true
-w3_knowledge_complete=true
-w5_complete=true
-w6_institution_system_complete=true
-trial_provisioning_complete=true
-
-business_writer_final_recompute=passed
+directory_refactor_complete=true
+architecture_v2_document_views=6/6
 business_writer_phase_complete=true
+architecture_quality_gate=passed
 
-unclassified_business_writer_residual=0
-legacy_cross_owner_direct_writer_residual=0
-unexpected_production_writer_residual=0
+architecture_v2_final_closure_audit=passed
+architecture_v2_refactor_complete=true
+architecture_v2_target_fully_realized=false
+
+architecture_quality_exception_count=1
+architecture_quality_active_governed_exception_count=1
+architecture_quality_stale_exception_count=0
+
+reader_release=false
+capability_release=false
+production_ready_inferred=false
+production_deployment=false
 ```
 
-Business Writer final fresh residual evidence:
+Final evidence:
 
-```text
-base=ca10b46c1938f29d192023e664a6f7933c5e4156
-fresh_mutation_candidate_file_count=63
-fresh_direct_writer_file_count=30
-fresh_direct_mutation_call_count=130
-```
-
-Evidence:
-
+- `docs/architecture/architecture-v2-final-closure-audit-20260811.md`
 - `docs/operations/base02-business-writer-final-fresh-residual-recompute-20260811.md`
 - `docs/operations/base02-business-writer-final-fresh-residual-inventory-20260811.csv`
 
-下一阶段只允许做 Architecture V2 最终闭环审计与 Handoff。
+## 下一任务目标
 
-不得因为 Business Writer phase complete 就自动推导：
+下一轮先做路线图重基线和下一阶段准入，不自动进入任何 Runtime。
+
+需要从 post-V2 backlog 中重新选择并冻结一个独立阶段，例如：
+
+- W2-P2B compatibility delegate / AQ004 exception 未来退役；
+- Reader / Capability 独立放行；
+- Platform / Audit / Workspace later-or-outside-phase review；
+- 真实 HIS / WeCom / AI / Storage / Jobs Adapter；
+- Test / Staging / Production readiness；
+- 七线正式发布与业务验收；
+- 其他 target 模块物理迁移。
+
+任何选项都必须重新定义：
 
 ```text
-reader_release=true
-capability_release=true
-production_ready=true
-production_deployment=true
+goal
+base
+exact scope
+runtime authorization
+database / migration authorization
+external-system authorization
+validation
+stop conditions
 ```
 
-这些边界继续维持既有治理状态，除非未来单独授权。
+Architecture V2 本轮授权在最终 Closure 后结束，不得继承到 post-V2 Runtime。

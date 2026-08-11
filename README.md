@@ -2,6 +2,27 @@
 
 智美天工是面向医疗机构业务与 SaaS 平台治理的模块化单体。根 README 只提供项目入口、当前边界和常用导航；阶段历史统一保存在 [`docs/handoff/RELEASE_HISTORY.md`](docs/handoff/RELEASE_HISTORY.md)。
 
+<!-- ARCHITECTURE_V2_FINAL_CLOSURE_START -->
+
+## 架构 V2 当前状态
+
+Architecture V2 的**目录重构、架构文档、边界治理、Architecture Quality Gate 与 Business Writer 重构阶段已经完成**。
+
+```text
+architecture_v2_refactor_complete=true
+architecture_v2_target_fully_realized=false
+business_writer_phase_complete=true
+reader_release=false
+capability_release=false
+production_ready_inferred=false
+```
+
+这里的“完成”不是生产发布声明。详细目标架构仍包含需要独立准入的 post-V2 backlog、兼容退出、Reader／Capability 放行、外部 Adapter 和环境发布工作。
+
+当前实施事实以代码、测试、Schema、Migration、配置和[Architecture V2 最终闭环审计](docs/architecture/architecture-v2-final-closure-audit-20260811.md)为准；2026-07-28 建立的六类详细视图继续作为 dated current/target/proposed 架构视图。
+
+<!-- ARCHITECTURE_V2_FINAL_CLOSURE_END -->
+
 ## 项目定位
 
 当前仓库同时承载：

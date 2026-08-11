@@ -1,5 +1,29 @@
 # 项目重构历史
 
+<!-- ARCHITECTURE_V2_FINAL_CLOSURE_HISTORY -->
+
+## 2026-08-11：Architecture V2 重构阶段最终闭环
+
+- Directory Refactor foundation PR #743 已合并，Phase 31 final directory closeout 继续保持 closed；
+- Architecture V2 PR #781～#789 文档、证据审计、六类架构视图和 MIG-01 closure preflight 链已核验；
+- 六类架构视图完成 6/6；
+- Business Writer Final Closure PR #1148：`d81d3efa22c0730a7ea1b4eea06645f65677b7ff`；
+- Business Writer fresh residual：63 mutation candidate files / 30 direct Writer files / 130 direct mutation calls；
+- unclassified Business Writer residual=0；
+- legacy cross-owner direct Writer residual=0；
+- unexpected production Writer residual=0；
+- Architecture Quality unit tests=148/148；
+- full tests=6589/6589，489 test files；
+- typecheck、lint、build、Architecture incremental 均通过；
+- Architecture Quality 当前只保留 1 个 W2-P2B 精确 AQ004 exception；
+- 该 exception 仍有 `tenant-business-repository.ts` production compatibility caller，因此 active governed exception=1、stale exception=0；
+- Architecture V2 refactor complete=true；
+- Architecture V2 target fully realized=false；
+- Reader、Capability、生产就绪与生产部署均未由本 Closure 放行或推导；
+- 六类 2026-07-28 详细架构视图保留 dated current/target/proposed 语义，不大规模重写历史快照；
+- 本次最终闭环为 docs-only，不修改 Runtime、DB、Schema、Migration、Route 或生产；
+- 下一任务：Post-V2 roadmap re-baseline + next phase admission。
+
 <!-- BASE02_BUSINESS_WRITER_FINAL_CLOSURE_HISTORY -->
 
 ## 2026-08-11：Business Writer phase 完成
