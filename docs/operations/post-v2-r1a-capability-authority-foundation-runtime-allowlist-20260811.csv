@@ -1,0 +1,7 @@
+path,file_role,change_kind,new_file_allowed,release_effect
+src/modules/institution/server/institution-capability-status-evaluator.ts,authority decision evaluator,existing_runtime,false,hidden_only
+src/modules/institution/server/institution-capability-status-reader.ts,authority evidence seal and CapabilityStatusV1 reader,existing_runtime,false,hidden_only
+src/modules/institution/server/institution-server-runtime.ts,composition root using existing sealed request authorization and trusted now,existing_runtime,false,no_route_release
+src/modules/institution/tests/InstitutionCapabilityStatusEvaluator.test.ts,evaluator authority and hidden-only tests,existing_test,false,test_only
+src/modules/institution/tests/InstitutionCapabilityStatusReader.test.ts,reader seal envelope freshness and fail-closed tests,existing_test,false,test_only
+src/modules/institution/tests/InstitutionServerRuntime.test.ts,composition-root authority foundation tests,existing_test,false,test_only

@@ -7,50 +7,49 @@
 
 - 更新日期：2026-08-11
 - Architecture V2 重构阶段：complete
-- Post-V2 roadmap：re-baselined
 - POST-V2-R1 Readiness Audit：complete
-- 26 个 page capability：0 eligible / 26 blocked
+- POST-V2-R1A Authority Foundation Preflight：complete
+- R1A Runtime：尚未授权
 - Reader / Capability：仍未放行
-- 下一阶段：POST-V2-R1A Capability Authority Foundation Preflight
 
 ```text
 architecture_v2_refactor_complete=true
 architecture_v2_target_fully_realized=false
 
-post_v2_roadmap_rebaseline=passed
-post_v2_r1_admission=passed
 post_v2_r1_readiness_audit=passed
 post_v2_r1_complete=true
-
-post_v2_r1_page_candidate_count=26
 post_v2_r1_eligible_page_count=0
 post_v2_r1_blocked_page_count=26
-post_v2_r1_outside_initial_readonly_release_count=0
 
-post_v2_r1_workbench_capability_off_count=1
-post_v2_r1_catch_all_capability_off_count=25
+post_v2_r1a_preflight=passed
 
-post_v2_r1_authority_bearing_evaluator_exists=false
-post_v2_r1_authority_bearing_reader_exists=false
-post_v2_r1_common_authority_foundation_required=true
+post_v2_r1a_capability_contract_change_required=false
+post_v2_r1a_existing_security_scope_authority=true
 
-post_v2_r1_targeted_test_files=5_passed
-post_v2_r1_targeted_tests=126_passed
-post_v2_r1_typecheck=passed
+post_v2_r1a_exact_runtime_file_count=6
+post_v2_r1a_existing_runtime_file_count=6
+post_v2_r1a_new_runtime_file_count=0
+post_v2_r1a_architecture_exception_required=false
+
+post_v2_r1a_release_policy=hidden_only
+post_v2_r1a_page_release_count_after_runtime=0
+
+post_v2_r1a_baseline_targeted_test_files=4_passed
+post_v2_r1a_baseline_targeted_tests=92_passed
+post_v2_r1a_baseline_typecheck=passed
+
+post_v2_r1a_runtime_authorized=false
 
 reader_release=false
 capability_release=false
 production_ready_inferred=false
 production_deployment=false
 production_change=false
-
-post_v2_r1a_runtime_authorized=false
-post_v2_backlog_requires_separate_admission=true
 ```
 
 ### 唯一下一任务
 
-`POST-V2-R1A Institution Capability Authority Foundation Preflight + exact Runtime admission decision`
+`POST-V2-R1A exact 6-file Capability Authority Foundation Runtime implementation explicit authorization`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
