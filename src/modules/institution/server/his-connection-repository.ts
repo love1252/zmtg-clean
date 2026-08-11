@@ -523,71 +523,11 @@ function decideSoftDeleteTransition(
 }
 
 async function updateHisConnectionStatusForTenant(
-  database: TenantDatabase,
-  input: HisConnectionStatusTransitionCommand,
-  decideTransition: (currentStatus: HisConnectionRow['status']) => StatusTransitionDecision,
+  _database: TenantDatabase,
+  _input: HisConnectionStatusTransitionCommand,
+  _decideTransition: (currentStatus: HisConnectionRow['status']) => StatusTransitionDecision,
 ): Promise<HisConnectionStatusTransitionResult> {
-  const command = pickStatusTransitionCommand(input);
-
-  if (!command) {
-    return { status: 'validation_failed' };
-  }
-
-  const currentRow = await findVisibleHisConnectionRowByTenant(database, {
-    tenantId: command.tenantId,
-    connectionId: command.connectionId,
-  });
-
-  if (!currentRow) {
-    return { status: 'not_found' };
-  }
-
-  const decision = decideTransition(currentRow.status);
-
-  if (decision.status !== 'ok') {
-    return { status: decision.status };
-  }
-
-  const now = new Date();
-  const values: Partial<typeof hisConnections.$inferInsert> = {
-    status: decision.nextStatus,
-    updatedAt: now,
-    updatedBy: command.actorUserId,
-  };
-
-  if (decision.setRevokedAt) {
-    values.revokedAt = now;
-  }
-
-  if (decision.setDeletedAt) {
-    values.deletedAt = now;
-  }
-
-  try {
-    const [row] = await database
-      .update(hisConnections)
-      .set(values)
-      .where(
-        and(
-          eq(hisConnections.tenantId, command.tenantId),
-          eq(hisConnections.id, command.connectionId),
-          isNull(hisConnections.deletedAt),
-        ),
-      )
-      .returning();
-
-    if (!row || row.id !== command.connectionId || row.tenantId !== command.tenantId) {
-      return { status: 'not_found' };
-    }
-
-    if (decision.nextStatus !== 'deleted' && row.deletedAt !== null) {
-      return { status: 'not_found' };
-    }
-
-    return { status: 'ok', record: mapHisConnectionRowToReadModel(row) };
-  } catch {
-    throw createSanitizedWriteError('change status');
-  }
+  throw new Error('legacy_institution_his_connection_writer_disabled');
 }
 
 function getHisConnectionCredentialStatus(row: HisConnectionRow): HisConnectionCredentialStatus {
@@ -641,249 +581,37 @@ export function mapHisConnectionRowToReadModel(row: HisConnectionRow): HisConnec
 }
 
 async function updateHisConnectionCredentialReferenceForTenant(
-  database: TenantDatabase,
-  input: HisConnectionCredentialReferenceCommand,
+  _database: TenantDatabase,
+  _input: HisConnectionCredentialReferenceCommand,
 ): Promise<HisConnectionCredentialReferenceResult> {
-  const command = pickCredentialReferenceCommand(input);
-
-  if (!command) {
-    return { status: 'validation_failed' };
-  }
-
-  const currentRow = await findVisibleHisConnectionRowByTenant(database, {
-    tenantId: command.tenantId,
-    connectionId: command.connectionId,
-  });
-
-  if (!currentRow) {
-    return { status: 'not_found' };
-  }
-
-  if (!canSetHisConnectionCredentialReference(currentRow)) {
-    return { status: 'invalid_state_transition' };
-  }
-
-  try {
-    const [row] = await database
-      .update(hisConnections)
-      .set({
-        credentialRef: command.credentialRef,
-        updatedAt: new Date(),
-        updatedBy: command.actorUserId,
-      })
-      .where(
-        and(
-          eq(hisConnections.tenantId, command.tenantId),
-          eq(hisConnections.id, command.connectionId),
-          isNull(hisConnections.deletedAt),
-        ),
-      )
-      .returning();
-
-    if (!row || row.id !== command.connectionId || !isVisibleHisConnectionRow(row, command.tenantId)) {
-      return { status: 'not_found' };
-    }
-
-    return {
-      status: 'ok',
-      record: mapHisConnectionRowToReadModel(row),
-      summary: mapHisConnectionRowToCredentialSummary(row),
-    };
-  } catch {
-    throw createSanitizedWriteError('change credential reference');
-  }
+  throw new Error('legacy_institution_his_connection_writer_disabled');
 }
 
 async function clearHisConnectionCredentialReferenceForTenantInDatabase(
-  database: TenantDatabase,
-  input: HisConnectionCredentialClearCommand,
+  _database: TenantDatabase,
+  _input: HisConnectionCredentialClearCommand,
 ): Promise<HisConnectionCredentialReferenceResult> {
-  const command = pickCredentialClearCommand(input);
-
-  if (!command) {
-    return { status: 'validation_failed' };
-  }
-
-  const currentRow = await findVisibleHisConnectionRowByTenant(database, {
-    tenantId: command.tenantId,
-    connectionId: command.connectionId,
-  });
-
-  if (!currentRow) {
-    return { status: 'not_found' };
-  }
-
-  try {
-    const [row] = await database
-      .update(hisConnections)
-      .set({
-        credentialRef: null,
-        updatedAt: new Date(),
-        updatedBy: command.actorUserId,
-      })
-      .where(
-        and(
-          eq(hisConnections.tenantId, command.tenantId),
-          eq(hisConnections.id, command.connectionId),
-          isNull(hisConnections.deletedAt),
-        ),
-      )
-      .returning();
-
-    if (!row || row.id !== command.connectionId || !isVisibleHisConnectionRow(row, command.tenantId)) {
-      return { status: 'not_found' };
-    }
-
-    return {
-      status: 'ok',
-      record: mapHisConnectionRowToReadModel(row),
-      summary: mapHisConnectionRowToCredentialSummary(row),
-    };
-  } catch {
-    throw createSanitizedWriteError('change credential reference');
-  }
+  throw new Error('legacy_institution_his_connection_writer_disabled');
 }
 
 export function createHisConnectionRepository(database: TenantDatabase) {
   return {
     async createHisConnectionForTenant(
-      input: CreateHisConnectionForTenantCommand,
+      _input: CreateHisConnectionForTenantCommand,
     ): Promise<CreateHisConnectionResult> {
-      const values = pickCreateHisConnectionValues(input);
-
-      if (!values) {
-        return { status: 'validation_failed' };
-      }
-
-      const now = new Date();
-
-      try {
-        const [row] = await database
-          .insert(hisConnections)
-          .values({
-            id: createHisConnectionId(),
-            tenantId: values.tenantId,
-            connectionName: values.connectionName,
-            sourceSystem: values.sourceSystem,
-            vendorType: values.vendorType,
-            systemType: values.systemType,
-            status: 'draft',
-            healthStatus: 'unknown',
-            createdAt: now,
-            updatedAt: now,
-            createdBy: values.actorUserId,
-            updatedBy: values.actorUserId,
-          })
-          .returning();
-
-        if (!row || !isVisibleHisConnectionRow(row, values.tenantId)) {
-          throw createSanitizedWriteError('create');
-        }
-
-        return { status: 'ok', record: mapHisConnectionRowToReadModel(row) };
-      } catch (error) {
-        if (isUniqueViolation(error)) {
-          return { status: 'conflict' };
-        }
-
-        throw createSanitizedWriteError('create');
-      }
+      throw new Error('legacy_institution_his_connection_writer_disabled');
     },
 
     async updateHisConnectionForTenant(
-      input: UpdateHisConnectionForTenantCommand,
+      _input: UpdateHisConnectionForTenantCommand,
     ): Promise<UpdateHisConnectionResult> {
-      const tenantId = normalizeRequiredText(input.tenantId, hisConnectionFieldLimits.tenantId);
-      const connectionId = normalizeRequiredText(
-        input.connectionId,
-        hisConnectionFieldLimits.connectionId,
-      );
-      const actorUserId = normalizeRequiredText(
-        input.actorUserId,
-        hisConnectionFieldLimits.actorUserId,
-      );
-      const values = pickUpdateHisConnectionValues(input.values);
-
-      if (!tenantId || !connectionId || !actorUserId || !values) {
-        return { status: 'validation_failed' };
-      }
-
-      try {
-        const [row] = await database
-          .update(hisConnections)
-          .set({
-            ...values,
-            updatedAt: new Date(),
-            updatedBy: actorUserId,
-          })
-          .where(
-            and(
-              eq(hisConnections.tenantId, tenantId),
-              eq(hisConnections.id, connectionId),
-              isNull(hisConnections.deletedAt),
-            ),
-          )
-          .returning();
-
-        if (!row || row.id !== connectionId || !isVisibleHisConnectionRow(row, tenantId)) {
-          return { status: 'not_found' };
-        }
-
-        return { status: 'ok', record: mapHisConnectionRowToReadModel(row) };
-      } catch (error) {
-        if (isUniqueViolation(error)) {
-          return { status: 'conflict' };
-        }
-
-        throw createSanitizedWriteError('update');
-      }
+      throw new Error('legacy_institution_his_connection_writer_disabled');
     },
 
     async writeHisConnectionHealthSummaryForTenant(
-      input: WriteHisConnectionHealthSummaryForTenantCommand,
+      _input: WriteHisConnectionHealthSummaryForTenantCommand,
     ): Promise<HisConnectionHealthSummaryWriteResult> {
-      const command = pickHealthSummaryCommand(input);
-
-      if (!command) {
-        return { status: 'validation_failed' };
-      }
-
-      const values: Partial<typeof hisConnections.$inferInsert> = {
-        healthStatus: command.healthStatus,
-        lastCheckedAt: command.checkedAt,
-        lastErrorCode: command.lastErrorCode,
-        updatedAt: new Date(),
-      };
-
-      if (command.actorUserId !== undefined) {
-        values.updatedBy = command.actorUserId;
-      }
-
-      try {
-        const [row] = await database
-          .update(hisConnections)
-          .set(values)
-          .where(
-            and(
-              eq(hisConnections.tenantId, command.tenantId),
-              eq(hisConnections.id, command.connectionId),
-              isNull(hisConnections.deletedAt),
-            ),
-          )
-          .returning();
-
-        if (
-          !row ||
-          row.id !== command.connectionId ||
-          !isVisibleHisConnectionRow(row, command.tenantId)
-        ) {
-          return { status: 'not_found' };
-        }
-
-        return { status: 'ok', record: mapHisConnectionRowToReadModel(row) };
-      } catch {
-        throw createSanitizedWriteError('write health summary');
-      }
+      throw new Error('legacy_institution_his_connection_writer_disabled');
     },
 
     async pauseHisConnectionForTenant(

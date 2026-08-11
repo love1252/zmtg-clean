@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
 import type {
@@ -579,5 +581,16 @@ describe('HIS 测试连接 service 最小 runtime', () => {
     expect(harness.fakeProvider).not.toHaveBeenCalled();
     expect(harness.repository.writeHisConnectionHealthSummaryForTenant).not.toHaveBeenCalled();
     expectNoSensitiveAuditData(result);
+  });
+});
+
+describe('W6A default Writer construction', () => {
+  it('uses server orchestration for the default Writer', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'src/modules/institution/server/his-connection-test-connection-service.ts'),
+      'utf8',
+    );
+    expect(source).toContain("@/server/orchestration/his-connection-writer");
+    expect(source).toContain('createHisConnectionWriter');
   });
 });
