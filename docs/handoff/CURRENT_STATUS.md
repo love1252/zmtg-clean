@@ -9,39 +9,41 @@
 - W2 Care：complete
 - W3 Knowledge：complete
 - W5 Analytics：complete
-- W6 Institution System：pending symbol/callgraph admission
+- W6 Institution System：decomposed; W6A admitted / Runtime not authorized; W6B pending domain-port admission
 - Trial Provisioning：separate review pending
 - Business Writer phase：not complete
 
 ```text
 w2_care_complete=true
 w3_knowledge_complete=true
-
-w5_analytics_admission=passed
-w5_runtime_implementation=passed
-w5_runtime_independent_review=passed
-w5_runtime_authorization_consumed=true
 w5_complete=true
 
-w5_implementation_pr=1130
-w5_implementation_merge=182b9fb6e2fbd730153b5ce536e826141ab03bce
-w5_independent_review_pr=1131
-w5_independent_review_merge=0f4f62197ad2929653f4341d783e00f4a954505a
+w6_symbol_callgraph_audit=passed
+w6_transaction_audit=passed
+w6_decomposition_frozen=true
+w6_canonical_owner=institution-system
 
-w5_runtime_file_count=6
-w5_canonical_owner=analytics
-w5_canonical_append_only=true
-w5_legacy_writer_blocked=true
-w5_legacy_direct_insert_calls=0
-w5_legacy_read_compatibility=true
-w5_active_production_writer_callers=0
-w5_institution_ai_write_route_capability_off=true
+w6_fresh_direct_mutation_calls=10
+w6_fresh_direct_writer_files=3
+w6_fresh_fact_tables=3
 
-w6_institution_system_state=pending_symbol_callgraph_admission
-w6_baseline_candidate_count=5
-w6_baseline_writer_candidate_count=4
-w6_baseline_nonwriter_candidate_count=1
-w6_runtime_authorized=false
+w6a_his_connection_core_admission=passed
+w6a_direct_mutation_calls=6
+w6a_active_production_factory_importers=4
+w6a_exact_runtime_file_count=16
+w6a_new_runtime_file_count=6
+w6a_existing_runtime_file_count=10
+w6a_seventeenth_runtime_file_requires_stop_and_readmission=true
+w6a_runtime_authorized=false
+
+w6b_compensation_audit=passed
+w6b_direct_mutation_calls=4
+w6b_direct_writer_files=2
+w6b_active_production_factory_constructors=0
+w6b_worker_uses_injected_ports=true
+w6b_runtime_allowlist_frozen=false
+w6b_runtime_authorized=false
+w6b_blocked_pending_domain_port_ownership_admission=true
 
 trial_provisioning_classification=separate_provisioning_review
 business_writer_phase_complete=false
@@ -52,12 +54,13 @@ schema_change=false
 route_change=false
 reader_release=false
 capability_release=false
+real_his=false
 production_change=false
 ```
 
 ### 唯一下一任务
 
-`W6 Institution System Writer symbol/callgraph audit + exact implementation allowlist admission`
+`W6A HIS Connection Core exact 16-file Runtime implementation explicit authorization`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 

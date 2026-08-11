@@ -1,0 +1,6 @@
+order,surface,current_atomicity,w6a_required_preservation
+1,his-connection-write-service,hisConnections create/update + Audit repository record in same database.transaction,preserve
+2,his-connection-status-service,hisConnections status transition + Audit repository record in same database.transaction,preserve
+3,his-connection-credential-service,synthetic provider store before DB transaction then credentialRef write + allowed Audit in same DB transaction,preserve provider-before-transaction and DB writer+Audit atomicity
+4,his-connection-test-connection-service,request/provider/audits and health summary write are sequential without one encompassing database.transaction,preserve existing non-atomic sequencing; do not expand atomicity in W6A
+5,credential-compensation-worker,operation/job repositories injected and transitions coordinated at worker level,no W6A change

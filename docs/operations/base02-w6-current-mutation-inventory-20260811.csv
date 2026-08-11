@@ -1,0 +1,6 @@
+order,path,current_direct_mutations,current_classification,w6_slice
+1,src/modules/institution/server/his-connection-repository.ts,6 calls on hisConnections,direct_writer,W6A_HIS_CONNECTION_CORE
+2,src/modules/institution/server/his-connection-credential-compensation-operation-repository.ts,2 calls on hisConnectionCredentialCompensationOperations,direct_writer,W6B_CREDENTIAL_COMPENSATION
+3,src/modules/institution/server/his-connection-credential-compensation-job-queue-repository.ts,2 calls on hisConnectionCredentialCompensationJobs,direct_writer,W6B_CREDENTIAL_COMPENSATION
+4,src/modules/institution/server/his-connection-credential-storage.ts,none,test_only_in_memory_provider_non_db_writer,none
+5,src/modules/institution/components/HisConnectionReadOnlyPanel.tsx,none,readonly_ui_non_writer,none

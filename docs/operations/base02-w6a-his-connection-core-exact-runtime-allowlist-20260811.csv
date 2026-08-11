@@ -1,0 +1,17 @@
+order,path,file_state,responsibility,runtime_authorized
+1,src/modules/institution-system/application/his-connection-command-service.ts,new,canonical Institution System command contract validation and state transition boundary,false
+2,src/modules/institution-system/server/his-connection-command-repository.ts,new,canonical hisConnections direct persistence Owner,false
+3,src/modules/institution-system/tests/HisConnectionCommandService.test.ts,new,canonical command validation transition and tenant-scope tests,false
+4,src/modules/institution-system/tests/HisConnectionCommandRepository.test.ts,new,canonical persistence create update status credentialRef health and Reader-safe return tests,false
+5,src/server/orchestration/his-connection-writer.ts,new,server composition factory for Institution System Writer,false
+6,src/server/orchestration/his-connection-writer.test.ts,new,composition ownership and construction tests,false
+7,src/modules/institution/server/his-connection-repository.ts,existing,remove direct hisConnections mutations block legacy Writer methods retain legacy Readers,false
+8,src/modules/institution/tests/HisConnectionRepository.test.ts,existing,legacy Writer blockade and Reader compatibility tests,false
+9,src/modules/institution/server/his-connection-write-service.ts,existing,rewire create/update Writer construction through orchestration preserving Audit transaction,false
+10,src/modules/institution/tests/HisConnectionWriteService.test.ts,existing,create/update transaction and Audit regression tests,false
+11,src/modules/institution/server/his-connection-status-service.ts,existing,rewire status Writer construction preserving Audit transaction,false
+12,src/modules/institution/tests/HisConnectionStatusService.test.ts,existing,status transition and Audit transaction regression tests,false
+13,src/modules/institution/server/his-connection-credential-service.ts,existing,rewire credentialRef Writer construction preserving synthetic provider and Audit transaction semantics,false
+14,src/modules/institution/tests/HisConnectionCredentialService.test.ts,existing,credential provider Writer Audit and failure regression tests,false
+15,src/modules/institution/server/his-connection-test-connection-service.ts,existing,use legacy Reader plus canonical health Writer without Route or real-HIS change,false
+16,src/modules/institution/tests/HisConnectionTestConnectionService.test.ts,existing,fake provider health Writer Audit sequencing and failure regression tests,false

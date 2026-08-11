@@ -3,27 +3,39 @@
 ## 唯一下一任务
 
 ```text
-W6 Institution System Writer symbol/callgraph audit + exact implementation allowlist admission
+W6A HIS Connection Core exact 16-file Runtime implementation explicit authorization
 ```
 
-## 当前状态
+## W6 Admission 状态
 
 ```text
-w2_care_complete=true
-w3_knowledge_complete=true
 w5_complete=true
 
-w6_institution_system_state=pending_symbol_callgraph_admission
-w6_runtime_authorized=false
+w6_symbol_callgraph_audit=passed
+w6_transaction_audit=passed
+w6_decomposition_frozen=true
+w6_canonical_owner=institution-system
 
-trial_provisioning_classification=separate_provisioning_review
+w6a_his_connection_core_admission=passed
+w6a_exact_runtime_file_count=16
+w6a_runtime_authorized=false
+
+w6b_compensation_audit=passed
+w6b_runtime_allowlist_frozen=false
+w6b_runtime_authorized=false
+w6b_blocked_pending_domain_port_ownership_admission=true
+
 business_writer_phase_complete=false
 ```
 
-## W6 当前冻结前证据
+W6A 冻结清单：
 
-旧 post-W1C inventory 有 5 个 W6 baseline candidate，其中 4 个带 direct mutation、1 个无 direct mutation UI candidate。
+`docs/operations/base02-w6a-his-connection-core-exact-runtime-allowlist-20260811.csv`
 
-这些旧证据不构成 Runtime Admission。W6 必须先重新完成 current-main symbol audit、direct mutation AST、production callgraph、Owner/transaction boundary、exact allowlist 和 test matrix，再走 docs-only Formal Admission。
+W6A 只迁移 `hisConnections` Writer ownership，保留现有 Reader、Audit transaction、synthetic credential provider、fake test-connection 和 API Route 契约。
 
-在新的明确 Runtime 授权前，禁止 W6 Runtime、Trial Provisioning Runtime、Schema、Migration、DB execution、Route change、Reader/Capability release、真实 HIS 和 production change。
+第 17 个 Runtime 文件必须 `STOP / re-admit`。
+
+W6B compensation 不包含在 W6A 授权中。W6A 完成并 Handoff 后，再单独完成 W6B domain/port ownership Admission。
+
+必须收到明确 Runtime 授权后才可实施 W6A。
