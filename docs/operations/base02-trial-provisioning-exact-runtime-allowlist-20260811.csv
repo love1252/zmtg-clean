@@ -1,0 +1,3 @@
+order,path,file_state,responsibility,runtime_authorized
+1,src/modules/institution/server/trial-provisioning-service.ts,existing,remove four direct business fact inserts and fail closed exported legacy Trial Provisioning function before DB access,false
+2,src/modules/institution/tests/TrialProvisioningService.test.ts,new,prove fail-closed occurs before select transaction or mutation,false

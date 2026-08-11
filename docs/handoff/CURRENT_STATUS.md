@@ -9,49 +9,39 @@
 - W2 Care：complete
 - W3 Knowledge：complete
 - W5 Analytics：complete
-- W6 Institution System：complete（W6A + W6B）
-- Trial Provisioning：separate review pending
+- W6 Institution System：complete
+- Trial Provisioning：fresh audit passed / exact 2-file fail-closed Runtime admitted, not authorized
 - Business Writer phase：not complete
 
 ```text
 w2_care_complete=true
 w3_knowledge_complete=true
 w5_complete=true
-
 w6a_complete=true
-
-w6b_domain_ownership_audit=passed
-w6b_port_ownership_audit=passed
-w6b_state_machine_cas_audit=passed
-w6b_coordination_boundary_audit=passed
-
-w6b_runtime_implementation=passed
-w6b_runtime_independent_review=passed
-w6b_runtime_authorization_consumed=true
 w6b_complete=true
-
-w6b_implementation_pr=1138
-w6b_implementation_merge=89f20a63b18f120c8bd430d3a4a6e8ac7d88e12c
-w6b_independent_review_pr=1139
-w6b_independent_review_merge=038e7665f21f4f78e868769d42371c3e09d61ca8
-
-w6b_runtime_file_count=18
-w6b_production_writer_files=2
-w6b_canonical_direct_mutation_calls=4
-w6b_legacy_direct_mutation_calls=0
-w6b_operation_state_cas=true
-w6b_job_state_and_claim_version_cas=true
-w6b_legacy_operation_factory_blocked=true
-w6b_legacy_job_factory_blocked=true
-w6b_legacy_worker_blocked=true
-w6b_canonical_worker_uses_ports=true
-w6b_canonical_worker_database_transaction=false
-w6b_canonical_production_activation=false
-
 w6_institution_system_complete=true
 
-trial_provisioning_classification=separate_provisioning_review
-trial_provisioning_review=pending
+trial_provisioning_fresh_audit=passed
+trial_provisioning_classification=dormant_legacy_cross_owner_writer
+trial_provisioning_direct_mutation_calls=4
+trial_provisioning_direct_writer_files=1
+trial_provisioning_fact_tables=4
+trial_provisioning_production_callers=0
+trial_provisioning_route_callers=0
+trial_provisioning_db_transaction_boundary=1
+trial_provisioning_existing_customer_guard=tenant_only
+
+trial_provisioning_closure_decision=fail_closed_blockade_required
+trial_provisioning_canonical_migration_required=false
+trial_provisioning_exact_runtime_file_count=2
+trial_provisioning_new_runtime_file_count=1
+trial_provisioning_existing_runtime_file_count=1
+trial_provisioning_third_runtime_file_requires_stop_and_readmission=true
+trial_provisioning_runtime_allowlist_frozen=true
+trial_provisioning_runtime_authorized=false
+trial_provisioning_production_activation=false
+trial_provisioning_review=admitted_runtime_pending
+
 business_writer_phase_complete=false
 
 database_connection=false
@@ -61,12 +51,13 @@ route_change=false
 reader_release=false
 capability_release=false
 real_his=false
+real_wecom=false
 production_change=false
 ```
 
 ### 唯一下一任务
 
-`Trial Provisioning Writer fresh residual audit + ownership classification / closure decision`
+`Trial Provisioning exact 2-file fail-closed Runtime implementation explicit authorization`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 

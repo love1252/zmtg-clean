@@ -1,0 +1,8 @@
+order,surface,current_main,decision
+1,provisionDemoDataForTenant,definition only; production callers=0,retain compatibility symbol but fail closed
+2,API Route callers,0,do not add Route
+3,Customers canonical Writer,src/modules/customers/server/customer-command-repository.ts,unchanged
+4,Care appointment canonical Writer,src/modules/care/server/appointment-command-repository.ts,unchanged
+5,Care treatment-summary canonical Writer,src/modules/care/server/treatment-summary-command-repository.ts,unchanged
+6,Care follow-up canonical Writer,src/modules/care/server/follow-up-command-repository.ts,unchanged
+7,Tenancy provisioning foundation,src/modules/tenancy/provisioning/server/provisioning-write-postgres-adapter.ts,explicitly excluded

@@ -1,0 +1,6 @@
+order,test_path,state,required_assertion
+1,src/modules/institution/tests/TrialProvisioningService.test.ts,new,legacy Trial Provisioning fails closed before DB access
+2,src/modules/customers/tests/CustomerCommandRepository.test.ts,existing_unmodified,Customers canonical Writer healthy
+3,src/modules/care/tests/AppointmentCommandRepository.test.ts,existing_unmodified,Care appointment canonical Writer healthy
+4,src/modules/care/tests/TreatmentSummaryCommandRepository.test.ts,existing_unmodified,Care treatment summary canonical Writer healthy
+5,src/modules/care/tests/FollowUpCommandRepository.test.ts,existing_unmodified,Care follow-up canonical Writer healthy

@@ -1,0 +1,2 @@
+path,classification,direct_mutation_calls,mutation_kind,fact_tables,transaction_boundary,production_callers,route_callers
+src/modules/institution/server/trial-provisioning-service.ts,dormant_legacy_cross_owner_writer,4,insert,customers|treatmentSummaries|followUpTasks|appointments,single_db_transaction,0,0
