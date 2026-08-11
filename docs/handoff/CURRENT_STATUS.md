@@ -10,8 +10,8 @@
 - W3 Knowledge：complete
 - W5 Analytics：complete
 - W6 Institution System：complete
-- Trial Provisioning：exact-3 Runtime logic passed but stopped by AQ004 new Institution test file / final exact-2 no-new-file re-admitted, not authorized
-- Business Writer phase：not complete
+- Trial Provisioning：complete
+- Business Writer phase：pending final full-repo fresh residual recompute
 
 ```text
 w2_care_complete=true
@@ -26,31 +26,40 @@ trial_provisioning_classification=dormant_legacy_cross_owner_writer
 trial_provisioning_closure_decision=fail_closed_blockade_required
 trial_provisioning_canonical_migration_required=false
 
-trial_provisioning_exact3_runtime_attempt=stopped_at_architecture_incremental
-trial_provisioning_exact3_runtime_head=a53b335bec70726d7393c7f7222f281f718e319f
-trial_provisioning_exact3_targeted_test_files=5
-trial_provisioning_exact3_targeted_tests=30
-trial_provisioning_exact3_targeted_passed=30
-trial_provisioning_exact3_typecheck=passed
-trial_provisioning_exact3_architecture_unit_tests=148_passed
-trial_provisioning_exact3_full_test_files=490
-trial_provisioning_exact3_full_tests=6589
-trial_provisioning_exact3_lint=passed
-trial_provisioning_exact3_build=passed
-trial_provisioning_exact3_architecture_incremental=failed_aq004_new_institution_test
-trial_provisioning_exact3_authorization_exhausted=true
+trial_provisioning_runtime_pr=1144
+trial_provisioning_runtime_head=22a1b625cf04083c672920bd18f1bf556dca5870
+trial_provisioning_runtime_merge=d1e56026be4f5fc7cea210a3b36860a4535ecd6c
 
-trial_provisioning_final_scope_reason=no_new_frozen_institution_test_file
-trial_provisioning_exact_runtime_file_count=2
-trial_provisioning_existing_runtime_file_count=2
-trial_provisioning_new_runtime_file_count=0
-trial_provisioning_third_runtime_file_requires_stop_and_readmission=true
-trial_provisioning_runtime_allowlist_frozen=true
-trial_provisioning_runtime_authorized=false
-trial_provisioning_architecture_exception_required=false
-trial_provisioning_production_activation=false
-trial_provisioning_review=final_exact2_runtime_pending
+trial_provisioning_independent_review_pr=1145
+trial_provisioning_independent_review_merge=9af2568bbae5fa3569a300bd5f69f7984c2cd57f
+trial_provisioning_review_evidence_repair_pr=1146
+trial_provisioning_review_evidence_repair_merge=c0f2ca0685898931cee7e0f32a9c772ff89e2c9a
 
+trial_provisioning_runtime_file_count=2
+trial_provisioning_runtime_existing_file_count=2
+trial_provisioning_runtime_new_file_count=0
+
+trial_provisioning_direct_mutation_calls=0
+trial_provisioning_direct_writer_files=0
+trial_provisioning_db_access=0
+trial_provisioning_production_callers=0
+trial_provisioning_route_callers=0
+
+trial_provisioning_legacy_service_blocked=true
+trial_provisioning_dynamic_blockade_test_embedded=true
+
+customers_canonical_runtime_change=false
+care_canonical_runtime_change=false
+tenancy_provisioning_change=false
+architecture_rules_change=false
+architecture_exception_added=false
+
+trial_provisioning_runtime_implementation=passed
+trial_provisioning_runtime_independent_review=passed
+trial_provisioning_review_evidence_repaired=true
+trial_provisioning_complete=true
+
+business_writer_final_recompute=pending
 business_writer_phase_complete=false
 
 database_connection=false
@@ -66,7 +75,7 @@ production_change=false
 
 ### 唯一下一任务
 
-`Trial Provisioning final exact 2-file no-new-file fail-closed Runtime implementation explicit authorization`
+`Full-repo Business Writer fresh residual recompute + phase completion decision`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 

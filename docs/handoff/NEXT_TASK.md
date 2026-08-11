@@ -3,71 +3,60 @@
 ## 唯一下一任务
 
 ```text
-Trial Provisioning final exact 2-file no-new-file fail-closed Runtime implementation explicit authorization
+Full-repo Business Writer fresh residual recompute + phase completion decision
 ```
 
-## Final Re-admission state
+## Current state
 
 ```text
-trial_provisioning_exact3_runtime_attempt=stopped_at_architecture_incremental
-trial_provisioning_exact3_runtime_head=a53b335bec70726d7393c7f7222f281f718e319f
+w2_care_complete=true
+w3_knowledge_complete=true
+w5_complete=true
+w6_institution_system_complete=true
+trial_provisioning_complete=true
 
-trial_provisioning_exact3_targeted_tests=30_passed
-trial_provisioning_exact3_typecheck=passed
-trial_provisioning_exact3_architecture_unit_tests=148_passed
-trial_provisioning_exact3_full_tests=6589_passed
-trial_provisioning_exact3_lint=passed
-trial_provisioning_exact3_build=passed
-
-trial_provisioning_exact3_architecture_incremental=failed_aq004_new_institution_test
-trial_provisioning_exact3_authorization_exhausted=true
-
-trial_provisioning_final_scope_reason=no_new_frozen_institution_test_file
-
-trial_provisioning_exact_runtime_file_count=2
-trial_provisioning_existing_runtime_file_count=2
-trial_provisioning_new_runtime_file_count=0
-trial_provisioning_runtime_allowlist_frozen=true
-trial_provisioning_runtime_authorized=false
-trial_provisioning_architecture_exception_required=false
-
+business_writer_final_recompute=pending
 business_writer_phase_complete=false
 ```
 
-Final exact 2：
+Trial Provisioning 已完成：
 
 ```text
-src/modules/institution/server/trial-provisioning-service.ts
-src/modules/care/tests/AppointmentCommandRepository.test.ts
+runtime_pr=1144
+runtime_merge=d1e56026be4f5fc7cea210a3b36860a4535ecd6c
+runtime_file_count=2
+runtime_new_file_count=0
+
+independent_review_pr=1145
+review_evidence_repair_pr=1146
+review_evidence_repaired=true
+
+direct_mutation_calls=0
+direct_writer_files=0
+db_access=0
+production_callers=0
+route_callers=0
+legacy_service_blocked=true
+dynamic_blockade_test_embedded=true
+architecture_exception_added=false
 ```
 
-最终方案：
+下一轮必须从当前 main 全仓重新计算 Business Writer residual。
+
+不得因为 W2 / W3 / W5 / W6 / Trial Provisioning 均分别 complete 就直接推导：
 
 ```text
-service direct mutation 4 -> 0
-service DB access -> 0
-legacy export preserved and fail-closed
-
-AppointmentCommandRepository.test.ts:
-- close historical Trial Provisioning insert exception
-- add dynamic no-DB-access blockade proof
+business_writer_phase_complete=true
 ```
 
-明确不新增：
+只有 full-repo fresh residual recompute 同时证明：
 
 ```text
-src/modules/institution/tests/TrialProvisioningService.test.ts
+unclassified_business_writer_residual=0
+legacy_cross_owner_direct_writer_residual=0
+unexpected_production_writer_residual=0
 ```
 
-明确不修改：
+并完成对应 closure review / handoff 后，才允许标记 Business Writer phase complete。
 
-```text
-scripts/verify/architecture-quality-rules.json
-Care Runtime
-Customers Runtime
-Tenancy provisioning Runtime
-```
-
-第 3 个 Runtime 文件必须 `STOP / re-admit`。
-
-需要新的明确 Runtime 授权。
+若 fresh recompute 发现任何新的未分类 Writer、production caller、Route、Schema/DB 或 ownership drift，必须 fail-closed 并单独 re-admit。
