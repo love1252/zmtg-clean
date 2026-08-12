@@ -1,0 +1,5 @@
+path,file_role,rollback_kind,post_rollback_state
+src/app/hospital/system/audit/page.tsx,dedicated audit Route,delete_runtime,page_system_audit returns to shared catch-all capability-off
+src/modules/institution/tests/InstitutionRouteShell.test.tsx,canonical Route tests,revert_existing_test,remove R1C dedicated audit Route assertions and authority mock
+src/server/orchestration/institution-capability-authority.test.ts,authority policy tests,revert_existing_test,restore R1B one-page workbench readonly policy assertions
+src/server/orchestration/institution-capability-authority.ts,capability release policy,revert_existing_runtime,restore R1B page_workbench-only readonly pilot

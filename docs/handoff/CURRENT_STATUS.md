@@ -7,42 +7,29 @@
 
 - 更新日期：2026-08-12
 - Architecture V2：complete
-- POST-V2-R1：complete
-- POST-V2-R1A Capability Authority Foundation：complete
-- POST-V2-R1B `page_workbench` readonly release：complete
-- POST-V2-R1C `page_system_audit`：re-audit + exact Runtime admission complete，等待显式 Runtime 授权
-- 当前 governed readonly page slice：1 / 26
+- POST-V2-R1B `page_workbench`：历史治理闭环 complete，但 R1C 引入管理角色投影回归风险，等待回滚恢复
+- POST-V2-R1C `page_system_audit`：Runtime merged，Independent Review blocked
+- 当前 Review 接受的 governed readonly page slice：1 / 26
 - Production ready / deployment：未推导、未执行
 
 ```text
 post_v2_r1b_complete=true
-post_v2_r1b_released_page=page_workbench
-post_v2_r1b_page_release_count=1
-post_v2_r1b_remaining_unreleased_page_count=25
+post_v2_r1c_runtime_implementation=passed
+post_v2_r1c_runtime_independent_review=blocked
+post_v2_r1c_runtime_review_blocker_count=2
+post_v2_r1c_complete=false
+
+r1c_workbench_regression_risk=true
+r1c_audit_reader_prerequisite_missing=true
+
+review_accepted_governed_page_release_count=1
+review_accepted_remaining_unreleased_page_count=25
 
 reader_release=true
 capability_release=true
 
-post_v2_r1c_page_system_audit_reaudit=passed
-post_v2_r1c_exact_runtime_admission=passed
-
-post_v2_r1c_target_capability=page_system_audit
-post_v2_r1c_target_section=system
-post_v2_r1c_target_route=/hospital/system/audit
-
-post_v2_r1c_exact_runtime_file_count=4
-post_v2_r1c_existing_runtime_file_count=3
-post_v2_r1c_new_runtime_file_count=1
-post_v2_r1c_shared_catch_all_change=false
-post_v2_r1c_architecture_exception_required=false
-
-post_v2_r1c_planned_decision=read_only
-post_v2_r1c_planned_production_release=pilot_released
-post_v2_r1c_planned_total_page_release_count=2
-
-post_v2_r1c_runtime_authorized=false
-post_v2_r1c_reader_release_authorized=false
-post_v2_r1c_capability_release_authorized=false
+post_v2_r1c_rollback_exact_runtime_file_count=4
+post_v2_r1c_rollback_runtime_authorized=false
 
 production_ready_inferred=false
 production_deployment=false
@@ -51,7 +38,7 @@ production_change=false
 
 ### 唯一下一任务
 
-`POST-V2-R1C page_system_audit readonly release exact 4-file Runtime implementation explicit authorization`
+`POST-V2-R1C exact-4 Runtime rollback explicit authorization`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 

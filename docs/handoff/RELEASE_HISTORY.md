@@ -1,5 +1,27 @@
 # 项目重构历史
 
+<!-- POST_V2_R1C_REVIEW_BLOCKER_HISTORY -->
+
+## 2026-08-12：POST-V2-R1C Runtime Independent Review 阻断
+
+```text
+post_v2_r1c_runtime_implementation=passed
+post_v2_r1c_runtime_independent_review=blocked
+post_v2_r1c_runtime_review_blocker_count=2
+post_v2_r1c_complete=false
+rollback_runtime_authorized=false
+```
+
+- Runtime PR #1163 已 exact-4 合并，CI / 180 targeted / 6602 full / lint / build / Architecture 均通过；
+- Independent Review 发现 P1-01：管理角色同时获得 Workbench + Audit 两条摘要，而 `/hospital` 仍要求 summaries.length=1，导致既有 Workbench readonly projection 回退；
+- Independent Review 发现 P1-02：`/api/institution/audit-events` 仍固定 503 capability-disabled，缺 institution-scoped audit reader，`page_system_audit` 无成功只读数据路径；
+- 不扩大原 R1C scope 去顺手实现 Reader/API；
+- 最小安全动作冻结为 exact-4 Runtime rollback，严格反向撤销 PR #1163 的四个 Runtime 文件；
+- PR #1163 两个 P1 review thread 在回滚验证完成前保持 unresolved；
+- 回滚后另开 Audit Reader prerequisite audit/admission；
+- 下一任务：`POST-V2-R1C exact-4 Runtime rollback explicit authorization`。
+
+
 <!-- POST_V2_R1C_READMISSION_HISTORY -->
 
 ## 2026-08-12：POST-V2-R1C `page_system_audit` 只读放行重新审计与准入
