@@ -1,5 +1,34 @@
 # 智美天工架构文档索引
 
+<!-- POST_V2_R1C_REVIEW_BLOCKER_START -->
+
+## POST-V2-R1C Runtime 独立审查阻断与回滚重新准入（2026-08-12）
+
+```text
+post_v2_r1c_runtime_implementation=passed
+post_v2_r1c_runtime_independent_review=blocked
+post_v2_r1c_runtime_review_blocker_count=2
+post_v2_r1c_complete=false
+
+workbench_regression_risk=true
+audit_reader_prerequisite_missing=true
+
+rollback_exact_runtime_file_count=4
+rollback_runtime_authorized=false
+```
+
+证据：
+
+- `docs/operations/post-v2-r1c-page-system-audit-runtime-independent-review-blocker-20260812.md`
+- `docs/operations/post-v2-r1c-page-system-audit-rollback-exact-runtime-allowlist-20260812.csv`
+
+唯一下一任务：
+
+`POST-V2-R1C exact-4 Runtime rollback explicit authorization`
+
+<!-- POST_V2_R1C_REVIEW_BLOCKER_END -->
+
+
 <!-- POST_V2_R1C_READMISSION_START -->
 
 ## POST-V2-R1C `page_system_audit` 只读放行重新审计与准入（2026-08-12）
