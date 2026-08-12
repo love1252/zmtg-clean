@@ -1,5 +1,61 @@
 # 项目重构历史
 
+<!-- POST_V2_R1C_AUDIT_READER_ADMISSION_HISTORY -->
+
+## 2026-08-13：POST-V2-R1C Audit Reader prerequisite fresh audit 与 exact Runtime Admission
+
+```text
+POST_V2_R1C_AUDIT_READER_FRESH_AUDIT=passed
+AUDIT_READER_EXISTING_ARCHITECTURE_IDENTIFIED=true
+AUDIT_READER_DATA_SOURCE_IDENTIFIED=true
+AUDIT_READER_AUTHORIZATION_BOUNDARY_IDENTIFIED=true
+AUDIT_READER_OWNER_IDENTIFIED=true
+AUDIT_READER_EXACT_RUNTIME_SCOPE_FROZEN=true
+AUDIT_READER_EXACT_RUNTIME_ADMISSION=passed
+
+RECOMMENDED_RUNTIME_DESIGN=orchestration_composition
+
+EXACT_RUNTIME_FILE_COUNT=8
+EXISTING_RUNTIME_FILE_COUNT=6
+NEW_RUNTIME_FILE_COUNT=2
+DELETE_RUNTIME_FILE_COUNT=0
+EXACT_TEST_FILE_COUNT=4
+
+ARCHITECTURE_EXCEPTION_REQUIRED=false
+DATABASE_CONNECTION_REQUIRED_FOR_RUNTIME=true
+DATABASE_CONNECTION_REQUIRED_FOR_ADMISSION=false
+SCHEMA_CHANGE_REQUIRED=false
+MIGRATION_REQUIRED=false
+DDL_REQUIRED=false
+DML_REQUIRED=false
+
+AUDIT_READER_RUNTIME_AUTHORIZED=false
+AUDIT_READER_RUNTIME_IMPLEMENTED=false
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+```
+
+- fresh audit 从 `/api/institution/audit-events` 向下核对 Route Guard、正式机构授权、Audit query/domain、Repository、Schema、Migration、tests 与 Git history；
+- 固定 503 是 `08b3e97c...` 对旧 demo-session + tenant-only Reader 的安全禁用，不是 Reader 已存在；
+- Audit canonical source 为 PostgreSQL `audit_events`，Audit owner 为 `src/modules/audit`，authorization owner 为 Security 的 `InstitutionRequestAuthorizationV1`；
+- `audit_events` 已有 nullable `institution_id` 与 `institution_attribution`，但当前 Writer 未写入这两个字段；安全 Reader 必须只读当前 tenant + institution + `verified` 行，可能合法返回空列表；
+- platform Audit Route 的 auth、scope 与输出语义不同，不能作为 institution Reader 直接复用；
+- 唯一推荐方案为 `src/server/orchestration/**` 消费既有 opaque formal context 并组合 Audit Repository，未新增 AQ004/AQ007 exception；
+- Runtime 精确闭包为 8 files：4 production + 4 test，6 existing + 2 new；
+- 本阶段 baseline targeted 62/62、typecheck、Architecture Quality 148/148 及零增量 Architecture check 均通过；
+- 本阶段只修改 6 个相互依赖的 Admission/handoff 文档文件，没有 Runtime、Route、API、数据库、Schema、Migration、DDL、DML 或生产变更；
+- Admission merge 不授权 Runtime，也不放行 `page_system_audit`；
+- 唯一下一任务：`POST-V2-R1C-AUDIT-READER exact 8-file Runtime implementation explicit authorization`。
+
+证据：
+
+- `docs/operations/post-v2-r1c-audit-reader-prerequisite-admission-20260813.md`
+- `docs/operations/post-v2-r1c-audit-reader-exact-runtime-allowlist-20260813.csv`
+
+<!-- POST_V2_R1C_AUDIT_READER_ADMISSION_HISTORY_END -->
+
 <!-- POST_V2_R1C_THREAD_CLOSURE_HANDOFF_SYNC_HISTORY -->
 
 ## 2026-08-13：POST-V2-R1C 审查线程治理收尾交接同步
