@@ -6,13 +6,13 @@
 ## Post-V2 当前状态
 
 - 更新日期：2026-08-13
-- Architecture V2：complete
-- POST-V2-R1B `page_workbench`：stable / complete
-- POST-V2-R1C `page_system_audit`：faulty Runtime 已 exact-4 rollback，独立验证 passed；capability 当前 hidden/not_released
-- 当前 Review 接受的 governed readonly page slice：1 / 26
-- PR #1163 两个 P1：代码层已通过 rollback 处置，等待显式授权后行政 reply + resolve
-- Audit Reader prerequisite：仍缺失，尚未准入 Runtime
-- Production ready / deployment：未推导、未执行
+- Architecture V2：已完成
+- POST-V2-R1B `page_workbench`：稳定且已完成治理闭环
+- POST-V2-R1C `page_system_audit`：存在问题的 Runtime 已按精确 4 文件范围回滚，独立验证通过；能力当前保持 `hidden/not_released`
+- 当前经审查接受的受治理只读页面切片：1 / 26
+- PR #1163 两个 P1：代码层已通过回滚处置，等待显式授权后在 GitHub 中回复并解决线程
+- 审计读取器前置条件：仍缺失，尚未准入 Runtime
+- 生产就绪 / 部署：未推导、未执行
 
 ```text
 post_v2_r1c_exact4_runtime_rollback=passed
@@ -43,7 +43,7 @@ production_change=false
 
 ### 唯一下一任务
 
-`PR #1163 两个 P1 review thread 回复 + resolve 的显式 GitHub 写授权`
+`PR #1163 两个 P1 review thread 回复并解决 的显式 GitHub 写授权`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 

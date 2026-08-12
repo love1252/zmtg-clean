@@ -2,7 +2,7 @@
 
 <!-- POST_V2_R1C_ROLLBACK_VERIFY_START -->
 
-## POST-V2-R1C exact-4 Runtime 回滚独立验证（2026-08-13）
+## POST-V2-R1C 精确 4 文件 Runtime 回滚独立验证（2026-08-13）
 
 ```text
 post_v2_r1c_exact4_runtime_rollback=passed
@@ -26,7 +26,7 @@ post_v2_r1c_complete=false_after_rollback
 
 唯一下一任务：
 
-`PR #1163 两个 P1 review thread 回复 + resolve 的显式 GitHub 写授权`
+`PR #1163 两个 P1 review thread 回复并解决 的显式 GitHub 写授权`
 
 <!-- POST_V2_R1C_ROLLBACK_VERIFY_END -->
 
@@ -1384,7 +1384,7 @@ fk_validate=false
 - 审计基线：`85bac25f48f930f260dbed2ac9b8dd16b23cbe68`
 - 状态：`current evidence + BASE-B2 binding provenance handoff`
 - 文档性质：架构导航索引，不是第二套架构事实源
-- 本次 BASE-B2 docs-only handoff 差异中的 Runtime、Schema、Migration、journal、snapshot、数据库、API、UI 修改：`0`
+- 本次 BASE-B2 仅文档 handoff 差异中的 Runtime、Schema、Migration、journal、snapshot、数据库、API、UI 修改：`0`
 
 ## 1. 文档定位
 
@@ -1764,7 +1764,7 @@ GitHub 最终只读核对结果为 `main.protected=true`，Required Check 已绑
 4. 不在多个文档维护相互独立的模块清单；
 5. 不大段复制总体架构，视图文档应引用并展开；
 6. 不为目录外观创建空模块或空适配器；
-7. docs-only 合并不构成 runtime、Schema、Migration、API、UI、Capability 或发布授权；
+7. 仅文档 合并不构成 runtime、Schema、Migration、API、UI、Capability 或发布授权；
 8. 发现代码与文档不一致时，优先记录差距，不把目标状态伪装为当前状态。
 
 ## 11. 当前项目级顺序
