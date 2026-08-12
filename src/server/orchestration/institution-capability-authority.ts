@@ -12,11 +12,10 @@ import {
 } from '@/modules/institution/server/institution-server-runtime';
 
 export const INSTITUTION_CAPABILITY_AUTHORITY_REVISION_V1 =
-  'r1c-page-workbench-system-audit-readonly-pilot-v1' as const;
+  'r1b-page-workbench-readonly-pilot-v1' as const;
 
 const AUTHORITY_STATUS_FRESHNESS_WINDOW_MS = 5_000;
 const WORKBENCH_READONLY_SUMMARY = '工作台仅供查看' as const;
-const SYSTEM_AUDIT_READONLY_SUMMARY = '审计与安全仅供查看' as const;
 
 function buildCapabilityStatus(
   context: NonNullable<
@@ -40,33 +39,28 @@ function buildCapabilityStatus(
     INSTITUTION_CAPABILITY_REGISTRY_V1.map((definition) => {
       const institutionAuthorized = availableSections.has(definition.sectionId);
       const workbenchReadonlyPilot = definition.key === 'page_workbench';
-      const systemAuditReadonlyPilot = definition.key === 'page_system_audit';
-      const readonlyPilot =
-        workbenchReadonlyPilot || systemAuditReadonlyPilot;
 
       return Object.freeze({
         key: definition.key,
         decision:
-          readonlyPilot && institutionAuthorized
+          workbenchReadonlyPilot && institutionAuthorized
             ? 'read_only'
             : 'hidden',
         dimensions: Object.freeze({
-          codeMaturity: readonlyPilot ? 'verified' : 'unverified',
+          codeMaturity: workbenchReadonlyPilot ? 'verified' : 'unverified',
           institutionAuthorization: institutionAuthorized
             ? 'authorized'
             : 'not_authorized',
           connectionAvailability: 'not_required',
           dataReadiness: 'not_required',
-          productionRelease: readonlyPilot
+          productionRelease: workbenchReadonlyPilot
             ? 'pilot_released'
             : 'not_released',
         }),
         safeSummary:
-          institutionAuthorized && workbenchReadonlyPilot
+          workbenchReadonlyPilot && institutionAuthorized
             ? WORKBENCH_READONLY_SUMMARY
-            : institutionAuthorized && systemAuditReadonlyPilot
-              ? SYSTEM_AUDIT_READONLY_SUMMARY
-              : null,
+            : null,
         diagnosticTargetKey:
           systemAvailable &&
           isInstitutionDiagnosticTargetCapabilityKeyV1(definition.key)
