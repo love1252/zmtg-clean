@@ -9,29 +9,30 @@
 - Architecture V2：complete
 - POST-V2-R1：complete
 - POST-V2-R1A Capability Authority Foundation：complete
-- POST-V2-R1B：已选择 `page_workbench`，等待 readonly release re-audit + exact Runtime admission
-- Reader / Capability：仍未放行
+- POST-V2-R1B page_workbench readonly release：Re-audit + exact Runtime admission complete，等待显式 Runtime 授权
+- Reader / Capability：当前仍未放行
 
 ```text
 architecture_v2_refactor_complete=true
 post_v2_r1_complete=true
-
-post_v2_r1a_revised_runtime_implementation=passed
-post_v2_r1a_revised_runtime_independent_review=passed
 post_v2_r1a_complete=true
-post_v2_r1a_exact_runtime_file_count=3
-post_v2_r1a_cross_owner_composition=orchestration_only
-post_v2_r1a_authority_production_caller_count=0
-post_v2_r1a_route_wiring=false
-post_v2_r1a_page_release_count=0
 
-post_v2_r1b_selected_capability=page_workbench
-post_v2_r1b_selected_section=workbench
-post_v2_r1b_selected_route=/hospital
-post_v2_r1b_current_route_state=capability_off_workbench
+post_v2_r1b_page_workbench_reaudit=passed
+post_v2_r1b_exact_runtime_admission=passed
+post_v2_r1b_target_capability=page_workbench
+post_v2_r1b_target_section=workbench
+post_v2_r1b_target_route=/hospital
+
+post_v2_r1b_exact_runtime_file_count=5
+post_v2_r1b_existing_runtime_file_count=5
+post_v2_r1b_new_runtime_file_count=0
+post_v2_r1b_architecture_exception_required=false
+
+post_v2_r1b_planned_decision=read_only
+post_v2_r1b_planned_production_release=pilot_released
+post_v2_r1b_planned_page_release_count=1
+
 post_v2_r1b_runtime_authorized=false
-post_v2_r1b_reader_release_authorized=false
-post_v2_r1b_capability_release_authorized=false
 
 reader_release=false
 capability_release=false
@@ -42,7 +43,7 @@ production_change=false
 
 ### 唯一下一任务
 
-`POST-V2-R1B page_workbench readonly release re-audit + exact Runtime admission`
+`POST-V2-R1B page_workbench readonly release exact 5-file Runtime implementation explicit authorization`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
