@@ -1,5 +1,30 @@
 # 项目重构历史
 
+<!-- POST_V2_R1C_ROLLBACK_VERIFY_HISTORY -->
+
+## 2026-08-13：POST-V2-R1C exact-4 Runtime rollback 独立验证通过
+
+```text
+post_v2_r1c_exact4_runtime_rollback=passed
+post_v2_r1c_rollback_independent_verification=passed
+r1b_workbench_stable_runtime_restored=true
+page_system_audit_state=hidden_not_released
+review_accepted_governed_page_release_count=1
+pr1163_thread_admin_closure_eligible=true
+pr1163_thread_write_authorized=false
+```
+
+- 回滚 PR #1165 已 exact-4 合并；
+- 回滚 Required Check 已通过，回滚 PR 无 review thread；
+- Authority、Authority test、InstitutionRouteShell test 三个恢复文件的 blob 与 R1C Runtime 之前的稳定提交 `17b1d7a4...` 完全一致；
+- `/hospital/system/audit/page.tsx` 已不存在；
+- 生产环境 Capability Authority 调用方恢复为仅 `/hospital`；
+- 新鲜定向验证 6 个文件 / 177 个测试及 typecheck 均通过；
+- PR #1163 两个 P1 仍未解决，等待显式授权后回复并解决线程；
+- 审计读取器前置条件仍需后续独立审计 / 准入，当前未授权 Runtime；
+- R1C 当前尚未完成；经审查接受的能力放行仍为 1/26。
+
+
 <!-- POST_V2_R1C_REVIEW_BLOCKER_HISTORY -->
 
 ## 2026-08-12：POST-V2-R1C Runtime Independent Review 阻断
@@ -207,7 +232,7 @@ post_v2_r1c_runtime_authorized=false
 - POST-V2-R1 只审计 26 个 page capability，不包含 3 个 create action；
 - POST-V2-R1 Runtime / Reader release / Capability release authorization 均为 false；
 - AQ004 compatibility retirement、Platform/Audit/Workspace、真实 Adapter、生产 readiness 和七线正式发布继续留在后序独立阶段；
-- 本轮 docs-only，不修改 Runtime、DB、Schema、Migration、Route 或生产；
+- 本轮 仅文档，不修改 Runtime、DB、Schema、Migration、Route 或生产；
 - 下一任务：POST-V2-R1 Institution Readonly Reader/Capability Release Readiness Audit。
 
 <!-- ARCHITECTURE_V2_FINAL_CLOSURE_HISTORY -->
@@ -231,14 +256,14 @@ post_v2_r1c_runtime_authorized=false
 - Architecture V2 target fully realized=false；
 - Reader、Capability、生产就绪与生产部署均未由本 Closure 放行或推导；
 - 六类 2026-07-28 详细架构视图保留 dated current/target/proposed 语义，不大规模重写历史快照；
-- 本次最终闭环为 docs-only，不修改 Runtime、DB、Schema、Migration、Route 或生产；
+- 本次最终闭环为 仅文档，不修改 Runtime、DB、Schema、Migration、Route 或生产；
 - 下一任务：Post-V2 roadmap re-baseline + next phase admission。
 
 <!-- BASE02_BUSINESS_WRITER_FINAL_CLOSURE_HISTORY -->
 
 ## 2026-08-11：Business Writer phase 完成
 
-- Trial Provisioning docs-only Handoff PR #1147 已完成，Trial Provisioning complete=true；
+- Trial Provisioning 仅文档 Handoff PR #1147 已完成，Trial Provisioning complete=true；
 - 从 `main=ca10b46c1938f29d192023e664a6f7933c5e4156` 重新执行全仓 fresh Writer residual recompute，不复用历史 residual 计数；
 - 以 2026-08-08 原始 75-file mutation inventory / 27-file Business Writer surface 作为历史分类证据，并叠加 W1 / W2 / W3 / W5 / W6 / Trial Provisioning 已合并 Runtime 证据；
 - fresh mutation candidate files=63；
@@ -249,7 +274,7 @@ post_v2_r1c_runtime_authorized=false
 - unexpected production Writer residual=0；
 - W2 Care / W3 Knowledge / W5 Analytics / W6 Institution System / Trial Provisioning 均保持 complete；
 - Business Writer phase complete=true；
-- 本次仅 docs-only audit / closure，不修改 Runtime、DB、Schema、Migration、Route、Reader、Capability、真实 HIS/WeCom 或生产；
+- 本次仅 仅文档 audit / closure，不修改 Runtime、DB、Schema、Migration、Route、Reader、Capability、真实 HIS/WeCom 或生产；
 - 下一任务：Architecture V2 final closure audit + handoff。
 
 <!-- BASE02_TRIAL_PROVISIONING_HANDOFF_HISTORY -->
@@ -1675,7 +1700,7 @@ post_v2_r1c_runtime_authorized=false
 - M2 未连接数据库，Schema、Migration、journal、snapshot、scripts、CI、package、lock 修改均为 0；legacy calibration、Reader、M3～M7 与 BASE-B1～B6 均未启动。
 - M1 冻结事实未被 M2 改动：仓库／环境 journal 保持 41，已消费 `0040` 不可改写，M1 Catalog 保持 `all_exact`，完整 current envelope／transition evidence 行仍为 `0／0`。
 - Owner 外 direct Membership mutation 仍为 4 个文件／6 个符号，其中 onboarding 委托候选 1、必须封堵 5；不得虚报已经归零。
-- 本次 docs-only handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 0。
+- 本次 仅文档 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 0。
 - 唯一下一任务冻结为 `BASE-02 Membership Revision M3 onboarding 委托、旧 Writer／Deleter 封堵`；handoff 合并前 M3 尚未启动，合并后按当前 ULTRA 用户授权继续。
 - M4～M7、BASE-B1～B6、active historical orphan／Scope relation orphan 修复、A2-P2 FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader 继续未启动或阻断。
 
@@ -1708,7 +1733,7 @@ post_v2_r1c_runtime_authorized=false
 - Lease claim／consume／renewal／release／active 为 `1／1／0／1／0`；client、进程、锁、marker、Helper 和隔离数据库活动残留均为 `0`。
 - 执行后 PR 描述维护期间发生一次无目标 Guard 启动拒绝；目标选择、连接参数读取、数据库连接、Lease、Migrator、SQL／DDL／DML、仓库变化与数据库变化均为 `0`，不构成第四次目标 Migration 或自动重试；F01 已由 PR #891 关闭。
 - 当前主动私有参数披露为 `0`；Secret、Token、密码、私钥、PII 与真实凭证披露为 `0`。
-- 本次四文件 docs-only handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 `0`。
+- 本次四文件 仅文档 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 `0`。
 - M4 完成并收口；唯一下一任务冻结为 `BASE-02 Membership Revision M5 高水位追赶与冲突清零`。M5 尚未启动，本 handoff 合并后按当前 ULTRA 授权和动态硬门继续。
 - M6～M7、BASE-B1～B6、orphan 修复、FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader 继续未启动或阻断；七线正式发布保持 `0/7`。
 
@@ -1729,7 +1754,7 @@ post_v2_r1c_runtime_authorized=false
 - F01 已在窄范围内关闭：恢复点 round-trip 只接受单一公开 CHECK 去除一对冗余括号，token、validated 状态与其余 Catalog／Shape 保持精确一致；该规则不得泛化。
 - F02 已关闭：编排器首次因私有输入权限不满足门禁而在目标调用、数据库连接和 Lease claim 前拒绝，数据库变化为 `0`；从头重检后完成唯一目标调用，不构成 Migration attempt 或自动重试。
 - 当前主动私有参数披露、Secret、Token、密码、私钥、PII、真实凭证披露和非 localhost 连接均为 `0`。
-- 本次四文件 docs-only handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 `0`。
+- 本次四文件 仅文档 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 `0`。
 - M5 完成并收口；唯一下一任务冻结为 `BASE-02 Membership Revision M6 Reader 从 updated_at 切换到显式 revision＋lifecycle`。M6 尚未启动，本 handoff 合并后按当前 ULTRA 授权和动态硬门继续。
 - M7、BASE-B1～B6、active historical orphan／Scope relation orphan 修复、A2-P2 FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader 继续未启动或阻断；七线正式发布保持 `0/7`。
 
@@ -1774,7 +1799,7 @@ post_v2_r1c_runtime_authorized=false
 - BASE-B1 结论为 `base_b1_owner_port_revision_contract=all_exact`、`base_b1_runtime_change_required=false`；Access Control、Identity、Tenancy 与 Security 的 Owner／Port 边界及 Membership revision／Binding version／Scope revision 三个独立版本域完整。
 - Owner 外 direct Membership Writer／Deleter、授权 `tenant_members.updated_at` 读取与时间戳兼容映射均为 `0／0`；Operating Context 未进入授权组合，第二授权事实源为 `0`，多 Membership 必须显式选择或失败关闭。
 - BASE-B1 定向测试为 10 个文件、`344／344`；两个 PR 的真实 Required Check 均完整执行环境核对、依赖安装、架构自测、增量检查、lint、typecheck、完整测试和 build并成功。
-- 本次四文件 docs-only handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 `0`。
+- 本次四文件 仅文档 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 `0`。
 - 继承状态未变：环境 journal 为 `44／0043`、snapshot 为 `0026`、active historical orphan／Scope relation orphan 为 `1／1`，A2-P2 Scope FK 继续 `NOT VALID`／`convalidated=false`。
 - BASE-B1 完成并收口；唯一下一任务冻结为 `BASE-B2 Membership／Binding 生命周期`。BASE-B2 尚未启动，本 handoff 合并后按当前 ULTRA 授权和动态硬门继续。
 - BASE-B3～B6、orphan 修复、FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader 继续未启动或阻断；七线正式发布保持 `0/7`。
@@ -1787,7 +1812,7 @@ post_v2_r1c_runtime_authorized=false
 - M09-A 绑定 `auth_account_institution_bindings` 为 Access Control 唯一 Binding canonical current／lifecycle history；Binding transition evidence 与 current 同 Owner、同事务、append-only，但不得回答 current 或成为第二套事实源。M09-B 的 current 冗余 `revokedBy／reason／reboundFrom` 不作为 BASE-B2 最小硬门。
 - PR #915 完成独立审查，Head `b874b819d3dfbb927f8e54d96fcb48e860030ad9`，Run `30745968589`／Job `91491518552`，Merge Commit `85bac25f48f930f260dbed2ac9b8dd16b23cbe68`；结论为 `base02_binding_provenance_acceptance_review=passed`，F01～F05 全部关闭。
 - 已冻结 provenanceSource／assignmentSource 分离、expire 受信任服务端时间、current identity／assignment 不可变、legacy calibration Shape、`UNIQUE (tenant_id, command_id)`、同事务 evidence 与 AQ008 扩展门禁。
-- PR #914／#915 均为单文件 docs-only；Schema、Migration、journal、snapshot、数据库、Runtime、scripts、tests、CI、package 和 lock 修改为 `0`。
+- PR #914／#915 均为单文件 仅文档；Schema、Migration、journal、snapshot、数据库、Runtime、scripts、tests、CI、package 和 lock 修改为 `0`。
 - 继承状态未变：环境 journal 为 `44／0043`、snapshot 为 `0026`、active historical orphan／Scope relation orphan 为 `1／1`，A2-P2 Scope FK 继续 `NOT VALID`／`convalidated=false`。
 - BASE-B2 已启动但尚未完成；唯一下一任务冻结为 `BASE-B2 Binding transition evidence Schema／Migration 前置预检`，handoff 合并后按当前 ULTRA 授权和动态硬门继续。
 - BASE-B3～B6、orphan 修复、FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader 继续未启动或阻断；七线正式发布保持 `0/7`。

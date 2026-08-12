@@ -5,22 +5,22 @@
 
 ## Post-V2 当前状态
 
-- 更新日期：2026-08-12
-- Architecture V2：complete
-- POST-V2-R1B `page_workbench`：历史治理闭环 complete，但 R1C 引入管理角色投影回归风险，等待回滚恢复
-- POST-V2-R1C `page_system_audit`：Runtime merged，Independent Review blocked
-- 当前 Review 接受的 governed readonly page slice：1 / 26
-- Production ready / deployment：未推导、未执行
+- 更新日期：2026-08-13
+- Architecture V2：已完成
+- POST-V2-R1B `page_workbench`：稳定且已完成治理闭环
+- POST-V2-R1C `page_system_audit`：存在问题的 Runtime 已按精确 4 文件范围回滚，独立验证通过；能力当前保持 `hidden/not_released`
+- 当前经审查接受的受治理只读页面切片：1 / 26
+- PR #1163 两个 P1：代码层已通过回滚处置，等待显式授权后在 GitHub 中回复并解决线程
+- 审计读取器前置条件：仍缺失，尚未准入 Runtime
+- 生产就绪 / 部署：未推导、未执行
 
 ```text
-post_v2_r1b_complete=true
-post_v2_r1c_runtime_implementation=passed
-post_v2_r1c_runtime_independent_review=blocked
-post_v2_r1c_runtime_review_blocker_count=2
-post_v2_r1c_complete=false
+post_v2_r1c_exact4_runtime_rollback=passed
+post_v2_r1c_rollback_independent_verification=passed
 
-r1c_workbench_regression_risk=true
-r1c_audit_reader_prerequisite_missing=true
+r1b_workbench_stable_runtime_restored=true
+page_workbench=read_only/pilot_released
+page_system_audit=hidden/not_released
 
 review_accepted_governed_page_release_count=1
 review_accepted_remaining_unreleased_page_count=25
@@ -28,8 +28,13 @@ review_accepted_remaining_unreleased_page_count=25
 reader_release=true
 capability_release=true
 
-post_v2_r1c_rollback_exact_runtime_file_count=4
-post_v2_r1c_rollback_runtime_authorized=false
+pr1163_thread_admin_closure_eligible=true
+pr1163_thread_write_authorized=false
+
+audit_reader_prerequisite_missing=true
+audit_reader_runtime_authorized=false
+
+post_v2_r1c_complete=false_after_rollback
 
 production_ready_inferred=false
 production_deployment=false
@@ -38,7 +43,7 @@ production_change=false
 
 ### 唯一下一任务
 
-`POST-V2-R1C exact-4 Runtime rollback explicit authorization`
+`PR #1163 两个 P1 review thread 回复并解决 的显式 GitHub 写授权`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
