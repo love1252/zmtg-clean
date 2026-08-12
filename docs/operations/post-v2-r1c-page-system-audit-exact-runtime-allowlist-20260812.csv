@@ -1,0 +1,5 @@
+path,file_role,change_kind,new_file_allowed,r1c_responsibility
+src/app/hospital/system/audit/page.tsx,dedicated system audit canonical Route,new_runtime,true,consume genuine system navigation authorization plus page_system_audit authority and render existing readonly audit shell while failing closed
+src/modules/institution/tests/InstitutionRouteShell.test.tsx,existing canonical Route integration tests,existing_test,false,prove dedicated system audit readonly release and fail-closed behavior without adding a frozen Institution test file
+src/server/orchestration/institution-capability-authority.test.ts,authority release-policy tests,existing_test,false,prove exactly page_workbench plus page_system_audit are readonly pilots and all remaining capabilities stay hidden
+src/server/orchestration/institution-capability-authority.ts,code-owned capability release policy,existing_runtime,false,add page_system_audit readonly pilot while preserving page_workbench and keeping every other capability hidden

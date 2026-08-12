@@ -1,5 +1,36 @@
 # 项目重构历史
 
+<!-- POST_V2_R1C_READMISSION_HISTORY -->
+
+## 2026-08-12：POST-V2-R1C `page_system_audit` 只读放行重新审计与准入
+
+```text
+post_v2_r1c_page_system_audit_reaudit=passed
+post_v2_r1c_exact_runtime_admission=passed
+exact_runtime_file_count=4
+existing_runtime_file_count=3
+new_runtime_file_count=1
+shared_catch_all_change=false
+architecture_exception_required=false
+runtime_authorized=false
+```
+
+- R1B `page_workbench` 已完成首个 governed readonly page slice；
+- 当前 page release count=1，remaining unreleased page=25；
+- Reader release=true、Capability release=true 继续仅表达已有首个完成治理切片；
+- R1C 目标固定为 `page_system_audit` / `/hospital/system/audit`；
+- 当前仍由 catch-all capability-off 承接，Authority 为 hidden/not_released；
+- 现有 `InstitutionAuditEventsShell` 与 audit client 保持冻结，client 无 POST/PUT/PATCH/DELETE method；
+- 为避免影响其余未放行页面，不修改共享 catch-all；
+- Runtime 精确范围冻结为 4 files：3 existing + 1 new dedicated static Route；
+- 不在冻结 `src/modules/institution/**` 下新建测试文件，复用既有 `InstitutionRouteShell.test.tsx`；
+- planned decision=`read_only`；
+- planned productionRelease=`pilot_released`；
+- planned total page release count=2；
+- R1C Runtime 尚未授权；
+- 下一任务：`POST-V2-R1C page_system_audit readonly release exact 4-file Runtime implementation explicit authorization`。
+
+
 <!-- POST_V2_R1B_HANDOFF_HISTORY -->
 
 ## 2026-08-12：POST-V2-R1B `page_workbench` 只读放行交接与闭环

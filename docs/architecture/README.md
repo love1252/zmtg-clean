@@ -1,5 +1,47 @@
 # 智美天工架构文档索引
 
+<!-- POST_V2_R1C_READMISSION_START -->
+
+## POST-V2-R1C `page_system_audit` 只读放行重新审计与准入（2026-08-12）
+
+```text
+post_v2_r1c_page_system_audit_reaudit=passed
+post_v2_r1c_exact_runtime_admission=passed
+
+target_capability=page_system_audit
+target_route=/hospital/system/audit
+
+exact_runtime_file_count=4
+existing_runtime_file_count=3
+new_runtime_file_count=1
+
+shared_catch_all_change=false
+architecture_exception_required=false
+
+planned_decision=read_only
+planned_production_release=pilot_released
+planned_total_page_release_count=2
+
+runtime_authorized=false
+
+reader_release=true
+capability_release=true
+production_ready_inferred=false
+production_deployment=false
+```
+
+证据：
+
+- `docs/operations/post-v2-r1c-page-system-audit-readonly-release-readmission-20260812.md`
+- `docs/operations/post-v2-r1c-page-system-audit-exact-runtime-allowlist-20260812.csv`
+
+唯一下一任务：
+
+`POST-V2-R1C page_system_audit readonly release exact 4-file Runtime implementation explicit authorization`
+
+<!-- POST_V2_R1C_READMISSION_END -->
+
+
 <!-- POST_V2_R1B_HANDOFF_START -->
 
 ## POST-V2-R1B `page_workbench` 只读放行交接与闭环（2026-08-12）
