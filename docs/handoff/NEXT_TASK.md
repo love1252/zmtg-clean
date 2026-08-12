@@ -3,7 +3,7 @@
 ## 唯一下一任务
 
 ```text
-POST-V2-R1C page_system_audit readonly release re-audit + exact Runtime admission
+POST-V2-R1C page_system_audit readonly release exact 4-file Runtime implementation explicit authorization
 ```
 
 ## 当前闭环状态
@@ -14,7 +14,6 @@ post_v2_r1b_complete=true
 released_page=page_workbench
 page_release_count=1
 remaining_unreleased_page_count=25
-controlled_create_release_count=0
 
 reader_release=true
 capability_release=true
@@ -23,24 +22,39 @@ production_ready_inferred=false
 production_deployment=false
 ```
 
-## R1C 已选候选
+## R1C Admission state
 
 ```text
+post_v2_r1c_page_system_audit_reaudit=passed
+post_v2_r1c_exact_runtime_admission=passed
+
 target_capability=page_system_audit
 target_section=system
 target_route=/hospital/system/audit
 
-current_route_state=catch_all_capability_off
-current_authority_decision=hidden
-current_production_release=not_released
+exact_runtime_file_count=4
+existing_runtime_file_count=3
+new_runtime_file_count=1
 
-existing_readonly_shell=InstitutionAuditEventsShell
-existing_client_mutation_method_count=0
+shared_catch_all_change=false
+architecture_exception_required=false
+
+planned_decision=read_only
+planned_production_release=pilot_released
+planned_total_page_release_count=2
+planned_remaining_unreleased_page_count=24
 ```
 
-`page_system_audit` 仅为下一候选，不代表已通过 re-audit 或 Runtime admission。
+## Frozen Runtime allowlist
 
-## R1C 授权状态
+1. `src/server/orchestration/institution-capability-authority.ts`
+2. `src/server/orchestration/institution-capability-authority.test.ts`
+3. `src/app/hospital/system/audit/page.tsx`（new）
+4. `src/modules/institution/tests/InstitutionRouteShell.test.tsx`
+
+共享 catch-all、Audit Shell、Audit Client、public Contract/Registry 均冻结不动。
+
+## 显式授权要求
 
 ```text
 runtime_authorized=false
@@ -48,4 +62,10 @@ reader_release_authorized=false
 capability_release_authorized=false
 ```
 
-下一任务必须先 fresh re-audit，并冻结独立 exact Runtime allowlist；在此之前不得修改 Runtime、Route 或 release policy。
+只有用户明确授权：
+
+```text
+授权执行 POST-V2-R1C page_system_audit readonly release exact 4-file Runtime implementation。
+```
+
+之后才能实施 Runtime。
