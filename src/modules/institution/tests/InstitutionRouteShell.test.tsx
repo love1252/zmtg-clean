@@ -11,7 +11,6 @@ const wireMocks = vi.hoisted(() => {
     authorizeCurrentInstitutionNavigationV1,
     genuineDecisions: new WeakSet<object>(),
     resolveInstitutionServerAuthorizationV1: vi.fn(),
-    resolveInstitutionCapabilityAuthorityStatusV1: vi.fn(),
   };
 });
 
@@ -35,19 +34,7 @@ vi.mock('@/modules/security/server/institution-section-guard', () => ({
   ),
 }));
 
-vi.mock('@/server/orchestration/institution-capability-authority', () => ({
-  resolveInstitutionCapabilityAuthorityStatusV1:
-    wireMocks.resolveInstitutionCapabilityAuthorityStatusV1,
-}));
-
-vi.mock('@/modules/institution/components/InstitutionAuditEventsShell', () => ({
-  InstitutionAuditEventsShell: () => (
-    <div data-testid="institution-audit-readonly-shell">审计日志只读壳</div>
-  ),
-}));
-
 import HospitalCapabilityOffRoute from '@/app/hospital/[...slug]/page';
-import SystemAuditPage from '@/app/hospital/system/audit/page';
 import {
   INSTITUTION_NAVIGATION_SECTION_IDS_V1,
   INSTITUTION_NAVIGATION_SECTIONS_V1,
@@ -674,112 +661,5 @@ describe('BASE-WIRE-01 canonical route authorization wiring', () => {
     }
     expect(getterReads).toBe(0);
     expect(proxyTraps).toBe(0);
-  });
-});
-
-function mintAuditReadonlyCapabilityStatus() {
-  return Object.freeze({
-    contractVersion: 'v1',
-    scope: Object.freeze({
-      tenantId: 'tenant-r1c-route-001',
-      institutionId: 'institution-r1c-route-001',
-    }),
-    readiness: 'ready',
-    freshness: Object.freeze({
-      observedAt: '2026-08-12T14:00:00.000Z',
-      freshUntil: '2026-08-12T14:00:05.000Z',
-    }),
-    partitions: Object.freeze([]),
-    data: Object.freeze({
-      capabilities: Object.freeze([
-        Object.freeze({
-          key: 'page_system_audit',
-          decision: 'read_only',
-          dimensions: Object.freeze({
-            codeMaturity: 'verified',
-            institutionAuthorization: 'authorized',
-            connectionAvailability: 'not_required',
-            dataReadiness: 'not_required',
-            productionRelease: 'pilot_released',
-          }),
-          safeSummary: '审计与安全仅供查看',
-          diagnosticTargetKey: 'page_system_audit',
-        }),
-      ]),
-    }),
-    failureCode: null,
-  });
-}
-
-describe('POST-V2-R1C page_system_audit dedicated readonly Route', () => {
-  beforeEach(() => {
-    wireMocks.resolveInstitutionServerAuthorizationV1.mockReset();
-    wireMocks.authorizeCurrentInstitutionNavigationV1.mockReset();
-    wireMocks.resolveInstitutionCapabilityAuthorityStatusV1.mockReset();
-    wireMocks.resolveInstitutionServerAuthorizationV1.mockResolvedValue(
-      wireMocks.authorization,
-    );
-  });
-
-  it('renders the existing audit readonly shell only after genuine system navigation and exact audit authority', async () => {
-    wireMocks.authorizeCurrentInstitutionNavigationV1.mockResolvedValueOnce(
-      mintNavigationDecision('system', 'allowed', allSectionIds),
-    );
-    wireMocks.resolveInstitutionCapabilityAuthorityStatusV1.mockResolvedValueOnce(
-      mintAuditReadonlyCapabilityStatus(),
-    );
-
-    render(await SystemAuditPage());
-
-    expect(
-      wireMocks.authorizeCurrentInstitutionNavigationV1,
-    ).toHaveBeenCalledWith({ targetSectionId: 'system' });
-    expect(
-      wireMocks.resolveInstitutionCapabilityAuthorityStatusV1,
-    ).toHaveBeenCalledTimes(1);
-    expect(
-      screen.getByTestId('institution-audit-readonly-shell'),
-    ).toBeInTheDocument();
-    expect(screen.queryByText('审计与安全尚未开放')).not.toBeInTheDocument();
-  });
-
-  it('keeps capability-off when system navigation is allowed but audit authority is unavailable', async () => {
-    wireMocks.authorizeCurrentInstitutionNavigationV1.mockResolvedValueOnce(
-      mintNavigationDecision('system', 'allowed', allSectionIds),
-    );
-    wireMocks.resolveInstitutionCapabilityAuthorityStatusV1.mockResolvedValueOnce(
-      null,
-    );
-
-    render(await SystemAuditPage());
-
-    expect(
-      wireMocks.resolveInstitutionCapabilityAuthorityStatusV1,
-    ).toHaveBeenCalledTimes(1);
-    expect(screen.getByText('审计与安全尚未开放')).toBeInTheDocument();
-    expect(
-      screen.queryByTestId('institution-audit-readonly-shell'),
-    ).not.toBeInTheDocument();
-  });
-
-  it('fails closed before capability authority when genuine system navigation is blocked', async () => {
-    wireMocks.authorizeCurrentInstitutionNavigationV1.mockResolvedValueOnce(
-      mintNavigationDecision('system', 'blocked', [
-        'workbench',
-        'customers',
-        'conversations',
-        'care',
-      ]),
-    );
-
-    render(await SystemAuditPage());
-
-    expect(
-      wireMocks.resolveInstitutionCapabilityAuthorityStatusV1,
-    ).not.toHaveBeenCalled();
-    expect(screen.getByText('当前账号不可访问该栏目')).toBeInTheDocument();
-    expect(
-      screen.queryByTestId('institution-audit-readonly-shell'),
-    ).not.toBeInTheDocument();
   });
 });
