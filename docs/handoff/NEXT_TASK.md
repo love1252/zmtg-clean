@@ -1,59 +1,48 @@
 # 下一任务
 
-## 唯一下一任务
+## 唯一技术任务
 
 ```text
-PR #1163 两个 P1 review thread 回复并解决 的显式 GitHub 写授权
+NEXT_TASK=POST-V2-R1C-AUDIT-READER institution-scoped audit readonly reader prerequisite fresh audit + exact Runtime admission
+AUDIT_READER_RUNTIME_AUTHORIZED=false
 ```
 
-## 当前回滚验证状态
+## 继承状态
 
 ```text
-post_v2_r1c_exact4_runtime_rollback=passed
-post_v2_r1c_rollback_independent_verification=passed
+POST_V2_R1C_FAILED_RELEASE_ATTEMPT_GOVERNANCE_CLOSED=true
+POST_V2_R1C_RELEASE_COMPLETE=false
 
-r1b_workbench_stable_runtime_restored=true
+PR1163_WORKBENCH_P1_THREAD_RESOLVED=true
+PR1163_AUDIT_READER_P1_THREAD_RESOLVED=true
+PR1163_TARGET_P1_UNRESOLVED_COUNT=0
 
-page_workbench=read_only/pilot_released
-page_system_audit=hidden/not_released
+PAGE_WORKBENCH_STATE=read_only/pilot_released
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
 
-review_accepted_governed_page_release_count=1
-review_accepted_remaining_unreleased_page_count=25
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+REVIEW_ACCEPTED_REMAINING_UNRELEASED_PAGE_COUNT=25
+CONTROLLED_CREATE_RELEASE_COUNT=0
 
-pr1163_thread_admin_closure_eligible=true
-pr1163_thread_write_authorized=false
+AUDIT_READER_PREREQUISITE_MISSING=true
+AUDIT_READER_RUNTIME_AUTHORIZED=false
 
-post_v2_r1c_complete=false_after_rollback
+PRODUCTION_READY_INFERRED=false
+PRODUCTION_DEPLOYMENT=false
+PRODUCTION_CHANGE=false
 ```
 
-## 待处理 review thread
+## 本任务允许的执行顺序
 
-1. `PRRT_kwDOSrGMn86Ymqcm` — 工作台投影回归
-2. `PRRT_kwDOSrGMn86Ymqcw` — 审计读取器前置条件缺失
+1. 对机构范围审计只读读取器进行新鲜审计；
+2. 完成依赖关系与所有权分析；
+3. 冻结精确 Runtime 范围并完成准入判断；
+4. 仅以文档形式交付准入结果。
 
-代码层均已由 PR #1165 的精确 4 文件回滚处置：
+## 停止边界
 
-- 工作台恢复到 R1B 稳定状态；
-- `page_system_audit` 恢复为 `hidden/not_released`；
-- 专用审计 Route 已删除。
-
-## 显式授权要求
-
-只有用户明确授权：
-
-```text
-授权处理 PR #1163 两个 P1 review thread：
-1. 分别回复“已由 PR #1165 完成精确回滚并恢复 R1B 稳定状态；page_system_audit 已恢复 hidden/not_released。”
-2. resolve thread PRRT_kwDOSrGMn86Ymqcm
-3. resolve thread PRRT_kwDOSrGMn86Ymqcw
-```
-
-之后才能写入 GitHub review 状态。
-
-## 后续技术任务
-
-review thread 行政闭环后，不直接重做 R1C 放行。
-
-下一技术候选必须先执行：
-
-`POST-V2-R1C-AUDIT-READER institution-scoped audit readonly reader prerequisite audit + admission`
+- 当前未授权 Audit Reader Runtime，不得直接开始 Runtime 实现；
+- 不得修改 `/api/institution/audit-events`，不得重新放行 `page_system_audit`；
+- 不得修改 Route、API、Schema、Migration 或连接数据库；
+- 不得推导生产就绪，不得执行生产变更或生产部署；
+- 如新鲜审计需要扩大范围，必须停止并获得新的精确授权。

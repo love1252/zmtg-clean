@@ -1,5 +1,47 @@
 # 项目重构历史
 
+<!-- POST_V2_R1C_THREAD_CLOSURE_HANDOFF_SYNC_HISTORY -->
+
+## 2026-08-13：POST-V2-R1C 审查线程治理收尾交接同步
+
+```text
+POST_V2_R1C_EXACT4_RUNTIME_ROLLBACK=passed
+POST_V2_R1C_ROLLBACK_INDEPENDENT_VERIFICATION=passed
+
+PR1163_WORKBENCH_P1_THREAD_RESOLVED=true
+PR1163_AUDIT_READER_P1_THREAD_RESOLVED=true
+PR1163_TARGET_P1_UNRESOLVED_COUNT=0
+
+POST_V2_R1C_FAILED_RELEASE_ATTEMPT_GOVERNANCE_CLOSED=true
+R1B_WORKBENCH_STABLE_RUNTIME_RESTORED=true
+
+PAGE_WORKBENCH_STATE=read_only/pilot_released
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+REVIEW_ACCEPTED_REMAINING_UNRELEASED_PAGE_COUNT=25
+CONTROLLED_CREATE_RELEASE_COUNT=0
+
+AUDIT_READER_PREREQUISITE_MISSING=true
+AUDIT_READER_RUNTIME_AUTHORIZED=false
+
+PRODUCTION_READY_INFERRED=false
+PRODUCTION_DEPLOYMENT=false
+PRODUCTION_CHANGE=false
+
+POST_V2_R1C_RELEASE_COMPLETE=false
+```
+
+- PR #1165 已完成精确 4 文件 Runtime 回滚，PR #1166 已完成回滚独立验证文档收口；
+- `PRRT_kwDOSrGMn86Ymqcm` 已回复并解决：R1B 工作台已恢复稳定单一只读投影，`page_system_audit` 已恢复 `hidden/not_released`；
+- `PRRT_kwDOSrGMn86Ymqcw` 已回复并解决：错误放行已撤回，审计读取器前置条件仍未实现，后续必须单独审计与准入；
+- R1C 错误放行尝试的治理收尾已经完成，不代表 `page_system_audit` 能力放行完成；
+- 当前经审查接受的受治理只读页面切片仍为 1 / 26，剩余未放行页面为 25，受控创建能力放行为 0 / 3；
+- 审计读取器 Runtime 尚未授权，本轮没有 Runtime、Route、API、数据库、Schema、Migration 或生产变更；
+- 唯一下一任务：`POST-V2-R1C-AUDIT-READER institution-scoped audit readonly reader prerequisite fresh audit + exact Runtime admission`。
+
+<!-- POST_V2_R1C_THREAD_CLOSURE_HANDOFF_SYNC_HISTORY_END -->
+
 <!-- POST_V2_R1C_ROLLBACK_VERIFY_HISTORY -->
 
 ## 2026-08-13：POST-V2-R1C exact-4 Runtime rollback 独立验证通过

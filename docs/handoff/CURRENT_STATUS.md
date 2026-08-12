@@ -8,42 +8,46 @@
 - 更新日期：2026-08-13
 - Architecture V2：已完成
 - POST-V2-R1B `page_workbench`：稳定且已完成治理闭环
-- POST-V2-R1C `page_system_audit`：存在问题的 Runtime 已按精确 4 文件范围回滚，独立验证通过；能力当前保持 `hidden/not_released`
+- POST-V2-R1C 错误放行尝试：精确 4 文件 Runtime 回滚、独立验证及两个指定 P1 审查线程均已完成治理收尾
+- POST-V2-R1C `page_system_audit`：能力放行尚未完成，当前保持 `hidden/not_released`
 - 当前经审查接受的受治理只读页面切片：1 / 26
-- PR #1163 两个 P1：代码层已通过回滚处置，等待显式授权后在 GitHub 中回复并解决线程
+- 剩余未放行页面：25
+- 受控创建能力放行：0 / 3
+- PR #1163 两个指定 P1：均已回复并解决，目标未解决线程数为 0
 - 审计读取器前置条件：仍缺失，尚未准入 Runtime
 - 生产就绪 / 部署：未推导、未执行
 
 ```text
-post_v2_r1c_exact4_runtime_rollback=passed
-post_v2_r1c_rollback_independent_verification=passed
+POST_V2_R1C_EXACT4_RUNTIME_ROLLBACK=passed
+POST_V2_R1C_ROLLBACK_INDEPENDENT_VERIFICATION=passed
 
-r1b_workbench_stable_runtime_restored=true
-page_workbench=read_only/pilot_released
-page_system_audit=hidden/not_released
+PR1163_WORKBENCH_P1_THREAD_RESOLVED=true
+PR1163_AUDIT_READER_P1_THREAD_RESOLVED=true
+PR1163_TARGET_P1_UNRESOLVED_COUNT=0
 
-review_accepted_governed_page_release_count=1
-review_accepted_remaining_unreleased_page_count=25
+POST_V2_R1C_FAILED_RELEASE_ATTEMPT_GOVERNANCE_CLOSED=true
+R1B_WORKBENCH_STABLE_RUNTIME_RESTORED=true
 
-reader_release=true
-capability_release=true
+PAGE_WORKBENCH_STATE=read_only/pilot_released
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
 
-pr1163_thread_admin_closure_eligible=true
-pr1163_thread_write_authorized=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+REVIEW_ACCEPTED_REMAINING_UNRELEASED_PAGE_COUNT=25
+CONTROLLED_CREATE_RELEASE_COUNT=0
 
-audit_reader_prerequisite_missing=true
-audit_reader_runtime_authorized=false
+AUDIT_READER_PREREQUISITE_MISSING=true
+AUDIT_READER_RUNTIME_AUTHORIZED=false
 
-post_v2_r1c_complete=false_after_rollback
+PRODUCTION_READY_INFERRED=false
+PRODUCTION_DEPLOYMENT=false
+PRODUCTION_CHANGE=false
 
-production_ready_inferred=false
-production_deployment=false
-production_change=false
+POST_V2_R1C_RELEASE_COMPLETE=false
 ```
 
 ### 唯一下一任务
 
-`PR #1163 两个 P1 review thread 回复并解决 的显式 GitHub 写授权`
+`POST-V2-R1C-AUDIT-READER institution-scoped audit readonly reader prerequisite fresh audit + exact Runtime admission`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
