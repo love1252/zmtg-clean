@@ -12,10 +12,11 @@ import {
 } from '@/modules/institution/server/institution-server-runtime';
 
 export const INSTITUTION_CAPABILITY_AUTHORITY_REVISION_V1 =
-  'r1b-page-workbench-readonly-pilot-v1' as const;
+  'r1c-page-workbench-system-audit-readonly-pilot-v1' as const;
 
 const AUTHORITY_STATUS_FRESHNESS_WINDOW_MS = 5_000;
 const WORKBENCH_READONLY_SUMMARY = '工作台仅供查看' as const;
+const SYSTEM_AUDIT_READONLY_SUMMARY = '审计与安全仅供查看' as const;
 
 function buildCapabilityStatus(
   context: NonNullable<
@@ -39,28 +40,33 @@ function buildCapabilityStatus(
     INSTITUTION_CAPABILITY_REGISTRY_V1.map((definition) => {
       const institutionAuthorized = availableSections.has(definition.sectionId);
       const workbenchReadonlyPilot = definition.key === 'page_workbench';
+      const systemAuditReadonlyPilot = definition.key === 'page_system_audit';
+      const readonlyPilot =
+        workbenchReadonlyPilot || systemAuditReadonlyPilot;
 
       return Object.freeze({
         key: definition.key,
         decision:
-          workbenchReadonlyPilot && institutionAuthorized
+          readonlyPilot && institutionAuthorized
             ? 'read_only'
             : 'hidden',
         dimensions: Object.freeze({
-          codeMaturity: workbenchReadonlyPilot ? 'verified' : 'unverified',
+          codeMaturity: readonlyPilot ? 'verified' : 'unverified',
           institutionAuthorization: institutionAuthorized
             ? 'authorized'
             : 'not_authorized',
           connectionAvailability: 'not_required',
           dataReadiness: 'not_required',
-          productionRelease: workbenchReadonlyPilot
+          productionRelease: readonlyPilot
             ? 'pilot_released'
             : 'not_released',
         }),
         safeSummary:
-          workbenchReadonlyPilot && institutionAuthorized
+          institutionAuthorized && workbenchReadonlyPilot
             ? WORKBENCH_READONLY_SUMMARY
-            : null,
+            : institutionAuthorized && systemAuditReadonlyPilot
+              ? SYSTEM_AUDIT_READONLY_SUMMARY
+              : null,
         diagnosticTargetKey:
           systemAvailable &&
           isInstitutionDiagnosticTargetCapabilityKeyV1(definition.key)
