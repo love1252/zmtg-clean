@@ -5,39 +5,33 @@
 
 ## Post-V2 当前状态
 
-- 更新日期：2026-08-11
-- Architecture V2 重构阶段：complete
-- POST-V2-R1 Readiness Audit：complete
-- POST-V2-R1A original Preflight：superseded by AQ007 re-admission
-- POST-V2-R1A failed exact-6 WIP：local-only / not pushed
-- POST-V2-R1A AQ007 Orchestration Re-admission：complete
-- Runtime：等待新的 exact-3 显式授权
+- 更新日期：2026-08-12
+- Architecture V2：complete
+- POST-V2-R1：complete
+- POST-V2-R1A Capability Authority Foundation：complete
+- POST-V2-R1B：已选择 `page_workbench`，等待 readonly release re-audit + exact Runtime admission
 - Reader / Capability：仍未放行
 
 ```text
 architecture_v2_refactor_complete=true
-
 post_v2_r1_complete=true
-post_v2_r1_eligible_page_count=0
-post_v2_r1_blocked_page_count=26
 
-post_v2_r1a_original_preflight=completed_but_scope_superseded
-
-post_v2_r1a_failed_exact6_wip_preserved=true
-post_v2_r1a_failed_exact6_remote_branch=false
-post_v2_r1a_failed_exact6_remote_pr=false
-post_v2_r1a_failed_exact6_aq007_count=4
-
-post_v2_r1a_aq007_readmission=passed
-
-post_v2_r1a_revised_exact_runtime_file_count=3
-post_v2_r1a_revised_existing_runtime_file_count=1
-post_v2_r1a_revised_new_runtime_file_count=2
-
+post_v2_r1a_revised_runtime_implementation=passed
+post_v2_r1a_revised_runtime_independent_review=passed
+post_v2_r1a_complete=true
+post_v2_r1a_exact_runtime_file_count=3
 post_v2_r1a_cross_owner_composition=orchestration_only
-post_v2_r1a_architecture_exception_required=false
+post_v2_r1a_authority_production_caller_count=0
+post_v2_r1a_route_wiring=false
+post_v2_r1a_page_release_count=0
 
-post_v2_r1a_runtime_authorized=false
+post_v2_r1b_selected_capability=page_workbench
+post_v2_r1b_selected_section=workbench
+post_v2_r1b_selected_route=/hospital
+post_v2_r1b_current_route_state=capability_off_workbench
+post_v2_r1b_runtime_authorized=false
+post_v2_r1b_reader_release_authorized=false
+post_v2_r1b_capability_release_authorized=false
 
 reader_release=false
 capability_release=false
@@ -48,7 +42,7 @@ production_change=false
 
 ### 唯一下一任务
 
-`POST-V2-R1A revised exact 3-file orchestration Capability Authority Foundation Runtime explicit authorization`
+`POST-V2-R1B page_workbench readonly release re-audit + exact Runtime admission`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 

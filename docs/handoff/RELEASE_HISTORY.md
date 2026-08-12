@@ -1,5 +1,21 @@
 # 项目重构历史
 
+<!-- POST_V2_R1A_HANDOFF_HISTORY -->
+
+## 2026-08-12：POST-V2-R1A Capability Authority Foundation Handoff
+
+- Runtime PR #1154 passed and merged；
+- Independent Review PR #1155 passed and merged；
+- R1A complete=true；
+- exact Runtime=3，cross-owner composition=orchestration-only；
+- authority production caller=0，Route wiring=false；
+- page release count=0；
+- Reader release=false；
+- Capability release=false；
+- R1B 首个 readonly slice 选择 `page_workbench` / `/hospital`；
+- R1B Runtime 尚未授权；
+- 下一任务：`POST-V2-R1B page_workbench readonly release re-audit + exact Runtime admission`。
+
 <!-- POST_V2_R1A_AQ007_READMISSION_HISTORY -->
 
 ## 2026-08-11：POST-V2-R1A AQ007 Orchestration Re-admission

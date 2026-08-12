@@ -3,54 +3,42 @@
 ## 唯一下一任务
 
 ```text
-POST-V2-R1A revised exact 3-file orchestration Capability Authority Foundation Runtime explicit authorization
+POST-V2-R1B page_workbench readonly release re-audit + exact Runtime admission
 ```
 
-## Why the old exact-6 authorization ended
+## R1A final state
 
 ```text
-old_exact6_targeted_tests=102_passed
-old_exact6_full_tests=6599_passed
-old_exact6_build=passed
-
-old_exact6_architecture_incremental=blocked
-AQ007_CROSS_MODULE_SERVER_REPOSITORY=4
-```
-
-旧实现被保留为 local-only WIP，不会 push。
-
-## Revised Runtime scope
-
-```text
+post_v2_r1a_complete=true
+runtime_pr=1154
+independent_review_pr=1155
 exact_runtime_file_count=3
-existing_runtime_file_count=1
-new_runtime_file_count=2
-architecture_exception_required=false
-```
-
-1. `src/modules/institution/server/institution-server-runtime.ts`
-2. `src/server/orchestration/institution-capability-authority.ts`
-3. `src/server/orchestration/institution-capability-authority.test.ts`
-
-Cross-owner composition 只允许位于 `src/server/orchestration/**`。
-
-原 Institution capability evaluator / reader 继续保持 candidate-only，不进入新 Runtime scope。
-
-## Release boundary
-
-```text
-productionRelease=not_released
-decision=hidden
 page_release_count=0
 reader_release=false
 capability_release=false
-route_change=false
 ```
 
-只有用户重新明确授权：
+## Selected first readonly slice
 
 ```text
-授权执行 POST-V2-R1A revised exact 3-file orchestration Capability Authority Foundation Runtime。
+capability=page_workbench
+section=workbench
+route=/hospital
+current_route_state=capability_off_workbench
 ```
 
-之后才能进入新的 Runtime implementation。
+这只是 R1B 重新审计与准入选择，不代表 release。
+
+R1B 必须重新冻结 owner facts、productionRelease policy/source、
+exact Runtime allowlist、Route exact scope、Workbench projection/UI exact scope，
+并保持 controlled-create actions hidden。
+
+```text
+R1B_runtime_authorized=false
+R1B_reader_release_authorized=false
+R1B_capability_release_authorized=false
+reader_release=false
+capability_release=false
+```
+
+未经新的 R1B Runtime 显式授权，不执行实现。
