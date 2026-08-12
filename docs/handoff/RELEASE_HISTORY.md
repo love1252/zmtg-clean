@@ -1,5 +1,48 @@
 # 项目重构历史
 
+<!-- POST_V2_R1B_HANDOFF_HISTORY -->
+
+## 2026-08-12：POST-V2-R1B `page_workbench` 只读放行交接与闭环
+
+```text
+post_v2_r1b_complete=true
+post_v2_r1b_released_page=page_workbench
+post_v2_r1b_page_release_count=1
+post_v2_r1b_remaining_unreleased_page_count=25
+post_v2_r1b_controlled_create_release_count=0
+
+reader_release=true
+capability_release=true
+
+production_ready_inferred=false
+production_deployment=false
+
+post_v2_r1c_selected_capability=page_system_audit
+post_v2_r1c_selected_route=/hospital/system/audit
+post_v2_r1c_runtime_authorized=false
+```
+
+- Runtime PR #1158 已完成 exact-5 Runtime 并合并；
+- Independent Review PR #1159 已完成独立审查并合并；
+- PR #1159 的 P1 中文优先反馈由 PR #1160 修正，原 review thread 已回复并 resolve；
+- `page_workbench` 为首个正式完成治理闭环的 readonly page slice；
+- page release count=1，remaining unreleased page count=25；
+- decision=`read_only`，productionRelease=`pilot_released`；
+- controlled-create release count=0；
+- Authority production caller file count=1，唯一调用页面为 `/hospital`；
+- Reader release=true；
+- Capability release=true；
+- 上述 release 仅代表首个 governed readonly slice，不代表全部 26 pages 或生产部署；
+- production ready inferred=false；
+- production deployment=false；
+- R1C 下一候选选择 `page_system_audit` / `/hospital/system/audit`；
+- 当前 R1C Route 仍为 catch-all capability-off，Authority 仍 hidden/not_released；
+- `InstitutionAuditEventsShell` 与 audit client 已有只读查询基线；
+- `page_customer_list` 暂不作为第二切片，因为当前 Customer shell 同时包含 create/update/import mutation surface；
+- R1C Runtime authorization=false；
+- 下一任务：`POST-V2-R1C page_system_audit readonly release re-audit + exact Runtime admission`。
+
+
 <!-- POST_V2_R1B_READMISSION_HISTORY -->
 
 ## 2026-08-12：POST-V2-R1B page_workbench Readonly Release Re-audit + Admission

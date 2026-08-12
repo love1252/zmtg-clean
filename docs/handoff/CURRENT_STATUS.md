@@ -9,41 +9,49 @@
 - Architecture V2：complete
 - POST-V2-R1：complete
 - POST-V2-R1A Capability Authority Foundation：complete
-- POST-V2-R1B page_workbench readonly release：Re-audit + exact Runtime admission complete，等待显式 Runtime 授权
-- Reader / Capability：当前仍未放行
+- POST-V2-R1B `page_workbench` readonly release：complete
+- 已完成受治理 readonly page slice：1 / 26
+- Reader / Capability：首个受治理 readonly slice 已放行
+- Production ready / deployment：未推导、未执行
 
 ```text
 architecture_v2_refactor_complete=true
 post_v2_r1_complete=true
 post_v2_r1a_complete=true
 
-post_v2_r1b_page_workbench_reaudit=passed
-post_v2_r1b_exact_runtime_admission=passed
-post_v2_r1b_target_capability=page_workbench
-post_v2_r1b_target_section=workbench
-post_v2_r1b_target_route=/hospital
+post_v2_r1b_runtime_implementation=passed
+post_v2_r1b_runtime_independent_review=passed
+post_v2_r1b_independent_review_cn_fix=passed
+post_v2_r1b_review_thread_closed=true
+post_v2_r1b_complete=true
 
-post_v2_r1b_exact_runtime_file_count=5
-post_v2_r1b_existing_runtime_file_count=5
-post_v2_r1b_new_runtime_file_count=0
-post_v2_r1b_architecture_exception_required=false
+post_v2_r1b_released_page=page_workbench
+post_v2_r1b_page_release_count=1
+post_v2_r1b_remaining_unreleased_page_count=25
+post_v2_r1b_controlled_create_release_count=0
 
-post_v2_r1b_planned_decision=read_only
-post_v2_r1b_planned_production_release=pilot_released
-post_v2_r1b_planned_page_release_count=1
+reader_release=true
+capability_release=true
 
-post_v2_r1b_runtime_authorized=false
-
-reader_release=false
-capability_release=false
 production_ready_inferred=false
 production_deployment=false
 production_change=false
+
+post_v2_r1c_selected_capability=page_system_audit
+post_v2_r1c_selected_section=system
+post_v2_r1c_selected_route=/hospital/system/audit
+post_v2_r1c_current_route_state=catch_all_capability_off
+post_v2_r1c_current_authority_decision=hidden
+post_v2_r1c_current_production_release=not_released
+
+post_v2_r1c_runtime_authorized=false
+post_v2_r1c_reader_release_authorized=false
+post_v2_r1c_capability_release_authorized=false
 ```
 
 ### 唯一下一任务
 
-`POST-V2-R1B page_workbench readonly release exact 5-file Runtime implementation explicit authorization`
+`POST-V2-R1C page_system_audit readonly release re-audit + exact Runtime admission`
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
