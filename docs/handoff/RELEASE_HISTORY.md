@@ -1,5 +1,30 @@
 # 项目重构历史
 
+<!-- POST_V2_R1C_ROLLBACK_VERIFY_HISTORY -->
+
+## 2026-08-13：POST-V2-R1C exact-4 Runtime rollback 独立验证通过
+
+```text
+post_v2_r1c_exact4_runtime_rollback=passed
+post_v2_r1c_rollback_independent_verification=passed
+r1b_workbench_stable_runtime_restored=true
+page_system_audit_state=hidden_not_released
+review_accepted_governed_page_release_count=1
+pr1163_thread_admin_closure_eligible=true
+pr1163_thread_write_authorized=false
+```
+
+- Rollback PR #1165 已 exact-4 合并；
+- rollback Required Check passed，rollback PR 无 review thread；
+- Authority / Authority test / InstitutionRouteShell test 三个恢复文件 blob 与 pre-R1C Runtime commit `17b1d7a4...` 完全一致；
+- `/hospital/system/audit/page.tsx` 已不存在；
+- production Capability Authority caller 回到仅 `/hospital`；
+- fresh targeted 6 files / 177 tests + typecheck passed；
+- PR #1163 两个 P1 仍 unresolved，等待显式授权后 reply + resolve；
+- Audit Reader prerequisite 仍为后续独立 audit/admission，当前未授权 Runtime；
+- R1C 当前不 complete；Review 接受 capability release 仍为 1/26。
+
+
 <!-- POST_V2_R1C_REVIEW_BLOCKER_HISTORY -->
 
 ## 2026-08-12：POST-V2-R1C Runtime Independent Review 阻断

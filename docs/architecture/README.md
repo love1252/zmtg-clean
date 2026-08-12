@@ -1,5 +1,36 @@
 # 智美天工架构文档索引
 
+<!-- POST_V2_R1C_ROLLBACK_VERIFY_START -->
+
+## POST-V2-R1C exact-4 Runtime 回滚独立验证（2026-08-13）
+
+```text
+post_v2_r1c_exact4_runtime_rollback=passed
+post_v2_r1c_rollback_independent_verification=passed
+
+r1b_workbench_stable_runtime_restored=true
+page_system_audit_state=hidden_not_released
+
+review_accepted_governed_page_release_count=1
+review_accepted_remaining_unreleased_page_count=25
+
+pr1163_thread_admin_closure_eligible=true
+pr1163_thread_write_authorized=false
+
+post_v2_r1c_complete=false_after_rollback
+```
+
+证据：
+
+- `docs/operations/post-v2-r1c-exact4-runtime-rollback-independent-verification-20260813.md`
+
+唯一下一任务：
+
+`PR #1163 两个 P1 review thread 回复 + resolve 的显式 GitHub 写授权`
+
+<!-- POST_V2_R1C_ROLLBACK_VERIFY_END -->
+
+
 <!-- POST_V2_R1C_REVIEW_BLOCKER_START -->
 
 ## POST-V2-R1C Runtime 独立审查阻断与回滚重新准入（2026-08-12）
