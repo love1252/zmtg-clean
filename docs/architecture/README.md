@@ -1,5 +1,40 @@
 # 智美天工架构文档索引
 
+<!-- POST_V2_R1B_READMISSION_START -->
+
+## POST-V2-R1B page_workbench Readonly Release Admission（2026-08-12）
+
+```text
+post_v2_r1b_page_workbench_reaudit=passed
+post_v2_r1b_exact_runtime_admission=passed
+
+target_capability=page_workbench
+target_route=/hospital
+
+exact_runtime_file_count=5
+existing_runtime_file_count=5
+new_runtime_file_count=0
+
+planned_decision=read_only
+planned_production_release=pilot_released
+planned_page_release_count=1
+
+runtime_authorized=false
+reader_release=false
+capability_release=false
+```
+
+证据：
+
+- `docs/operations/post-v2-r1b-page-workbench-readonly-release-readmission-20260812.md`
+- `docs/operations/post-v2-r1b-page-workbench-exact-runtime-allowlist-20260812.csv`
+
+唯一下一任务：
+
+`POST-V2-R1B page_workbench readonly release exact 5-file Runtime implementation explicit authorization`
+
+<!-- POST_V2_R1B_READMISSION_END -->
+
 <!-- POST_V2_R1A_HANDOFF_START -->
 
 ## POST-V2-R1A Capability Authority Foundation Handoff（2026-08-12）

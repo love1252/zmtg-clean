@@ -1,0 +1,6 @@
+path,file_role,change_kind,new_file_allowed,r1b_responsibility
+src/app/hospital/page.tsx,canonical workbench Route wiring,existing_runtime,false,consume authority status and fail closed to existing boundary
+src/modules/institution-workbench/components/InstitutionWorkbenchCapabilityOff.tsx,workbench shell compatibility renderer,existing_runtime,false,render projected readonly capability while action and lifecycle stay blocked
+src/modules/institution-workbench/tests/HospitalWorkbenchEntry.test.tsx,canonical Route release integration tests,existing_test,false,prove readonly release and fail-closed fallback
+src/server/orchestration/institution-capability-authority.test.ts,authority release-policy tests,existing_test,false,prove page_workbench-only pilot readonly and all other capabilities hidden
+src/server/orchestration/institution-capability-authority.ts,code-owned capability release policy,existing_runtime,false,release page_workbench only as read_only pilot

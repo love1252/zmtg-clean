@@ -1,5 +1,25 @@
 # 项目重构历史
 
+<!-- POST_V2_R1B_READMISSION_HISTORY -->
+
+## 2026-08-12：POST-V2-R1B page_workbench Readonly Release Re-audit + Admission
+
+- R1A complete=true；
+- 首个 readonly slice 固定为 `page_workbench` / `/hospital`；
+- R1A authority 缺口已解决；
+- 当前剩余 blocker 收窄为 release policy + Route authority-status wiring；
+- Workbench projection 已支持 read_only / safe summary / stale/scope fail-closed，无需修改；
+- exact Runtime scope=5 existing / 0 new；
+- planned decision=`read_only`；
+- planned productionRelease=`pilot_released`；
+- planned page release count=1；
+- 其余 35 capability 继续 hidden/not_released；
+- 3 个 controlled-create actions 继续 hidden/not_released；
+- R1B Runtime 尚未授权；
+- Reader release=false；
+- Capability release=false；
+- 下一任务：`POST-V2-R1B page_workbench readonly release exact 5-file Runtime implementation explicit authorization`。
+
 <!-- POST_V2_R1A_HANDOFF_HISTORY -->
 
 ## 2026-08-12：POST-V2-R1A Capability Authority Foundation Handoff
