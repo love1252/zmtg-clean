@@ -1,5 +1,30 @@
 # 智美天工架构文档索引
 
+<!-- POST_V2_R1A_HANDOFF_START -->
+
+## POST-V2-R1A Capability Authority Foundation Handoff（2026-08-12）
+
+```text
+post_v2_r1a_complete=true
+runtime_pr=1154
+independent_review_pr=1155
+exact_runtime_file_count=3
+cross_owner_composition=orchestration_only
+page_release_count=0
+reader_release=false
+capability_release=false
+
+r1b_selected_capability=page_workbench
+r1b_selected_route=/hospital
+r1b_runtime_authorized=false
+```
+
+唯一下一任务：
+
+`POST-V2-R1B page_workbench readonly release re-audit + exact Runtime admission`
+
+<!-- POST_V2_R1A_HANDOFF_END -->
+
 <!-- POST_V2_R1A_AQ007_READMISSION_START -->
 
 ## POST-V2-R1A AQ007 Orchestration Re-admission（2026-08-11）
