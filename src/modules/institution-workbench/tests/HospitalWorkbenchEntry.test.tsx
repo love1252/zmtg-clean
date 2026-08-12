@@ -6,6 +6,9 @@ import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'v
 const serverRuntimeMocks = vi.hoisted(() => ({
   resolveInstitutionServerAuthorizationV1: vi.fn(),
 }));
+const capabilityAuthorityMocks = vi.hoisted(() => ({
+  resolveInstitutionCapabilityAuthorityStatusV1: vi.fn(),
+}));
 const readerProvenance = vi.hoisted(() => ({
   identity: new WeakSet<object>(),
   membership: new WeakSet<object>(),
@@ -32,6 +35,14 @@ vi.mock(
   () => ({
     resolveInstitutionServerAuthorizationV1:
       serverRuntimeMocks.resolveInstitutionServerAuthorizationV1,
+  }),
+);
+
+vi.mock(
+  '@/server/orchestration/institution-capability-authority',
+  () => ({
+    resolveInstitutionCapabilityAuthorityStatusV1:
+      capabilityAuthorityMocks.resolveInstitutionCapabilityAuthorityStatusV1,
   }),
 );
 
@@ -66,6 +77,7 @@ vi.mock(
 );
 
 import HospitalPage from '@/app/hospital/page';
+import type { CapabilityStatusV1 } from '@/modules/institution-contracts/v1/institution-capability';
 import {
   createAuthoritativeInstitutionMembershipFactReaderV1 as createUnbrandedMembershipFactReaderV1,
   type CurrentInstitutionMembershipFactRow,
@@ -254,6 +266,49 @@ function authorizationFixture(
   });
 
   return { authorization, owner, anchorProvider, codec, membershipRead, anchorRead };
+}
+
+function readonlyWorkbenchCapabilityStatus(): CapabilityStatusV1 {
+  const freshness = {
+    observedAt: NOW.toISOString(),
+    freshUntil: new Date(NOW.getTime() + 5_000).toISOString(),
+  };
+
+  return {
+    contractVersion: 'v1',
+    scope: {
+      tenantId: payload.tenantId,
+      institutionId: payload.institutionId,
+    },
+    readiness: 'ready',
+    freshness,
+    partitions: [
+      {
+        key: 'page_workbench',
+        readiness: 'ready',
+        freshness,
+        failureCode: null,
+      },
+    ],
+    data: {
+      capabilities: [
+        {
+          key: 'page_workbench',
+          decision: 'read_only',
+          dimensions: {
+            codeMaturity: 'verified',
+            institutionAuthorization: 'authorized',
+            connectionAvailability: 'not_required',
+            dataReadiness: 'not_required',
+            productionRelease: 'pilot_released',
+          },
+          safeSummary: '工作台仅供查看',
+          diagnosticTargetKey: null,
+        },
+      ],
+    },
+    failureCode: null,
+  };
 }
 
 describe('WB-ENTRY-02A server-owned 工作台入口', () => {
@@ -532,10 +587,15 @@ describe('BASE-WIRE-01 /hospital server navigation authorization', () => {
     serverRuntimeMocks.resolveInstitutionServerAuthorizationV1.mockResolvedValue(
       createInstitutionRequestAuthorizationV1({} as never),
     );
+    capabilityAuthorityMocks.resolveInstitutionCapabilityAuthorityStatusV1.mockReset();
+    capabilityAuthorityMocks.resolveInstitutionCapabilityAuthorityStatusV1.mockResolvedValue(
+      null,
+    );
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it('uses one genuine admin navigation authorization for seven sections and the authorized boundary', async () => {
@@ -596,6 +656,71 @@ describe('BASE-WIRE-01 /hospital server navigation authorization', () => {
         sectionId: 'workbench',
       }),
     ).resolves.toEqual({ kind: 'rejected', code: 'scope_unavailable' });
+    expect(
+      capabilityAuthorityMocks.resolveInstitutionCapabilityAuthorityStatusV1,
+    ).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders exactly one readonly page_workbench pilot when navigation and authority status both succeed', async () => {
+    const created = authorizationFixture('tenant_admin');
+    vi.spyOn(Date, 'now').mockReturnValue(NOW.getTime());
+
+    serverRuntimeMocks.resolveInstitutionServerAuthorizationV1.mockResolvedValueOnce(
+      created.authorization,
+    );
+    capabilityAuthorityMocks.resolveInstitutionCapabilityAuthorityStatusV1.mockResolvedValueOnce(
+      readonlyWorkbenchCapabilityStatus(),
+    );
+
+    render(await HospitalPage());
+
+    const main = screen.getByRole('main');
+    expect(
+      main.querySelector('[data-capability-state="readonly-pilot"]'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: '工作台', level: 1 }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('工作台仅供查看')).toBeInTheDocument();
+    expect(screen.getByText('只读')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', {
+        name: '工作台访问已核验',
+        level: 2,
+      }),
+    ).not.toBeInTheDocument();
+    expect(within(main).queryAllByRole('button')).toHaveLength(0);
+    expect(within(main).queryAllByRole('link')).toHaveLength(0);
+    expect(
+      capabilityAuthorityMocks.resolveInstitutionCapabilityAuthorityStatusV1,
+    ).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the genuine navigation boundary when capability authority resolution throws', async () => {
+    const created = authorizationFixture('tenant_admin');
+    serverRuntimeMocks.resolveInstitutionServerAuthorizationV1.mockResolvedValueOnce(
+      created.authorization,
+    );
+    capabilityAuthorityMocks.resolveInstitutionCapabilityAuthorityStatusV1.mockRejectedValueOnce(
+      new Error('capability authority unavailable'),
+    );
+
+    render(await HospitalPage());
+
+    expect(
+      screen
+        .getByRole('main')
+        .querySelector('[data-capability-state="readonly-pilot"]'),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', {
+        name: '工作台访问已核验',
+        level: 2,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      capabilityAuthorityMocks.resolveInstitutionCapabilityAuthorityStatusV1,
+    ).toHaveBeenCalledTimes(1);
   });
 
   it.each(['consultant', 'customer_service'] as const)(
@@ -679,6 +804,9 @@ describe('BASE-WIRE-01 /hospital server navigation authorization', () => {
       expect(
         screen.queryByRole('heading', { name: '工作台访问已核验', level: 2 }),
       ).not.toBeInTheDocument();
+      expect(
+        capabilityAuthorityMocks.resolveInstitutionCapabilityAuthorityStatusV1,
+      ).not.toHaveBeenCalled();
     },
   );
 
@@ -738,6 +866,9 @@ describe('BASE-WIRE-01 /hospital server navigation authorization', () => {
     }
     expect(getterReads).toBe(0);
     expect(proxyTraps).toBe(0);
+    expect(
+      capabilityAuthorityMocks.resolveInstitutionCapabilityAuthorityStatusV1,
+    ).not.toHaveBeenCalled();
   });
 
   it('does not render authorization details, numbers, buttons or business entry points', async () => {
