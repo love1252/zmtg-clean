@@ -248,7 +248,7 @@ function availableRuntimeConfig() {
   });
 }
 
-describe('POST-V2-R1A orchestration capability authority foundation', () => {
+describe('POST-V2-R1B page_workbench readonly release authority', () => {
   beforeEach(() => {
     for (const mock of Object.values(runtimeMocks)) mock.mockClear();
 
@@ -377,7 +377,7 @@ describe('POST-V2-R1A orchestration capability authority foundation', () => {
     vi.restoreAllMocks();
   });
 
-  it('exposes no-input hidden-only authority resolver and frozen revision', () => {
+  it('exposes no-input page_workbench readonly-pilot authority resolver and frozen revision', () => {
     expectTypeOf<
       Parameters<typeof resolveInstitutionCapabilityAuthorityStatusV1>
     >().toEqualTypeOf<[]>();
@@ -385,11 +385,11 @@ describe('POST-V2-R1A orchestration capability authority foundation', () => {
       ReturnType<typeof resolveInstitutionCapabilityAuthorityStatusV1>
     >().toEqualTypeOf<Promise<CapabilityStatusV1 | null>>();
     expect(INSTITUTION_CAPABILITY_AUTHORITY_REVISION_V1).toBe(
-      'r1a-orchestration-hidden-v1',
+      'r1b-page-workbench-readonly-pilot-v1',
     );
   });
 
-  it('tenant_admin returns 36 hidden / not_released items and six diagnostic keys', async () => {
+  it('tenant_admin returns exactly one page_workbench read_only pilot and keeps the other 35 hidden', async () => {
     const status = await resolveInstitutionCapabilityAuthorityStatusV1();
 
     expect(status).toMatchObject({
@@ -405,16 +405,35 @@ describe('POST-V2-R1A orchestration capability authority foundation', () => {
     expect(status?.data?.capabilities).toHaveLength(36);
     expect(status?.freshness).toEqual({
       observedAt: NOW.toISOString(),
-      freshUntil: NOW.toISOString(),
+      freshUntil: new Date(NOW.getTime() + 5_000).toISOString(),
     });
 
-    for (const item of status?.data?.capabilities ?? []) {
+    const capabilities = status?.data?.capabilities ?? [];
+    const workbench = capabilities.find((item) => item.key === 'page_workbench');
+
+    expect(workbench).toEqual({
+      key: 'page_workbench',
+      decision: 'read_only',
+      dimensions: {
+        codeMaturity: 'verified',
+        institutionAuthorization: 'authorized',
+        connectionAvailability: 'not_required',
+        dataReadiness: 'not_required',
+        productionRelease: 'pilot_released',
+      },
+      safeSummary: '工作台仅供查看',
+      diagnosticTargetKey: null,
+    });
+
+    const remaining = capabilities.filter((item) => item.key !== 'page_workbench');
+    expect(remaining).toHaveLength(35);
+    for (const item of remaining) {
       expect(item.decision).toBe('hidden');
       expect(item.dimensions.productionRelease).toBe('not_released');
       expect(item.safeSummary).toBeNull();
     }
 
-    const diagnosticKeys = (status?.data?.capabilities ?? [])
+    const diagnosticKeys = capabilities
       .map((item) => item.diagnosticTargetKey)
       .filter((value) => value !== null);
 
@@ -431,7 +450,7 @@ describe('POST-V2-R1A orchestration capability authority foundation', () => {
     expect(runtimeMocks.customerObjectFactSourceRead).not.toHaveBeenCalled();
   });
 
-  it('consultant remains hidden, authorizes customer scope, and receives no system diagnostics', async () => {
+  it('consultant receives the readonly workbench pilot while customer/system dimensions remain authoritative', async () => {
     runtimeMocks.membershipRead.mockResolvedValue([
       {
         ...membershipRow,
@@ -441,6 +460,17 @@ describe('POST-V2-R1A orchestration capability authority foundation', () => {
 
     const status = await resolveInstitutionCapabilityAuthorityStatusV1();
     const capabilities = status?.data?.capabilities ?? [];
+
+    expect(
+      capabilities.find((item) => item.key === 'page_workbench'),
+    ).toMatchObject({
+      decision: 'read_only',
+      dimensions: {
+        institutionAuthorization: 'authorized',
+        productionRelease: 'pilot_released',
+      },
+      safeSummary: '工作台仅供查看',
+    });
 
     expect(
       capabilities.find((item) => item.key === 'page_customer_list'),

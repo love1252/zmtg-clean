@@ -12,45 +12,62 @@ import {
 } from '@/modules/institution/server/institution-server-runtime';
 
 export const INSTITUTION_CAPABILITY_AUTHORITY_REVISION_V1 =
-  'r1a-orchestration-hidden-v1' as const;
+  'r1b-page-workbench-readonly-pilot-v1' as const;
 
-function buildHiddenCapabilityStatus(
+const AUTHORITY_STATUS_FRESHNESS_WINDOW_MS = 5_000;
+const WORKBENCH_READONLY_SUMMARY = '工作台仅供查看' as const;
+
+function buildCapabilityStatus(
   context: NonNullable<
     ReturnType<typeof consumeInstitutionCapabilityAuthorityRuntimeContextV1>
   >,
-): CapabilityStatusV1 {
+): CapabilityStatusV1 | null {
+  const observedAtEpochMs = Date.parse(context.observedAt);
+  if (!Number.isFinite(observedAtEpochMs)) return null;
+
   const freshness = Object.freeze({
     observedAt: context.observedAt,
-    freshUntil: context.observedAt,
+    freshUntil: new Date(
+      observedAtEpochMs + AUTHORITY_STATUS_FRESHNESS_WINDOW_MS,
+    ).toISOString(),
   });
 
   const availableSections = new Set(context.availableSectionIds);
   const systemAvailable = availableSections.has('system');
 
   const capabilities: CapabilityStatusItemV1[] =
-    INSTITUTION_CAPABILITY_REGISTRY_V1.map((definition) =>
-      Object.freeze({
+    INSTITUTION_CAPABILITY_REGISTRY_V1.map((definition) => {
+      const institutionAuthorized = availableSections.has(definition.sectionId);
+      const workbenchReadonlyPilot = definition.key === 'page_workbench';
+
+      return Object.freeze({
         key: definition.key,
-        decision: 'hidden',
+        decision:
+          workbenchReadonlyPilot && institutionAuthorized
+            ? 'read_only'
+            : 'hidden',
         dimensions: Object.freeze({
-          codeMaturity: 'unverified',
-          institutionAuthorization: availableSections.has(
-            definition.sectionId,
-          )
+          codeMaturity: workbenchReadonlyPilot ? 'verified' : 'unverified',
+          institutionAuthorization: institutionAuthorized
             ? 'authorized'
             : 'not_authorized',
           connectionAvailability: 'not_required',
           dataReadiness: 'not_required',
-          productionRelease: 'not_released',
+          productionRelease: workbenchReadonlyPilot
+            ? 'pilot_released'
+            : 'not_released',
         }),
-        safeSummary: null,
+        safeSummary:
+          workbenchReadonlyPilot && institutionAuthorized
+            ? WORKBENCH_READONLY_SUMMARY
+            : null,
         diagnosticTargetKey:
           systemAvailable &&
           isInstitutionDiagnosticTargetCapabilityKeyV1(definition.key)
             ? definition.key
             : null,
-      } satisfies CapabilityStatusItemV1),
-    );
+      } satisfies CapabilityStatusItemV1);
+    });
 
   const partitions: CapabilityStatusV1['partitions'] =
     INSTITUTION_CAPABILITY_REGISTRY_V1.map((definition) =>
@@ -74,30 +91,21 @@ function buildHiddenCapabilityStatus(
     readiness: 'ready',
     freshness,
     partitions,
-    data: Object.freeze({
-      capabilities,
-    }),
+    data: Object.freeze({ capabilities }),
     failureCode: null,
   } satisfies CapabilityStatusV1);
 }
 
-/**
- * POST-V2-R1A authority foundation.
- *
- * This is not wired to any Route. It consumes one opaque current server authority context and
- * emits the public CapabilityStatusV1 wire shape in a hidden-only / not-released state.
- */
 export async function resolveInstitutionCapabilityAuthorityStatusV1(): Promise<CapabilityStatusV1 | null> {
   try {
-    const handle =
-      await resolveInstitutionCapabilityAuthorityRuntimeContextV1();
+    const handle = await resolveInstitutionCapabilityAuthorityRuntimeContextV1();
     if (!handle) return null;
 
     const context =
       consumeInstitutionCapabilityAuthorityRuntimeContextV1(handle);
     if (!context) return null;
 
-    return buildHiddenCapabilityStatus(context);
+    return buildCapabilityStatus(context);
   } catch {
     return null;
   }

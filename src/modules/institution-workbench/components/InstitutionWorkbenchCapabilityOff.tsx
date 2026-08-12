@@ -22,13 +22,29 @@ const capabilityOffCapabilityProjection: WorkbenchCapabilityProjection = {
   quickCreateMenu: null,
 };
 
-/**
- * 首期根页只展示已发布的工作台外壳。业务来源尚未接通时，显式传入不可用/阻断投影，
- * 不以 fixture、旧工作台摘要或静态计数补齐。
- */
 export function InstitutionWorkbenchCapabilityOff({
   genuineAllowed = false,
-}: Readonly<{ genuineAllowed?: boolean }>) {
+  capabilityProjection = null,
+}: Readonly<{
+  genuineAllowed?: boolean;
+  capabilityProjection?: WorkbenchCapabilityProjection | null;
+}>) {
+  if (
+    genuineAllowed &&
+    capabilityProjection?.status === 'projected' &&
+    capabilityProjection.quickCreateMenu === null
+  ) {
+    return (
+      <div data-capability-state="readonly-pilot" className="min-w-0">
+        <InstitutionWorkbenchShell
+          actionProjection={capabilityOffActionProjection}
+          lifecycleProjection={capabilityOffLifecycleProjection}
+          capabilityProjection={capabilityProjection}
+        />
+      </div>
+    );
+  }
+
   if (genuineAllowed) {
     return (
       <section
