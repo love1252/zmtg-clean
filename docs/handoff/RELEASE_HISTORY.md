@@ -34,9 +34,9 @@ NEW_RUNTIME_FILE_COUNT=0
 DELETE_RUNTIME_FILE_COUNT=0
 EXACT_PRODUCTION_FILE_COUNT=1
 EXACT_TEST_FILE_COUNT=1
-EXACT_DOC_FILE_COUNT=6
+EXACT_DOC_FILE_COUNT=5
 EXISTING_DOC_FILE_COUNT=4
-NEW_DOC_FILE_COUNT=2
+NEW_DOC_FILE_COUNT=1
 
 SCHEMA_CHANGE_REQUIRED=false
 MIGRATION_REQUIRED=false
@@ -66,11 +66,13 @@ PRODUCTION_DEPLOYMENT=false
 - exact Runtime 只允许修改 `src/app/api/auth/login/route.ts` 与 `src/modules/auth/tests/FormalAuthRoutes.test.ts`，共 2 个既有文件；切片完成后 legacy caller residual 预计从 19 降至 18；
 - 首切片保持登录 allowed/denied、Cookie、低敏响应、Audit failure isolation 与 query/transaction 基数；不修改 S6 scope port、S8 contract、Schema、Architecture rules、Workbench 或页面；
 - S9 只交付 docs-only Admission，未连接数据库，未实施 caller Runtime、DDL/DML、backfill、Staging 或 Production。
+- PR #1181 合并后收到 P1：原 Admission 将非 Markdown CSV 纳入 docs-only scope，与 `AGENTS.md` 的 Markdown-only 分类冲突；
+- S9-RD1 删除独立 CSV，并把 canonical exact Runtime allowlist 保留在 Admission Markdown 内；没有用其他 CSV、JSON、YAML 或 script 替代；
+- S9 正式 closure 必须以 corrective PR 合并、PR #1181 指定 thread resolved 与 post-merge sweep clean 为准，不能在 corrective merge 前提前宣称 Review debt 为 0。
 
 证据：
 
 - `docs/operations/post-v2-r1c-audit-writer-classified-caller-migration-admission-20260813.md`
-- `docs/operations/post-v2-r1c-audit-writer-classified-caller-migration-exact-runtime-allowlist-20260813.csv`
 
 下一任务：`POST-V2-R1C Audit Writer caller migration AUTH_LOGIN_NOT_APPLICABLE_V1 exact 2-file Runtime implementation explicit authorization`，`CALLER_MIGRATION_RUNTIME_AUTHORIZED=false`。
 

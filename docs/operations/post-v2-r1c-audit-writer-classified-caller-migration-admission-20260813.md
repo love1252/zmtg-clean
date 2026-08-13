@@ -36,9 +36,9 @@ DELETE_RUNTIME_FILE_COUNT=0
 EXACT_PRODUCTION_FILE_COUNT=1
 EXACT_TEST_FILE_COUNT=1
 
-EXACT_DOC_FILE_COUNT=6
+EXACT_DOC_FILE_COUNT=5
 EXISTING_DOC_FILE_COUNT=4
-NEW_DOC_FILE_COUNT=2
+NEW_DOC_FILE_COUNT=1
 
 SCHEMA_CHANGE_REQUIRED=false
 MIGRATION_REQUIRED=false
@@ -61,6 +61,8 @@ PRODUCTION_DEPLOYMENT=false
 ```
 
 本 Admission 只冻结下一原子 Runtime 切片，不实施任何 caller migration。S6 formal scope port 与 S8 Audit Owner contract 是已完成 Foundation，本阶段没有修改它们，也没有连接数据库。
+
+PR #1181 合并后收到 docs-only classification P1：独立机器可读 CSV 不属于 `AGENTS.md` 定义的 Markdown-only 文档范围。S9-RD1 删除该 CSV，并把 canonical exact Runtime allowlist 完整保留在本文第 8.1 节。S9 正式 closure 仍以 corrective PR 合并、PR #1181 指定 thread resolved 与 post-merge sweep clean 为准；本文不提前宣称 `POST_MERGE_REVIEW_DEBT=0`。
 
 ## 2. Fresh inventory 方法与边界
 
@@ -274,7 +276,7 @@ N_PLUS_ONE_QUERY_REQUIRED=false
 | `src/app/api/auth/login/route.ts` | production | Auth 正式登录 Audit caller | existing_runtime | 用 `createAttributedTenantAuditEventV1(...not_applicable...)` 与 `recordAttributed()` 替换该 caller 的 legacy `record()`，保持成功／失败与 best-effort 隔离 |
 | `src/modules/auth/tests/FormalAuthRoutes.test.ts` | test | 正式登录 Route 与 Audit contract 回归 | existing_test | 证明成功与拒绝登录均写 `not_applicable`，legacy `record()` 为零，审计异常不改变认证响应且无新增 DB transaction/query |
 
-机器可读 allowlist：`docs/operations/post-v2-r1c-audit-writer-classified-caller-migration-exact-runtime-allowlist-20260813.csv`。
+上表即 `AUTH_LOGIN_NOT_APPLICABLE_V1` 的 canonical exact Runtime allowlist；不另建 CSV、JSON、YAML 或 script 镜像。
 
 任何第 3 个 Runtime/Test 文件、S6 scope port、S8 contract、Schema、Migration、Architecture rules、Workbench 或页面变更均属于 Admission drift，必须停止并重新准入。
 
@@ -303,16 +305,15 @@ src/modules/auth/tests/DemoAuthRoutes.test.ts
 
 ### 8.3 Exact docs scope
 
-S9 docs-only scope 冻结为 6 文件，2 个新增、4 个既有：
+S9 docs-only scope 修正为 5 个 Markdown，1 个新增、4 个既有：
 
 1. `docs/operations/post-v2-r1c-audit-writer-classified-caller-migration-admission-20260813.md`
-2. `docs/operations/post-v2-r1c-audit-writer-classified-caller-migration-exact-runtime-allowlist-20260813.csv`
-3. `docs/architecture/README.md`
-4. `docs/handoff/CURRENT_STATUS.md`
-5. `docs/handoff/NEXT_TASK.md`
-6. `docs/handoff/RELEASE_HISTORY.md`
+2. `docs/architecture/README.md`
+3. `docs/handoff/CURRENT_STATUS.md`
+4. `docs/handoff/NEXT_TASK.md`
+5. `docs/handoff/RELEASE_HISTORY.md`
 
-完整 caller inventory 保留在本文，不创建额外 inventory CSV。
+完整 caller inventory 与 canonical exact Runtime allowlist 均保留在本文；不创建额外 inventory CSV，也不创建独立 machine-readable allowlist CSV。
 
 ## 9. Architecture 与数据边界
 

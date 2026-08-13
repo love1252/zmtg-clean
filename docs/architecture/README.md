@@ -31,9 +31,9 @@ NEW_RUNTIME_FILE_COUNT=0
 DELETE_RUNTIME_FILE_COUNT=0
 EXACT_PRODUCTION_FILE_COUNT=1
 EXACT_TEST_FILE_COUNT=1
-EXACT_DOC_FILE_COUNT=6
+EXACT_DOC_FILE_COUNT=5
 EXISTING_DOC_FILE_COUNT=4
-NEW_DOC_FILE_COUNT=2
+NEW_DOC_FILE_COUNT=1
 
 SCHEMA_CHANGE_REQUIRED=false
 MIGRATION_REQUIRED=false
@@ -67,7 +67,6 @@ PRODUCTION_DEPLOYMENT=false
 证据：
 
 - `docs/operations/post-v2-r1c-audit-writer-classified-caller-migration-admission-20260813.md`
-- `docs/operations/post-v2-r1c-audit-writer-classified-caller-migration-exact-runtime-allowlist-20260813.csv`
 
 唯一下一任务：
 
