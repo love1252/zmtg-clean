@@ -9,6 +9,13 @@ import {
   createWeComRealSendProofTransactionRepository,
 } from '@/modules/institution/server/wecom-real-send-proof-repository';
 import type { TenantDatabase } from '@/server/db/client';
+import { mintVerifiedInstitutionAuditAttributionForOrchestrationV1 } from '@/modules/audit/domain/audit-events';
+
+const auditAttribution = mintVerifiedInstitutionAuditAttributionForOrchestrationV1({
+  formalPair: { tenantId: 'tenant-a', institutionId: 'inst-a', observedAt: '2026-07-12T08:00:00.000Z' },
+  businessPair: { tenantId: 'tenant-a', institutionId: 'inst-a' },
+})!;
+if (!auditAttribution) throw new Error('test audit attribution unavailable');
 
 describe('WeComRealSendProof repository compatibility', () => {
   it('可信事实 read / lock 逻辑保留，但 direct business Writer 已移除', () => {
@@ -46,13 +53,14 @@ describe('WeComRealSendProof repository compatibility', () => {
       markRealSendSucceeded: vi.fn(async () => ({ operationRef: 'a' })),
     };
     const auditRepository = {
-      record: vi.fn(async () => undefined),
+      recordAttributed: vi.fn(async () => undefined),
     };
 
     const repository = createWeComRealSendProofTransactionRepository(
       {} as unknown as TenantDatabase,
       writer as never,
       auditRepository,
+      auditAttribution,
     );
 
     await repository.createOperation({ id: 'a' } as never);
@@ -72,12 +80,13 @@ describe('WeComRealSendProof repository compatibility', () => {
 
   it('audit evidence 委托 Audit canonical repository', async () => {
     const auditRepository = {
-      record: vi.fn(async () => undefined),
+      recordAttributed: vi.fn(async () => undefined),
     };
     const repository = createWeComRealSendProofTransactionRepository(
       {} as unknown as TenantDatabase,
       {} as never,
       auditRepository,
+      auditAttribution,
     );
 
     const event = {
@@ -86,7 +95,7 @@ describe('WeComRealSendProof repository compatibility', () => {
 
     await repository.recordAudit(event);
 
-    expect(auditRepository.record).toHaveBeenCalledWith(event);
+    expect(auditRepository.recordAttributed).toHaveBeenCalledWith(event);
   });
 
   it('public repository 仅保留 orchestration transaction compatibility 入口', () => {

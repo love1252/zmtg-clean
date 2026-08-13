@@ -4,6 +4,8 @@ const mocks = vi.hoisted(() => ({
   createAuditRepository: vi.fn(), createCustomerRepository: vi.fn(), createMappingRepository: vi.fn(),
   createSafetyRepository: vi.fn(), createCanonicalWriter: vi.fn(), createRealSendTransactionRepository: vi.fn(),
   createCareDraftRepository: vi.fn(),
+  resolveVerifiedAttribution: vi.fn(),
+  verifiedAttribution: {},
 }));
 vi.mock('@/modules/audit/server/audit-event-repository', () => ({ createAuditEventRepository: mocks.createAuditRepository }));
 vi.mock('@/modules/institution/server/tenant-business-repository', () => ({ createTenantBusinessRepository: mocks.createCustomerRepository }));
@@ -12,8 +14,14 @@ vi.mock('@/modules/institution/server/trusted-reachout-safety-repository', () =>
 vi.mock('@/modules/messaging/server/wecom-reachout-command-repository', () => ({ createWeComReachOutCommandRepository: mocks.createCanonicalWriter }));
 vi.mock('@/modules/institution/server/wecom-real-send-proof-repository', () => ({ createWeComRealSendProofTransactionRepository: mocks.createRealSendTransactionRepository }));
 vi.mock('@/modules/care/server/follow-up-message-draft-command-repository', () => ({ createFollowUpMessageDraftCommandRepository: mocks.createCareDraftRepository }));
+vi.mock('@/server/orchestration/institution-audit-writer-scope', () => ({
+  resolveInstitutionAuditWriterVerifiedAttributionV1: mocks.resolveVerifiedAttribution,
+}));
 
-import { runWeComReachOutTransaction, runWeComRealSendProofTransaction } from '@/server/orchestration/wecom-reachout-transaction';
+import {
+  runAttributedWeComReachOutTransaction,
+  runWeComRealSendProofTransaction,
+} from '@/server/orchestration/wecom-reachout-transaction';
 
 describe('wecom reachout orchestration', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -36,7 +44,12 @@ describe('wecom reachout orchestration', () => {
     mocks.createCanonicalWriter.mockReturnValue(canonicalWriter);
     mocks.createCareDraftRepository.mockReturnValue({});
 
-    const deps = await runWeComReachOutTransaction(database as never, async (input) => input);
+    mocks.resolveVerifiedAttribution.mockResolvedValueOnce(mocks.verifiedAttribution);
+    const deps = await runAttributedWeComReachOutTransaction(
+      database as never,
+      { tenantId: 'tenant-a', institutionId: 'inst-a' },
+      async (input) => input,
+    );
     expect(mocks.createCustomerRepository).toHaveBeenCalledWith(transactionDatabase);
     expect(mocks.createMappingRepository).toHaveBeenCalledWith(transactionDatabase);
     expect(mocks.createSafetyRepository).toHaveBeenCalledWith(transactionDatabase);
@@ -44,6 +57,8 @@ describe('wecom reachout orchestration', () => {
     expect(mocks.createAuditRepository).toHaveBeenCalledWith(transactionDatabase);
     expect(mocks.createCareDraftRepository).toHaveBeenCalledWith(transactionDatabase);
     expect(deps.careMessageDraftCommandService.updateControlledReachOutMetadata).toBeTypeOf('function');
+    expect(deps.auditAttribution).toBe(mocks.verifiedAttribution);
+    expect(mocks.resolveVerifiedAttribution).toHaveBeenCalledOnce();
 
     await deps.safetyRepository.upsertConsent({} as never);
     await deps.safetyRepository.createFrequencyIfAbsent({} as never);
@@ -58,7 +73,12 @@ describe('wecom reachout orchestration', () => {
     mocks.createCustomerRepository.mockReturnValue({}); mocks.createMappingRepository.mockReturnValue({});
     mocks.createSafetyRepository.mockReturnValue({}); mocks.createCanonicalWriter.mockReturnValue({});
     mocks.createAuditRepository.mockReturnValue({}); mocks.createCareDraftRepository.mockReturnValue({});
-    await expect(runWeComReachOutTransaction(database as never, async () => { throw new Error('rollback-required'); }))
+    mocks.resolveVerifiedAttribution.mockResolvedValueOnce(mocks.verifiedAttribution);
+    await expect(runAttributedWeComReachOutTransaction(
+      database as never,
+      { tenantId: 'tenant-a', institutionId: 'inst-a' },
+      async () => { throw new Error('rollback-required'); },
+    ))
       .rejects.toThrow('rollback-required');
   });
 
@@ -71,8 +91,18 @@ describe('wecom reachout orchestration', () => {
     mocks.createCanonicalWriter.mockReturnValue(canonicalWriter);
     mocks.createAuditRepository.mockReturnValue(auditRepository);
     mocks.createRealSendTransactionRepository.mockReturnValue(realSendRepository);
-    const result = await runWeComRealSendProofTransaction(database as never, async (repository) => repository);
-    expect(mocks.createRealSendTransactionRepository).toHaveBeenCalledWith(transactionDatabase, canonicalWriter, auditRepository);
+    mocks.resolveVerifiedAttribution.mockResolvedValueOnce(mocks.verifiedAttribution);
+    const result = await runWeComRealSendProofTransaction(
+      database as never,
+      { tenantId: 'tenant-a', institutionId: 'inst-a' },
+      async (repository) => repository,
+    );
+    expect(mocks.createRealSendTransactionRepository).toHaveBeenCalledWith(
+      transactionDatabase,
+      canonicalWriter,
+      auditRepository,
+      mocks.verifiedAttribution,
+    );
     expect(result).toBe(realSendRepository);
   });
 });

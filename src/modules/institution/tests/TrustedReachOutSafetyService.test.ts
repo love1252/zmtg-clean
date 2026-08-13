@@ -4,6 +4,7 @@ import {
   recordWeComReachOutConsent,
   reservePreparedAttempt,
 } from '@/modules/institution/server/trusted-reachout-safety-service';
+import { mintVerifiedInstitutionAuditAttributionForOrchestrationV1 } from '@/modules/audit/domain/audit-events';
 
 const context = {
   source: 'demo_session',
@@ -14,6 +15,11 @@ const context = {
   institutionId: 'institution-1',
 } as const;
 const scope = { tenantId: 'tenant-1', institutionId: 'institution-1', customerId: 'customer-1' };
+const auditAttribution = mintVerifiedInstitutionAuditAttributionForOrchestrationV1({
+  formalPair: { tenantId: 'tenant-1', institutionId: 'institution-1', observedAt: '2026-07-11T00:00:00.000Z' },
+  businessPair: { tenantId: 'tenant-1', institutionId: 'institution-1' },
+})!;
+if (!auditAttribution) throw new Error('test audit attribution unavailable');
 
 function frequency(overrides: Record<string, unknown> = {}) {
   return {
@@ -59,7 +65,7 @@ describe('可信企业微信触达安全服务', () => {
     createFrequencyIfAbsent: vi.fn(),
     updateFrequencyWhenVersion: vi.fn(),
   };
-  const auditRepository = { record: vi.fn() };
+  const auditRepository = { recordAttributed: vi.fn() };
   let id = 0;
   const createId = () => `generated-${++id}`;
 
@@ -70,7 +76,7 @@ describe('可信企业微信触达安全服务', () => {
     safetyRepository.findConsent.mockResolvedValue(null);
     safetyRepository.findConsentForUpdate.mockResolvedValue(null);
     safetyRepository.findFrequency.mockResolvedValue(null);
-    auditRepository.record.mockResolvedValue(undefined);
+    auditRepository.recordAttributed.mockResolvedValue(undefined);
   });
 
   it('无许可和频控记录对外返回 unknown 与保守默认值', async () => {
@@ -96,13 +102,13 @@ describe('可信企业微信触达安全服务', () => {
     const result = await recordWeComReachOutConsent({
       context, scope, action: 'record_consent', sourceType: 'customer_explicit_written',
       confirmation: '我确认客户已明确同意通过企业微信联系', occurredAt: '2026-07-11T00:00:00.000Z',
-      createId, repositories: { customerRepository, safetyRepository, auditRepository } as never,
+      createId, repositories: { customerRepository, safetyRepository, auditRepository, auditAttribution } as never,
     });
     expect(result.kind).toBe('updated');
     expect(safetyRepository.upsertConsent).toHaveBeenCalledWith(expect.objectContaining({
       evidenceRef: 'wcc_generated-1', status: 'consented', expectedVersion: null,
     }));
-    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+    expect(auditRepository.recordAttributed).toHaveBeenCalledWith(expect.objectContaining({
       reason: 'wecom_reachout_consent_recorded', result: 'transitioned',
     }));
   });
@@ -112,11 +118,11 @@ describe('可信企业微信触达安全服务', () => {
     const result = await recordWeComReachOutConsent({
       context, scope, action: 'record_consent', sourceType: 'customer_explicit_written',
       confirmation: '我确认客户已明确同意通过企业微信联系', occurredAt: '2026-07-11T00:00:00.000Z',
-      createId, repositories: { customerRepository, safetyRepository, auditRepository } as never,
+      createId, repositories: { customerRepository, safetyRepository, auditRepository, auditAttribution } as never,
     });
     expect(result.kind).toBe('idempotent');
     expect(safetyRepository.upsertConsent).not.toHaveBeenCalled();
-    expect(auditRepository.record).not.toHaveBeenCalled();
+    expect(auditRepository.recordAttributed).not.toHaveBeenCalled();
   });
 
   it('CAS 失败返回 conflict，避免并发覆盖', async () => {
@@ -125,7 +131,7 @@ describe('可信企业微信触达安全服务', () => {
     const result = await recordWeComReachOutConsent({
       context, scope, action: 'record_consent', sourceType: 'customer_explicit_verbal',
       confirmation: '我确认客户已明确同意通过企业微信联系', occurredAt: '2026-07-11T00:00:00.000Z',
-      createId, repositories: { customerRepository, safetyRepository, auditRepository } as never,
+      createId, repositories: { customerRepository, safetyRepository, auditRepository, auditAttribution } as never,
     });
     expect(result).toEqual({ kind: 'conflict' });
     expect(safetyRepository.upsertConsent).toHaveBeenCalledWith(expect.objectContaining({ expectedVersion: 1 }));
@@ -135,7 +141,7 @@ describe('可信企业微信触达安全服务', () => {
     safetyRepository.findConsentForUpdate.mockResolvedValue(consent({ status: 'opted_out' }));
     expect((await reservePreparedAttempt({
       context, scope, systemOperationId: 'operation-2', occurredAt: '2026-07-11T01:00:00.000Z', createId,
-      repositories: { safetyRepository, auditRepository } as never,
+      repositories: { safetyRepository, auditRepository, auditAttribution } as never,
     })).kind).toBe('opted_out');
     expect(safetyRepository.findConsentForUpdate).toHaveBeenCalledWith(scope);
     expect(safetyRepository.findFrequency).not.toHaveBeenCalled();
@@ -145,11 +151,11 @@ describe('可信企业微信触达安全服务', () => {
     safetyRepository.findConsentForUpdate.mockResolvedValue(null);
     const result = await reservePreparedAttempt({
       context, scope, systemOperationId: 'operation-2', occurredAt: '2026-07-11T01:00:00.000Z', createId,
-      repositories: { safetyRepository, auditRepository } as never,
+      repositories: { safetyRepository, auditRepository, auditAttribution } as never,
     });
     expect(result.kind).toBe('consent_required');
     expect(safetyRepository.findFrequency).not.toHaveBeenCalled();
-    expect(auditRepository.record).not.toHaveBeenCalled();
+    expect(auditRepository.recordAttributed).not.toHaveBeenCalled();
   });
 
   it('首次预留、同 ref 幂等和窗口内超限', async () => {
@@ -157,20 +163,20 @@ describe('可信企业微信触达安全服务', () => {
     safetyRepository.createFrequencyIfAbsent.mockResolvedValue(frequency());
     expect((await reservePreparedAttempt({
       context, scope, systemOperationId: 'operation-1', occurredAt: '2026-07-11T00:00:00.000Z', createId,
-      repositories: { safetyRepository, auditRepository } as never,
+      repositories: { safetyRepository, auditRepository, auditAttribution } as never,
     })).kind).toBe('reserved');
 
     safetyRepository.findFrequency.mockResolvedValue(frequency());
     expect((await reservePreparedAttempt({
       context, scope, systemOperationId: 'operation-1', occurredAt: '2026-07-11T01:00:00.000Z', createId,
-      repositories: { safetyRepository, auditRepository } as never,
+      repositories: { safetyRepository, auditRepository, auditAttribution } as never,
     })).kind).toBe('idempotent');
 
     expect((await reservePreparedAttempt({
       context, scope, systemOperationId: 'operation-2', occurredAt: '2026-07-11T01:00:00.000Z', createId,
-      repositories: { safetyRepository, auditRepository } as never,
+      repositories: { safetyRepository, auditRepository, auditAttribution } as never,
     })).kind).toBe('frequency_cap_reached');
-    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({ reason: 'wecom_reachout_frequency_blocked' }));
+    expect(auditRepository.recordAttributed).toHaveBeenCalledWith(expect.objectContaining({ reason: 'wecom_reachout_frequency_blocked' }));
   });
 
   it('窗口过期以 CAS 原子重置并预留', async () => {
@@ -182,7 +188,7 @@ describe('可信企业微信触达安全服务', () => {
     }));
     const result = await reservePreparedAttempt({
       context, scope, systemOperationId: 'operation-2', occurredAt: '2026-07-12T01:00:00.000Z', createId,
-      repositories: { safetyRepository, auditRepository } as never,
+      repositories: { safetyRepository, auditRepository, auditAttribution } as never,
     });
     expect(result.kind).toBe('reserved');
     expect(safetyRepository.updateFrequencyWhenVersion).toHaveBeenCalledWith(expect.objectContaining({
@@ -195,7 +201,7 @@ describe('可信企业微信触达安全服务', () => {
   it('拒绝非低敏系统 operation ID，且不读取或写入频控', async () => {
     const result = await reservePreparedAttempt({
       context, scope, systemOperationId: 'customer@example.com', occurredAt: '2026-07-11T01:00:00.000Z', createId,
-      repositories: { safetyRepository, auditRepository } as never,
+      repositories: { safetyRepository, auditRepository, auditAttribution } as never,
     });
     expect(result.kind).toBe('invalid_operation');
     expect(safetyRepository.findConsentForUpdate).not.toHaveBeenCalled();
@@ -208,11 +214,11 @@ describe('可信企业微信触达安全服务', () => {
     safetyRepository.updateFrequencyWhenVersion.mockResolvedValue(null);
     const result = await reservePreparedAttempt({
       context, scope, systemOperationId: 'operation-2', occurredAt: '2026-07-11T01:00:00.000Z', createId,
-      repositories: { safetyRepository, auditRepository } as never,
+      repositories: { safetyRepository, auditRepository, auditAttribution } as never,
     });
     expect(result.kind).toBe('conflict');
     expect(safetyRepository.updateFrequencyWhenVersion).toHaveBeenCalledTimes(3);
-    expect(auditRepository.record).not.toHaveBeenCalled();
+    expect(auditRepository.recordAttributed).not.toHaveBeenCalled();
   });
 
   it('两个写链路固定按 consent row lock → frequency/CAS → audit 顺序执行', async () => {
@@ -229,13 +235,13 @@ describe('可信企业微信触达安全服务', () => {
       order.push('frequency_write');
       return frequency();
     });
-    auditRepository.record.mockImplementation(async () => {
+    auditRepository.recordAttributed.mockImplementation(async () => {
       order.push('audit');
     });
 
     await reservePreparedAttempt({
       context, scope, systemOperationId: 'operation-1', occurredAt: '2026-07-11T01:00:00.000Z', createId,
-      repositories: { safetyRepository, auditRepository } as never,
+      repositories: { safetyRepository, auditRepository, auditAttribution } as never,
     });
     expect(order).toEqual(['consent_lock', 'frequency_read', 'frequency_write', 'audit']);
 
@@ -247,7 +253,7 @@ describe('可信企业微信触达安全服务', () => {
     await recordWeComReachOutConsent({
       context, scope, action: 'record_opt_out', sourceType: 'customer_opt_out_request',
       confirmation: '我确认客户已明确要求停止企业微信联系', occurredAt: '2026-07-11T02:00:00.000Z',
-      createId, repositories: { customerRepository, safetyRepository, auditRepository } as never,
+      createId, repositories: { customerRepository, safetyRepository, auditRepository, auditAttribution } as never,
     });
     expect(order).toEqual(['consent_lock', 'consent_write', 'audit']);
   });
@@ -259,7 +265,7 @@ describe('可信企业微信触达安全服务', () => {
     }));
     const pending = reservePreparedAttempt({
       context, scope, systemOperationId: 'operation-2', occurredAt: '2026-07-11T01:00:00.000Z', createId,
-      repositories: { safetyRepository, auditRepository } as never,
+      repositories: { safetyRepository, auditRepository, auditAttribution } as never,
     });
     await Promise.resolve();
     expect(safetyRepository.findFrequency).not.toHaveBeenCalled();

@@ -1,4 +1,5 @@
 import type { AuditEventRepository } from '@/modules/audit/server/audit-event-repository';
+import type { VerifiedInstitutionAuditAttributionHandleV1 } from '@/modules/audit/domain/audit-events';
 import {
   createWeComControlledReachOutBoundary,
   createWeComControlledReachOutMetadata,
@@ -277,7 +278,8 @@ export async function prepareWeComControlledReachOut(input: {
   repository: WeComControlledReachOutRepository;
   mappingRepository: WeComControlledReachOutMappingRepository;
   safetyRepository: WeComControlledReachOutSafetyRepository;
-  auditRepository: Pick<AuditEventRepository, 'record'>;
+  auditRepository: Pick<AuditEventRepository, 'recordAttributed'>;
+  auditAttribution: VerifiedInstitutionAuditAttributionHandleV1;
   careMessageDraftCommandService: WeComControlledReachOutCareDraftPort;
   occurredAt: string;
   createId: () => string;
@@ -318,6 +320,7 @@ export async function prepareWeComControlledReachOut(input: {
     repositories: {
       safetyRepository: input.safetyRepository as TrustedReachOutSafetyRepository,
       auditRepository: input.auditRepository,
+      auditAttribution: input.auditAttribution,
     },
   });
   if (frequencyReservation.kind === 'frequency_cap_reached') {

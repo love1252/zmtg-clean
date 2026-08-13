@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/server/orchestration/wecom-reachout-transaction', () => ({
-  runWeComReachOutTransaction: mocks.runReachOutTransaction,
+  runAttributedWeComReachOutTransaction: mocks.runReachOutTransaction,
 }));
 
 import {
@@ -24,30 +24,35 @@ describe('trusted reachout safety transaction compatibility', () => {
     const mappingRepository = { kind: 'mapping' };
     const safetyRepository = { kind: 'canonical-safety' };
     const auditRepository = { kind: 'audit' };
+    const auditAttribution = { kind: 'attribution' };
 
     mocks.runReachOutTransaction.mockImplementation(
-      async (_database, operation) =>
+      async (_database, _businessPair, operation) =>
         operation({
           customerRepository,
           mappingRepository,
           safetyRepository,
           auditRepository,
+          auditAttribution,
         }),
     );
 
     const result = await runTrustedReachOutSafetyTransaction(
       database as never,
+      { tenantId: 'tenant-a', institutionId: 'inst-a' },
       async (dependencies) => dependencies,
     );
 
     expect(mocks.runReachOutTransaction).toHaveBeenCalledWith(
       database,
+      { tenantId: 'tenant-a', institutionId: 'inst-a' },
       expect.any(Function),
     );
     expect(result).toEqual({
       customerRepository,
       safetyRepository,
       auditRepository,
+      auditAttribution,
     });
   });
 
@@ -59,6 +64,7 @@ describe('trusted reachout safety transaction compatibility', () => {
     await expect(
       runTrustedReachOutSafetyTransaction(
         {} as never,
+        { tenantId: 'tenant-a', institutionId: 'inst-a' },
         async () => 'never',
       ),
     ).rejects.toThrow('canonical-transaction-failed');

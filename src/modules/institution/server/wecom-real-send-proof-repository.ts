@@ -1,6 +1,9 @@
 import { and, desc, eq, or } from 'drizzle-orm';
 
-import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
+import type {
+  AttributedTenantAuditEventV1,
+  VerifiedInstitutionAuditAttributionHandleV1,
+} from '@/modules/audit/domain/audit-events';
 import type {
   WeComReachOutCommandWriter,
   WeComRealSendProofOperationCreateInput,
@@ -64,10 +67,12 @@ export function createWeComRealSendProofTransactionRepository(
   database: TenantDatabase,
   writer: WeComReachOutCommandWriter,
   auditRepository: Readonly<{
-    record(event: TenantAuditEvent): Promise<void>;
+    recordAttributed(event: AttributedTenantAuditEventV1): Promise<void>;
   }>,
+  auditAttribution: VerifiedInstitutionAuditAttributionHandleV1,
 ) {
   return {
+    auditAttribution,
     async loadReadySource(input: {
       tenantId: string;
       institutionId: string;
@@ -369,8 +374,8 @@ export function createWeComRealSendProofTransactionRepository(
       return writer.markRealSendSucceeded(input);
     },
 
-    async recordAudit(event: TenantAuditEvent) {
-      await auditRepository.record(event);
+    async recordAudit(event: AttributedTenantAuditEventV1) {
+      await auditRepository.recordAttributed(event);
     },
   };
 }
@@ -379,6 +384,7 @@ export type WeComRealSendProofTransactionRepository = ReturnType<typeof createWe
 
 export type WeComRealSendProofRepository = {
   runInTransaction<T>(
+    businessPair: Readonly<{ tenantId: string; institutionId: string }>,
     operation: (repository: WeComRealSendProofTransactionRepository) => Promise<T>,
   ): Promise<T>;
 };
@@ -387,11 +393,11 @@ export function createWeComRealSendProofRepository(
   database: TenantDatabase,
 ): WeComRealSendProofRepository {
   return {
-    async runInTransaction(operation) {
+    async runInTransaction(businessPair, operation) {
       const { runWeComRealSendProofTransaction } = await import(
         '@/server/orchestration/wecom-reachout-transaction'
       );
-      return runWeComRealSendProofTransaction(database, operation);
+      return runWeComRealSendProofTransaction(database, businessPair, operation);
     },
   };
 }

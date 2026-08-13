@@ -859,6 +859,7 @@ describe('租户业务仓储映射', () => {
     await expect(repository.cancelFollowUpPathEnrollment({tenantId:'demo-tenant-001',institutionId:'inst-001',enrollmentId:'enrollment-1'})).rejects.toThrow('legacy_follow_up_writer_disabled');
     await expect(repository.recordFollowUpCustomerTimelineEvent({id:'event-1',tenantId:'demo-tenant-001',institutionId:'inst-001',customerId:'cust_001',sourceType:'followup_task',sourceId:'fu_001:in_progress',eventType:'followup_task_status_changed',eventTitle:'状态变化',safeSummary:'人工随访状态变化',riskLevel:null,occurredAt:'2026-05-30T11:00:00.000Z',safeActorRole:'consultant',safeReasonCode:'followup_task_status_changed',metadataJson:{}})).rejects.toThrow('legacy_follow_up_writer_disabled');
     expect(repository.runCareFollowUpTransaction).toBeTypeOf('function');
+    expect(repository.runAttributedCareFollowUpTransaction).toBeTypeOf('function');
     expect(mutation.insert).not.toHaveBeenCalled(); expect(mutation.update).not.toHaveBeenCalled(); expect(mutation.values).not.toHaveBeenCalled(); expect(mutation.set).not.toHaveBeenCalled();
   });
 

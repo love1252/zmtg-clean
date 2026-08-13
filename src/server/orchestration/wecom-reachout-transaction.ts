@@ -1,4 +1,5 @@
 import { createAuditEventRepository, type AuditEventRepository } from '@/modules/audit/server/audit-event-repository';
+import type { VerifiedInstitutionAuditAttributionHandleV1 } from '@/modules/audit/domain/audit-events';
 import { createFollowUpMessageDraftCommandService } from '@/modules/care/application/follow-up-message-draft-command-service';
 import { createFollowUpMessageDraftCommandRepository } from '@/modules/care/server/follow-up-message-draft-command-repository';
 import { createTenantBusinessRepository, type TenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
@@ -7,6 +8,7 @@ import { createWeComCustomerMappingRepository, type WeComCustomerMappingReposito
 import { createWeComRealSendProofTransactionRepository, type WeComRealSendProofTransactionRepository } from '@/modules/institution/server/wecom-real-send-proof-repository';
 import { createWeComReachOutCommandRepository } from '@/modules/messaging/server/wecom-reachout-command-repository';
 import type { TenantDatabase } from '@/server/db/client';
+import { resolveInstitutionAuditWriterVerifiedAttributionV1 } from '@/server/orchestration/institution-audit-writer-scope';
 
 export type WeComReachOutTransactionDependencies = Readonly<{
   customerRepository: TenantBusinessRepository;
@@ -15,6 +17,11 @@ export type WeComReachOutTransactionDependencies = Readonly<{
   auditRepository: AuditEventRepository;
   careMessageDraftCommandService: ReturnType<typeof createFollowUpMessageDraftCommandService>;
 }>;
+
+export type AttributedWeComReachOutTransactionDependencies =
+  WeComReachOutTransactionDependencies & Readonly<{
+    auditAttribution: VerifiedInstitutionAuditAttributionHandleV1;
+  }>;
 
 function createCanonicalSafetyRepository(database: TenantDatabase): TrustedReachOutSafetyRepository {
   const legacyReads = createTrustedReachOutSafetyRepository(database);
@@ -46,15 +53,45 @@ export async function runWeComReachOutTransaction<T>(
   });
 }
 
+export async function runAttributedWeComReachOutTransaction<T>(
+  database: TenantDatabase,
+  businessPair: Readonly<{ tenantId: string; institutionId: string }>,
+  operation: (dependencies: AttributedWeComReachOutTransactionDependencies) => Promise<T>,
+): Promise<T> {
+  const auditAttribution = await resolveInstitutionAuditWriterVerifiedAttributionV1(
+    businessPair,
+  );
+  if (!auditAttribution) throw new Error('institution_audit_attribution_unavailable');
+
+  return runWeComReachOutTransaction(
+    database,
+    async (dependencies) => operation({
+      ...dependencies,
+      auditAttribution,
+    }),
+  );
+}
+
 export async function runWeComRealSendProofTransaction<T>(
   database: TenantDatabase,
+  businessPair: Readonly<{ tenantId: string; institutionId: string }>,
   operation: (repository: WeComRealSendProofTransactionRepository) => Promise<T>,
 ): Promise<T> {
+  const auditAttribution = await resolveInstitutionAuditWriterVerifiedAttributionV1(
+    businessPair,
+  );
+  if (!auditAttribution) throw new Error('institution_audit_attribution_unavailable');
+
   return database.transaction(async (transactionDatabase) => {
     const transactionDb = transactionDatabase as unknown as TenantDatabase;
     const canonicalWriter = createWeComReachOutCommandRepository(transactionDb);
     const auditRepository = createAuditEventRepository(transactionDb);
-    const repository = createWeComRealSendProofTransactionRepository(transactionDb, canonicalWriter, auditRepository);
+    const repository = createWeComRealSendProofTransactionRepository(
+      transactionDb,
+      canonicalWriter,
+      auditRepository,
+      auditAttribution,
+    );
     return operation(repository);
   });
 }
