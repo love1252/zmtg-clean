@@ -96,7 +96,8 @@ S10_RUNTIME_PR_COUNT=4
 S10_REQUIRED_CHECKS=passed
 S10_ACTIONABLE_P0_P1=0
 S10_RUNTIME_POST_MERGE_REVIEW_DEBT=0
-S10_HANDOFF_PR=pending_this_docs_only_change
+S10_HANDOFF_PR=1187
+S10_PR_COUNT=5
 ```
 
 PR #1184 的 canonical tenant/user normalization Review 与 PR #1185 的 attempted-denial classification Review 均先通过同 scope commit 实际修复，再回复并解决；PR #1183 / #1186 无 actionable Review thread。四个 Runtime PR 合并后复扫均无 P0/P1/P2 debt。
