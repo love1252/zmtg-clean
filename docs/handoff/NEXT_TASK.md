@@ -56,10 +56,9 @@ DATABASE_WRITE_EXECUTION=false
 
 目标仅是把正式登录成功／失败审计从 legacy `record()` 迁移为 `not_applicable + recordAttributed()`，同时保持登录结果、Cookie、低敏响应、Audit failure isolation、数据库 query 基数与非事务语义不变。
 
-Admission 与机器可读 allowlist：
+Admission（内含 canonical exact Runtime allowlist）：
 
 - `docs/operations/post-v2-r1c-audit-writer-classified-caller-migration-admission-20260813.md`
-- `docs/operations/post-v2-r1c-audit-writer-classified-caller-migration-exact-runtime-allowlist-20260813.csv`
 
 ## 已完成前置
 
