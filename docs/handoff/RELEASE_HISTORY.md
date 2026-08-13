@@ -1,5 +1,86 @@
 # 项目重构历史
 
+<!-- POST_V2_R1C_AUDIT_WRITER_CALLER_MIGRATION_RUNTIME_HISTORY -->
+
+## 2026-08-13：POST-V2-R1C Audit Writer production caller migration Runtime 闭环
+
+```text
+STAGE=S10
+COMPLETION_MODE=COMPLETE
+BASELINE=ed211a5e2f236c13cab3fecba8d0831acd5218ee
+RUNTIME_FINAL_MAIN=124c79a3b121fa9d67dc7fc86847f244acc43ef2
+
+PRODUCTION_AUDIT_WRITER_CALLER_FILE_COUNT=19
+PRODUCTION_LEGACY_WRITER_CALLER_FILE_COUNT=0
+PRODUCTION_ATTRIBUTED_WRITER_CALLER_FILE_COUNT=19
+TARGET_VERIFIED_MIGRATED=5
+TARGET_NOT_APPLICABLE_MIGRATED=12
+ATTEMPTED_DENIAL_MIGRATED=2
+BLOCKED_UNCLASSIFIED_CALLER_FILE_COUNT=0
+
+FORMAL_SCOPE_RESOLUTION_CARDINALITY=exactly_once_per_top_level_operation
+FORMAL_SCOPE_REUSE_WITHIN_OPERATION_SAFE=true
+
+S10_RUNTIME_CHANGED_FILE_COUNT=33
+S10_TEST_CHANGED_FILE_COUNT=32
+S10_DOC_CHANGED_FILE_COUNT=4
+
+S10_RUNTIME_PR_COUNT=4
+S10_RUNTIME_PRS=1183,1184,1185,1186
+S10_REQUIRED_CHECKS=passed
+S10_ACTIONABLE_P0_P1=0
+S10_RUNTIME_POST_MERGE_REVIEW_DEBT=0
+
+TARGETED_TEST_FILES=21
+TARGETED_TESTS=291
+FULL_TEST_FILES=493
+FULL_TESTS=6697
+TYPECHECK=passed
+ARCHITECTURE_UNIT=148/148 passed
+ARCHITECTURE_INCREMENTAL=passed
+LINT=passed_with_4_existing_warnings
+BUILD=passed
+PRODUCTION_READINESS_DOCS=8/8 passed
+
+AUDIT_CALLER_MIGRATION_CLOSED=true
+AUDIT_WRITER_ATTRIBUTION_CLOSED=true
+S10_CALLER_MIGRATION_COMPLETE=true
+
+HISTORICAL_BACKFILL_CLOSED=false
+WORKBENCH_MULTI_CAPABILITY_SAFE=false
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+
+DATABASE_CONNECTION=false
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+MIGRATION=false
+DDL_EXECUTION=false
+DML_EXECUTION=false
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+```
+
+- PR #1183 迁移 Auth formal login 与 7 个 Platform caller 为 `not_applicable`，保持登录、Cookie、Platform authorization、外部操作和 best-effort failure isolation；
+- PR #1184 迁移 4 个 tenant-wide HIS caller 为 `not_applicable`，保持 provider failure、transaction rollback 与低敏响应；
+- PR #1185 为两个 mixed pre-scope caller 增加最小 attempted-institution denial contract：可信 attempted pair 被保留，但 attribution 为 `NULL`，不会冒充 verified 或 not-applicable；
+- PR #1186 迁移 5 个 verified Institution caller；Care / WeCom 每个 top-level operation 只消费一次 formal scope，并在事务内复用同一 opaque handle；
+- 新增 canonical 19-row static residual guard，逐行确认 5 verified、12 not-applicable、2 valid denial attribution，legacy production `record()` residual 为 0；
+- 10 个 transaction persistence / composition 边界保持 caller-provided transaction database、rollback 与 query cardinality；未新增业务查询或 database transaction；
+- 四个 Runtime PR Required Check 全部通过；同范围 Review 先修复再回复／解决，合并后 Review sweep 无 debt；
+- merged main 独立复核通过 6 files / 115 tests、typecheck 与从 S10 baseline 到 final main 的 Architecture incremental；
+- 未连接数据库，未执行 Schema、Migration、DDL/DML、Seed、historical backfill、Workbench、页面、Staging 或 Production。
+
+证据：
+
+- `docs/operations/post-v2-r1c-audit-writer-caller-migration-runtime-closure-20260813.md`
+- Runtime PR #1183 / #1184 / #1185 / #1186
+
+下一任务：`POST-V2-R1C Audit Writer Historical Backfill explicit authorization`；本阶段只定义任务，不授权数据库连接或 backfill。
+
+<!-- POST_V2_R1C_AUDIT_WRITER_CALLER_MIGRATION_RUNTIME_HISTORY_END -->
+
 <!-- POST_V2_R1C_AUDIT_WRITER_CLASSIFIED_CALLER_MIGRATION_ADMISSION_HISTORY -->
 
 ## 2026-08-13：POST-V2-R1C Audit Writer 分类 caller migration 获得 Auth login exact 2-file Runtime 准入
