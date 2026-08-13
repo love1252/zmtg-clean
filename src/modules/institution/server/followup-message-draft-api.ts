@@ -7,6 +7,7 @@ import {
   type AttributedTenantAuditEventV1,
   type AuditReason,
   type InstitutionAuditEventAttributionV1,
+  type InstitutionAuditWriterEventV1,
   type VerifiedInstitutionAuditAttributionHandleV1,
 } from '@/modules/audit/domain/audit-events';
 import type { AccessContext } from '@/modules/security/domain/access-control';
@@ -33,7 +34,7 @@ export function deniedFollowUpMessageAudit(input: {
   occurredAt: string;
   resourceId?: string | null;
   attribution: InstitutionAuditEventAttributionV1;
-}): AttributedTenantAuditEventV1 {
+}): InstitutionAuditWriterEventV1 {
   const event = createInstitutionAttributedTenantAuditEventV1({
     event: createDeniedAccessAuditEvent({
       eventId: createFollowUpMessageAuditEventId(),

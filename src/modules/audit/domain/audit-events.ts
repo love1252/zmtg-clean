@@ -237,6 +237,18 @@ export type AttributedTenantAuditEventV1 = Readonly<
   Omit<TenantAuditEvent, 'tenantId'> & AuditInstitutionAttributionV1
 >;
 
+export type AttemptedInstitutionDenialAuditEventV1 = Readonly<
+  Omit<TenantAuditEvent, 'tenantId'> & {
+    tenantId: string;
+    institutionId: string;
+    institutionAttribution: null;
+  }
+>;
+
+export type InstitutionAuditWriterEventV1 =
+  | AttributedTenantAuditEventV1
+  | AttemptedInstitutionDenialAuditEventV1;
+
 declare const verifiedInstitutionAuditAttributionMarkerV1: unique symbol;
 
 export type VerifiedInstitutionAuditAttributionHandleV1 = Readonly<{
@@ -292,7 +304,7 @@ const verifiedInstitutionAuditAttributionHandlesV1 = new WeakMap<
 >();
 const attemptedInstitutionDenialAttributionHandlesV1 = new WeakMap<
   object,
-  Extract<AuditInstitutionAttributionV1, { institutionAttribution: 'verified' }>
+  Readonly<{ tenantId: string; institutionId: string }>
 >();
 
 function isRecord(value: unknown): value is Record<PropertyKey, unknown> {
@@ -464,7 +476,6 @@ export function mintAttemptedInstitutionDenialAttributionForOrchestrationV1(inpu
     attemptedInstitutionDenialAttributionHandlesV1.set(
       handle,
       Object.freeze({
-        institutionAttribution: 'verified',
         tenantId: input.signedSessionPair.tenantId,
         institutionId: input.signedSessionPair.institutionId,
       }),
@@ -493,7 +504,7 @@ export function createAttemptedInstitutionDenialAuditEventV1(input: {
   event: TenantAuditEvent;
   attemptedPair: Readonly<{ tenantId: string; institutionId: string }>;
   attribution: AttemptedInstitutionDenialAttributionHandleV1;
-}): AttributedTenantAuditEventV1 | null {
+}): AttemptedInstitutionDenialAuditEventV1 | null {
   try {
     if (!isRecord(input) || !isRecord(input.attemptedPair) || input.event.result !== 'denied') {
       return null;
@@ -507,9 +518,23 @@ export function createAttemptedInstitutionDenialAuditEventV1(input: {
     ) {
       return null;
     }
-    return createAttributedTenantAuditEventV1({
-      event: { ...input.event, tenantId: attribution.tenantId },
-      attribution,
+    const event = { ...input.event, tenantId: attribution.tenantId };
+    if (!isLegacyTenantAuditEvent(event)) return null;
+    return Object.freeze({
+      eventId: event.eventId,
+      actorId: event.actorId,
+      actorRole: event.actorRole,
+      tenantId: attribution.tenantId,
+      institutionId: attribution.institutionId,
+      institutionAttribution: null,
+      scope: event.scope,
+      resource: event.resource,
+      ...(event.resourceId === undefined ? {} : { resourceId: event.resourceId }),
+      action: event.action,
+      result: event.result,
+      reason: event.reason,
+      occurredAt: event.occurredAt,
+      source: event.source,
     });
   } catch {
     return null;
@@ -519,7 +544,7 @@ export function createAttemptedInstitutionDenialAuditEventV1(input: {
 export function createInstitutionAttributedTenantAuditEventV1(input: {
   event: TenantAuditEvent;
   attribution: InstitutionAuditEventAttributionV1;
-}): AttributedTenantAuditEventV1 | null {
+}): InstitutionAuditWriterEventV1 | null {
   try {
     if (!isRecord(input) || !isRecord(input.attribution)) return null;
     if (input.attribution.kind === 'verified') {
@@ -538,6 +563,26 @@ export function createInstitutionAttributedTenantAuditEventV1(input: {
     return null;
   } catch {
     return null;
+  }
+}
+
+export function isAttemptedInstitutionDenialAuditEventV1(
+  value: unknown,
+): value is AttemptedInstitutionDenialAuditEventV1 {
+  try {
+    if (!isRecord(value)) return false;
+    if (!hasOnlyAttributedAuditEventKeys(value) || !isLegacyTenantAuditEvent(value)) {
+      return false;
+    }
+    const candidate = value as Record<PropertyKey, unknown>;
+    return (
+      candidate.result === 'denied' &&
+      isCanonicalNonEmptyString(candidate.tenantId) &&
+      isCanonicalNonEmptyString(candidate.institutionId) &&
+      candidate.institutionAttribution === null
+    );
+  } catch {
+    return false;
   }
 }
 

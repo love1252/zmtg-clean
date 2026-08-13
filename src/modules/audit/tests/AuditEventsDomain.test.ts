@@ -11,6 +11,7 @@ import {
   createDeniedAccessAuditEvent,
   createVerifiedInstitutionAttributedTenantAuditEventV1,
   isAttributedTenantAuditEventV1,
+  isAttemptedInstitutionDenialAuditEventV1,
   mintAttemptedInstitutionDenialAttributionForOrchestrationV1,
   mintVerifiedInstitutionAuditAttributionForOrchestrationV1,
   type AuditInstitutionAttributionV1,
@@ -163,7 +164,7 @@ describe('Audit Owner 机构归因契约', () => {
     ).toBeNull();
   });
 
-  it('attempted-denial handle 仅接受签名 pair 对应的 denied event，持久化为 verified target attribution', () => {
+  it('attempted-denial handle 仅接受签名 pair 对应的 denied event，并保持非 verified 的独立 shape', () => {
     const attribution = mintAttemptedInstitutionDenialAttributionForOrchestrationV1({
       signedSessionPair: {
         tenantId: 'demo-tenant-001',
@@ -178,21 +179,22 @@ describe('Audit Owner 机构归因契约', () => {
       result: 'denied' as const,
       reason: 'role_denied' as const,
     };
-    expect(
-      createAttemptedInstitutionDenialAuditEventV1({
+    const attemptedEvent = createAttemptedInstitutionDenialAuditEventV1({
         event: deniedEvent,
         attemptedPair: {
           tenantId: 'demo-tenant-001',
           institutionId: 'demo-institution-001',
         },
         attribution,
-      }),
-    ).toMatchObject({
+      });
+    expect(attemptedEvent).toMatchObject({
       result: 'denied',
-      institutionAttribution: 'verified',
+      institutionAttribution: null,
       tenantId: 'demo-tenant-001',
       institutionId: 'demo-institution-001',
     });
+    expect(isAttemptedInstitutionDenialAuditEventV1(attemptedEvent)).toBe(true);
+    expect(isAttributedTenantAuditEventV1(attemptedEvent)).toBe(false);
     expect(
       createAttemptedInstitutionDenialAuditEventV1({
         event: deniedEvent,

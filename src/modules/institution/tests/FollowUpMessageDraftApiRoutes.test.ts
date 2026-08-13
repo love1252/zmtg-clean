@@ -294,7 +294,7 @@ describe('随访消息草稿 attributed Audit helper', () => {
       }),
     ).toMatchObject({
       result: 'denied',
-      institutionAttribution: 'verified',
+      institutionAttribution: null,
       tenantId: 'demo-tenant-001',
       institutionId: 'demo-inst-001',
     });

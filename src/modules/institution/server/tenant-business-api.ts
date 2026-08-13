@@ -3,8 +3,10 @@ import {
   createAuditEvent,
   createDeniedAccessAuditEvent,
   createInstitutionAttributedTenantAuditEventV1,
+  createVerifiedInstitutionAttributedTenantAuditEventV1,
   type AttributedTenantAuditEventV1,
   type InstitutionAuditEventAttributionV1,
+  type InstitutionAuditWriterEventV1,
 } from '@/modules/audit/domain/audit-events';
 import type { AuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import type {
@@ -24,7 +26,10 @@ type TenantBusinessListRequest<Item> = {
   context: AccessContext | null;
   resource: TenantBusinessResource;
   list: (tenantId: string) => Promise<Item[]>;
-  auditRepository: Pick<AuditEventRepository, 'recordAttributed'>;
+  auditRepository: Pick<
+    AuditEventRepository,
+    'recordAttributed' | 'recordAttemptedInstitutionDenial'
+  >;
   auditAttribution: InstitutionAuditEventAttributionV1;
 };
 
@@ -43,7 +48,10 @@ export type TenantBusinessMutationRequest<Item> = {
     tenantId: string;
     successAuditEvent: AttributedTenantAuditEventV1;
   }) => Promise<TenantBusinessMutationResult<Item>>;
-  auditRepository: Pick<AuditEventRepository, 'recordAttributed'>;
+  auditRepository: Pick<
+    AuditEventRepository,
+    'recordAttributed' | 'recordAttemptedInstitutionDenial'
+  >;
   auditAttribution: InstitutionAuditEventAttributionV1;
   successStatus?: 200 | 201;
 };
@@ -58,13 +66,26 @@ function createAuditEventId() {
 function attributeTenantBusinessAuditEvent(
   event: Parameters<typeof createInstitutionAttributedTenantAuditEventV1>[0]['event'],
   attribution: InstitutionAuditEventAttributionV1,
-): AttributedTenantAuditEventV1 {
+): InstitutionAuditWriterEventV1 {
   const attributedEvent = createInstitutionAttributedTenantAuditEventV1({
     event,
     attribution,
   });
   if (!attributedEvent) throw new Error('invalid_tenant_business_audit_attribution');
   return attributedEvent;
+}
+
+async function recordTenantBusinessAuditEvent(
+  repository: Pick<
+    AuditEventRepository,
+    'recordAttributed' | 'recordAttemptedInstitutionDenial'
+  >,
+  event: InstitutionAuditWriterEventV1,
+) {
+  if (event.institutionAttribution === null) {
+    return repository.recordAttemptedInstitutionDenial(event);
+  }
+  return repository.recordAttributed(event);
 }
 
 const tenantQuotaDenialMessages: Record<TenantQuotaDenialReason, string> = {
@@ -111,7 +132,7 @@ export async function handleTenantBusinessListRequest<Item>({
   });
 
   if (!decision.allowed) {
-    await auditRepository.recordAttributed(
+    await recordTenantBusinessAuditEvent(auditRepository,
       attributeTenantBusinessAuditEvent(createDeniedAccessAuditEvent({
         eventId: createAuditEventId(),
         context,
@@ -126,7 +147,7 @@ export async function handleTenantBusinessListRequest<Item>({
   }
 
   if (!context.tenantId) {
-    await auditRepository.recordAttributed(
+    await recordTenantBusinessAuditEvent(auditRepository,
       attributeTenantBusinessAuditEvent(createDeniedAccessAuditEvent({
         eventId: createAuditEventId(),
         context,
@@ -142,7 +163,7 @@ export async function handleTenantBusinessListRequest<Item>({
 
   const records = await list(context.tenantId);
 
-  await auditRepository.recordAttributed(
+  await recordTenantBusinessAuditEvent(auditRepository,
     attributeTenantBusinessAuditEvent(createAuditEvent({
       eventId: createAuditEventId(),
       context,
@@ -179,7 +200,7 @@ export async function handleTenantBusinessMutationRequest<Item>({
   });
 
   if (!decision.allowed) {
-    await auditRepository.recordAttributed(
+    await recordTenantBusinessAuditEvent(auditRepository,
       attributeTenantBusinessAuditEvent(createDeniedAccessAuditEvent({
         eventId: createAuditEventId(),
         context,
@@ -194,7 +215,7 @@ export async function handleTenantBusinessMutationRequest<Item>({
   }
 
   if (!context.tenantId) {
-    await auditRepository.recordAttributed(
+    await recordTenantBusinessAuditEvent(auditRepository,
       attributeTenantBusinessAuditEvent(createDeniedAccessAuditEvent({
         eventId: createAuditEventId(),
         context,
@@ -208,7 +229,11 @@ export async function handleTenantBusinessMutationRequest<Item>({
     return NextResponse.json({ error: '没有访问权限' }, { status: 403 });
   }
 
-  const successAuditEvent = attributeTenantBusinessAuditEvent(createAuditEvent({
+  if (auditAttribution.kind !== 'verified') {
+    throw new Error('verified_tenant_business_audit_attribution_required');
+  }
+  const successAuditEvent = createVerifiedInstitutionAttributedTenantAuditEventV1({
+    event: createAuditEvent({
     eventId: createAuditEventId(),
     context,
     resource,
@@ -216,11 +241,14 @@ export async function handleTenantBusinessMutationRequest<Item>({
     result: 'allowed',
     reason: decision.reason,
     occurredAt,
-  }), auditAttribution);
+    }),
+    attribution: auditAttribution.attribution,
+  });
+  if (!successAuditEvent) throw new Error('invalid_tenant_business_success_audit_attribution');
   const result = await mutate({ tenantId: context.tenantId, successAuditEvent });
 
   if (result.kind === 'not_found') {
-    await auditRepository.recordAttributed(
+    await recordTenantBusinessAuditEvent(auditRepository,
       attributeTenantBusinessAuditEvent(createAuditEvent({
         eventId: createAuditEventId(),
         context,
@@ -237,7 +265,7 @@ export async function handleTenantBusinessMutationRequest<Item>({
   }
 
   if (result.kind === 'invalid_transition') {
-    await auditRepository.recordAttributed(
+    await recordTenantBusinessAuditEvent(auditRepository,
       attributeTenantBusinessAuditEvent(createAuditEvent({
         eventId: createAuditEventId(),
         context,
@@ -254,7 +282,7 @@ export async function handleTenantBusinessMutationRequest<Item>({
   }
 
   if (result.kind === 'conflict') {
-    await auditRepository.recordAttributed(
+    await recordTenantBusinessAuditEvent(auditRepository,
       attributeTenantBusinessAuditEvent(createAuditEvent({
         eventId: createAuditEventId(),
         context,
@@ -271,7 +299,7 @@ export async function handleTenantBusinessMutationRequest<Item>({
   }
 
   if (result.kind === 'quota_denied') {
-    await auditRepository.recordAttributed(
+    await recordTenantBusinessAuditEvent(auditRepository,
       attributeTenantBusinessAuditEvent(createAuditEvent({
         eventId: createAuditEventId(),
         context,
