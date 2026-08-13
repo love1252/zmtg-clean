@@ -1,5 +1,45 @@
 # 智美天工架构文档索引
 
+<!-- POST_V2_R1C_AUDIT_READER_DATA_READINESS_WORKBENCH_MULTI_CAPABILITY_START -->
+
+## POST-V2-R1C Reader coverage / Workbench multi-capability 前置条件闭环（2026-08-14）
+
+```text
+STAGE=S12
+COMPLETION_MODE=COMPLETE
+AUDIT_READER_SAFE_DATA_AVAILABLE=true
+AUDIT_READER_COVERAGE_STATE=partial_verified_only
+AUDIT_READER_HISTORICAL_COVERAGE_COMPLETE=false
+AUDIT_READER_PARTIAL_COVERAGE_SAFE=true
+AUDIT_READER_DATA_READINESS=partial_safe
+
+WORKBENCH_MULTI_CAPABILITY_SAFE=true
+WORKBENCH_PAGE_WORKBENCH_PROJECTION_STABLE=true
+
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+```
+
+架构结论：
+
+- Institution Audit Reader 以精确四字段 coverage contract 区分 `complete` 与 `partial_verified_only`；scope、facts、query 或 contract 不可信时继续使用既有 503 unavailable 边界；
+- 267 条不可分类历史记录不被猜测归因，也不被 API/UI 当作不存在；当前 7 条可信记录可读，但完整历史覆盖仍为 false；
+- `authoritative_empty` 只由 `complete + safeDataAvailable=false + records=[]` 派生，partial 的 0 rows 不得表达为从未发生；
+- `/hospital` 按 `capabilityKey='page_workbench'` 精确选择并缩小自身投影；第二条合法 summary 与数组顺序不再影响 Workbench，duplicate/missing 仍 fail-closed；
+- production Capability Authority、导航、`page_system_audit` 与受治理页面计数未修改。
+
+证据：
+
+- `docs/operations/post-v2-r1c-audit-reader-data-readiness-workbench-multi-capability-prerequisite-closure-20260814.md`
+- Runtime PR #1195 / Merge `9cf3ac78bbd0bafdcbf4c56afd4af8f2badf84df`
+
+唯一下一任务：
+
+`POST-V2-R1C page_system_audit fresh release re-audit + exact Runtime re-admission explicit authorization`
+
+<!-- POST_V2_R1C_AUDIT_READER_DATA_READINESS_WORKBENCH_MULTI_CAPABILITY_END -->
+
 <!-- POST_V2_R1C_AUDIT_WRITER_CLASSIFIED_CALLER_MIGRATION_ADMISSION_START -->
 
 ## POST-V2-R1C Audit Writer 分类 caller migration 精确 Runtime 准入（2026-08-13）
