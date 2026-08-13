@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import {
@@ -165,7 +165,9 @@ import type { AuthoritativeInstitutionScopeFactReaderV1 } from '@/modules/tenanc
 import {
   consumeInstitutionAuditWriterFormalScopeV1,
   isInstitutionAuditWriterFormalScopeHandleV1,
+  resolveInstitutionAuditWriterAttemptedDenialAttributionV1,
   resolveInstitutionAuditWriterFormalScopeV1,
+  resolveInstitutionAuditWriterVerifiedAttributionV1,
   type InstitutionAuditWriterFormalScopeConsumptionV1,
   type InstitutionAuditWriterFormalScopeHandleV1,
 } from '@/server/orchestration/institution-audit-writer-scope';
@@ -333,6 +335,62 @@ afterEach(() => {
 });
 
 describe('Audit Writer 正式机构范围端口', () => {
+  it('verified attribution composition 每个 operation resolve/consume formal scope 一次并比较 business pair', async () => {
+    const attribution = await resolveInstitutionAuditWriterVerifiedAttributionV1({
+      tenantId: payload.tenantId,
+      institutionId: payload.institutionId,
+    });
+
+    expect(attribution).not.toBeNull();
+    expect(Object.isFrozen(attribution)).toBe(true);
+    expect(Reflect.ownKeys(attribution as object)).toEqual([]);
+    expect(runtimeMocks.verifyClaims).toHaveBeenCalledOnce();
+    expect(runtimeMocks.identityRead).toHaveBeenCalledTimes(2);
+    expect(runtimeMocks.membershipRead).toHaveBeenCalledTimes(2);
+    expect(runtimeMocks.scopeRead).toHaveBeenCalledTimes(2);
+  });
+
+  it('verified attribution composition 对 business pair mismatch fail-closed', async () => {
+    await expect(
+      resolveInstitutionAuditWriterVerifiedAttributionV1({
+        tenantId: payload.tenantId,
+        institutionId: 'institution-other',
+      }),
+    ).resolves.toBeNull();
+    expect(runtimeMocks.verifyClaims).toHaveBeenCalledOnce();
+  });
+
+  it('attempted-denial attribution 只消费已签名 session pair，不查询 Membership 或 Tenancy', async () => {
+    const resolution = await resolveInstitutionAuditWriterAttemptedDenialAttributionV1();
+
+    expect(resolution).not.toBeNull();
+    expect(Object.isFrozen(resolution)).toBe(true);
+    expect(resolution?.attemptedPair).toEqual({
+      tenantId: payload.tenantId,
+      institutionId: payload.institutionId,
+    });
+    expect(Object.isFrozen(resolution?.attemptedPair)).toBe(true);
+    expect(Object.isFrozen(resolution?.attribution)).toBe(true);
+    expect(Reflect.ownKeys(resolution?.attribution as object)).toEqual([]);
+    expect(runtimeMocks.verifyClaims).toHaveBeenCalledOnce();
+    expect(runtimeMocks.consumeClaims).toHaveBeenCalledOnce();
+    expectNoAuthoritativeReads();
+  });
+
+  it('attempted-denial attribution 对无效签名 fail-closed 且不查询 authoritative facts', async () => {
+    runtimeMocks.cookieGet.mockReturnValueOnce(
+      Object.freeze({
+        name: FORMAL_SERVER_SESSION_COOKIE_V1,
+        value: `${signToken()}-tampered`,
+      }),
+    );
+
+    await expect(
+      resolveInstitutionAuditWriterAttemptedDenialAttributionV1(),
+    ).resolves.toBeNull();
+    expectNoAuthoritativeReads();
+  });
+
   it('以无输入 resolver 交叉确认 formal claims 与 authoritative pair', async () => {
     expectTypeOf<
       Parameters<typeof resolveInstitutionAuditWriterFormalScopeV1>
@@ -849,7 +907,7 @@ describe('Audit Writer 正式机构范围端口', () => {
     }
   });
 
-  it('源码静态锁定零 Capability、navigation、Audit Repository 与数据库耦合', async () => {
+  it('源码静态锁定仅依赖 Audit domain mint，零 Capability、navigation、Audit Repository 与数据库耦合', async () => {
     const source = await readFile(
       resolve(
         process.cwd(),
@@ -869,12 +927,42 @@ describe('Audit Writer 正式机构范围端口', () => {
       'AuditEventRepository',
       'getDatabase',
       '@/server/db/',
-      '@/modules/audit/',
+      '@/modules/audit/server/',
       '@/modules/institution/',
     ]) {
       expect(source).not.toContain(forbidden);
     }
     expect(source).not.toMatch(/\.(?:insert|update)\s*\(/u);
     expect(source).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\b/u);
+    expect(source).toContain(
+      "from '@/modules/audit/domain/audit-events'",
+    );
+  });
+
+  it('Audit attribution mint 的唯一 production consumer 是 server orchestration', async () => {
+    const sourceRoot = resolve(process.cwd(), 'src');
+    const paths = await readdir(sourceRoot, { recursive: true });
+    const violations: string[] = [];
+
+    for (const relativePath of paths) {
+      if (
+        typeof relativePath !== 'string' ||
+        !/\.(?:ts|tsx)$/u.test(relativePath) ||
+        /\.test\.(?:ts|tsx)$/u.test(relativePath) ||
+        relativePath === 'modules/audit/domain/audit-events.ts' ||
+        relativePath === 'server/orchestration/institution-audit-writer-scope.ts'
+      ) {
+        continue;
+      }
+      const source = await readFile(resolve(sourceRoot, relativePath), 'utf8');
+      if (
+        source.includes('mintVerifiedInstitutionAuditAttributionForOrchestrationV1') ||
+        source.includes('mintAttemptedInstitutionDenialAttributionForOrchestrationV1')
+      ) {
+        violations.push(relativePath);
+      }
+    }
+
+    expect(violations).toEqual([]);
   });
 });

@@ -5,10 +5,14 @@ import {
 } from '@/modules/audit/domain/audit-event-query';
 import {
   auditForbiddenTerms,
+  createAttemptedInstitutionDenialAuditEventV1,
   createAttributedTenantAuditEventV1,
   createAuditEvent,
   createDeniedAccessAuditEvent,
+  createVerifiedInstitutionAttributedTenantAuditEventV1,
   isAttributedTenantAuditEventV1,
+  mintAttemptedInstitutionDenialAttributionForOrchestrationV1,
+  mintVerifiedInstitutionAuditAttributionForOrchestrationV1,
   type AuditInstitutionAttributionV1,
   type TenantAuditEvent,
 } from '@/modules/audit/domain/audit-events';
@@ -88,6 +92,129 @@ function createLegacyAuditEvent(tenantId: string | null = 'demo-tenant-001') {
 }
 
 describe('Audit Owner 机构归因契约', () => {
+  it('verified attribution handle 仅在 formal 与 business pair 完全一致时 mint，并可在同 operation 复用', () => {
+    const attribution = mintVerifiedInstitutionAuditAttributionForOrchestrationV1({
+      formalPair: {
+        tenantId: 'demo-tenant-001',
+        institutionId: 'demo-institution-001',
+        observedAt: '2026-08-13T08:00:00.000Z',
+      },
+      businessPair: {
+        tenantId: 'demo-tenant-001',
+        institutionId: 'demo-institution-001',
+      },
+    });
+
+    expect(attribution).not.toBeNull();
+    if (!attribution) throw new Error('expected verified attribution handle');
+    expect(Object.isFrozen(attribution)).toBe(true);
+    expect(Reflect.ownKeys(attribution)).toEqual([]);
+    const first = createVerifiedInstitutionAttributedTenantAuditEventV1({
+      event: createLegacyAuditEvent(),
+      attribution,
+    });
+    const second = createVerifiedInstitutionAttributedTenantAuditEventV1({
+      event: { ...createLegacyAuditEvent(), eventId: 'audit-attribution-002' },
+      attribution,
+    });
+    expect(first).toMatchObject({
+      institutionAttribution: 'verified',
+      tenantId: 'demo-tenant-001',
+      institutionId: 'demo-institution-001',
+    });
+    expect(second).toMatchObject({
+      eventId: 'audit-attribution-002',
+      institutionAttribution: 'verified',
+    });
+  });
+
+  it('verified attribution handle 对 pair mismatch、非法时间与 shape-only handle fail-closed', () => {
+    expect(
+      mintVerifiedInstitutionAuditAttributionForOrchestrationV1({
+        formalPair: {
+          tenantId: 'demo-tenant-001',
+          institutionId: 'demo-institution-001',
+          observedAt: '2026-08-13T08:00:00.000Z',
+        },
+        businessPair: {
+          tenantId: 'demo-tenant-001',
+          institutionId: 'other-institution',
+        },
+      }),
+    ).toBeNull();
+    expect(
+      mintVerifiedInstitutionAuditAttributionForOrchestrationV1({
+        formalPair: {
+          tenantId: 'demo-tenant-001',
+          institutionId: 'demo-institution-001',
+          observedAt: 'not-a-time',
+        },
+        businessPair: {
+          tenantId: 'demo-tenant-001',
+          institutionId: 'demo-institution-001',
+        },
+      }),
+    ).toBeNull();
+    expect(
+      createVerifiedInstitutionAttributedTenantAuditEventV1({
+        event: createLegacyAuditEvent(),
+        attribution: Object.freeze({}) as never,
+      }),
+    ).toBeNull();
+  });
+
+  it('attempted-denial handle 仅接受签名 pair 对应的 denied event，持久化为 verified target attribution', () => {
+    const attribution = mintAttemptedInstitutionDenialAttributionForOrchestrationV1({
+      signedSessionPair: {
+        tenantId: 'demo-tenant-001',
+        institutionId: 'demo-institution-001',
+      },
+    });
+    expect(attribution).not.toBeNull();
+    if (!attribution) throw new Error('expected attempted-denial attribution handle');
+
+    const deniedEvent = {
+      ...createLegacyAuditEvent(),
+      result: 'denied' as const,
+      reason: 'role_denied' as const,
+    };
+    expect(
+      createAttemptedInstitutionDenialAuditEventV1({
+        event: deniedEvent,
+        attemptedPair: {
+          tenantId: 'demo-tenant-001',
+          institutionId: 'demo-institution-001',
+        },
+        attribution,
+      }),
+    ).toMatchObject({
+      result: 'denied',
+      institutionAttribution: 'verified',
+      tenantId: 'demo-tenant-001',
+      institutionId: 'demo-institution-001',
+    });
+    expect(
+      createAttemptedInstitutionDenialAuditEventV1({
+        event: deniedEvent,
+        attemptedPair: {
+          tenantId: 'demo-tenant-001',
+          institutionId: 'other-institution',
+        },
+        attribution,
+      }),
+    ).toBeNull();
+    expect(
+      createAttemptedInstitutionDenialAuditEventV1({
+        event: createLegacyAuditEvent(),
+        attemptedPair: {
+          tenantId: 'demo-tenant-001',
+          institutionId: 'demo-institution-001',
+        },
+        attribution,
+      }),
+    ).toBeNull();
+  });
+
   it('创建字段白名单且冻结的 verified attributed event', () => {
     const event = Object.assign(createLegacyAuditEvent(), {
       credential: 'credential-must-not-survive',

@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import {
   createAuditEvent,
   createDeniedAccessAuditEvent,
-  type TenantAuditEvent,
+  createInstitutionAttributedTenantAuditEventV1,
+  type AttributedTenantAuditEventV1,
+  type InstitutionAuditEventAttributionV1,
 } from '@/modules/audit/domain/audit-events';
 import type { AuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import type {
@@ -22,7 +24,8 @@ type TenantBusinessListRequest<Item> = {
   context: AccessContext | null;
   resource: TenantBusinessResource;
   list: (tenantId: string) => Promise<Item[]>;
-  auditRepository: Pick<AuditEventRepository, 'record'>;
+  auditRepository: Pick<AuditEventRepository, 'recordAttributed'>;
+  auditAttribution: InstitutionAuditEventAttributionV1;
 };
 
 export type TenantBusinessMutationResult<Item> =
@@ -38,9 +41,10 @@ export type TenantBusinessMutationRequest<Item> = {
   action: Extract<ProtectedAction, 'create' | 'update'>;
   mutate: (input: {
     tenantId: string;
-    successAuditEvent: TenantAuditEvent;
+    successAuditEvent: AttributedTenantAuditEventV1;
   }) => Promise<TenantBusinessMutationResult<Item>>;
-  auditRepository: Pick<AuditEventRepository, 'record'>;
+  auditRepository: Pick<AuditEventRepository, 'recordAttributed'>;
+  auditAttribution: InstitutionAuditEventAttributionV1;
   successStatus?: 200 | 201;
 };
 
@@ -49,6 +53,18 @@ function createAuditEventId() {
     globalThis.crypto?.randomUUID?.() ??
     `audit_${Date.now()}_${Math.random().toString(36).slice(2)}`
   );
+}
+
+function attributeTenantBusinessAuditEvent(
+  event: Parameters<typeof createInstitutionAttributedTenantAuditEventV1>[0]['event'],
+  attribution: InstitutionAuditEventAttributionV1,
+): AttributedTenantAuditEventV1 {
+  const attributedEvent = createInstitutionAttributedTenantAuditEventV1({
+    event,
+    attribution,
+  });
+  if (!attributedEvent) throw new Error('invalid_tenant_business_audit_attribution');
+  return attributedEvent;
 }
 
 const tenantQuotaDenialMessages: Record<TenantQuotaDenialReason, string> = {
@@ -79,6 +95,7 @@ export async function handleTenantBusinessListRequest<Item>({
   resource,
   list,
   auditRepository,
+  auditAttribution,
 }: TenantBusinessListRequest<Item>) {
   if (!context) {
     return NextResponse.json({ error: '请先登录' }, { status: 401 });
@@ -94,30 +111,30 @@ export async function handleTenantBusinessListRequest<Item>({
   });
 
   if (!decision.allowed) {
-    await auditRepository.record(
-      createDeniedAccessAuditEvent({
+    await auditRepository.recordAttributed(
+      attributeTenantBusinessAuditEvent(createDeniedAccessAuditEvent({
         eventId: createAuditEventId(),
         context,
         resource,
         action,
         reason: decision.reason,
         occurredAt,
-      }),
+      }), auditAttribution),
     );
 
     return NextResponse.json({ error: '没有访问权限' }, { status: 403 });
   }
 
   if (!context.tenantId) {
-    await auditRepository.record(
-      createDeniedAccessAuditEvent({
+    await auditRepository.recordAttributed(
+      attributeTenantBusinessAuditEvent(createDeniedAccessAuditEvent({
         eventId: createAuditEventId(),
         context,
         resource,
         action,
         reason: 'missing_tenant',
         occurredAt,
-      }),
+      }), auditAttribution),
     );
 
     return NextResponse.json({ error: '没有访问权限' }, { status: 403 });
@@ -125,8 +142,8 @@ export async function handleTenantBusinessListRequest<Item>({
 
   const records = await list(context.tenantId);
 
-  await auditRepository.record(
-    createAuditEvent({
+  await auditRepository.recordAttributed(
+    attributeTenantBusinessAuditEvent(createAuditEvent({
       eventId: createAuditEventId(),
       context,
       resource,
@@ -134,7 +151,7 @@ export async function handleTenantBusinessListRequest<Item>({
       result: 'allowed',
       reason: decision.reason,
       occurredAt,
-    }),
+    }), auditAttribution),
   );
 
   return NextResponse.json({ records });
@@ -146,6 +163,7 @@ export async function handleTenantBusinessMutationRequest<Item>({
   action,
   mutate,
   auditRepository,
+  auditAttribution,
   successStatus = 200,
 }: TenantBusinessMutationRequest<Item>) {
   if (!context) {
@@ -161,36 +179,36 @@ export async function handleTenantBusinessMutationRequest<Item>({
   });
 
   if (!decision.allowed) {
-    await auditRepository.record(
-      createDeniedAccessAuditEvent({
+    await auditRepository.recordAttributed(
+      attributeTenantBusinessAuditEvent(createDeniedAccessAuditEvent({
         eventId: createAuditEventId(),
         context,
         resource,
         action,
         reason: decision.reason,
         occurredAt,
-      }),
+      }), auditAttribution),
     );
 
     return NextResponse.json({ error: '没有访问权限' }, { status: 403 });
   }
 
   if (!context.tenantId) {
-    await auditRepository.record(
-      createDeniedAccessAuditEvent({
+    await auditRepository.recordAttributed(
+      attributeTenantBusinessAuditEvent(createDeniedAccessAuditEvent({
         eventId: createAuditEventId(),
         context,
         resource,
         action,
         reason: 'missing_tenant',
         occurredAt,
-      }),
+      }), auditAttribution),
     );
 
     return NextResponse.json({ error: '没有访问权限' }, { status: 403 });
   }
 
-  const successAuditEvent = createAuditEvent({
+  const successAuditEvent = attributeTenantBusinessAuditEvent(createAuditEvent({
     eventId: createAuditEventId(),
     context,
     resource,
@@ -198,12 +216,12 @@ export async function handleTenantBusinessMutationRequest<Item>({
     result: 'allowed',
     reason: decision.reason,
     occurredAt,
-  });
+  }), auditAttribution);
   const result = await mutate({ tenantId: context.tenantId, successAuditEvent });
 
   if (result.kind === 'not_found') {
-    await auditRepository.record(
-      createAuditEvent({
+    await auditRepository.recordAttributed(
+      attributeTenantBusinessAuditEvent(createAuditEvent({
         eventId: createAuditEventId(),
         context,
         resource,
@@ -212,15 +230,15 @@ export async function handleTenantBusinessMutationRequest<Item>({
         result: 'denied',
         reason: 'not_found_or_not_owned',
         occurredAt,
-      }),
+      }), auditAttribution),
     );
 
     return NextResponse.json({ error: '记录不存在' }, { status: 404 });
   }
 
   if (result.kind === 'invalid_transition') {
-    await auditRepository.record(
-      createAuditEvent({
+    await auditRepository.recordAttributed(
+      attributeTenantBusinessAuditEvent(createAuditEvent({
         eventId: createAuditEventId(),
         context,
         resource,
@@ -229,15 +247,15 @@ export async function handleTenantBusinessMutationRequest<Item>({
         result: 'denied',
         reason: 'invalid_transition',
         occurredAt,
-      }),
+      }), auditAttribution),
     );
 
     return NextResponse.json({ error: '随访状态不允许这样流转' }, { status: 409 });
   }
 
   if (result.kind === 'conflict') {
-    await auditRepository.record(
-      createAuditEvent({
+    await auditRepository.recordAttributed(
+      attributeTenantBusinessAuditEvent(createAuditEvent({
         eventId: createAuditEventId(),
         context,
         resource,
@@ -246,15 +264,15 @@ export async function handleTenantBusinessMutationRequest<Item>({
         result: 'denied',
         reason: result.reason,
         occurredAt,
-      }),
+      }), auditAttribution),
     );
 
     return NextResponse.json({ error: '随访状态已变化，请刷新后重试' }, { status: 409 });
   }
 
   if (result.kind === 'quota_denied') {
-    await auditRepository.record(
-      createAuditEvent({
+    await auditRepository.recordAttributed(
+      attributeTenantBusinessAuditEvent(createAuditEvent({
         eventId: createAuditEventId(),
         context,
         resource,
@@ -262,7 +280,7 @@ export async function handleTenantBusinessMutationRequest<Item>({
         result: 'denied',
         reason: result.decision.reason,
         occurredAt,
-      }),
+      }), auditAttribution),
     );
 
     return NextResponse.json(

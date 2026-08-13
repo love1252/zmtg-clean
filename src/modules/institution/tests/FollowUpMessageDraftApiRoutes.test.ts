@@ -2,6 +2,14 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  mintAttemptedInstitutionDenialAttributionForOrchestrationV1,
+  mintVerifiedInstitutionAuditAttributionForOrchestrationV1,
+} from '@/modules/audit/domain/audit-events';
+import {
+  allowedFollowUpMessageAudit,
+  deniedFollowUpMessageAudit,
+} from '@/modules/institution/server/followup-message-draft-api';
 
 vi.mock('@/app/api/institution/_shared/institution-route-guard', () => ({
   withInstitutionSectionRouteGuardV1: ({
@@ -82,6 +90,15 @@ const templateCapabilityDisabledPayload = {
   code: 'capability_disabled',
   error: '随访消息模板能力当前未启用',
 } as const;
+
+const followUpAuditContext = Object.freeze({
+  userId: 'demo-user-admin',
+  role: 'tenant_admin' as const,
+  scope: 'tenant' as const,
+  tenantId: 'demo-tenant-001',
+  institutionId: 'demo-inst-001',
+  source: 'server_session' as const,
+});
 
 const disabledRoutePaths = [
   'src/app/api/institution/followup-message-templates/route.ts',
@@ -223,6 +240,77 @@ beforeEach(() => {
     tenantId: 'demo-tenant-001',
     institutionId: 'inst-001',
     source: 'demo_session',
+  });
+});
+
+describe('随访消息草稿 attributed Audit helper', () => {
+  it('allowed 使用 formal/business corroborated verified handle', () => {
+    const attribution = mintVerifiedInstitutionAuditAttributionForOrchestrationV1({
+      formalPair: {
+        tenantId: 'demo-tenant-001',
+        institutionId: 'demo-inst-001',
+        observedAt: '2026-08-13T08:00:00.000Z',
+      },
+      businessPair: {
+        tenantId: 'demo-tenant-001',
+        institutionId: 'demo-inst-001',
+      },
+    });
+    if (!attribution) throw new Error('expected verified test attribution');
+
+    expect(
+      allowedFollowUpMessageAudit({
+        context: followUpAuditContext,
+        action: 'create',
+        reason: 'allowed_by_policy',
+        occurredAt: '2026-08-13T08:00:00.000Z',
+        attribution,
+      }),
+    ).toMatchObject({
+      result: 'allowed',
+      institutionAttribution: 'verified',
+      tenantId: 'demo-tenant-001',
+      institutionId: 'demo-inst-001',
+    });
+  });
+
+  it('pre-scope denial 只接受 signed-session attempted pair', () => {
+    const attemptedPair = Object.freeze({
+      tenantId: 'demo-tenant-001',
+      institutionId: 'demo-inst-001',
+    });
+    const attribution = mintAttemptedInstitutionDenialAttributionForOrchestrationV1({
+      signedSessionPair: attemptedPair,
+    });
+    if (!attribution) throw new Error('expected attempted-denial test attribution');
+
+    expect(
+      deniedFollowUpMessageAudit({
+        context: followUpAuditContext,
+        action: 'approve',
+        reason: 'role_denied',
+        occurredAt: '2026-08-13T08:00:00.000Z',
+        attribution: { kind: 'attempted_denial', attribution, attemptedPair },
+      }),
+    ).toMatchObject({
+      result: 'denied',
+      institutionAttribution: 'verified',
+      tenantId: 'demo-tenant-001',
+      institutionId: 'demo-inst-001',
+    });
+    expect(() =>
+      deniedFollowUpMessageAudit({
+        context: followUpAuditContext,
+        action: 'approve',
+        reason: 'role_denied',
+        occurredAt: '2026-08-13T08:00:00.000Z',
+        attribution: {
+          kind: 'attempted_denial',
+          attribution,
+          attemptedPair: { ...attemptedPair, institutionId: 'other-institution' },
+        },
+      }),
+    ).toThrow('invalid_followup_message_denial_audit_attribution');
   });
 });
 
