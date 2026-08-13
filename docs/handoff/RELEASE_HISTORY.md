@@ -1,5 +1,68 @@
 # 项目重构历史
 
+<!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_RELEASE_BLOCKER_HISTORY -->
+
+## 2026-08-13：POST-V2-R1C `page_system_audit` release eligibility 因 Writer attribution 阻断
+
+```text
+POST_V2_R1C_PAGE_SYSTEM_AUDIT_RELEASE_REAUDIT=passed
+PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=false
+
+AUDIT_READER_SUCCESS_PATH_EXISTS=true
+AUDIT_READER_READINESS=ready
+AUDIT_DATA_READINESS=false
+
+AUDIT_WRITER_ATTRIBUTION_CLOSED=false
+HISTORICAL_BACKFILL_CLOSED=false
+
+WORKBENCH_MULTI_CAPABILITY_SAFE=false
+CANONICAL_ROUTE=/hospital/system/audit
+ROUTE_STRATEGY=dedicated_static_route_after_data_prerequisite
+SHELL_READONLY_SAFE=true
+AUTHORIZATION_SAFE=true
+LOW_SENSITIVE_OUTPUT_SAFE=true
+
+DATABASE_ENVIRONMENT=local_development
+DATABASE_READONLY_CONNECTION=passed
+AUDIT_TOTAL_ROW_COUNT=275
+AUDIT_INSTITUTION_ID_PRESENT_ROW_COUNT=0
+VERIFIED_ATTRIBUTED_ROW_COUNT=0
+NULL_ATTRIBUTION_ROW_COUNT=275
+DATABASE_WRITE_EXECUTION=false
+
+BLOCKING_PREREQUISITE_COUNT=1
+PRIMARY_BLOCKING_PREREQUISITE=Audit Writer institution attribution closure
+BLOCKING_OWNER=src/modules/audit
+
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+PAGE_SYSTEM_AUDIT_RUNTIME_AUTHORIZED=false
+
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+REVIEW_ACCEPTED_REMAINING_UNRELEASED_PAGE_COUNT=25
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+```
+
+- fresh re-audit 重新证明机构 Audit API、Section Guard、query parser、one-shot formal context、Reader、tenant + institution + `verified` Repository 条件与低敏响应链均存在；
+- relevant targeted 10 files / 215 tests、typecheck、Architecture Quality 148/148 与增量检查均通过；
+- `InstitutionAuditEventsShell` 与 client 仍为 GET-only，支持 loading、空态、错误、分页与迟到响应治理；
+- Platform Audit semantics 未改变，Schema、Migration、Architecture exception 与 AQ004 均无漂移；
+- 本地 loopback PostgreSQL 只读验证发现 275 条记录全部缺少 attribution，且 `institutionId` / `verified` 均为 0；
+- canonical Writer 映射不写入 `institutionId` / `institutionAttribution`，因此 Reader 返回空不能证明权威空数据；
+- `page_system_audit` release eligibility 被首个必要前置条件 Audit Writer institution attribution closure 阻断；
+- historical backfill 仍未闭环，但是否成为独立页面门禁必须在 Writer attribution 闭环后重新审计；
+- `/hospital` 当前 exact-one summary guard 对第二个可见 capability 不安全，后续页面 re-audit 必须纳入小范围修正或重新阻断；
+- 本阶段只修改 docs，不生成页面 Runtime allowlist，不实施 Writer、backfill 或页面 Runtime；
+- 下一任务：`POST-V2-R1C Audit Writer institution attribution prerequisite fresh audit + exact Runtime admission`。
+
+证据：
+
+- `docs/operations/post-v2-r1c-page-system-audit-release-reaudit-blocker-20260813.md`
+- `docs/operations/post-v2-r1c-audit-reader-runtime-independent-verification-20260813.md`
+
+<!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_RELEASE_BLOCKER_HISTORY_END -->
+
 <!-- POST_V2_R1C_AUDIT_READER_RUNTIME_HISTORY -->
 
 ## 2026-08-13：POST-V2-R1C 机构范围 Audit Reader Runtime 闭环
