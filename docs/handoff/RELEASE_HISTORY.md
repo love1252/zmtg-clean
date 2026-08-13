@@ -1,5 +1,73 @@
 # 项目重构历史
 
+<!-- POST_V2_R1C_AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME_HISTORY -->
+
+## 2026-08-13：POST-V2-R1C Audit Owner 机构归因契约 Runtime 闭环
+
+```text
+POST_V2_R1C_AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME=passed
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME_IMPLEMENTED=true
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME_VERIFIED=true
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_INDEPENDENT_VERIFICATION=passed
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_HANDOFF_COMPLETE=true
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_CLOSED=true
+
+RUNTIME_EXACT_FILE_COUNT=4
+RUNTIME_PR=1179
+RUNTIME_HEAD=509140180aa95e56cccba17db4d5e65db20d6cd5
+RUNTIME_MERGE=cba79e6bad83be4eafebc6b4359e381d98eb804a
+RUNTIME_REQUIRED_CHECK=passed
+RUNTIME_ACTIONABLE_P0_P1=0
+
+TARGETED_TEST_FILES=16
+TARGETED_TESTS=288
+FULL_TEST_FILES=492
+FULL_TESTS=6678
+TYPECHECK=passed
+ARCHITECTURE_UNIT=148/148 passed
+ARCHITECTURE_INCREMENTAL=passed
+LINT=passed_with_4_existing_warnings
+BUILD=passed
+
+LEGACY_CALLER_CAN_WRITE_VERIFIED=false
+LEGACY_UNATTRIBUTED_NEW_WRITE_ALLOWED=false
+AUDIT_CONTRACT_PROVES_FORMAL_SCOPE=false
+AUDIT_OWNER_IMPORTS_SCOPE_PORT=false
+
+AUDIT_WRITER_ATTRIBUTION_CLOSED=false
+AUDIT_CALLER_MIGRATION_CLOSED=false
+HISTORICAL_BACKFILL_CLOSED=false
+WORKBENCH_MULTI_CAPABILITY_SAFE=false
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+
+DATABASE_CONNECTION=false
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+MIGRATION=false
+DDL_EXECUTION=false
+DML_EXECUTION=false
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+```
+
+- Runtime PR #1179 严格修改 4 个既有 Audit Owner 文件，没有第 5 个文件、新文件、删除文件、caller 或 scope port 漂移；
+- legacy `record()` 显式映射 `NULL/NULL`；attributed contract、factory / validator、mapper 与 `recordAttributed()` 只接受 `verified | not_applicable`；
+- unknown、`legacy_unattributed`、非法组合、cast / fake input 均固定低敏 fail-closed，Repository 二次验证证明 invalid insert count=0；
+- Repository 继续使用 caller-provided database，不调用 `getDatabase`、不查询业务 Owner、不自行开启 transaction；Institution / Platform Reader 语义保持；
+- Runtime targeted 16 files / 288 tests、full 492 files / 6678 tests、typecheck、Architecture unit 148/148、Architecture incremental、lint、build 与 Required Check 全部通过；
+- 合并后从 merged main 重跑 targeted、typecheck、Architecture incremental 与静态 scope guards，独立验证通过；
+- 未连接数据库，未执行 Schema/Migration、DDL/DML、backfill、caller migration、Workbench、页面、Staging 或 Production；
+- 下一任务：`POST-V2-R1C Audit Writer classified caller migration fresh audit + exact Runtime admission`，`CALLER_MIGRATION_RUNTIME_AUTHORIZED=false`。
+
+证据：
+
+- `docs/operations/post-v2-r1c-audit-owner-institution-attribution-contract-runtime-independent-verification-20260813.md`
+- Runtime PR #1179 / Merge `cba79e6bad83be4eafebc6b4359e381d98eb804a`
+
+<!-- POST_V2_R1C_AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME_HISTORY_END -->
+
 <!-- POST_V2_R1C_AUDIT_OWNER_ATTRIBUTION_CONTRACT_ADMISSION_HISTORY -->
 
 ## 2026-08-13：POST-V2-R1C Audit Owner 机构归因契约获得 exact 4-file Runtime 准入
