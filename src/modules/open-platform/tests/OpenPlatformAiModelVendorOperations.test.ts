@@ -97,7 +97,7 @@ function repositoryWithRecord(record: VendorProviderConfigRecord | null) {
 function createAuditRepository() {
   return {
     events: [] as unknown[],
-    async record(event: unknown) {
+    async recordAttributed(event: unknown) {
       this.events.push(event);
     },
   };

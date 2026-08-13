@@ -1,5 +1,5 @@
 import type { AccessContext } from '@/modules/security/domain/access-control';
-import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
+import type { AttributedTenantAuditEventV1 } from '@/modules/audit/domain/audit-events';
 import type {
   PlatformAiModelConfigAgentInheritance,
   PlatformAiModelConfigDryRunStatus,
@@ -96,7 +96,7 @@ export type PlatformAiModelConfigSnapshotRepository = {
 };
 
 export type PlatformAiModelConfigAuditRepository = {
-  record(event: TenantAuditEvent): Promise<void>;
+  recordAttributed(event: AttributedTenantAuditEventV1): Promise<void>;
 };
 
 export type PlatformAiModelConfigSaveResult =

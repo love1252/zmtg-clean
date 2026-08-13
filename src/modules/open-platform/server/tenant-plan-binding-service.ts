@@ -6,7 +6,11 @@ import {
 } from '@/modules/auth/domain/auth-account';
 import { hashPasswordScrypt } from '@/modules/auth/server/password-hash';
 import type { AuthAccountPasswordHasher } from '@/modules/auth/server/auth-account-service';
-import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
+import {
+  createAttributedTenantAuditEventV1,
+  type AttributedTenantAuditEventV1,
+  type TenantAuditEvent,
+} from '@/modules/audit/domain/audit-events';
 import type { TenantManagementListItem } from '@/modules/open-platform/domain/tenant-management';
 import {
   buildOpeningContactSnapshot,
@@ -89,12 +93,25 @@ export type TenantPlanBindingRepository = {
       supersededAt: null;
       createdAt: Date;
     };
-    auditEvent: TenantAuditEvent;
-    accountAuditEvent: TenantAuditEvent;
+    auditEvent: AttributedTenantAuditEventV1;
+    accountAuditEvent: AttributedTenantAuditEventV1;
   }): Promise<TenantManagementListItem>;
 };
 
 type IdFactory = (prefix: string) => string;
+
+function createNotApplicableAuditEvent(event: TenantAuditEvent): AttributedTenantAuditEventV1 {
+  const attributedEvent = createAttributedTenantAuditEventV1({
+    event,
+    attribution: {
+      institutionAttribution: 'not_applicable',
+      tenantId: event.tenantId,
+      institutionId: null,
+    },
+  });
+  if (!attributedEvent) throw new Error('invalid_tenant_plan_binding_audit_attribution');
+  return attributedEvent;
+}
 type PasswordHasher = Pick<AuthAccountPasswordHasher, 'hash'>;
 
 function defaultIdFactory(prefix: string) {
@@ -275,7 +292,7 @@ export async function createTenantWithPlanService(input: {
       supersededAt: null,
       createdAt: current,
     },
-    auditEvent: {
+    auditEvent: createNotApplicableAuditEvent({
       eventId: auditEventId,
       actorId: input.actorId,
       actorRole: input.actorRole,
@@ -288,8 +305,8 @@ export async function createTenantWithPlanService(input: {
       reason: 'tenant_plan_assignment_created',
       occurredAt: current.toISOString(),
       source: input.auditSource,
-    },
-    accountAuditEvent: {
+    }),
+    accountAuditEvent: createNotApplicableAuditEvent({
       eventId: accountAuditEventId,
       actorId: input.actorId,
       actorRole: input.actorRole,
@@ -302,7 +319,7 @@ export async function createTenantWithPlanService(input: {
       reason: 'tenant_account_created',
       occurredAt: current.toISOString(),
       source: input.auditSource,
-    },
+    }),
   });
 
   return {

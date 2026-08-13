@@ -3,7 +3,11 @@ import { randomUUID } from 'node:crypto';
 import type { AuthAccountStatus } from '@/modules/auth/domain/auth-account';
 import type { AuthAccountPasswordHasher } from '@/modules/auth/server/auth-account-service';
 import { hashPasswordScrypt } from '@/modules/auth/server/password-hash';
-import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
+import {
+  createAttributedTenantAuditEventV1,
+  type AttributedTenantAuditEventV1,
+  type TenantAuditEvent,
+} from '@/modules/audit/domain/audit-events';
 import type { AccessRole } from '@/modules/security/domain/access-control';
 
 export type TenantAccountOperationAction = 'reset_password' | 'disable' | 'enable';
@@ -38,7 +42,7 @@ export type TenantAccountOperationInput = {
   lockedUntil: Date | null;
   updatedAt: Date;
   updatedBy: string;
-  auditEvent: TenantAuditEvent;
+  auditEvent: AttributedTenantAuditEventV1;
 };
 
 export type TenantAccountManagementRepository = {
@@ -106,14 +110,14 @@ function buildAuditEvent(input: {
   tenantId: string;
   tenantMemberId: string;
   occurredAt: Date;
-}): TenantAuditEvent {
+}): AttributedTenantAuditEventV1 {
   const reasonByAction = {
     reset_password: 'tenant_account_password_reset',
     disable: 'tenant_account_disabled',
     enable: 'tenant_account_enabled',
   } as const;
 
-  return {
+  const event: TenantAuditEvent = {
     eventId: input.auditEventId,
     actorId: input.actorId,
     actorRole: input.actorRole,
@@ -127,6 +131,16 @@ function buildAuditEvent(input: {
     occurredAt: input.occurredAt.toISOString(),
     source: 'server_session',
   };
+  const attributedEvent = createAttributedTenantAuditEventV1({
+    event,
+    attribution: {
+      institutionAttribution: 'not_applicable',
+      tenantId: event.tenantId,
+      institutionId: null,
+    },
+  });
+  if (!attributedEvent) throw new Error('invalid_tenant_account_audit_attribution');
+  return attributedEvent;
 }
 
 export async function manageTenantAccountService(input: {

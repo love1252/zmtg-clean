@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
-import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
+import {
+  createAttributedTenantAuditEventV1,
+  type AttributedTenantAuditEventV1,
+  type TenantAuditEvent,
+} from '@/modules/audit/domain/audit-events';
 import {
   normalizeTenantOpeningContact,
   type TenantManagementListItem,
@@ -97,7 +101,7 @@ export type TenantPlanChangeApplyInput = {
     createdAt: Date;
     updatedAt: Date;
   };
-  auditEvent: TenantAuditEvent;
+  auditEvent: AttributedTenantAuditEventV1;
   appliedAt: Date;
 };
 
@@ -171,11 +175,24 @@ export type InitialPlanAssignmentInput = {
     createdAt: Date;
     updatedAt: Date;
   };
-  auditEvent: TenantAuditEvent;
+  auditEvent: AttributedTenantAuditEventV1;
   appliedAt: Date;
 };
 
 type IdFactory = (prefix: string) => string;
+
+function createNotApplicableAuditEvent(event: TenantAuditEvent): AttributedTenantAuditEventV1 {
+  const attributedEvent = createAttributedTenantAuditEventV1({
+    event,
+    attribution: {
+      institutionAttribution: 'not_applicable',
+      tenantId: event.tenantId,
+      institutionId: null,
+    },
+  });
+  if (!attributedEvent) throw new Error('invalid_tenant_plan_change_audit_attribution');
+  return attributedEvent;
+}
 
 type TenantPlanChangeServiceResult =
   | { status: 'validation_error'; errors: string[] }
@@ -336,7 +353,7 @@ export async function applyTenantPlanChangeService(input: {
         createdAt: current,
         updatedAt: current,
       },
-      auditEvent: {
+      auditEvent: createNotApplicableAuditEvent({
         eventId: auditEventId,
         actorId: input.actorId,
         actorRole: input.actorRole,
@@ -349,7 +366,7 @@ export async function applyTenantPlanChangeService(input: {
         reason: 'tenant_plan_changed',
         occurredAt: current.toISOString(),
         source: 'server_session',
-      },
+      }),
       appliedAt: current,
     });
   }
@@ -415,7 +432,7 @@ export async function applyTenantPlanChangeService(input: {
       createdAt: current,
       updatedAt: current,
     },
-    auditEvent: {
+    auditEvent: createNotApplicableAuditEvent({
       eventId: auditEventId,
       actorId: input.actorId,
       actorRole: input.actorRole,
@@ -428,7 +445,7 @@ export async function applyTenantPlanChangeService(input: {
       reason: 'tenant_plan_changed',
       occurredAt: current.toISOString(),
       source: 'server_session',
-    },
+    }),
     appliedAt: current,
   });
 }

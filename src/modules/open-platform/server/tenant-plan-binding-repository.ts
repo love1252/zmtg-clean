@@ -1,6 +1,6 @@
 import { and, asc, desc, eq } from 'drizzle-orm';
 
-import { mapAuditEventToInsert } from '@/modules/audit/server/audit-event-repository';
+import { mapAttributedAuditEventToInsert } from '@/modules/audit/server/audit-event-repository';
 import {
   mapTenantManagementRecordToDto,
   normalizeTenantOpeningContact,
@@ -159,8 +159,8 @@ export function createTenantPlanBindingRepository(
           await tx.insert(tenantContacts).values(input.tenantContact);
           await tx.insert(tenantPlanAssignments).values(input.assignment);
           await tx.insert(tenantAuthorizationSnapshots).values(input.authorizationSnapshot);
-          await tx.insert(auditEvents).values(mapAuditEventToInsert(input.auditEvent));
-          await tx.insert(auditEvents).values(mapAuditEventToInsert(input.accountAuditEvent));
+          await tx.insert(auditEvents).values(mapAttributedAuditEventToInsert(input.auditEvent));
+          await tx.insert(auditEvents).values(mapAttributedAuditEventToInsert(input.accountAuditEvent));
           // 机构开通商业记录
           await insertOneCommercialRecord(tx, {
             id: `${input.tenant.id}-commercial-tenant-opening`,

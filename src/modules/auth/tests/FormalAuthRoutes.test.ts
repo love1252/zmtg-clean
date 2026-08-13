@@ -76,7 +76,7 @@ const routeMocks = vi.hoisted(() => {
   return {
     account,
     authenticateDemoUser: vi.fn(),
-    auditRepository: { record: vi.fn() },
+    auditRepository: { recordAttributed: vi.fn() },
     consumeClaims: vi.fn(),
     consumeSnapshot: vi.fn(),
     contextResolver,
@@ -374,7 +374,7 @@ beforeEach(() => {
     passwordResetRequired: false,
     account: routeMocks.safeAccount,
   });
-  routeMocks.auditRepository.record.mockReset();
+  routeMocks.auditRepository.recordAttributed.mockReset();
 });
 
 afterEach(() => {
@@ -441,7 +441,14 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
     expect(response.headers.get('set-cookie')).toContain(`${FORMAL_SERVER_SESSION_COOKIE_V1}=v1.k1.formal-payload.formal-tag`);
     expectCookieCleared(response, DEMO_SESSION_COOKIE);
     expect(routeMocks.authenticateDemoUser).not.toHaveBeenCalled();
-    expect(routeMocks.auditRepository.record).toHaveBeenCalledTimes(1);
+    expect(routeMocks.auditRepository.recordAttributed).toHaveBeenCalledTimes(1);
+    expect(routeMocks.auditRepository.recordAttributed).toHaveBeenCalledWith(
+      expect.objectContaining({
+        institutionAttribution: 'not_applicable',
+        institutionId: null,
+        tenantId: routeMocks.membership.tenantId,
+      }),
+    );
   });
 
   it('scope 缺失 fail-closed 且零 DB、零 keyring、零 demo', async () => {
@@ -584,7 +591,14 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
     expect(routeMocks.membershipReader.resolveSingleForAccount).toHaveBeenCalledWith({
       accountId: routeMocks.user.id,
     });
-    expect(routeMocks.auditRepository.record).toHaveBeenCalledTimes(1);
+    expect(routeMocks.auditRepository.recordAttributed).toHaveBeenCalledTimes(1);
+    expect(routeMocks.auditRepository.recordAttributed).toHaveBeenCalledWith(
+      expect.objectContaining({
+        institutionAttribution: 'not_applicable',
+        institutionId: null,
+        tenantId: routeMocks.membership.tenantId,
+      }),
+    );
   });
 
   it('password reset required 返回低敏 403，零 snapshot/cookie/demo', async () => {
@@ -638,7 +652,7 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
     ).not.toHaveBeenCalled();
     expect(routeMocks.contextResolver.resolveForLogin).not.toHaveBeenCalled();
     expect(routeMocks.issueFormalCookie).not.toHaveBeenCalled();
-    expect(routeMocks.auditRepository.record).not.toHaveBeenCalled();
+    expect(routeMocks.auditRepository.recordAttributed).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -667,7 +681,7 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
       expect(routeMocks.issueFormalCookie).not.toHaveBeenCalled();
     }
     expect(routeMocks.authenticateDemoUser).not.toHaveBeenCalled();
-    expect(routeMocks.auditRepository.record).not.toHaveBeenCalled();
+    expect(routeMocks.auditRepository.recordAttributed).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -699,7 +713,7 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
 
     expect(response.status).toBe(503);
     expectNoStore(response);
-    expect(routeMocks.auditRepository.record).not.toHaveBeenCalled();
+    expect(routeMocks.auditRepository.recordAttributed).not.toHaveBeenCalled();
     expect(routeMocks.authenticateDemoUser).not.toHaveBeenCalled();
   });
 

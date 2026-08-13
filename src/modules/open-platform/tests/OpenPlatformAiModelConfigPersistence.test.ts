@@ -93,7 +93,7 @@ function createRepository(initialRecord: PlatformAiModelConfigSnapshotRecord | n
 function createAuditRepository() {
   return {
     events: [] as unknown[],
-    async record(event) {
+    async recordAttributed(event) {
       this.events.push(event);
     },
   } satisfies PlatformAiModelConfigAuditRepository & {

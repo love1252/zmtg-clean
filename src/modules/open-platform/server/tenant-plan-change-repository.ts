@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 
-import { mapAuditEventToInsert } from '@/modules/audit/server/audit-event-repository';
+import { mapAttributedAuditEventToInsert } from '@/modules/audit/server/audit-event-repository';
 import {
   mapTenantManagementRecordToDto,
   normalizeTenantOpeningContact,
@@ -251,7 +251,7 @@ export function createTenantPlanChangeRepository(database: TenantDatabase): Tena
         await tx.insert(tenantPlanAssignments).values(input.newAssignment);
         await tx.insert(tenantAuthorizationSnapshots).values(input.newAuthorizationSnapshot);
         await tx.insert(tenantPlanChangeRecords).values(input.changeRecord);
-        await tx.insert(auditEvents).values(mapAuditEventToInsert(input.auditEvent));
+        await tx.insert(auditEvents).values(mapAttributedAuditEventToInsert(input.auditEvent));
         // 套餐变更商业记录
         await insertOneCommercialRecord(tx, {
           id: `${input.tenant.id}-commercial-plan-change-${input.changeRecord.id.slice(0, 12)}`,
@@ -280,7 +280,7 @@ export function createTenantPlanChangeRepository(database: TenantDatabase): Tena
         await tx.insert(tenantPlanAssignments).values(input.newAssignment);
         await tx.insert(tenantAuthorizationSnapshots).values(input.newAuthorizationSnapshot);
         await tx.insert(tenantPlanChangeRecords).values(input.changeRecord);
-        await tx.insert(auditEvents).values(mapAuditEventToInsert(input.auditEvent));
+        await tx.insert(auditEvents).values(mapAttributedAuditEventToInsert(input.auditEvent));
         // 套餐首次分配商业记录
         await insertOneCommercialRecord(tx, {
           id: `${input.tenant.id}-commercial-plan-assign-${input.changeRecord.id.slice(0, 12)}`,
