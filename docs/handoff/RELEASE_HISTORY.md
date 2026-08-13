@@ -1,5 +1,69 @@
 # 项目重构历史
 
+<!-- POST_V2_R1C_AUDIT_READER_RUNTIME_HISTORY -->
+
+## 2026-08-13：POST-V2-R1C 机构范围 Audit Reader Runtime 闭环
+
+```text
+POST_V2_R1C_AUDIT_READER_RUNTIME=passed
+AUDIT_READER_RUNTIME_IMPLEMENTED=true
+AUDIT_READER_RUNTIME_VERIFIED=true
+AUDIT_READER_RUNTIME_INDEPENDENT_VERIFICATION=passed
+AUDIT_READER_RUNTIME_HANDOFF_COMPLETE=true
+
+RUNTIME_EXACT_FILE_COUNT=8
+RUNTIME_PR=1169
+RUNTIME_HEAD=c927fdfc9a37a865d3df2082ec350b7e01806c45
+RUNTIME_MERGE=2a45b74999784bdcf1a4777c9017ba15d2cef546
+RUNTIME_REQUIRED_CHECK=passed
+RUNTIME_ACTIONABLE_P0_P1=0
+
+DATABASE_CONNECTION_USED=true
+DATABASE_CONNECTION_SCOPE=local_development_only
+DATABASE_READONLY_VERIFICATION=passed
+DATABASE_WRITE_EXECUTION=false
+
+SCHEMA_CHANGE=false
+MIGRATION=false
+DDL_EXECUTION=false
+DML_EXECUTION=false
+ARCHITECTURE_EXCEPTION_REQUIRED=false
+
+AUDIT_WRITER_ATTRIBUTION_CLOSED=false
+HISTORICAL_BACKFILL_CLOSED=false
+AUDIT_READER_DATA_READINESS=false
+
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+REVIEW_ACCEPTED_REMAINING_UNRELEASED_PAGE_COUNT=25
+
+PRODUCTION_READY_INFERRED=false
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+```
+
+- Runtime PR #1169 严格修改 Admission 批准的 8 个文件，其中新增 orchestration Reader 及其测试两个文件；
+- institution query scope 已强制 tenant + institution 双键，Repository 数据库条件额外强制 `institution_attribution='verified'`；
+- Reader 只消费既有正式 one-shot opaque institution context，并要求 `system` section；
+- Route 保留既有 `system` Section Guard，只承担 parser、Reader 与低敏 HTTP 映射；
+- 机构成功响应省略 `tenantId`，也不暴露 institution attribution、内部错误或 secret；
+- Runtime targeted 4 files / 27 tests、full 491 files / 6611 tests、typecheck、Architecture unit 148/148、Architecture incremental、lint 与 build 全部通过；
+- 本地 loopback PostgreSQL 只读事务验证通过，范围列 3/3，但 `verified` 归属行数为 0，因此 data readiness 仍为 false；
+- 合并后重新执行 targeted、typecheck 与 Architecture incremental，确认 exact-8、调用链和禁止范围均无漂移；
+- Platform Audit Route、Schema、Migration、Architecture exception 与 AQ004 均保持原边界；
+- Audit Writer attribution 与历史 backfill 没有闭环；
+- `page_system_audit` 仍为 `hidden/not_released`，Reader Foundation 不构成页面放行；
+- 下一任务：`POST-V2-R1C page_system_audit readonly release fresh re-audit + exact Runtime admission`，Runtime authorization=false。
+
+证据：
+
+- `docs/operations/post-v2-r1c-audit-reader-runtime-independent-verification-20260813.md`
+- `docs/operations/post-v2-r1c-audit-reader-prerequisite-admission-20260813.md`
+- `docs/operations/post-v2-r1c-audit-reader-exact-runtime-allowlist-20260813.csv`
+
+<!-- POST_V2_R1C_AUDIT_READER_RUNTIME_HISTORY_END -->
+
 <!-- POST_V2_R1C_AUDIT_READER_ADMISSION_HISTORY -->
 
 ## 2026-08-13：POST-V2-R1C Audit Reader prerequisite fresh audit 与 exact Runtime Admission
