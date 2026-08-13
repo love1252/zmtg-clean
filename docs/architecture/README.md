@@ -7,6 +7,11 @@
 ```text
 STAGE=S12
 COMPLETION_MODE=COMPLETE
+S12_PRS=1195,1196
+S12_PR_COUNT=2
+S12_REQUIRED_CHECKS=passed
+S12_ACTIONABLE_P0_P1=0
+POST_MERGE_REVIEW_DEBT=0
 AUDIT_READER_SAFE_DATA_AVAILABLE=true
 AUDIT_READER_COVERAGE_STATE=partial_verified_only
 AUDIT_READER_HISTORICAL_COVERAGE_COMPLETE=false
@@ -33,6 +38,7 @@ REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
 
 - `docs/operations/post-v2-r1c-audit-reader-data-readiness-workbench-multi-capability-prerequisite-closure-20260814.md`
 - Runtime PR #1195 / Merge `9cf3ac78bbd0bafdcbf4c56afd4af8f2badf84df`
+- Handoff PR #1196
 
 唯一下一任务：
 
