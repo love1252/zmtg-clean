@@ -1,9 +1,13 @@
-import type {
-  AccessContext,
-  AccessDecision,
-  ProtectedAction,
-  ProtectedResource,
+import {
+  ACCESS_ACTIONS,
+  ACCESS_RESOURCES,
+  ACCESS_ROLES,
+  type AccessContext,
+  type AccessDecision,
+  type ProtectedAction,
+  type ProtectedResource,
 } from '@/modules/security/domain/access-control';
+import { AUDIT_REASON_VALUES } from '@/modules/audit/domain/audit-event-query';
 
 export type AuditResult = 'allowed' | 'denied' | 'transitioned';
 
@@ -216,6 +220,173 @@ export type TenantAuditEvent = {
   occurredAt: string;
   source: AccessContext['source'];
 };
+
+export type AuditInstitutionAttributionV1 =
+  | Readonly<{
+      institutionAttribution: 'verified';
+      tenantId: string;
+      institutionId: string;
+    }>
+  | Readonly<{
+      institutionAttribution: 'not_applicable';
+      tenantId: string | null;
+      institutionId: null;
+    }>;
+
+export type AttributedTenantAuditEventV1 = Readonly<
+  Omit<TenantAuditEvent, 'tenantId'> & AuditInstitutionAttributionV1
+>;
+
+const auditScopes = ['platform', 'tenant'] as const;
+const auditSources = ['demo_session', 'server_session', 'trusted_gateway'] as const;
+const auditResults = ['allowed', 'denied', 'transitioned'] as const;
+
+const legacyAuditEventRequiredKeys = [
+  'eventId',
+  'actorId',
+  'actorRole',
+  'tenantId',
+  'scope',
+  'resource',
+  'action',
+  'result',
+  'reason',
+  'occurredAt',
+  'source',
+] as const;
+
+const attributedAuditEventAllowedKeys = new Set<PropertyKey>([
+  ...legacyAuditEventRequiredKeys,
+  'resourceId',
+  'institutionId',
+  'institutionAttribution',
+]);
+
+function isRecord(value: unknown): value is Record<PropertyKey, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function hasOwn(value: object, key: PropertyKey): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function isCanonicalNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.trim() === value;
+}
+
+function isOneOf(values: readonly string[], value: unknown): value is string {
+  return typeof value === 'string' && values.includes(value);
+}
+
+function isLegacyTenantAuditEvent(value: unknown): value is TenantAuditEvent {
+  if (!isRecord(value)) return false;
+  if (legacyAuditEventRequiredKeys.some((key) => !hasOwn(value, key))) return false;
+
+  return (
+    isCanonicalNonEmptyString(value.eventId) &&
+    isCanonicalNonEmptyString(value.actorId) &&
+    isOneOf(ACCESS_ROLES, value.actorRole) &&
+    (value.tenantId === null || isCanonicalNonEmptyString(value.tenantId)) &&
+    isOneOf(auditScopes, value.scope) &&
+    isOneOf(ACCESS_RESOURCES, value.resource) &&
+    (!hasOwn(value, 'resourceId') ||
+      value.resourceId === null ||
+      isCanonicalNonEmptyString(value.resourceId)) &&
+    isOneOf(ACCESS_ACTIONS, value.action) &&
+    isOneOf(auditResults, value.result) &&
+    isOneOf(AUDIT_REASON_VALUES, value.reason) &&
+    isCanonicalNonEmptyString(value.occurredAt) &&
+    Number.isFinite(Date.parse(value.occurredAt)) &&
+    isOneOf(auditSources, value.source)
+  );
+}
+
+function hasOnlyAttributedAuditEventKeys(value: Record<PropertyKey, unknown>): boolean {
+  return Reflect.ownKeys(value).every((key) => attributedAuditEventAllowedKeys.has(key));
+}
+
+function isAuditInstitutionAttributionV1(
+  value: unknown,
+): value is AuditInstitutionAttributionV1 {
+  if (!isRecord(value)) return false;
+
+  if (value.institutionAttribution === 'verified') {
+    return (
+      isCanonicalNonEmptyString(value.tenantId) &&
+      isCanonicalNonEmptyString(value.institutionId)
+    );
+  }
+
+  if (value.institutionAttribution === 'not_applicable') {
+    return (
+      (value.tenantId === null || isCanonicalNonEmptyString(value.tenantId)) &&
+      value.institutionId === null
+    );
+  }
+
+  return false;
+}
+
+export function createAttributedTenantAuditEventV1(input: {
+  event: TenantAuditEvent;
+  attribution: AuditInstitutionAttributionV1;
+}): AttributedTenantAuditEventV1 | null {
+  try {
+    if (!isRecord(input)) return null;
+    if (!isLegacyTenantAuditEvent(input.event)) return null;
+    if (!isAuditInstitutionAttributionV1(input.attribution)) return null;
+    if (input.event.tenantId !== input.attribution.tenantId) return null;
+
+    const eventFields = {
+      eventId: input.event.eventId,
+      actorId: input.event.actorId,
+      actorRole: input.event.actorRole,
+      scope: input.event.scope,
+      resource: input.event.resource,
+      ...(input.event.resourceId === undefined ? {} : { resourceId: input.event.resourceId }),
+      action: input.event.action,
+      result: input.event.result,
+      reason: input.event.reason,
+      occurredAt: input.event.occurredAt,
+      source: input.event.source,
+    };
+
+    if (input.attribution.institutionAttribution === 'verified') {
+      return Object.freeze({
+        ...eventFields,
+        tenantId: input.attribution.tenantId,
+        institutionId: input.attribution.institutionId,
+        institutionAttribution: 'verified' as const,
+      });
+    }
+
+    return Object.freeze({
+      ...eventFields,
+      tenantId: input.attribution.tenantId,
+      institutionId: null,
+      institutionAttribution: 'not_applicable' as const,
+    });
+  } catch {
+    return null;
+  }
+}
+
+export function isAttributedTenantAuditEventV1(
+  value: unknown,
+): value is AttributedTenantAuditEventV1 {
+  try {
+    return (
+      isRecord(value) &&
+      hasOnlyAttributedAuditEventKeys(value) &&
+      isLegacyTenantAuditEvent(value) &&
+      hasOwn(value, 'institutionId') &&
+      hasOwn(value, 'institutionAttribution') &&
+      isAuditInstitutionAttributionV1(value)
+    );
+  } catch {
+    return false;
+  }
+}
 
 export const auditForbiddenTerms = [
   'client_secret',

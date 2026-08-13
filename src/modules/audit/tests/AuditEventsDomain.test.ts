@@ -5,8 +5,12 @@ import {
 } from '@/modules/audit/domain/audit-event-query';
 import {
   auditForbiddenTerms,
+  createAttributedTenantAuditEventV1,
   createAuditEvent,
   createDeniedAccessAuditEvent,
+  isAttributedTenantAuditEventV1,
+  type AuditInstitutionAttributionV1,
+  type TenantAuditEvent,
 } from '@/modules/audit/domain/audit-events';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 
@@ -65,6 +69,220 @@ const weComRealSendProofReasons = [
   'wecom_real_send_proof_confirmation_expired',
   'wecom_real_send_proof_completed_count_recorded',
 ] as const;
+
+function createLegacyAuditEvent(tenantId: string | null = 'demo-tenant-001') {
+  return createAuditEvent({
+    eventId: 'audit-attribution-001',
+    context: {
+      ...tenantAdminContext,
+      tenantId,
+      ...(tenantId === null ? { role: 'platform_admin' as const, scope: 'platform' as const } : {}),
+    },
+    resource: 'audit_log',
+    resourceId: 'audit-resource-001',
+    action: 'review',
+    result: 'allowed',
+    reason: 'allowed_by_policy',
+    occurredAt: '2026-08-13T08:00:00.000Z',
+  });
+}
+
+describe('Audit Owner 机构归因契约', () => {
+  it('创建字段白名单且冻结的 verified attributed event', () => {
+    const event = Object.assign(createLegacyAuditEvent(), {
+      credential: 'credential-must-not-survive',
+      requestBody: { institutionId: 'fake-institution' },
+      scopeHandle: { tenantId: 'demo-tenant-001' },
+      session: { cookie: 'secret' },
+    });
+    const attribution = {
+      institutionAttribution: 'verified',
+      tenantId: 'demo-tenant-001',
+      institutionId: 'demo-institution-001',
+      provenance: 'must-not-survive',
+    } as AuditInstitutionAttributionV1 & { provenance: string };
+
+    const attributed = createAttributedTenantAuditEventV1({ event, attribution });
+
+    expect(attributed).toEqual({
+      eventId: 'audit-attribution-001',
+      actorId: 'demo-user-admin',
+      actorRole: 'tenant_admin',
+      tenantId: 'demo-tenant-001',
+      institutionId: 'demo-institution-001',
+      institutionAttribution: 'verified',
+      scope: 'tenant',
+      resource: 'audit_log',
+      resourceId: 'audit-resource-001',
+      action: 'review',
+      result: 'allowed',
+      reason: 'allowed_by_policy',
+      occurredAt: '2026-08-13T08:00:00.000Z',
+      source: 'demo_session',
+    });
+    expect(Object.isFrozen(attributed)).toBe(true);
+    expect(isAttributedTenantAuditEventV1(attributed)).toBe(true);
+    expect(attributed).not.toHaveProperty('credential');
+    expect(attributed).not.toHaveProperty('provenance');
+    expect(attributed).not.toHaveProperty('requestBody');
+    expect(attributed).not.toHaveProperty('scopeHandle');
+    expect(attributed).not.toHaveProperty('session');
+  });
+
+  it('创建 tenant-scoped 与 global not_applicable attributed event', () => {
+    const tenantAttributed = createAttributedTenantAuditEventV1({
+      event: createLegacyAuditEvent(),
+      attribution: {
+        institutionAttribution: 'not_applicable',
+        tenantId: 'demo-tenant-001',
+        institutionId: null,
+      },
+    });
+    const globalAttributed = createAttributedTenantAuditEventV1({
+      event: createLegacyAuditEvent(null),
+      attribution: {
+        institutionAttribution: 'not_applicable',
+        tenantId: null,
+        institutionId: null,
+      },
+    });
+
+    expect(tenantAttributed).toMatchObject({
+      tenantId: 'demo-tenant-001',
+      institutionId: null,
+      institutionAttribution: 'not_applicable',
+    });
+    expect(globalAttributed).toMatchObject({
+      tenantId: null,
+      institutionId: null,
+      institutionAttribution: 'not_applicable',
+      scope: 'platform',
+    });
+    expect(isAttributedTenantAuditEventV1(tenantAttributed)).toBe(true);
+    expect(isAttributedTenantAuditEventV1(globalAttributed)).toBe(true);
+  });
+
+  it('拒绝非法归因组合、tenant mismatch、unknown 与 legacy_unattributed', () => {
+    const tenantEvent = createLegacyAuditEvent();
+    const invalidCases: Array<{
+      event?: TenantAuditEvent;
+      attribution: unknown;
+    }> = [
+      {
+        attribution: {
+          institutionAttribution: 'verified', tenantId: null, institutionId: 'inst-001',
+        },
+      },
+      {
+        attribution: {
+          institutionAttribution: 'verified', tenantId: '', institutionId: 'inst-001',
+        },
+      },
+      {
+        attribution: {
+          institutionAttribution: 'verified', tenantId: ' tenant-001 ', institutionId: 'inst-001',
+        },
+      },
+      {
+        attribution: {
+          institutionAttribution: 'verified', tenantId: 'demo-tenant-001', institutionId: null,
+        },
+      },
+      {
+        attribution: {
+          institutionAttribution: 'verified', tenantId: 'demo-tenant-001', institutionId: '',
+        },
+      },
+      {
+        attribution: {
+          institutionAttribution: 'verified', tenantId: 'other-tenant', institutionId: 'inst-001',
+        },
+      },
+      {
+        attribution: {
+          institutionAttribution: 'not_applicable',
+          tenantId: 'demo-tenant-001',
+          institutionId: 'inst-001',
+        },
+      },
+      {
+        attribution: {
+          institutionAttribution: 'not_applicable', tenantId: 'other-tenant', institutionId: null,
+        },
+      },
+      {
+        attribution: {
+          institutionAttribution: 'unknown', tenantId: 'demo-tenant-001', institutionId: null,
+        },
+      },
+      {
+        attribution: {
+          institutionAttribution: 'legacy_unattributed',
+          tenantId: 'demo-tenant-001',
+          institutionId: null,
+        },
+      },
+      { attribution: undefined },
+    ];
+
+    for (const invalidCase of invalidCases) {
+      expect(
+        createAttributedTenantAuditEventV1({
+          event: invalidCase.event ?? tenantEvent,
+          attribution: invalidCase.attribution as AuditInstitutionAttributionV1,
+        }),
+      ).toBeNull();
+    }
+  });
+
+  it('拒绝缺少 legacy event 必填字段或伪造字段的 attributed object', () => {
+    const { actorId: _actorId, ...eventWithoutActor } = createLegacyAuditEvent();
+    const valid = createAttributedTenantAuditEventV1({
+      event: createLegacyAuditEvent(),
+      attribution: {
+        institutionAttribution: 'verified',
+        tenantId: 'demo-tenant-001',
+        institutionId: 'demo-institution-001',
+      },
+    });
+
+    expect(
+      createAttributedTenantAuditEventV1({
+        event: eventWithoutActor as TenantAuditEvent,
+        attribution: {
+          institutionAttribution: 'verified',
+          tenantId: 'demo-tenant-001',
+          institutionId: 'demo-institution-001',
+        },
+      }),
+    ).toBeNull();
+    expect(isAttributedTenantAuditEventV1({ ...valid, credential: 'secret' })).toBe(false);
+    expect(isAttributedTenantAuditEventV1({ ...valid, actorId: undefined })).toBe(false);
+    expect(isAttributedTenantAuditEventV1(createLegacyAuditEvent())).toBe(false);
+    expect(
+      isAttributedTenantAuditEventV1({
+        ...valid,
+        institutionAttribution: 'legacy_unattributed',
+      }),
+    ).toBe(false);
+    expect(
+      isAttributedTenantAuditEventV1(
+        new Proxy({}, { ownKeys: () => { throw new Error('proxy trap'); } }),
+      ),
+    ).toBe(false);
+  });
+
+  it('保持 legacy TenantAuditEvent 工厂签名且不伪造机构归因', () => {
+    const legacyEvent = createLegacyAuditEvent();
+
+    expect(legacyEvent).toMatchObject({
+      tenantId: 'demo-tenant-001',
+      resource: 'audit_log',
+    });
+    expect(legacyEvent).not.toHaveProperty('institutionId');
+    expect(legacyEvent).not.toHaveProperty('institutionAttribution');
+  });
+});
 
 describe('审计事件领域模型', () => {
   it('固定真实发送 proof 审计 reason 白名单且事件仅含低敏结构字段', () => {
