@@ -7,6 +7,7 @@ import {
 } from '@/modules/institution/server/followup-message-draft-service';
 import type { FollowUpMessageDraft } from '@/modules/institution/domain/followup-message-drafts';
 import type { AccessContext } from '@/modules/security/domain/access-control';
+import { mintVerifiedInstitutionAuditAttributionForOrchestrationV1 } from '@/modules/audit/domain/audit-events';
 
 const context: AccessContext = {
   userId: 'admin-a', role: 'tenant_admin', scope: 'tenant', tenantId: 'tenant-a', institutionId: 'inst-a', source: 'demo_session',
@@ -31,6 +32,11 @@ function draft(overrides: Partial<FollowUpMessageDraft> = {}): FollowUpMessageDr
 }
 
 function dependencies() {
+  const auditAttribution = mintVerifiedInstitutionAuditAttributionForOrchestrationV1({
+    formalPair: { tenantId: 'tenant-a', institutionId: 'inst-a', observedAt: '2026-08-10T00:00:00.000Z' },
+    businessPair: { tenantId: 'tenant-a', institutionId: 'inst-a' },
+  });
+  if (!auditAttribution) throw new Error('test audit attribution unavailable');
   const commandService = {
     recordTimelineEvidence: vi.fn(async ({ attribution, event }) => ({
       kind: 'created' as const, event: { ...attribution, ...event, createdAt: event.occurredAt, updatedAt: event.occurredAt },
@@ -49,8 +55,14 @@ function dependencies() {
     })),
     rejectDraftWithTimeline: vi.fn(), markDraftSentWithTimeline: vi.fn(), updateControlledReachOutMetadata: vi.fn(),
   };
-  const auditRepository = { record: vi.fn(async () => undefined) };
+  const auditRepository = { recordAttributed: vi.fn(async () => undefined) };
   const runCareFollowUpTransaction = vi.fn(async (operation) => operation({ commandService, messageDraftCommandService, auditRepository }));
+  const runAttributedCareFollowUpTransaction = vi.fn(async (_businessPair, operation) => operation({
+    commandService,
+    messageDraftCommandService,
+    auditRepository,
+    auditAttribution,
+  }));
   const repository = {
     listFollowUpMessageTemplatesByTenant: vi.fn(async () => []),
     getFollowUpTaskPathContextByTenant: vi.fn(async () => pathContext),
@@ -59,8 +71,16 @@ function dependencies() {
     getCustomerByTenant: vi.fn(async () => ({ id: 'customer-a' })),
     recordFollowUpCustomerTimelineEvent: vi.fn(async () => { throw new Error('legacy timeline writer must not be used'); }),
     runCareFollowUpTransaction,
+    runAttributedCareFollowUpTransaction,
   };
-  return { repository, commandService, messageDraftCommandService, auditRepository, runCareFollowUpTransaction };
+  return {
+    repository,
+    commandService,
+    messageDraftCommandService,
+    auditRepository,
+    runCareFollowUpTransaction,
+    runAttributedCareFollowUpTransaction,
+  };
 }
 
 beforeEach(() => vi.clearAllMocks());
@@ -117,15 +137,38 @@ describe('follow-up message draft service P2C rewire', () => {
       expectedUpdatedAt: '2026-08-10T00:00:00.000Z',
     }));
     expect(deps.commandService.recordTimelineEvidence).toHaveBeenCalled();
-    expect(deps.auditRepository.record).toHaveBeenCalled();
-    expect(deps.runCareFollowUpTransaction).toHaveBeenCalledTimes(1);
+    expect(deps.auditRepository.recordAttributed).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-a', institutionId: 'inst-a', institutionAttribution: 'verified',
+    }));
+    expect(deps.runAttributedCareFollowUpTransaction).toHaveBeenCalledWith(
+      { tenantId: 'tenant-a', institutionId: 'inst-a' },
+      expect.any(Function),
+    );
+    expect(deps.runCareFollowUpTransaction).not.toHaveBeenCalled();
     expect(deps.repository.recordFollowUpCustomerTimelineEvent).not.toHaveBeenCalled();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it('fails closed before the transaction when the loaded draft business pair mismatches formal context', async () => {
+    const deps = dependencies();
+    deps.repository.getFollowUpMessageDraftByTenant.mockResolvedValueOnce(
+      draft({ institutionId: 'inst-b' }),
+    );
+
+    await expect(approveMessageDraft({
+      context,
+      draftId: 'draft-a',
+      tenantBusinessRepository: deps.repository as never,
+      occurredAt: '2026-08-10T00:10:00.000Z',
+    })).resolves.toEqual({ kind: 'not_found' });
+
+    expect(deps.runAttributedCareFollowUpTransaction).not.toHaveBeenCalled();
+    expect(deps.auditRepository.recordAttributed).not.toHaveBeenCalled();
+  });
+
   it('Audit failure escapes the transaction callback so approval bundle can roll back', async () => {
     const deps = dependencies();
-    deps.auditRepository.record.mockRejectedValueOnce(new Error('audit unavailable'));
+    deps.auditRepository.recordAttributed.mockRejectedValueOnce(new Error('audit unavailable'));
     await expect(approveMessageDraft({
       context, draftId: 'draft-a', tenantBusinessRepository: deps.repository as never,
       occurredAt: '2026-08-10T00:10:00.000Z',

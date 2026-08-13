@@ -1,4 +1,8 @@
-import { createAuditEvent } from '@/modules/audit/domain/audit-events';
+import {
+  createAuditEvent,
+  createVerifiedInstitutionAttributedTenantAuditEventV1,
+  type VerifiedInstitutionAuditAttributionHandleV1,
+} from '@/modules/audit/domain/audit-events';
 import type { AuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import {
   createDefaultWeComOfficialDryRunConfigInput,
@@ -67,7 +71,8 @@ export async function evaluateAndPersistWeComDryRunSnapshot(input: {
   createId: () => string;
   repositories: {
     safetyRepository: TrustedReachOutSafetyRepository;
-    auditRepository: Pick<AuditEventRepository, 'record'>;
+    auditRepository: Pick<AuditEventRepository, 'recordAttributed'>;
+    auditAttribution: VerifiedInstitutionAuditAttributionHandleV1;
   };
 }) {
   const derived = deriveWeComDryRunServerPreflight(input);
@@ -117,16 +122,21 @@ export async function evaluateAndPersistWeComDryRunSnapshot(input: {
   });
   if (!snapshot) throw new Error('dry_run_snapshot_stale_without_current');
   const finalReady = snapshot.configStatus === 'dry_run_ready';
-  await input.repositories.auditRepository.record(createAuditEvent({
-    eventId: input.createId(),
-    context: input.context,
-    resource: 'real_channel',
-    action: 'review',
-    result: finalReady ? 'transitioned' : 'denied',
-    reason: finalReady
-      ? 'wecom_reachout_dry_run_snapshot_ready'
-      : 'wecom_reachout_dry_run_snapshot_blocked',
-    occurredAt: input.occurredAt,
-  }));
+  const auditEvent = createVerifiedInstitutionAttributedTenantAuditEventV1({
+    event: createAuditEvent({
+      eventId: input.createId(),
+      context: input.context,
+      resource: 'real_channel',
+      action: 'review',
+      result: finalReady ? 'transitioned' : 'denied',
+      reason: finalReady
+        ? 'wecom_reachout_dry_run_snapshot_ready'
+        : 'wecom_reachout_dry_run_snapshot_blocked',
+      occurredAt: input.occurredAt,
+    }),
+    attribution: input.repositories.auditAttribution,
+  });
+  if (!auditEvent) throw new Error('invalid_wecom_dry_run_audit_attribution');
+  await input.repositories.auditRepository.recordAttributed(auditEvent);
   return { config, snapshot };
 }

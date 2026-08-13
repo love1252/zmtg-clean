@@ -1,5 +1,12 @@
-import type { AuditReason, TenantAuditEvent } from '@/modules/audit/domain/audit-events';
-import { createAuditEvent } from '@/modules/audit/domain/audit-events';
+import type {
+  AuditReason,
+  AuditResult,
+  VerifiedInstitutionAuditAttributionHandleV1,
+} from '@/modules/audit/domain/audit-events';
+import {
+  createAuditEvent,
+  createVerifiedInstitutionAttributedTenantAuditEventV1,
+} from '@/modules/audit/domain/audit-events';
 import type { AuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import type { CustomerRecordSummary } from '@/modules/institution/domain/customer-records';
 import {
@@ -52,7 +59,8 @@ type MappingRepositories = {
 };
 
 type MappingTransactionRepositories = MappingRepositories & {
-  auditRepository: Pick<AuditEventRepository, 'record'>;
+  auditRepository: Pick<AuditEventRepository, 'recordAttributed'>;
+  auditAttribution: VerifiedInstitutionAuditAttributionHandleV1;
 };
 
 function toCandidate(customer: CustomerRecordSummary): WeComCustomerMappingCandidate {
@@ -70,20 +78,26 @@ function createMappingAudit(input: {
   eventId: string;
   context: AccessContext;
   resourceId: string | null;
-  result: TenantAuditEvent['result'];
+  result: AuditResult;
   reason: AuditReason;
   occurredAt: string;
+  auditAttribution: VerifiedInstitutionAuditAttributionHandleV1;
 }) {
-  return createAuditEvent({
-    eventId: input.eventId,
-    context: input.context,
-    resource: 'customer',
-    resourceId: input.resourceId,
-    action: 'update',
-    result: input.result,
-    reason: input.reason,
-    occurredAt: input.occurredAt,
+  const event = createVerifiedInstitutionAttributedTenantAuditEventV1({
+    event: createAuditEvent({
+      eventId: input.eventId,
+      context: input.context,
+      resource: 'customer',
+      resourceId: input.resourceId,
+      action: 'update',
+      result: input.result,
+      reason: input.reason,
+      occurredAt: input.occurredAt,
+    }),
+    attribution: input.auditAttribution,
   });
+  if (!event) throw new Error('invalid_wecom_mapping_audit_attribution');
+  return event;
 }
 
 function reasonForStatus(status: PersistedWeComCustomerMappingStatus): AuditReason {
@@ -150,7 +164,7 @@ export async function writeWeComCustomerMapping(input: {
     id: input.customerId,
   });
   if (!customer) {
-    await input.repositories.auditRepository.record(
+    await input.repositories.auditRepository.recordAttributed(
       createMappingAudit({
         eventId: input.createId(),
         context: input.context,
@@ -158,6 +172,7 @@ export async function writeWeComCustomerMapping(input: {
         result: 'denied',
         reason: 'wecom_customer_mapping_customer_not_found',
         occurredAt: input.occurredAt,
+        auditAttribution: input.repositories.auditAttribution,
       }),
     );
     return { kind: 'customer_not_found' };
@@ -176,7 +191,7 @@ export async function writeWeComCustomerMapping(input: {
   });
 
   if (decision.kind === 'conflict' || decision.kind === 'invalid_transition') {
-    await input.repositories.auditRepository.record(
+    await input.repositories.auditRepository.recordAttributed(
       createMappingAudit({
         eventId: input.createId(),
         context: input.context,
@@ -187,6 +202,7 @@ export async function writeWeComCustomerMapping(input: {
             ? 'wecom_customer_mapping_conflict_blocked'
             : 'wecom_customer_mapping_invalid_transition',
         occurredAt: input.occurredAt,
+        auditAttribution: input.repositories.auditAttribution,
       }),
     );
     return { kind: decision.kind };
@@ -218,7 +234,7 @@ export async function writeWeComCustomerMapping(input: {
       });
 
   if (!state) {
-    await input.repositories.auditRepository.record(
+    await input.repositories.auditRepository.recordAttributed(
       createMappingAudit({
         eventId: input.createId(),
         context: input.context,
@@ -226,12 +242,13 @@ export async function writeWeComCustomerMapping(input: {
         result: 'denied',
         reason: 'wecom_customer_mapping_conflict_blocked',
         occurredAt: input.occurredAt,
+        auditAttribution: input.repositories.auditAttribution,
       }),
     );
     return { kind: 'conflict' };
   }
 
-  await input.repositories.auditRepository.record(
+  await input.repositories.auditRepository.recordAttributed(
     createMappingAudit({
       eventId: input.createId(),
       context: input.context,
@@ -239,6 +256,7 @@ export async function writeWeComCustomerMapping(input: {
       result: 'transitioned',
       reason: reasonForStatus(state.status),
       occurredAt: input.occurredAt,
+      auditAttribution: input.repositories.auditAttribution,
     }),
   );
   return { kind: 'updated', state };

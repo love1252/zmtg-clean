@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
+import {
+  mintVerifiedInstitutionAuditAttributionForOrchestrationV1,
+  type AttributedTenantAuditEventV1,
+} from '@/modules/audit/domain/audit-events';
 import type { CustomerRecordSummary } from '@/modules/institution/domain/customer-records';
 import type {
   CreateWeComCustomerMappingStateInput,
@@ -21,6 +24,11 @@ const context: AccessContext = {
   institutionId: 'inst-a',
   source: 'demo_session',
 };
+const auditAttribution = mintVerifiedInstitutionAuditAttributionForOrchestrationV1({
+  formalPair: { tenantId: 'tenant-a', institutionId: 'inst-a', observedAt: '2026-07-10T08:00:00.000Z' },
+  businessPair: { tenantId: 'tenant-a', institutionId: 'inst-a' },
+})!;
+if (!auditAttribution) throw new Error('test audit attribution unavailable');
 
 function customer(id: string): CustomerRecordSummary {
   return {
@@ -84,8 +92,9 @@ function writeRepositories(current: WeComCustomerMappingState | null = null) {
       >(async (input) => state(input.status, input.customerId)),
     },
     auditRepository: {
-      record: vi.fn<(event: TenantAuditEvent) => Promise<void>>(async () => undefined),
+      recordAttributed: vi.fn<(event: AttributedTenantAuditEventV1) => Promise<void>>(async () => undefined),
     },
+    auditAttribution,
   };
 }
 
@@ -170,8 +179,9 @@ describe('WeComCustomerMappingService', () => {
     expect(repositories.mappingRepository.createIfAbsent).toHaveBeenCalledWith(
       expect.objectContaining({ status: expectedStatus, customerId: 'customer-a' }),
     );
-    expect(repositories.auditRepository.record).toHaveBeenCalledWith(
+    expect(repositories.auditRepository.recordAttributed).toHaveBeenCalledWith(
       expect.objectContaining({
+        institutionAttribution: 'verified',
         resource: 'customer',
         resourceId: 'customer-a',
         result: 'transitioned',
@@ -202,7 +212,7 @@ describe('WeComCustomerMappingService', () => {
         status: 'revoked',
       }),
     );
-    expect(repositories.auditRepository.record).toHaveBeenCalledWith(
+    expect(repositories.auditRepository.recordAttributed).toHaveBeenCalledWith(
       expect.objectContaining({ reason: 'wecom_customer_mapping_revoked' }),
     );
   });
@@ -224,7 +234,7 @@ describe('WeComCustomerMappingService', () => {
     expect(result.kind).toBe('idempotent');
     expect(repositories.mappingRepository.createIfAbsent).not.toHaveBeenCalled();
     expect(repositories.mappingRepository.updateWhenCurrentStatus).not.toHaveBeenCalled();
-    expect(repositories.auditRepository.record).not.toHaveBeenCalled();
+    expect(repositories.auditRepository.recordAttributed).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -246,7 +256,7 @@ describe('WeComCustomerMappingService', () => {
 
     expect(result.kind).toBe(expectedKind);
     expect(repositories.mappingRepository.updateWhenCurrentStatus).not.toHaveBeenCalled();
-    expect(repositories.auditRepository.record).toHaveBeenCalledWith(
+    expect(repositories.auditRepository.recordAttributed).toHaveBeenCalledWith(
       expect.objectContaining({ resourceId: customerId, result: 'denied', reason: expectedReason }),
     );
   });
@@ -267,7 +277,7 @@ describe('WeComCustomerMappingService', () => {
     });
 
     expect(result).toEqual({ kind: 'conflict' });
-    expect(repositories.auditRepository.record).toHaveBeenCalledWith(
+    expect(repositories.auditRepository.recordAttributed).toHaveBeenCalledWith(
       expect.objectContaining({ reason: 'wecom_customer_mapping_conflict_blocked' }),
     );
   });
@@ -295,7 +305,7 @@ describe('WeComCustomerMappingService', () => {
         expectedStatus: 'revoked',
       }),
     );
-    expect(repositories.auditRepository.record).toHaveBeenCalledWith(
+    expect(repositories.auditRepository.recordAttributed).toHaveBeenCalledWith(
       expect.objectContaining({ reason: 'wecom_customer_mapping_conflict_blocked' }),
     );
   });
@@ -317,7 +327,7 @@ describe('WeComCustomerMappingService', () => {
 
     expect(result).toEqual({ kind: 'conflict' });
     expect(repositories.mappingRepository.updateWhenCurrentStatus).not.toHaveBeenCalled();
-    expect(repositories.auditRepository.record).toHaveBeenCalledWith(
+    expect(repositories.auditRepository.recordAttributed).toHaveBeenCalledWith(
       expect.objectContaining({ reason: 'wecom_customer_mapping_conflict_blocked' }),
     );
   });
@@ -339,13 +349,13 @@ describe('WeComCustomerMappingService', () => {
 
     expect(result).toEqual({ kind: 'customer_not_found' });
     expect(repositories.mappingRepository.findByScope).not.toHaveBeenCalled();
-    expect(repositories.auditRepository.record).toHaveBeenCalledWith(
+    expect(repositories.auditRepository.recordAttributed).toHaveBeenCalledWith(
       expect.objectContaining({
         resource: 'customer',
         reason: 'wecom_customer_mapping_customer_not_found',
       }),
     );
-    const [audit] = repositories.auditRepository.record.mock.calls[0];
+    const [audit] = repositories.auditRepository.recordAttributed.mock.calls[0];
     expect(audit).not.toHaveProperty('resourceId');
   });
 });

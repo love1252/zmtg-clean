@@ -11,10 +11,16 @@ import {
   WeComControlledReachOutTransactionAbort,
 } from '@/modules/institution/server/wecom-controlled-reachout-service';
 import type { AccessContext } from '@/modules/security/domain/access-control';
+import { mintVerifiedInstitutionAuditAttributionForOrchestrationV1 } from '@/modules/audit/domain/audit-events';
 
 const context: AccessContext = {
   userId: 'admin-a', role: 'tenant_admin', scope: 'tenant', tenantId: 'tenant-a', institutionId: 'inst-a', source: 'demo_session',
 };
+const auditAttribution = mintVerifiedInstitutionAuditAttributionForOrchestrationV1({
+  formalPair: { tenantId: 'tenant-a', institutionId: 'inst-a', observedAt: '2026-07-11T08:00:00.000Z' },
+  businessPair: { tenantId: 'tenant-a', institutionId: 'inst-a' },
+})!;
+if (!auditAttribution) throw new Error('test audit attribution unavailable');
 
 function draft(overrides: Partial<FollowUpMessageDraft> = {}): FollowUpMessageDraft {
   return {
@@ -120,9 +126,10 @@ function dependencies() {
     findDryRunSnapshot: vi.fn(async (): Promise<ReturnType<typeof dryRun> | null> => dryRun()),
     findDryRunSnapshotForUpdate: vi.fn(async (): Promise<ReturnType<typeof dryRun> | null> => dryRun()),
   };
-  const auditRepository = { record: vi.fn(async () => undefined) };
+  const auditRepository = { recordAttributed: vi.fn(async () => undefined) };
   return {
     repository, careMessageDraftCommandService, mappingRepository, safetyRepository, auditRepository,
+    auditAttribution,
     occurredAt: '2026-07-11T09:00:00.000Z', createId: () => 'generated-low-sensitive-id',
   };
 }
@@ -211,7 +218,8 @@ describe('weComControlledReachOut service', () => {
     expect(consentLockOrder).toBeLessThan(frequencyOrder);
     expect(frequencyOrder).toBeLessThan(snapshotLockOrder);
     expect(snapshotLockOrder).toBeLessThan(draftCasOrder);
-    expect(deps.auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+    expect(deps.auditRepository.recordAttributed).toHaveBeenCalledWith(expect.objectContaining({
+      institutionAttribution: 'verified',
       reason: 'wecom_reachout_frequency_reserved',
     }));
     expect(originalDelivery).toEqual(deliveryBeforePost);
@@ -277,7 +285,7 @@ describe('weComControlledReachOut service', () => {
 
     expect(result).toMatchObject({ kind: 'ready', idempotent: true });
     expect(deps.safetyRepository.createFrequencyIfAbsent).not.toHaveBeenCalled();
-    expect(deps.auditRepository.record).not.toHaveBeenCalled();
+    expect(deps.auditRepository.recordAttributed).not.toHaveBeenCalled();
     expect(deps.careMessageDraftCommandService.updateControlledReachOutMetadata).not.toHaveBeenCalled();
   });
 
@@ -358,7 +366,7 @@ describe('weComControlledReachOut service', () => {
 
   it('frequency audit 失败向上抛出，不能继续写 ready_no_send', async () => {
     const deps = dependencies();
-    deps.auditRepository.record.mockRejectedValue(new Error('audit unavailable'));
+    deps.auditRepository.recordAttributed.mockRejectedValue(new Error('audit unavailable'));
 
     await expect(prepareWeComControlledReachOut({ context, draftId: 'draft-a', ...deps }))
       .rejects.toThrow('audit unavailable');

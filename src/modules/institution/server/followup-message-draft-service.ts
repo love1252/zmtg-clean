@@ -23,7 +23,11 @@ import {
 import { recordMessageDeliveryTimelineEvents } from '@/modules/institution/server/followup-customer-timeline-service';
 import type { TenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
 import type { AuditEventRepository } from '@/modules/audit/server/audit-event-repository';
-import { createAuditEvent } from '@/modules/audit/domain/audit-events';
+import {
+  createAuditEvent,
+  createVerifiedInstitutionAttributedTenantAuditEventV1,
+  type VerifiedInstitutionAuditAttributionHandleV1,
+} from '@/modules/audit/domain/audit-events';
 
 export type FollowUpMessageForbiddenReason =
   | Extract<AccessDecision, { allowed: false }>['reason']
@@ -38,6 +42,7 @@ type ServiceRepository = Pick<
   | 'getFollowUpMessageDraftByTenant'
   | 'recordFollowUpCustomerTimelineEvent'
   | 'runCareFollowUpTransaction'
+  | 'runAttributedCareFollowUpTransaction'
 >;
 
 export type ListFollowUpMessageTemplatesResult =
@@ -87,7 +92,8 @@ function asLegacyDraft(draft: unknown): FollowUpMessageDraft { return draft as F
 
 async function recordDeliveryAudit(input: {
   context: AccessContext;
-  auditRepository: Pick<AuditEventRepository, 'record'>;
+  auditRepository: Pick<AuditEventRepository, 'recordAttributed'>;
+  auditAttribution: VerifiedInstitutionAuditAttributionHandleV1;
   deliveryId: string;
   reason:
     | ReturnType<typeof messageDeliveryStatusAuditReason>
@@ -97,10 +103,15 @@ async function recordDeliveryAudit(input: {
     | 'message_delivery_created';
   occurredAt: string;
 }) {
-  await input.auditRepository.record(createAuditEvent({
+  const event = createVerifiedInstitutionAttributedTenantAuditEventV1({
+    event: createAuditEvent({
     eventId: globalThis.crypto.randomUUID(), context: input.context, resource: 'follow_up', action: 'create',
     result: 'allowed', reason: input.reason, occurredAt: input.occurredAt, resourceId: input.deliveryId,
-  }));
+    }),
+    attribution: input.auditAttribution,
+  });
+  if (!event) throw new Error('invalid_followup_delivery_audit_attribution');
+  await input.auditRepository.recordAttributed(event);
 }
 
 async function createDeliveryEvidenceInsideCareTransaction(input: {
@@ -108,7 +119,8 @@ async function createDeliveryEvidenceInsideCareTransaction(input: {
   draft: FollowUpMessageDraft;
   tenantBusinessRepository: ServiceRepository;
   careTimelineEvidencePort: NonNullable<Parameters<typeof recordMessageDeliveryTimelineEvents>[0]['careTimelineEvidencePort']>;
-  auditRepository: Pick<AuditEventRepository, 'record'>;
+  auditRepository: Pick<AuditEventRepository, 'recordAttributed'>;
+  auditAttribution: VerifiedInstitutionAuditAttributionHandleV1;
   occurredAt: string;
   deliveryOptions?: CreateMessageDeliveryOptions;
 }) {
@@ -127,15 +139,15 @@ async function createDeliveryEvidenceInsideCareTransaction(input: {
     delivery: deliveryResult.delivery,
     occurredAt: input.occurredAt,
   });
-  await recordDeliveryAudit({ context: input.context, auditRepository: input.auditRepository, occurredAt: input.occurredAt, deliveryId: deliveryResult.delivery.id, reason: 'message_delivery_created' });
-  await recordDeliveryAudit({ context: input.context, auditRepository: input.auditRepository, occurredAt: input.occurredAt, deliveryId: deliveryResult.delivery.id, reason: messageDeliveryContactSafetyAuditReason(deliveryResult.delivery) });
+  await recordDeliveryAudit({ context: input.context, auditRepository: input.auditRepository, auditAttribution: input.auditAttribution, occurredAt: input.occurredAt, deliveryId: deliveryResult.delivery.id, reason: 'message_delivery_created' });
+  await recordDeliveryAudit({ context: input.context, auditRepository: input.auditRepository, auditAttribution: input.auditAttribution, occurredAt: input.occurredAt, deliveryId: deliveryResult.delivery.id, reason: messageDeliveryContactSafetyAuditReason(deliveryResult.delivery) });
   const weComReason = messageDeliveryWeComMockReachOutAuditReason(deliveryResult.delivery);
   if (weComReason) {
-    await recordDeliveryAudit({ context: input.context, auditRepository: input.auditRepository, occurredAt: input.occurredAt, deliveryId: deliveryResult.delivery.id, reason: 'wecom_mock_reachout_created' });
-    await recordDeliveryAudit({ context: input.context, auditRepository: input.auditRepository, occurredAt: input.occurredAt, deliveryId: deliveryResult.delivery.id, reason: weComReason });
+    await recordDeliveryAudit({ context: input.context, auditRepository: input.auditRepository, auditAttribution: input.auditAttribution, occurredAt: input.occurredAt, deliveryId: deliveryResult.delivery.id, reason: 'wecom_mock_reachout_created' });
+    await recordDeliveryAudit({ context: input.context, auditRepository: input.auditRepository, auditAttribution: input.auditAttribution, occurredAt: input.occurredAt, deliveryId: deliveryResult.delivery.id, reason: weComReason });
   }
   if (deliveryResult.delivery.status !== 'pending') {
-    await recordDeliveryAudit({ context: input.context, auditRepository: input.auditRepository, occurredAt: input.occurredAt, deliveryId: deliveryResult.delivery.id, reason: messageDeliveryStatusAuditReason(deliveryResult.delivery.status) });
+    await recordDeliveryAudit({ context: input.context, auditRepository: input.auditRepository, auditAttribution: input.auditAttribution, occurredAt: input.occurredAt, deliveryId: deliveryResult.delivery.id, reason: messageDeliveryStatusAuditReason(deliveryResult.delivery.status) });
   }
   return mapMessageDeliveryToDto(deliveryResult.delivery);
 }
@@ -252,7 +264,7 @@ export async function approveMessageDraft(input: {
   context: AccessContext;
   draftId: string;
   tenantBusinessRepository: ServiceRepository;
-  auditRepository?: Pick<AuditEventRepository, 'record'>;
+  auditRepository?: Pick<AuditEventRepository, 'recordAttributed'>;
   occurredAt: string;
   deliveryOptions?: CreateMessageDeliveryOptions;
 }): Promise<UpdateFollowUpMessageDraftResult> {
@@ -275,7 +287,7 @@ async function transitionMessageDraft(input: {
   tenantBusinessRepository: ServiceRepository;
   occurredAt: string;
   operation: 'approve' | 'reject' | 'mark_sent';
-  auditRepository?: Pick<AuditEventRepository, 'record'>;
+  auditRepository?: Pick<AuditEventRepository, 'recordAttributed'>;
   deliveryOptions?: CreateMessageDeliveryOptions;
 }): Promise<UpdateFollowUpMessageDraftResult> {
   const decision = canUseFollowUpMessage(input.context, 'update');
@@ -287,32 +299,41 @@ async function transitionMessageDraft(input: {
     tenantId: scopedContext.tenantId, institutionId: scopedContext.institutionId, draftId: input.draftId,
   });
   if (!current) return { kind: 'not_found' };
+  if (
+    current.tenantId !== scopedContext.tenantId ||
+    current.institutionId !== scopedContext.institutionId
+  ) {
+    return { kind: 'not_found' };
+  }
   try {
-    return await input.tenantBusinessRepository.runCareFollowUpTransaction(async ({
-      messageDraftCommandService, commandService, auditRepository,
-    }) => {
-      const command = {
-        attribution: { tenantId: scopedContext.tenantId, institutionId: scopedContext.institutionId },
-        actorId: scopedContext.userId, actorRole: scopedContext.role, draftId: input.draftId,
-        expectedUpdatedAt: current.updatedAt, occurredAt: input.occurredAt,
-      };
-      const result = input.operation === 'approve'
-        ? await messageDraftCommandService.approveDraftWithTimeline(command)
-        : input.operation === 'reject'
-          ? await messageDraftCommandService.rejectDraftWithTimeline(command)
-          : await messageDraftCommandService.markDraftSentWithTimeline(command);
-      if (result.kind === 'not_found_or_not_owned') return { kind: 'not_found' as const };
-      if (result.kind === 'conflict') return result;
-      const draft = asLegacyDraft(result.draft);
-      const draftDto = mapFollowUpMessageDraftToDto(draft);
-      if (input.operation !== 'approve') return { kind: 'updated' as const, draft: draftDto };
-      const delivery = await createDeliveryEvidenceInsideCareTransaction({
-        context: scopedContext, draft, tenantBusinessRepository: input.tenantBusinessRepository,
-        careTimelineEvidencePort: commandService, auditRepository, occurredAt: input.occurredAt,
-        deliveryOptions: input.deliveryOptions,
-      });
-      return { kind: 'updated_with_delivery' as const, draft: draftDto, delivery, deduped: false };
-    });
+    return await input.tenantBusinessRepository.runAttributedCareFollowUpTransaction(
+      { tenantId: current.tenantId, institutionId: current.institutionId },
+      async ({
+        messageDraftCommandService, commandService, auditRepository, auditAttribution,
+      }) => {
+        const command = {
+          attribution: { tenantId: scopedContext.tenantId, institutionId: scopedContext.institutionId },
+          actorId: scopedContext.userId, actorRole: scopedContext.role, draftId: input.draftId,
+          expectedUpdatedAt: current.updatedAt, occurredAt: input.occurredAt,
+        };
+        const result = input.operation === 'approve'
+          ? await messageDraftCommandService.approveDraftWithTimeline(command)
+          : input.operation === 'reject'
+            ? await messageDraftCommandService.rejectDraftWithTimeline(command)
+            : await messageDraftCommandService.markDraftSentWithTimeline(command);
+        if (result.kind === 'not_found_or_not_owned') return { kind: 'not_found' as const };
+        if (result.kind === 'conflict') return result;
+        const draft = asLegacyDraft(result.draft);
+        const draftDto = mapFollowUpMessageDraftToDto(draft);
+        if (input.operation !== 'approve') return { kind: 'updated' as const, draft: draftDto };
+        const delivery = await createDeliveryEvidenceInsideCareTransaction({
+          context: scopedContext, draft, tenantBusinessRepository: input.tenantBusinessRepository,
+          careTimelineEvidencePort: commandService, auditRepository, auditAttribution, occurredAt: input.occurredAt,
+          deliveryOptions: input.deliveryOptions,
+        });
+        return { kind: 'updated_with_delivery' as const, draft: draftDto, delivery, deduped: false };
+      },
+    );
   } catch (error) {
     if (error instanceof FollowUpMessageApprovalBundleConflict) {
       return { kind: 'conflict', resourceId: error.resourceId, reason: error.reason };

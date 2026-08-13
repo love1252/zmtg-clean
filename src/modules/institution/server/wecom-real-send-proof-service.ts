@@ -1,4 +1,7 @@
-import { createAuditEvent } from '@/modules/audit/domain/audit-events';
+import {
+  createAuditEvent,
+  createVerifiedInstitutionAttributedTenantAuditEventV1,
+} from '@/modules/audit/domain/audit-events';
 import {
   createWeComRealSendConfirmationToken,
   createWeComRealSendProofDigest,
@@ -60,7 +63,9 @@ function validateContext(context: AccessContext):
   return { ok: true, context: context as RealSendProofContext };
 }
 
-function audit(input: {
+function audit(
+  repository: Pick<WeComRealSendProofTransactionRepository, 'auditAttribution'>,
+  input: {
   context: RealSendProofContext;
   createId: () => string;
   operationRef: string;
@@ -81,17 +86,34 @@ function audit(input: {
     | 'wecom_real_send_proof_confirmation_consumed'
     | 'wecom_real_send_proof_confirmation_expired'
     | 'wecom_real_send_proof_completed_count_recorded';
-}) {
-  return createAuditEvent({
-    eventId: input.createId(),
-    context: input.context,
-    resource: 'real_channel',
-    resourceId: input.operationRef,
-    action: 'execute_once',
-    result: input.result,
-    reason: input.reason,
-    occurredAt: input.occurredAt,
+  },
+) {
+  const event = createVerifiedInstitutionAttributedTenantAuditEventV1({
+    event: createAuditEvent({
+      eventId: input.createId(),
+      context: input.context,
+      resource: 'real_channel',
+      resourceId: input.operationRef,
+      action: 'execute_once',
+      result: input.result,
+      reason: input.reason,
+      occurredAt: input.occurredAt,
+    }),
+    attribution: repository.auditAttribution,
   });
+  if (!event) throw new Error('invalid_wecom_real_send_audit_attribution');
+  return event;
+}
+
+function runInAttributedTransaction<T>(
+  repository: WeComRealSendProofRepository,
+  context: RealSendProofContext,
+  operation: (repository: WeComRealSendProofTransactionRepository) => Promise<T>,
+): Promise<T> {
+  return repository.runInTransaction(
+    { tenantId: context.tenantId, institutionId: context.institutionId },
+    operation,
+  );
 }
 
 async function evaluateIssueGates(input: {
@@ -219,7 +241,7 @@ export async function issueRealSendProofOperation(input: {
   const context = validateContext(input.context);
   if (!context.ok) return { kind: 'failed', reason: context.reason };
 
-  return input.repository.runInTransaction(async (repository) => {
+  return runInAttributedTransaction(input.repository, context.context, async (repository) => {
     const gates = await evaluateIssueGates({
       context: context.context,
       draftId: input.draftId,
@@ -228,7 +250,7 @@ export async function issueRealSendProofOperation(input: {
       occurredAt: input.occurredAt,
     });
     if (!gates.ok) {
-      await repository.recordAudit(audit({
+      await repository.recordAudit(audit(repository, {
         context: context.context,
         createId: input.createId,
         operationRef: `draft-${input.draftId}`.slice(0, 96),
@@ -277,7 +299,7 @@ export async function issueRealSendProofOperation(input: {
     });
     if (!created) return { kind: 'failed' as const, reason: 'duplicate_operation' as const };
 
-    await repository.recordAudit(audit({
+    await repository.recordAudit(audit(repository, {
       context: context.context,
       createId: input.createId,
       operationRef,
@@ -307,7 +329,7 @@ export async function consumeRealSendProofConfirmation(input: {
   const context = validateContext(input.context);
   if (!context.ok) return { kind: 'failed', reason: context.reason };
 
-  return input.repository.runInTransaction(async (repository) => {
+  return runInAttributedTransaction(input.repository, context.context, async (repository) => {
     const before = await repository.lockOperation({
       tenantId: context.context.tenantId,
       institutionId: context.context.institutionId,
@@ -327,7 +349,7 @@ export async function consumeRealSendProofConfirmation(input: {
       return { kind: 'failed' as const, reason: 'confirmation_invalid' as const };
     }
     if (expiresAt <= occurredAt) {
-      await repository.recordAudit(audit({
+      await repository.recordAudit(audit(repository, {
         context: context.context,
         createId: input.createId,
         operationRef: input.operationRef,
@@ -349,7 +371,7 @@ export async function consumeRealSendProofConfirmation(input: {
       occurredAt: input.occurredAt,
     });
     if (!gates.ok) {
-      await repository.recordAudit(audit({
+      await repository.recordAudit(audit(repository, {
         context: context.context,
         createId: input.createId,
         operationRef: input.operationRef,
@@ -360,7 +382,7 @@ export async function consumeRealSendProofConfirmation(input: {
       return { kind: 'failed' as const, reason: gates.reason };
     }
     if (!operationMatchesCurrentProof(before, gates)) {
-      await repository.recordAudit(audit({
+      await repository.recordAudit(audit(repository, {
         context: context.context,
         createId: input.createId,
         operationRef: input.operationRef,
@@ -386,7 +408,7 @@ export async function consumeRealSendProofConfirmation(input: {
       now: new Date(input.occurredAt),
     });
     if (!consumed) return { kind: 'failed' as const, reason: 'confirmation_invalid' as const };
-    await repository.recordAudit(audit({
+    await repository.recordAudit(audit(repository, {
       context: context.context,
       createId: input.createId,
       operationRef: input.operationRef,
@@ -394,7 +416,7 @@ export async function consumeRealSendProofConfirmation(input: {
       result: 'transitioned',
       reason: 'wecom_real_send_proof_confirmation_consumed',
     }));
-    await repository.recordAudit(audit({
+    await repository.recordAudit(audit(repository, {
       context: context.context,
       createId: input.createId,
       operationRef: input.operationRef,
@@ -415,7 +437,7 @@ export async function abortRealSendProofOperation(input: {
 }): Promise<{ kind: 'aborted'; operationRef: string } | ServiceFailure> {
   const context = validateContext(input.context);
   if (!context.ok) return { kind: 'failed', reason: context.reason };
-  return input.repository.runInTransaction(async (repository) => {
+  return runInAttributedTransaction(input.repository, context.context, async (repository) => {
     const operation = await repository.abortOperation({
       operationRef: input.operationRef,
       tenantId: context.context.tenantId,
@@ -424,7 +446,7 @@ export async function abortRealSendProofOperation(input: {
       now: new Date(input.occurredAt),
     });
     if (!operation) return { kind: 'failed' as const, reason: 'operation_not_requested' as const };
-    await repository.recordAudit(audit({
+    await repository.recordAudit(audit(repository, {
       context: context.context,
       createId: input.createId,
       operationRef: input.operationRef,
@@ -448,7 +470,7 @@ export async function finalizeRealSendProofSuccess(input: {
   if (!context.ok) return { kind: 'failed', reason: context.reason };
   if (input.providerOutcome !== 'accepted') return { kind: 'failed', reason: 'provider_outcome_not_accepted' };
 
-  return input.repository.runInTransaction(async (repository) => {
+  return runInAttributedTransaction(input.repository, context.context, async (repository) => {
     const operation = await repository.lockOperation({
       tenantId: context.context.tenantId,
       institutionId: context.context.institutionId,
@@ -481,7 +503,7 @@ export async function finalizeRealSendProofSuccess(input: {
     });
     if (!succeeded) throw new WeComRealSendProofTransactionAbort('conflict');
 
-    await repository.recordAudit(audit({
+    await repository.recordAudit(audit(repository, {
       context: context.context,
       createId: input.createId,
       operationRef: input.operationRef,
@@ -489,7 +511,7 @@ export async function finalizeRealSendProofSuccess(input: {
       result: 'transitioned',
       reason: 'wecom_real_send_proof_completed_count_recorded',
     }));
-    await repository.recordAudit(audit({
+    await repository.recordAudit(audit(repository, {
       context: context.context,
       createId: input.createId,
       operationRef: input.operationRef,
@@ -517,7 +539,7 @@ async function finalizeNonSuccess(input: {
     : input.providerResultCategory === 'rejected';
   if (!validCategory) return { kind: 'failed' as const, reason: 'conflict' as const };
 
-  return input.repository.runInTransaction(async (repository) => {
+  return runInAttributedTransaction(input.repository, context.context, async (repository) => {
     const operation = await repository.finalizeNonSuccess({
       operationRef: input.operationRef,
       tenantId: context.context.tenantId,
@@ -528,7 +550,7 @@ async function finalizeNonSuccess(input: {
       now: new Date(input.occurredAt),
     });
     if (!operation) return { kind: 'failed' as const, reason: 'invalid_transition' as const };
-    await repository.recordAudit(audit({
+    await repository.recordAudit(audit(repository, {
       context: context.context,
       createId: input.createId,
       operationRef: input.operationRef,

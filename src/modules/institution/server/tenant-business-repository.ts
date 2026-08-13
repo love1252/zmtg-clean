@@ -41,6 +41,7 @@ import {
   runInstitutionCareFollowUpTransaction,
   type InstitutionCareFollowUpTransactionOperation,
 } from '@/modules/institution/server/followup-path-enrollment-transaction';
+import { runAttributedCareFollowUpTransaction } from '@/server/orchestration/care-follow-up-transaction';
 import type {
   CustomerObjectFactSourceCandidateV1,
   CustomerObjectFactSourceQueryV1,
@@ -785,6 +786,12 @@ function createWeComCustomerContactSeeds(input: {
 
 export function createTenantBusinessRepository(database: TenantDatabase) {
   return {
+    runAttributedCareFollowUpTransaction<T>(
+      businessPair: Readonly<{ tenantId: string; institutionId: string }>,
+      operation: Parameters<typeof runAttributedCareFollowUpTransaction<T>>[2],
+    ) {
+      return runAttributedCareFollowUpTransaction(database, businessPair, operation);
+    },
     runCareFollowUpTransaction<T>(operation: InstitutionCareFollowUpTransactionOperation<T>) {
       return runInstitutionCareFollowUpTransaction(database, operation);
     },

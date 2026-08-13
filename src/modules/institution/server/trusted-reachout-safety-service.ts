@@ -1,4 +1,9 @@
-import { createAuditEvent, type AuditReason } from '@/modules/audit/domain/audit-events';
+import {
+  createAuditEvent,
+  createVerifiedInstitutionAttributedTenantAuditEventV1,
+  type AuditReason,
+  type VerifiedInstitutionAuditAttributionHandleV1,
+} from '@/modules/audit/domain/audit-events';
 import type { AuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import {
   consentBlocksPreparedAttempt,
@@ -38,7 +43,8 @@ type SafetyRepositories = {
 };
 
 type SafetyTransactionRepositories = SafetyRepositories & {
-  auditRepository: Pick<AuditEventRepository, 'record'>;
+  auditRepository: Pick<AuditEventRepository, 'recordAttributed'>;
+  auditAttribution: VerifiedInstitutionAuditAttributionHandleV1;
 };
 
 function createSafetyAudit(input: {
@@ -48,17 +54,23 @@ function createSafetyAudit(input: {
   reason: AuditReason;
   result: 'allowed' | 'denied' | 'transitioned';
   occurredAt: string;
+  auditAttribution: VerifiedInstitutionAuditAttributionHandleV1;
 }) {
-  return createAuditEvent({
-    eventId: input.eventId,
-    context: input.context,
-    resource: 'customer',
-    resourceId: input.resourceId,
-    action: 'update',
-    result: input.result,
-    reason: input.reason,
-    occurredAt: input.occurredAt,
+  const event = createVerifiedInstitutionAttributedTenantAuditEventV1({
+    event: createAuditEvent({
+      eventId: input.eventId,
+      context: input.context,
+      resource: 'customer',
+      resourceId: input.resourceId,
+      action: 'update',
+      result: input.result,
+      reason: input.reason,
+      occurredAt: input.occurredAt,
+    }),
+    attribution: input.auditAttribution,
   });
+  if (!event) throw new Error('invalid_wecom_safety_audit_attribution');
+  return event;
 }
 
 export async function readWeComReachOutSafety(input: {
@@ -140,13 +152,14 @@ export async function recordWeComReachOutConsent(input: {
     : input.action === 'record_opt_out'
       ? 'wecom_reachout_opt_out_recorded'
       : 'wecom_reachout_consent_revoked';
-  await input.repositories.auditRepository.record(createSafetyAudit({
+  await input.repositories.auditRepository.recordAttributed(createSafetyAudit({
     eventId: input.createId(),
     context: input.context,
     resourceId: input.scope.customerId,
     reason,
     result: 'transitioned',
     occurredAt: input.occurredAt,
+    auditAttribution: input.repositories.auditAttribution,
   }));
   return { kind: 'updated' as const, consent };
 }
@@ -157,7 +170,10 @@ export async function reservePreparedAttempt(input: {
   systemOperationId: string;
   occurredAt: string;
   createId: () => string;
-  repositories: Pick<SafetyTransactionRepositories, 'safetyRepository' | 'auditRepository'>;
+  repositories: Pick<
+    SafetyTransactionRepositories,
+    'safetyRepository' | 'auditRepository' | 'auditAttribution'
+  >;
 }) {
   const operationRef = createWeComReachOutOperationRef(input.systemOperationId);
   if (!operationRef) return { kind: 'invalid_operation' as const };
@@ -182,18 +198,20 @@ export async function reservePreparedAttempt(input: {
         windowEndsAt: window.windowEndsAt,
       });
       if (!created) continue;
-      await input.repositories.auditRepository.record(createSafetyAudit({
+      await input.repositories.auditRepository.recordAttributed(createSafetyAudit({
         eventId: input.createId(), context: input.context, resourceId: input.scope.customerId,
         reason: 'wecom_reachout_frequency_reserved', result: 'transitioned', occurredAt: input.occurredAt,
+        auditAttribution: input.repositories.auditAttribution,
       }));
       return { kind: 'reserved' as const, state: created };
     }
 
     const expired = new Date(current.windowEndsAt).getTime() <= now.getTime();
     if (!expired && current.preparedCount >= current.maxPreparedCount) {
-      await input.repositories.auditRepository.record(createSafetyAudit({
+      await input.repositories.auditRepository.recordAttributed(createSafetyAudit({
         eventId: input.createId(), context: input.context, resourceId: input.scope.customerId,
         reason: 'wecom_reachout_frequency_blocked', result: 'denied', occurredAt: input.occurredAt,
+        auditAttribution: input.repositories.auditAttribution,
       }));
       return { kind: 'frequency_cap_reached' as const, state: current };
     }
@@ -213,9 +231,10 @@ export async function reservePreparedAttempt(input: {
       expectedVersion: current.version,
     });
     if (!updated) continue;
-    await input.repositories.auditRepository.record(createSafetyAudit({
+    await input.repositories.auditRepository.recordAttributed(createSafetyAudit({
       eventId: input.createId(), context: input.context, resourceId: input.scope.customerId,
       reason: 'wecom_reachout_frequency_reserved', result: 'transitioned', occurredAt: input.occurredAt,
+      auditAttribution: input.repositories.auditAttribution,
     }));
     return { kind: 'reserved' as const, state: updated };
   }

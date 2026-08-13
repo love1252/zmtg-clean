@@ -24,6 +24,7 @@ import {
   issueRealSendProofOperation,
 } from '@/modules/institution/server/wecom-real-send-proof-service';
 import type { AccessContext } from '@/modules/security/domain/access-control';
+import { mintVerifiedInstitutionAuditAttributionForOrchestrationV1 } from '@/modules/audit/domain/audit-events';
 
 const occurredAt = '2026-07-12T08:00:00.000Z';
 const context: AccessContext = {
@@ -36,6 +37,11 @@ const environment = {
   migrationHash: 'a'.repeat(64),
   journalLatest: '0036_v08_05b_a_single_real_send_proof_foundation',
 };
+const auditAttribution = mintVerifiedInstitutionAuditAttributionForOrchestrationV1({
+  formalPair: { tenantId: 'tenant-a', institutionId: 'inst-a', observedAt: occurredAt },
+  businessPair: { tenantId: 'tenant-a', institutionId: 'inst-a' },
+})!;
+if (!auditAttribution) throw new Error('test audit attribution unavailable');
 
 const source: WeComRealSendReadySource = {
   tenantId: 'tenant-a', institutionId: 'inst-a', customerId: 'customer-a', draftId: 'draft-a', deliveryId: 'delivery-a',
@@ -99,6 +105,7 @@ function dependencies() {
   const matchesScope = (input: { tenantId: string; institutionId: string }) =>
     current?.tenantId === input.tenantId && current.institutionId === input.institutionId;
   const tx: WeComRealSendProofTransactionRepository = {
+    auditAttribution,
     loadReadySource: vi.fn(async () => source),
     listControls: vi.fn(async () => controlRows()),
     findProductionAttestation: vi.fn(async () => attestation),
@@ -152,7 +159,7 @@ function dependencies() {
     recordAudit: vi.fn(async () => undefined),
   };
   const repository: WeComRealSendProofRepository = {
-    runInTransaction: vi.fn(async (callback) => {
+    runInTransaction: vi.fn(async (_businessPair, callback) => {
       const operationSnapshot = current ? { ...current } : null;
       const completedCountSnapshot = completedCount;
       try {
@@ -183,6 +190,10 @@ describe('WeComRealSendProof service', () => {
     const result = await issueRealSendProofOperation({ context, draftId: 'draft-a', environment, occurredAt, ...deps });
 
     expect(result).toMatchObject({ kind: 'issued', operationRef: 'wrsproof-a', idempotent: false });
+    expect(deps.repository.runInTransaction).toHaveBeenCalledWith(
+      { tenantId: 'tenant-a', institutionId: 'inst-a' },
+      expect.any(Function),
+    );
     expect(result.kind === 'issued' && result.confirmationToken).toBeTruthy();
     const insert = vi.mocked(deps.tx.createOperation).mock.calls[0][0];
     expect(insert.confirmationTokenDigest).toMatch(/^[a-f0-9]{64}$/u);
