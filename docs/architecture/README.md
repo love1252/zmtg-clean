@@ -1,61 +1,64 @@
 # 智美天工架构文档索引
 
-<!-- POST_V2_R1C_AUDIT_READER_ADMISSION_START -->
+<!-- POST_V2_R1C_AUDIT_READER_RUNTIME_START -->
 
-## POST-V2-R1C 机构范围 Audit Reader 前置审计与精确 Runtime 准入（2026-08-13）
+## POST-V2-R1C 机构范围 Audit Reader Runtime 闭环（2026-08-13）
 
 ```text
-POST_V2_R1C_AUDIT_READER_FRESH_AUDIT=passed
-AUDIT_READER_EXISTING_ARCHITECTURE_IDENTIFIED=true
-AUDIT_READER_DATA_SOURCE_IDENTIFIED=true
-AUDIT_READER_AUTHORIZATION_BOUNDARY_IDENTIFIED=true
-AUDIT_READER_OWNER_IDENTIFIED=true
-AUDIT_READER_EXACT_RUNTIME_SCOPE_FROZEN=true
-AUDIT_READER_EXACT_RUNTIME_ADMISSION=passed
+POST_V2_R1C_AUDIT_READER_RUNTIME=passed
+AUDIT_READER_RUNTIME_IMPLEMENTED=true
+AUDIT_READER_RUNTIME_VERIFIED=true
+AUDIT_READER_RUNTIME_INDEPENDENT_VERIFICATION=passed
+AUDIT_READER_RUNTIME_HANDOFF_COMPLETE=true
 
-RECOMMENDED_RUNTIME_DESIGN=orchestration_composition
-
-EXACT_RUNTIME_FILE_COUNT=8
-EXISTING_RUNTIME_FILE_COUNT=6
-NEW_RUNTIME_FILE_COUNT=2
-DELETE_RUNTIME_FILE_COUNT=0
-EXACT_TEST_FILE_COUNT=4
+RUNTIME_EXACT_FILE_COUNT=8
+RUNTIME_PR=1169
+RUNTIME_MERGE=2a45b74999784bdcf1a4777c9017ba15d2cef546
 
 ARCHITECTURE_EXCEPTION_REQUIRED=false
-DATABASE_CONNECTION_REQUIRED_FOR_RUNTIME=true
-DATABASE_CONNECTION_REQUIRED_FOR_ADMISSION=false
-SCHEMA_CHANGE_REQUIRED=false
-MIGRATION_REQUIRED=false
-DDL_REQUIRED=false
-DML_REQUIRED=false
+DATABASE_CONNECTION_SCOPE=local_development_only
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+MIGRATION=false
+DDL_EXECUTION=false
+DML_EXECUTION=false
 
-AUDIT_READER_RUNTIME_AUTHORIZED=false
-AUDIT_READER_RUNTIME_IMPLEMENTED=false
+AUDIT_WRITER_ATTRIBUTION_CLOSED=false
+HISTORICAL_BACKFILL_CLOSED=false
+AUDIT_READER_DATA_READINESS=false
+
 PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
 REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+REVIEW_ACCEPTED_REMAINING_UNRELEASED_PAGE_COUNT=25
+
+PRODUCTION_READY_INFERRED=false
 PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
 ```
 
 当前架构结论：
 
-- `/api/institution/audit-events` 在正式 `system` Section Guard 后固定返回低敏 503，因为旧 demo-session + tenant-only 实现已因不安全被禁用；
-- Audit domain/query/parser/DTO/Repository 可复用，canonical source 是 PostgreSQL `audit_events`；
-- `audit_events` 已有 nullable institution attribution 列，但当前 Writer 未闭环；Reader 只允许读取当前 tenant + institution + `verified` 行；
-- platform Audit Reader 的授权、跨租户 scope 与输出语义不同，必须严格分离；
-- 可信 scope 来自既有 one-shot opaque formal institution context，跨 owner 组合必须位于 `src/server/orchestration/**`；
-- 唯一 Runtime 闭包冻结为 exact 8 files（4 production + 4 test），不需要 Schema、Migration、DDL、DML 或 Architecture exception；
-- 本 Admission 不实施或授权 Runtime，不放行 `page_system_audit`，也不推导 data readiness 或生产就绪。
+- PR #1169 已按正式 Admission 完成 exact 8-file Runtime，并以 Merge `2a45b749...` 进入 `main`；
+- `/api/institution/audit-events` 继续位于既有 `system` Section Guard 后，由 query parser 连接 current-institution orchestration Reader；
+- 可信 scope 只来自既有 one-shot opaque formal institution context，Repository 强制 tenant + institution + `verified`；
+- 机构响应省略 `tenantId`，不暴露 `institutionId`、attribution 或内部错误；
+- Platform Audit Route、Schema、Migration 与 Architecture exception 均未修改，AQ004 仍存在；
+- 本地 PostgreSQL 只读验证通过，但 `verified` 归属数据为 0，因此 data readiness 仍为 false；
+- Audit Writer attribution 与历史 backfill 均未闭环；
+- Reader Foundation 完成不等于 `page_system_audit` 放行，页面仍为 `hidden/not_released`。
 
 证据：
 
+- `docs/operations/post-v2-r1c-audit-reader-runtime-independent-verification-20260813.md`
 - `docs/operations/post-v2-r1c-audit-reader-prerequisite-admission-20260813.md`
 - `docs/operations/post-v2-r1c-audit-reader-exact-runtime-allowlist-20260813.csv`
 
 唯一下一任务：
 
-`POST-V2-R1C-AUDIT-READER exact 8-file Runtime implementation explicit authorization`
+`POST-V2-R1C page_system_audit readonly release fresh re-audit + exact Runtime admission`
 
-<!-- POST_V2_R1C_AUDIT_READER_ADMISSION_END -->
+<!-- POST_V2_R1C_AUDIT_READER_RUNTIME_END -->
 
 <!-- POST_V2_R1C_ROLLBACK_VERIFY_START -->
 
