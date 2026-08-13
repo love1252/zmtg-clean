@@ -1,5 +1,78 @@
 # 智美天工架构文档索引
 
+<!-- POST_V2_R1C_AUDIT_WRITER_FORMAL_SCOPE_PORT_RUNTIME_START -->
+
+## POST-V2-R1C Audit Writer 正式机构范围端口 Runtime 闭环（2026-08-13）
+
+```text
+POST_V2_R1C_AUDIT_WRITER_SCOPE_PORT_RUNTIME=passed
+AUDIT_WRITER_SCOPE_PORT_RUNTIME_IMPLEMENTED=true
+AUDIT_WRITER_SCOPE_PORT_RUNTIME_VERIFIED=true
+AUDIT_WRITER_SCOPE_PORT_INDEPENDENT_VERIFICATION=passed
+AUDIT_WRITER_SCOPE_PORT_HANDOFF_COMPLETE=true
+
+FORMAL_SCOPE_SOURCE=formal server-session verified claims corroborated by authoritative Identity + active Membership/Binding + active Tenancy Institution Scope
+PORT_OWNER=src/server/orchestration
+HANDLE_OWNER=src/server/orchestration/institution-audit-writer-scope.ts
+HANDLE_CREATOR=resolveInstitutionAuditWriterFormalScopeV1
+HANDLE_CONSUMER=consumeInstitutionAuditWriterFormalScopeV1
+CONSUMPTION_COUNT=1
+
+RUNTIME_EXACT_FILE_COUNT=2
+RUNTIME_PR=1176
+RUNTIME_HEAD=77f792ae29dfaf983f77d3a246ec925943e4f016
+RUNTIME_MERGE=1aea18be710f32d8589a48ae7ca23aaba0c5ecb6
+RUNTIME_REQUIRED_CHECK=passed
+RUNTIME_ACTIONABLE_P0_P1=0
+
+CAPABILITY_COUPLING=false
+WRITER_SCOPE_PORT_IS_AUTHORIZATION_REPLACEMENT=false
+DATABASE_CONNECTION=false
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+MIGRATION=false
+DDL_EXECUTION=false
+DML_EXECUTION=false
+ARCHITECTURE_EXCEPTION_REQUIRED=false
+
+AUDIT_WRITER_ATTRIBUTION_CLOSED=false
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_CLOSED=false
+AUDIT_CALLER_MIGRATION_CLOSED=false
+HISTORICAL_BACKFILL_CLOSED=false
+WORKBENCH_MULTI_CAPABILITY_SAFE=false
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+```
+
+当前架构结论：
+
+- PR #1176 已按 Admission 完成 exact 2-file Runtime，并以 Merge `1aea18be...` 进入 `main`；没有第 3 个文件或既有 Runtime 漂移；
+- 无输入 resolver 复用正式 server-session verified claims，并通过 authoritative Identity、active Membership / Binding 与 active Tenancy Institution Scope 交叉确认 exact pair；
+- handle genuine、opaque、冻结、one-shot、不可 clone 或重放，consumption 只含 `tenantId + institutionId + observedAt`；
+- 端口与 Capability Authority、navigation、Workbench、`page_system_audit` release 彻底解耦，且不替代业务授权；
+- Runtime targeted 10 files / 253 tests、full 492 files / 6668 tests、typecheck、Architecture unit 148/148、Architecture incremental、lint 与 build 全部通过；
+- 合并后重新执行 targeted、typecheck、Architecture incremental 与静态边界检查，确认 exact-2 和禁止范围无漂移；
+- 未连接数据库；Audit Owner contract、caller migration、historical backfill、Workbench、页面、Staging 与 Production 均未实施。
+
+证据：
+
+- `docs/operations/post-v2-r1c-audit-writer-formal-institution-scope-port-runtime-independent-verification-20260813.md`
+- `docs/operations/post-v2-r1c-audit-writer-formal-institution-scope-port-admission-20260813.md`
+- `docs/operations/post-v2-r1c-audit-writer-formal-institution-scope-port-exact-runtime-allowlist-20260813.csv`
+
+唯一下一任务：
+
+`POST-V2-R1C Audit Owner institution attribution contract fresh audit + exact Runtime admission`
+
+```text
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME_AUTHORIZED=false
+```
+
+<!-- POST_V2_R1C_AUDIT_WRITER_FORMAL_SCOPE_PORT_RUNTIME_END -->
+
 <!-- POST_V2_R1C_AUDIT_WRITER_FORMAL_SCOPE_PORT_ADMISSION_START -->
 
 ## POST-V2-R1C Audit Writer 正式机构范围端口精确 Runtime 准入（2026-08-13）
