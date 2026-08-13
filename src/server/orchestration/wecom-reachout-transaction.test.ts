@@ -27,6 +27,10 @@ import { recordWeComReachOutConsent } from '@/modules/institution/server/trusted
 import { writeWeComCustomerMapping } from '@/modules/institution/server/wecom-customer-mapping-service';
 import { evaluateAndPersistWeComDryRunSnapshot } from '@/modules/institution/server/wecom-dry-run-snapshot-service';
 import { prepareWeComControlledReachOut } from '@/modules/institution/server/wecom-controlled-reachout-service';
+import {
+  createAttributedTenantAuditEventV1,
+  createAuditEvent,
+} from '@/modules/audit/domain/audit-events';
 
 const businessPair = { tenantId: 'tenant-a', institutionId: 'inst-a' } as const;
 const driftPair = { tenantId: 'tenant-a', institutionId: 'inst-b' } as const;
@@ -34,6 +38,27 @@ const driftContext = {
   userId: 'admin-a', role: 'tenant_admin', scope: 'tenant', source: 'demo_session',
   ...driftPair,
 } as const;
+
+function createDriftAuditEvent() {
+  const event = createAttributedTenantAuditEventV1({
+    event: createAuditEvent({
+      eventId: 'audit-inst-b',
+      context: driftContext,
+      resource: 'customer',
+      resourceId: 'customer-b',
+      action: 'update',
+      result: 'transitioned',
+      reason: 'wecom_customer_mapping_confirmed',
+      occurredAt: '2026-08-13T00:00:00.000Z',
+    }),
+    attribution: {
+      institutionAttribution: 'verified',
+      ...driftPair,
+    },
+  });
+  if (!event) throw new Error('test drift audit event unavailable');
+  return event;
+}
 
 function createTransactionSetup() {
   const transactionDatabase = { kind: 'transaction-db' };
@@ -101,6 +126,11 @@ type DriftServiceCase = Readonly<{
 }>;
 
 const driftServiceCases: DriftServiceCase[] = [
+  {
+    label: 'recordAttributed direct Audit write',
+    operation: (dependencies) =>
+      dependencies.auditRepository.recordAttributed(createDriftAuditEvent()),
+  },
   {
     label: 'recordWeComReachOutConsent',
     operation: (dependencies) => recordWeComReachOutConsent({
@@ -337,5 +367,8 @@ describe('wecom reachout orchestration', () => {
     expect(() => result.createOperation({ ...driftPair } as never))
       .toThrow('wecom_reachout_business_pair_mismatch');
     expect(realSendRepository.createOperation).toHaveBeenCalledOnce();
+    expect(() => result.recordAudit(createDriftAuditEvent()))
+      .toThrow('wecom_reachout_business_pair_mismatch');
+    expect(realSendRepository.recordAudit).not.toHaveBeenCalled();
   });
 });

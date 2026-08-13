@@ -47,7 +47,10 @@ export type AttributedWeComReachOutTransactionDependencies = Readonly<{
 
 function assertInstitutionBusinessPair(
   boundPair: InstitutionBusinessPair,
-  candidatePair: InstitutionBusinessPair,
+  candidatePair: Readonly<{
+    tenantId: string | null;
+    institutionId: string | null;
+  }>,
 ): void {
   if (
     candidatePair.tenantId !== boundPair.tenantId ||
@@ -55,6 +58,18 @@ function assertInstitutionBusinessPair(
   ) {
     throw new Error('wecom_reachout_business_pair_mismatch');
   }
+}
+
+function bindAuditRepository(
+  repository: AuditEventRepository,
+  businessPair: InstitutionBusinessPair,
+): Pick<AuditEventRepository, 'recordAttributed'> {
+  return {
+    recordAttributed(event) {
+      assertInstitutionBusinessPair(businessPair, event);
+      return repository.recordAttributed(event);
+    },
+  };
 }
 
 function bindInstitutionScopedOperation<
@@ -207,7 +222,10 @@ function bindRealSendProofTransactionRepository(
       businessPair,
       repository.markSucceeded,
     ),
-    recordAudit: repository.recordAudit,
+    recordAudit(event) {
+      assertInstitutionBusinessPair(businessPair, event);
+      return repository.recordAudit(event);
+    },
   };
 }
 
@@ -266,9 +284,10 @@ export async function runAttributedWeComReachOutTransaction<T>(
         dependencies.safetyRepository,
         businessPair,
       ),
-      auditRepository: {
-        recordAttributed: dependencies.auditRepository.recordAttributed,
-      },
+      auditRepository: bindAuditRepository(
+        dependencies.auditRepository,
+        businessPair,
+      ),
       auditAttribution,
       careMessageDraftCommandService: bindCareMessageDraftCommandService(
         dependencies.careMessageDraftCommandService,
