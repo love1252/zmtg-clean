@@ -21,14 +21,15 @@
 - S9：caller migration fresh audit 已通过，目标分为 5 `VERIFIED` / 12 `NOT_APPLICABLE` / 2 `BLOCKED_UNCLASSIFIED`；选择 composition-family split，并冻结 Auth login `not_applicable` exact 2-file 首切片
 - S10：19 个 production Audit Writer caller 已全部迁移；5 个 `MIGRATED_VERIFIED`、12 个 `MIGRATED_NOT_APPLICABLE`、2 个 `MIGRATED_VALID_DENIAL_ATTRIBUTION`，legacy residual 与 blocked-unclassified 均为 0
 - S10 Runtime：PR #1183、#1184、#1185、#1186、corrective #1188 均已合并；verified attribution、业务写与 Audit 写已绑定同一 transaction business pair，两个相关 P1 均已解决
-- S11：Historical Backfill tooling PR #1190 已合并；在 merged clean main 的 local-development loopback PostgreSQL 上完成 fresh 275-row exact cohort、dry-run、8-row DML、actual recovery、final re-apply、postcheck 与 second-run no-op
+- S11：Historical Backfill tooling PR #1190、initial Handoff #1191、corrective Runtime #1192、tool-identity corrective Runtime #1194 与 final Handoff #1193 已闭环；在 merged clean main 的 local-development loopback PostgreSQL 上完成 fresh 275-row exact cohort、dry-run、8-row DML、actual recovery、final re-apply、postcheck 与 second-run no-op
 - S11 历史终态：7 `VERIFIED`、1 `NOT_APPLICABLE`、0 `ATTEMPTED_DENIAL`、267 `UNCLASSIFIABLE`；Historical Backfill governance 已闭环，不等于 Reader data readiness 或页面 release
+- S11 post-merge Review：#1190 两个 P2 已由 #1192 修复并解决；#1191 两个 docs P2 已由 final Handoff #1193 修复并解决；#1192 的 runner identity P2 已由 #1194 修复并解决
 - 当前经审查接受的受治理只读页面切片：1 / 26
 - 剩余未放行页面：25
 - 受控创建能力放行：0 / 3
 - PR #1163 两个指定 P1：均已回复并解决，目标未解决线程数为 0
 - 审计读取器：机构范围 Reader 已实现，只消费正式 one-shot opaque context，并强制 tenant + institution + `verified`
-- Audit Writer caller migration / attribution 与 Historical Backfill：均已闭环，S11 tooling Review debt=0
+- Audit Writer caller migration / attribution 与 Historical Backfill：均已闭环，S11 五个 post-merge P2 已实际修复并解决
 - Reader readiness：ready；Reader data readiness：false
 - 本地 postcheck：275 条审计记录中 `verified=7`、`not_applicable=1`、`attempted_denial=0`、`unclassifiable=267`；机构 Reader 对 1 个 active pair 可安全返回 7 行，但 residual 不允许宣称完整历史
 - Workbench multi-capability：当前不安全，第二条可见摘要仍会触发 `/hospital` 的 exact-one guard
@@ -98,10 +99,24 @@ S11_HISTORICAL_BACKFILL_COMPLETE=true
 S11_TOOLING_PR=1190
 S11_TOOLING_HEAD=5220cab1892b3c89ecda0283e3c16929709e317e
 S11_TOOLING_MERGE=54c191ec06b6d3766d990d8b8a12d44d5fd22516
-S11_HANDOFF_PR=1191
+S11_INITIAL_HANDOFF_PR=1191
+S11_INITIAL_HANDOFF_HEAD=542293d3c85950b5e667f594d4a7e4a0bdf62a13
+S11_INITIAL_HANDOFF_MERGE=e2c9e32d7df8bba51a48c397beefa4ff02a55869
+S11_PRE_CORRECTIVE_MAIN=e2c9e32d7df8bba51a48c397beefa4ff02a55869
+S11_CORRECTIVE_RUNTIME_PR=1192
+S11_CORRECTIVE_RUNTIME_HEAD=6661daac0b93848c58b995c2232fe8cbfb971464
+S11_CORRECTIVE_RUNTIME_MERGE=82c2c6e24dd7a8463a77e8270040d7536dd9ad1a
+S11_SECOND_CORRECTIVE_RUNTIME_PR=1194
+S11_SECOND_CORRECTIVE_RUNTIME_HEAD=1d34c83c1f3d4af2bb66c2fbcacf41f833925c03
+S11_SECOND_CORRECTIVE_RUNTIME_MERGE=bdd74e8957efb8e14b46905e911ed8b32ee14298
+S11_FINAL_HANDOFF_PR=1193
+S11_PRS=1190,1191,1192,1193,1194
+S11_PR_COUNT=5
+S11_REQUIRED_CHECKS=passed
 S11_TOOLING_REQUIRED_CHECK=passed
 S11_TOOLING_ACTIONABLE_P0_P1=0
-S11_TOOLING_POST_MERGE_REVIEW_DEBT=0
+S11_CORRECTIVE_REQUIRED_CHECK=passed
+S11_SECOND_CORRECTIVE_REQUIRED_CHECK=passed
 S11_HISTORICAL_CUTOFF_KIND=EXACT_EVENT_ID_SNAPSHOT
 S11_HISTORICAL_TOTAL_ROW_COUNT=275
 S11_HISTORICAL_VERIFIED_ROW_COUNT=7
@@ -117,16 +132,31 @@ S11_ROLLBACK_RECOVERY=passed
 S11_BACKFILL_POSTCHECK=passed
 S11_BACKFILL_IDEMPOTENCY=passed
 S11_SECOND_RUN_UPDATE_COUNT=0
+S11_RUNNER_TEST_FILES=1
+S11_RUNNER_TESTS=36
 S11_TARGETED_TEST_FILES=10
-S11_TARGETED_TESTS=123
+S11_TARGETED_TESTS=128
 S11_FULL_TEST_FILES=494
-S11_FULL_TESTS=6740
+S11_FULL_TESTS=6745
 S11_TYPECHECK=passed
 S11_ARCHITECTURE_UNIT=148/148 passed
 S11_ARCHITECTURE_INCREMENTAL=passed
 S11_LINT=passed_with_4_existing_warnings
 S11_BUILD=passed
 S11_PRODUCTION_READINESS_DOCS=8/8 passed
+S11_POST_MERGE_P2_DETECTED=5
+PR1190_RECOVERY_P2_THREAD=PRRT_kwDOSrGMn86Y9qqF
+PR1190_RECOVERY_P2_THREAD_RESOLVED=true
+PR1190_MANIFEST_PATH_P2_THREAD=PRRT_kwDOSrGMn86Y9qqL
+PR1190_MANIFEST_PATH_P2_THREAD_RESOLVED=true
+PR1191_REASON_AGGREGATE_P2_THREAD=PRRT_kwDOSrGMn86Y998t
+PR1191_REASON_AGGREGATE_P2_THREAD_RESOLVED=true
+PR1191_BACKFILL_PREREQUISITE_P2_THREAD=PRRT_kwDOSrGMn86Y998y
+PR1191_BACKFILL_PREREQUISITE_P2_THREAD_RESOLVED=true
+PR1192_TOOL_IDENTITY_P2_THREAD=PRRT_kwDOSrGMn86Y-m7M
+PR1192_TOOL_IDENTITY_P2_THREAD_RESOLVED=true
+S11_ACTIONABLE_P0_P1=0
+POST_MERGE_REVIEW_DEBT=0
 
 RUNTIME_EXACT_FILE_COUNT=8
 RUNTIME_PR=1169
@@ -170,7 +200,7 @@ PRODUCTION_NON_INSTITUTION_AUDIT_WRITER_CALLER_FILE_COUNT=1
 TRANSACTIONAL_AUDIT_WRITER_CALLER_FILE_COUNT=10
 BLOCKING_PREREQUISITE_COUNT=3
 PRIMARY_BLOCKING_PREREQUISITE=formal institution Audit Writer scope port
-HISTORICAL_BACKFILL_REQUIRED_FOR_PAGE_RELEASE=false
+HISTORICAL_BACKFILL_REQUIRED_FOR_PAGE_RELEASE=true
 
 AUDIT_WRITER_SCOPE_PORT_FRESH_AUDIT=passed
 AUDIT_WRITER_SCOPE_PORT_RUNTIME_ELIGIBLE=true
