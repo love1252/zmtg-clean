@@ -22,9 +22,16 @@ HISTORICAL_BACKFILL_CLOSED=true
 S11_TOOLING_PR=1190
 S11_TOOLING_HEAD=5220cab1892b3c89ecda0283e3c16929709e317e
 S11_TOOLING_MERGE=54c191ec06b6d3766d990d8b8a12d44d5fd22516
+S11_INITIAL_HANDOFF_PR=1191
+S11_CORRECTIVE_RUNTIME_PR=1192
+S11_CORRECTIVE_RUNTIME_HEAD=6661daac0b93848c58b995c2232fe8cbfb971464
+S11_CORRECTIVE_RUNTIME_MERGE=82c2c6e24dd7a8463a77e8270040d7536dd9ad1a
+S11_FINAL_HANDOFF_PR=pending
+S11_PRS=1190,1191,1192,pending
+S11_PR_COUNT=4
 S11_TOOLING_REQUIRED_CHECK=passed
 S11_TOOLING_ACTIONABLE_P0_P1=0
-S11_TOOLING_POST_MERGE_REVIEW_DEBT=0
+S11_CORRECTIVE_REQUIRED_CHECK=passed
 
 HISTORICAL_CUTOFF_KIND=EXACT_EVENT_ID_SNAPSHOT
 HISTORICAL_TOTAL_ROW_COUNT=275
@@ -45,10 +52,26 @@ BACKFILL_POSTCHECK=passed
 BACKFILL_IDEMPOTENCY=passed
 SECOND_RUN_UPDATE_COUNT=0
 
+S11_CORRECTIVE_TEST_FILES=1
+S11_CORRECTIVE_TESTS=34
+S11_TARGETED_TEST_FILES=10
+S11_TARGETED_TESTS=126
+S11_FULL_TEST_FILES=494
+S11_FULL_TESTS=6743
+
+S11_POST_MERGE_P2_DETECTED=4
+PR1190_RECOVERY_P2_THREAD_RESOLVED=true
+PR1190_MANIFEST_PATH_P2_THREAD_RESOLVED=true
+PR1191_REASON_AGGREGATE_P2_THREAD_RESOLVED=false
+PR1191_BACKFILL_PREREQUISITE_P2_THREAD_RESOLVED=false
+S11_ACTIONABLE_P0_P1=0
+POST_MERGE_REVIEW_DEBT=pending_final_handoff
+
 AUDIT_READER_DATA_READINESS=false
+HISTORICAL_BACKFILL_REQUIRED_FOR_PAGE_RELEASE=true
 ```
 
-S11 在 merged clean main 的 local-development loopback PostgreSQL 上 fresh 冻结 275-row exact cohort。7 行通过 unique same-operation persisted pair 证据进入 `VERIFIED`，1 条 Auth login 通过业务语义进入 `NOT_APPLICABLE`，267 行因缺少历史时点 provenance 保持 `UNCLASSIFIABLE`。正式 DML 预计 8、实际 8；repo 外 0600 manifest 已实际恢复 exact 8 行并重新应用，final postcheck 守恒，同一 execute command 第二次实际更新 0。
+S11 在 merged clean main 的 local-development loopback PostgreSQL 上 fresh 冻结 275-row exact cohort。7 行通过 unique same-operation persisted pair 证据进入 `VERIFIED`，1 条 Auth login 通过业务语义进入 `NOT_APPLICABLE`，267 行因缺少历史时点 provenance 保持 `UNCLASSIFIABLE`。正式 DML 预计 8、实际 8；repo 外 0600 manifest 已实际恢复 exact 8 行并重新应用，final postcheck 守恒，同一 execute command 第二次实际更新 0。PR #1192 进一步闭合 recovery 的可变 evidence 与 manifest 父目录 symlink 两项 P2；合并后原 manifest 再次 postcheck 通过且 execute 仍实际更新 0。
 
 ## Reader data readiness 仍为 false
 
@@ -57,6 +80,7 @@ S11 在 merged clean main 的 local-development loopback PostgreSQL 上 fresh �
 ```text
 HISTORICAL_BACKFILL_CLOSED=true
 AUDIT_READER_DATA_READINESS=false
+HISTORICAL_BACKFILL_REQUIRED_FOR_PAGE_RELEASE=true
 PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
 PAGE_SYSTEM_AUDIT_RELEASE=false
 ```

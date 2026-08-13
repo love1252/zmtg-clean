@@ -13,10 +13,17 @@ BASELINE=5dedc54da98ee5a028216980049e245807630150
 S11_TOOLING_PR=1190
 S11_TOOLING_HEAD=5220cab1892b3c89ecda0283e3c16929709e317e
 S11_TOOLING_MERGE=54c191ec06b6d3766d990d8b8a12d44d5fd22516
-S11_HANDOFF_PR=1191
+S11_INITIAL_HANDOFF_PR=1191
+S11_PRE_CORRECTIVE_MAIN=e2c9e32d7df8bba51a48c397beefa4ff02a55869
+S11_CORRECTIVE_RUNTIME_PR=1192
+S11_CORRECTIVE_RUNTIME_HEAD=6661daac0b93848c58b995c2232fe8cbfb971464
+S11_CORRECTIVE_RUNTIME_MERGE=82c2c6e24dd7a8463a77e8270040d7536dd9ad1a
+S11_FINAL_HANDOFF_PR=pending
+S11_PRS=1190,1191,1192,pending
+S11_PR_COUNT=4
 S11_TOOLING_REQUIRED_CHECK=passed
 S11_TOOLING_ACTIONABLE_P0_P1=0
-S11_TOOLING_POST_MERGE_REVIEW_DEBT=0
+S11_CORRECTIVE_REQUIRED_CHECK=passed
 
 FRESH_DATABASE_AUDIT=passed
 CLASSIFICATION_MANIFEST=passed
@@ -40,17 +47,32 @@ SECOND_RUN_UPDATE_COUNT=0
 
 HISTORICAL_BACKFILL_CLOSED=true
 AUDIT_READER_DATA_READINESS=false
+HISTORICAL_BACKFILL_REQUIRED_FOR_PAGE_RELEASE=true
 
+CORRECTIVE_TEST_FILES=1
+CORRECTIVE_TESTS=34
 TARGETED_TEST_FILES=10
-TARGETED_TESTS=123
+TARGETED_TESTS=126
 FULL_TEST_FILES=494
-FULL_TESTS=6740
+FULL_TESTS=6743
 TYPECHECK=passed
 ARCHITECTURE_UNIT=148/148 passed
 ARCHITECTURE_INCREMENTAL=passed
 LINT=passed_with_4_existing_warnings
 BUILD=passed
 PRODUCTION_READINESS_DOCS=8/8 passed
+
+S11_POST_MERGE_P2_DETECTED=4
+PR1190_RECOVERY_P2_THREAD=PRRT_kwDOSrGMn86Y9qqF
+PR1190_RECOVERY_P2_THREAD_RESOLVED=true
+PR1190_MANIFEST_PATH_P2_THREAD=PRRT_kwDOSrGMn86Y9qqL
+PR1190_MANIFEST_PATH_P2_THREAD_RESOLVED=true
+PR1191_REASON_AGGREGATE_P2_THREAD=PRRT_kwDOSrGMn86Y998t
+PR1191_REASON_AGGREGATE_P2_THREAD_RESOLVED=false
+PR1191_BACKFILL_PREREQUISITE_P2_THREAD=PRRT_kwDOSrGMn86Y998y
+PR1191_BACKFILL_PREREQUISITE_P2_THREAD_RESOLVED=false
+S11_ACTIONABLE_P0_P1=0
+POST_MERGE_REVIEW_DEBT=pending_final_handoff
 
 DATABASE_ENVIRONMENT=local_development_only
 DATABASE_HOST_CLASS=loopback
@@ -73,12 +95,17 @@ PRODUCTION_DEPLOYMENT=false
 - 正式 DML 使用 repo 外 0600 manifest、`SERIALIZABLE` transaction、exact identity/current-state precondition 与 `RETURNING` count，只修改 `institution_id` / `institution_attribution`；预计 8、实际 8，总行数保持 275；
 - actual recovery 已精确恢复本次 8 行的旧 attribution state，随后 final re-apply 再更新 8；postcheck 保持 immutable digest 与 unclassifiable residual 不变，同一 execute command 第二次 actual update 为 0；
 - postcheck 形成 7 `verified`、1 `not_applicable`、0 attempted-denial、267 residual；正式 Reader query 对 1 个 active pair 返回 7 行，但 residual 使完整页面 data semantics 不成立，因此 `AUDIT_READER_DATA_READINESS=false`；
-- tooling PR #1190 Required Check、local targeted/full/typecheck/AQ/lint/build/ProductionReadinessDocs 与 post-merge Review sweep 均通过；未执行 Schema、Migration、DDL、Seed、Workbench、页面、Staging 或 Production。
+- #1190 post-merge 的 recovery 可变 evidence 与 manifest parent symlink 两项 P2 已由 corrective Runtime #1192 修复并解决；合并后使用原 manifest 再次 postcheck 通过且 execute actual update 仍为 0；
+- #1191 post-merge 的 reason aggregate 守恒与 Historical Backfill 页面前置条件两项 P2 已由 final Handoff scope 修复，等待对应线程闭环；
+- PR #1190、#1191、#1192 Required Check 与 local targeted/full/typecheck/AQ/lint/build/ProductionReadinessDocs 均通过；未执行 Schema、Migration、DDL、Seed、Workbench、页面、Staging 或 Production。
 
 证据：
 
 - `docs/operations/post-v2-r1c-audit-writer-historical-backfill-closure-20260813.md`
 - tooling PR #1190
+- initial Handoff PR #1191
+- corrective Runtime PR #1192
+- final Handoff PR pending
 
 下一任务：`POST-V2-R1C Audit Reader Data Readiness / Workbench Multi-Capability prerequisite explicit authorization`；当前未授权自动开始。
 
