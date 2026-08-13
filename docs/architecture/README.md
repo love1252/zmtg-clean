@@ -9,11 +9,12 @@ AUDIT_WRITER_ATTRIBUTION_FRESH_AUDIT=passed
 AUDIT_WRITER_ATTRIBUTION_RUNTIME_ELIGIBLE=false
 ADMISSION_MODE=SPLIT_REQUIRED
 
-PRODUCTION_AUDIT_WRITER_CALLER_FILE_COUNT=16
+CALLER_INVENTORY_REAUDIT=passed
+PRODUCTION_AUDIT_WRITER_CALLER_FILE_COUNT=19
 PRODUCTION_INSTITUTION_AUDIT_WRITER_CALLER_FILE_COUNT=11
-PRODUCTION_PLATFORM_AUDIT_WRITER_CALLER_FILE_COUNT=4
+PRODUCTION_PLATFORM_AUDIT_WRITER_CALLER_FILE_COUNT=7
 PRODUCTION_NON_INSTITUTION_AUDIT_WRITER_CALLER_FILE_COUNT=1
-TRANSACTIONAL_AUDIT_WRITER_CALLER_FILE_COUNT=7
+TRANSACTIONAL_AUDIT_WRITER_CALLER_FILE_COUNT=10
 
 BLOCKING_PREREQUISITE_COUNT=3
 PRIMARY_BLOCKING_PREREQUISITE=formal institution Audit Writer scope port
@@ -35,7 +36,7 @@ PAGE_SYSTEM_AUDIT_RELEASE=false
 - canonical persistence Owner 继续是 Audit domain event contract 与 `AuditEventRepository` mapper；
 - Institution attribution 的 cross-owner composition 必须位于 `src/server/orchestration`，只消费复用既有正式 Identity / Membership / Scope 链得到的 one-shot opaque pair；
 - mapper 无法安全推断 institution，普通 caller 也不得自行声明 `verified`；
-- 16 个生产事件构造文件跨 Institution、Platform 与 Auth，另有 7 个 transaction-bound composition 文件，必须拆成 formal scope port、Audit Owner contract 与 caller migration 三个原子切片；
+- S5 Phase 0 重新执行 helper 与直接 object construction 的 union search，确认 19 个生产事件构造文件跨 Institution、Platform 与 Auth，另有 10 个 transaction-bound persistence / composition 文件；遗漏的 3 个 Platform service 及其 Repository / tests 已纳入后续 caller migration，三段原子拆分结论不变；
 - 当前 275 条历史记录 attribution 全为 `NULL`，没有 enforcement epoch 或 coverage metadata，因此当前页面发布契约下仍需要独立历史分类/backfill prerequisite；
 - 现有列足够，且推荐边界不需要 Architecture exception。
 

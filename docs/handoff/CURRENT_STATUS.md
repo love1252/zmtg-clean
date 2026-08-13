@@ -12,7 +12,7 @@
 - POST-V2-R1C Audit Reader Foundation：exact 8-file Runtime、Required Check、合并后独立验证与 Handoff 均已闭环
 - POST-V2-R1C `page_system_audit`：fresh release re-audit 已通过，但 eligibility 因 Audit Writer institution attribution 未闭环而阻断
 - S4 Phase 0：PR #1172 已修正 Handoff 授权来源与页面授权状态，PR #1171 两个 post-merge Review thread 已回复并解决
-- S4 Phase 1：Audit Writer attribution fresh audit 已通过；16 个生产 caller 与 7 个 transaction composition 点证明完整 closure 必须拆分，当前不具备单一 Runtime Admission
+- S4 Phase 1 / S5 Phase 0 修正：Audit Writer attribution fresh audit 已通过；重新核算为 19 个生产 caller 与 10 个 transaction persistence / composition 点，完整 closure 仍必须拆分，当前不具备单一 Runtime Admission
 - 当前经审查接受的受治理只读页面切片：1 / 26
 - 剩余未放行页面：25
 - 受控创建能力放行：0 / 3
@@ -70,11 +70,12 @@ PHASE0_FIX_MERGE=44b2f3653fbfd5cc4dd02f33e5c2c8fc80f292cb
 AUDIT_WRITER_ATTRIBUTION_FRESH_AUDIT=passed
 AUDIT_WRITER_ATTRIBUTION_RUNTIME_ELIGIBLE=false
 ADMISSION_MODE=SPLIT_REQUIRED
-PRODUCTION_AUDIT_WRITER_CALLER_FILE_COUNT=16
+CALLER_INVENTORY_REAUDIT=passed
+PRODUCTION_AUDIT_WRITER_CALLER_FILE_COUNT=19
 PRODUCTION_INSTITUTION_AUDIT_WRITER_CALLER_FILE_COUNT=11
-PRODUCTION_PLATFORM_AUDIT_WRITER_CALLER_FILE_COUNT=4
+PRODUCTION_PLATFORM_AUDIT_WRITER_CALLER_FILE_COUNT=7
 PRODUCTION_NON_INSTITUTION_AUDIT_WRITER_CALLER_FILE_COUNT=1
-TRANSACTIONAL_AUDIT_WRITER_CALLER_FILE_COUNT=7
+TRANSACTIONAL_AUDIT_WRITER_CALLER_FILE_COUNT=10
 BLOCKING_PREREQUISITE_COUNT=3
 PRIMARY_BLOCKING_PREREQUISITE=formal institution Audit Writer scope port
 HISTORICAL_BACKFILL_REQUIRED_FOR_PAGE_RELEASE=true
