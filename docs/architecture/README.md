@@ -1,5 +1,71 @@
 # 智美天工架构文档索引
 
+<!-- POST_V2_R1C_AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME_START -->
+
+## POST-V2-R1C Audit Owner 机构归因契约 Runtime 闭环（2026-08-13）
+
+```text
+POST_V2_R1C_AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME=passed
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME_IMPLEMENTED=true
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME_VERIFIED=true
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_INDEPENDENT_VERIFICATION=passed
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_HANDOFF_COMPLETE=true
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_CLOSED=true
+
+RUNTIME_EXACT_FILE_COUNT=4
+RUNTIME_PR=1179
+RUNTIME_HEAD=509140180aa95e56cccba17db4d5e65db20d6cd5
+RUNTIME_MERGE=cba79e6bad83be4eafebc6b4359e381d98eb804a
+RUNTIME_REQUIRED_CHECK=passed
+RUNTIME_ACTIONABLE_P0_P1=0
+
+LEGACY_CALLER_CAN_WRITE_VERIFIED=false
+LEGACY_UNATTRIBUTED_NEW_WRITE_ALLOWED=false
+AUDIT_CONTRACT_PROVES_FORMAL_SCOPE=false
+AUDIT_OWNER_IMPORTS_SCOPE_PORT=false
+
+DATABASE_CONNECTION=false
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+MIGRATION=false
+DDL_EXECUTION=false
+DML_EXECUTION=false
+ARCHITECTURE_EXCEPTION_REQUIRED=false
+
+AUDIT_WRITER_ATTRIBUTION_CLOSED=false
+AUDIT_CALLER_MIGRATION_CLOSED=false
+HISTORICAL_BACKFILL_CLOSED=false
+WORKBENCH_MULTI_CAPABILITY_SAFE=false
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+```
+
+架构结论：
+
+- legacy `TenantAuditEvent + record()` 暂时保留且只映射 `NULL/NULL`；新 attributed contract 只允许 `verified | not_applicable`，并提供严格 factory、validator、mapper 与 `recordAttributed()`；
+- factory 输出冻结的字段白名单对象；mapper 与 Repository 二次验证，非法 cast / fake object 固定低敏失败且零 insert；
+- Audit contract 不证明 formal scope，Audit module 不导入 S6 scope port；Repository 不查询业务 Owner、不获取全局数据库、不自行开启 transaction；
+- exact-4 Runtime、Required Check、合并后独立验证均通过；targeted 16 files / 288 tests、full 492 files / 6678 tests、Architecture unit 148/148、typecheck、Architecture incremental、lint 与 build 全部通过；
+- 19 个 callers、caller migration、historical backfill、Workbench、`page_system_audit`、Schema/Migration、Staging 与 Production 均未实施。
+
+证据：
+
+- `docs/operations/post-v2-r1c-audit-owner-institution-attribution-contract-runtime-independent-verification-20260813.md`
+- Runtime PR #1179 / Merge `cba79e6bad83be4eafebc6b4359e381d98eb804a`
+
+唯一下一任务：
+
+`POST-V2-R1C Audit Writer classified caller migration fresh audit + exact Runtime admission`
+
+```text
+CALLER_MIGRATION_RUNTIME_AUTHORIZED=false
+```
+
+<!-- POST_V2_R1C_AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME_END -->
+
 <!-- POST_V2_R1C_AUDIT_OWNER_ATTRIBUTION_CONTRACT_ADMISSION_START -->
 
 ## POST-V2-R1C Audit Owner 机构归因契约精确 Runtime 准入（2026-08-13）
