@@ -10,7 +10,7 @@
 - POST-V2-R1B `page_workbench`：稳定且已完成治理闭环
 - POST-V2-R1C 错误放行尝试：精确 4 文件 Runtime 回滚、独立验证及两个指定 P1 审查线程均已完成治理收尾
 - POST-V2-R1C Audit Reader Foundation：exact 8-file Runtime、Required Check、合并后独立验证与 Handoff 均已闭环
-- POST-V2-R1C `page_system_audit`：既有 fresh release re-audit 已完成；Audit Writer attribution 已完成 corrective closure，但 historical backfill / Reader data readiness 仍未闭环，页面继续 hidden/not-released
+- POST-V2-R1C `page_system_audit`：既有 fresh release re-audit 已完成；Audit Writer attribution 与 historical backfill 已闭环，但 Reader data readiness 仍为 false，页面继续 hidden/not-released
 - S4 Phase 0：PR #1172 已修正 Handoff 授权来源与页面授权状态，PR #1171 两个 post-merge Review thread 已回复并解决
 - S4 Phase 1 / S5 Phase 0 修正：Audit Writer attribution fresh audit 已通过；重新核算为 19 个生产 caller 与 10 个 transaction persistence / composition 点，完整 closure 仍必须拆分
 - S5 Phase 0：caller inventory docs-only follow-up PR #1174 已合并；合并后仅回复并解决 PR #1173 指定 Review thread
@@ -21,14 +21,16 @@
 - S9：caller migration fresh audit 已通过，目标分为 5 `VERIFIED` / 12 `NOT_APPLICABLE` / 2 `BLOCKED_UNCLASSIFIED`；选择 composition-family split，并冻结 Auth login `not_applicable` exact 2-file 首切片
 - S10：19 个 production Audit Writer caller 已全部迁移；5 个 `MIGRATED_VERIFIED`、12 个 `MIGRATED_NOT_APPLICABLE`、2 个 `MIGRATED_VALID_DENIAL_ATTRIBUTION`，legacy residual 与 blocked-unclassified 均为 0
 - S10 Runtime：PR #1183、#1184、#1185、#1186、corrective #1188 均已合并；verified attribution、业务写与 Audit 写已绑定同一 transaction business pair，两个相关 P1 均已解决
+- S11：Historical Backfill tooling PR #1190 已合并；在 merged clean main 的 local-development loopback PostgreSQL 上完成 fresh 275-row exact cohort、dry-run、8-row DML、actual recovery、final re-apply、postcheck 与 second-run no-op
+- S11 历史终态：7 `VERIFIED`、1 `NOT_APPLICABLE`、0 `ATTEMPTED_DENIAL`、267 `UNCLASSIFIABLE`；Historical Backfill governance 已闭环，不等于 Reader data readiness 或页面 release
 - 当前经审查接受的受治理只读页面切片：1 / 26
 - 剩余未放行页面：25
 - 受控创建能力放行：0 / 3
 - PR #1163 两个指定 P1：均已回复并解决，目标未解决线程数为 0
 - 审计读取器：机构范围 Reader 已实现，只消费正式 one-shot opaque context，并强制 tenant + institution + `verified`
-- Audit Writer caller migration / attribution：已闭环，Review debt=0；历史 backfill：未闭环
+- Audit Writer caller migration / attribution 与 Historical Backfill：均已闭环，S11 tooling Review debt=0
 - Reader readiness：ready；Reader data readiness：false
-- 本地只读验证：275 条审计记录中 `institutionId` 非空为 0、`verified` 为 0、attribution 为 `NULL` 的记录为 275
+- 本地 postcheck：275 条审计记录中 `verified=7`、`not_applicable=1`、`attempted_denial=0`、`unclassifiable=267`；机构 Reader 对 1 个 active pair 可安全返回 7 行，但 residual 不允许宣称完整历史
 - Workbench multi-capability：当前不安全，第二条可见摘要仍会触发 `/hospital` 的 exact-one guard
 - 生产就绪 / 部署：未推导、未执行
 
@@ -92,6 +94,40 @@ S10_POST_MERGE_INDEPENDENT_TESTS=17
 S10_POST_MERGE_INDEPENDENT_TYPECHECK=passed
 S10_POST_MERGE_INDEPENDENT_ARCHITECTURE_INCREMENTAL=passed
 
+S11_HISTORICAL_BACKFILL_COMPLETE=true
+S11_TOOLING_PR=1190
+S11_TOOLING_HEAD=5220cab1892b3c89ecda0283e3c16929709e317e
+S11_TOOLING_MERGE=54c191ec06b6d3766d990d8b8a12d44d5fd22516
+S11_HANDOFF_PR=1191
+S11_TOOLING_REQUIRED_CHECK=passed
+S11_TOOLING_ACTIONABLE_P0_P1=0
+S11_TOOLING_POST_MERGE_REVIEW_DEBT=0
+S11_HISTORICAL_CUTOFF_KIND=EXACT_EVENT_ID_SNAPSHOT
+S11_HISTORICAL_TOTAL_ROW_COUNT=275
+S11_HISTORICAL_VERIFIED_ROW_COUNT=7
+S11_HISTORICAL_NOT_APPLICABLE_ROW_COUNT=1
+S11_HISTORICAL_ATTEMPTED_DENIAL_ROW_COUNT=0
+S11_HISTORICAL_UNCLASSIFIABLE_ROW_COUNT=267
+S11_RULE_COUNT=10
+S11_RULE_OVERLAP_COUNT=0
+S11_UNSAFE_GUESSED_ATTRIBUTION_COUNT=0
+S11_BACKFILL_EXPECTED_UPDATE_COUNT=8
+S11_BACKFILL_ACTUAL_UPDATE_COUNT=8
+S11_ROLLBACK_RECOVERY=passed
+S11_BACKFILL_POSTCHECK=passed
+S11_BACKFILL_IDEMPOTENCY=passed
+S11_SECOND_RUN_UPDATE_COUNT=0
+S11_TARGETED_TEST_FILES=10
+S11_TARGETED_TESTS=123
+S11_FULL_TEST_FILES=494
+S11_FULL_TESTS=6740
+S11_TYPECHECK=passed
+S11_ARCHITECTURE_UNIT=148/148 passed
+S11_ARCHITECTURE_INCREMENTAL=passed
+S11_LINT=passed_with_4_existing_warnings
+S11_BUILD=passed
+S11_PRODUCTION_READINESS_DOCS=8/8 passed
+
 RUNTIME_EXACT_FILE_COUNT=8
 RUNTIME_PR=1169
 RUNTIME_HEAD=c927fdfc9a37a865d3df2082ec350b7e01806c45
@@ -103,14 +139,14 @@ ARCHITECTURE_EXCEPTION_REQUIRED=false
 DATABASE_CONNECTION_USED=true
 DATABASE_CONNECTION_SCOPE=local_development_only
 DATABASE_READONLY_VERIFICATION=passed
-DATABASE_WRITE_EXECUTION=false
+DATABASE_WRITE_EXECUTION=true
 SCHEMA_CHANGE=false
 MIGRATION=false
 DDL_EXECUTION=false
-DML_EXECUTION=false
+DML_EXECUTION=true
 
 AUDIT_WRITER_ATTRIBUTION_CLOSED=true
-HISTORICAL_BACKFILL_CLOSED=false
+HISTORICAL_BACKFILL_CLOSED=true
 AUDIT_READER_DATA_READINESS=false
 
 PR1171_POST_MERGE_P1_RESOLVED=true
@@ -134,7 +170,7 @@ PRODUCTION_NON_INSTITUTION_AUDIT_WRITER_CALLER_FILE_COUNT=1
 TRANSACTIONAL_AUDIT_WRITER_CALLER_FILE_COUNT=10
 BLOCKING_PREREQUISITE_COUNT=3
 PRIMARY_BLOCKING_PREREQUISITE=formal institution Audit Writer scope port
-HISTORICAL_BACKFILL_REQUIRED_FOR_PAGE_RELEASE=true
+HISTORICAL_BACKFILL_REQUIRED_FOR_PAGE_RELEASE=false
 
 AUDIT_WRITER_SCOPE_PORT_FRESH_AUDIT=passed
 AUDIT_WRITER_SCOPE_PORT_RUNTIME_ELIGIBLE=true
