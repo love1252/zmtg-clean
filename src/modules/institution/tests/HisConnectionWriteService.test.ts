@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
+import type { AttributedTenantAuditEventV1 } from '@/modules/audit/domain/audit-events';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 import type { TenantDatabase } from '@/server/db/client';
 import type {
@@ -95,8 +95,11 @@ function createServiceHarness(input: {
     ),
   };
   const auditRepository = {
-    record: vi.fn(async (event: TenantAuditEvent) => {
-      void event;
+    recordAttributed: vi.fn(async (event: AttributedTenantAuditEventV1) => {
+      expect(event).toMatchObject({
+        institutionAttribution: 'not_applicable',
+        institutionId: null,
+      });
       if (input.auditError) throw input.auditError;
     }),
   };
@@ -196,7 +199,7 @@ describe('HIS 连接配置写入 service', () => {
       vendorType: 'demo_vendor',
       systemType: 'his',
     });
-    expect(harness.auditRepository.record).toHaveBeenCalledWith(
+    expect(harness.auditRepository.recordAttributed).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: 'demo-user-admin',
         actorRole: 'tenant_admin',
@@ -251,7 +254,7 @@ describe('HIS 连接配置写入 service', () => {
         tenantId: 'forged-tenant',
       }),
     );
-    expect(harness.auditRepository.record).toHaveBeenCalledWith(
+    expect(harness.auditRepository.recordAttributed).toHaveBeenCalledWith(
       expect.objectContaining({
         resource: 'open_connection',
         resourceId: 'his_conn_001',
@@ -328,8 +331,8 @@ describe('HIS 连接配置写入 service', () => {
         auditEventRepositoryFactory: createValidationHarness.auditEventRepositoryFactory,
       }),
     ).resolves.toEqual({ status: 'validation_failed' });
-    expect(createValidationHarness.auditRepository.record).toHaveBeenCalledTimes(1);
-    expectDeniedAuditEvent(createValidationHarness.auditRepository.record.mock.calls[0]?.[0], {
+    expect(createValidationHarness.auditRepository.recordAttributed).toHaveBeenCalledTimes(1);
+    expectDeniedAuditEvent(createValidationHarness.auditRepository.recordAttributed.mock.calls[0]?.[0], {
       action: 'create',
       reason: 'invalid_his_connection_payload',
     });
@@ -343,8 +346,8 @@ describe('HIS 连接配置写入 service', () => {
         auditEventRepositoryFactory: createConflictHarness.auditEventRepositoryFactory,
       }),
     ).resolves.toEqual({ status: 'conflict' });
-    expect(createConflictHarness.auditRepository.record).toHaveBeenCalledTimes(1);
-    expectDeniedAuditEvent(createConflictHarness.auditRepository.record.mock.calls[0]?.[0], {
+    expect(createConflictHarness.auditRepository.recordAttributed).toHaveBeenCalledTimes(1);
+    expectDeniedAuditEvent(createConflictHarness.auditRepository.recordAttributed.mock.calls[0]?.[0], {
       action: 'create',
       reason: 'his_connection_name_conflict',
     });
@@ -359,8 +362,8 @@ describe('HIS 连接配置写入 service', () => {
         auditEventRepositoryFactory: updateValidationHarness.auditEventRepositoryFactory,
       }),
     ).resolves.toEqual({ status: 'validation_failed' });
-    expect(updateValidationHarness.auditRepository.record).toHaveBeenCalledTimes(1);
-    expectDeniedAuditEvent(updateValidationHarness.auditRepository.record.mock.calls[0]?.[0], {
+    expect(updateValidationHarness.auditRepository.recordAttributed).toHaveBeenCalledTimes(1);
+    expectDeniedAuditEvent(updateValidationHarness.auditRepository.recordAttributed.mock.calls[0]?.[0], {
       action: 'update',
       reason: 'invalid_his_connection_payload',
       resourceId: 'his_conn_invalid',
@@ -376,8 +379,8 @@ describe('HIS 连接配置写入 service', () => {
         auditEventRepositoryFactory: updateConflictHarness.auditEventRepositoryFactory,
       }),
     ).resolves.toEqual({ status: 'conflict' });
-    expect(updateConflictHarness.auditRepository.record).toHaveBeenCalledTimes(1);
-    expectDeniedAuditEvent(updateConflictHarness.auditRepository.record.mock.calls[0]?.[0], {
+    expect(updateConflictHarness.auditRepository.recordAttributed).toHaveBeenCalledTimes(1);
+    expectDeniedAuditEvent(updateConflictHarness.auditRepository.recordAttributed.mock.calls[0]?.[0], {
       action: 'update',
       reason: 'his_connection_name_conflict',
       resourceId: 'his_conn_conflict',
@@ -393,8 +396,8 @@ describe('HIS 连接配置写入 service', () => {
         auditEventRepositoryFactory: notFoundHarness.auditEventRepositoryFactory,
       }),
     ).resolves.toEqual({ status: 'not_found' });
-    expect(notFoundHarness.auditRepository.record).toHaveBeenCalledTimes(1);
-    expectDeniedAuditEvent(notFoundHarness.auditRepository.record.mock.calls[0]?.[0], {
+    expect(notFoundHarness.auditRepository.recordAttributed).toHaveBeenCalledTimes(1);
+    expectDeniedAuditEvent(notFoundHarness.auditRepository.recordAttributed.mock.calls[0]?.[0], {
       action: 'update',
       reason: 'not_found_or_not_owned',
       resourceId: 'his_conn_missing',
@@ -418,7 +421,7 @@ describe('HIS 连接配置写入 service', () => {
 
     expect(result).toEqual({ status: 'service_unavailable' });
     expect(JSON.stringify(result)).not.toMatch(/DATABASE_URL|postgres:\/\/|token|stack/i);
-    expect(harness.auditRepository.record).not.toHaveBeenCalled();
+    expect(harness.auditRepository.recordAttributed).not.toHaveBeenCalled();
   });
 
   it('audit 失败时 create / update 返回 service_unavailable，且不返回业务成功或原失败结果', async () => {
@@ -461,7 +464,7 @@ describe('HIS 连接配置写入 service', () => {
         auditEventRepositoryFactory: deniedHarness.auditEventRepositoryFactory,
       }),
     ).resolves.toEqual({ status: 'service_unavailable' });
-    expect(deniedHarness.auditRepository.record).toHaveBeenCalledWith(
+    expect(deniedHarness.auditRepository.recordAttributed).toHaveBeenCalledWith(
       expect.objectContaining({
         resource: 'open_connection',
         action: 'create',

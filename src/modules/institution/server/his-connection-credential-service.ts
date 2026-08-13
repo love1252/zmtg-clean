@@ -2,7 +2,13 @@ import {
   mapHisConnectionCredentialSuccessToDto,
   type HisConnectionCredentialSuccessDto,
 } from '@/modules/institution/server/his-connection-credential-dto';
-import { createAuditEvent, type AuditReason } from '@/modules/audit/domain/audit-events';
+import {
+  createAttributedTenantAuditEventV1,
+  createAuditEvent,
+  type AttributedTenantAuditEventV1,
+  type AuditReason,
+  type TenantAuditEvent,
+} from '@/modules/audit/domain/audit-events';
 import type { AuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import type {
   HisConnectionCredentialMutationInput,
@@ -52,7 +58,7 @@ type HisConnectionCredentialRepository = Pick<
   | 'revokeHisConnectionCredentialReferenceForTenant'
 >;
 
-type HisConnectionCredentialAuditRepository = Pick<AuditEventRepository, 'record'>;
+type HisConnectionCredentialAuditRepository = Pick<AuditEventRepository, 'recordAttributed'>;
 
 type HisConnectionCredentialStorage = Pick<
   HisConnectionCredentialProvider,
@@ -167,10 +173,25 @@ function createAuditEventId() {
   );
 }
 
+function createNotApplicableAuditEvent(event: TenantAuditEvent): AttributedTenantAuditEventV1 {
+  const attributedEvent = createAttributedTenantAuditEventV1({
+    event,
+    attribution: {
+      institutionAttribution: 'not_applicable',
+      tenantId: event.tenantId,
+      institutionId: null,
+    },
+  });
+  if (!attributedEvent) throw new Error('invalid_his_credential_audit_attribution');
+  return attributedEvent;
+}
+
 async function recordAllowedCredentialAudit(input: {
   dependencies: HisConnectionCredentialServiceDependencies;
   database: TenantDatabase;
   accessContext: AccessContext;
+  tenantId: string;
+  actorUserId: string;
   connectionId: string;
 }) {
   const auditRepository = getAuditRepository(input.dependencies, input.database);
@@ -179,17 +200,21 @@ async function recordAllowedCredentialAudit(input: {
     return;
   }
 
-  await auditRepository.record(
-    createAuditEvent({
+  await auditRepository.recordAttributed(
+    createNotApplicableAuditEvent(createAuditEvent({
       eventId: createAuditEventId(),
-      context: input.accessContext,
+      context: {
+        ...input.accessContext,
+        tenantId: input.tenantId,
+        userId: input.actorUserId,
+      },
       resource: 'open_connection',
       resourceId: input.connectionId,
       action: 'manage_credentials',
       result: 'allowed',
       reason: 'allowed_by_policy',
       occurredAt: new Date().toISOString(),
-    }),
+    })),
   );
 }
 
@@ -197,6 +222,8 @@ async function recordProviderFailureCredentialAudit(input: {
   dependencies: HisConnectionCredentialServiceDependencies;
   database: TenantDatabase;
   accessContext: AccessContext;
+  tenantId: string;
+  actorUserId: string;
   connectionId: string;
   failure: HisConnectionCredentialProviderFailure;
 }) {
@@ -207,17 +234,21 @@ async function recordProviderFailureCredentialAudit(input: {
       return { ok: true as const };
     }
 
-    await auditRepository.record(
-      createAuditEvent({
+    await auditRepository.recordAttributed(
+      createNotApplicableAuditEvent(createAuditEvent({
         eventId: createAuditEventId(),
-        context: input.accessContext,
+        context: {
+          ...input.accessContext,
+          tenantId: input.tenantId,
+          userId: input.actorUserId,
+        },
         resource: 'open_connection',
         resourceId: input.connectionId,
         action: 'manage_credentials',
         result: 'denied',
         reason: providerFailureAuditReasonByCategory[input.failure.category],
         occurredAt: new Date().toISOString(),
-      }),
+      })),
     );
 
     return { ok: true as const };
@@ -230,6 +261,8 @@ async function mapProviderFailureToServiceResult(input: {
   dependencies: HisConnectionCredentialServiceDependencies;
   database: TenantDatabase;
   accessContext: AccessContext;
+  tenantId: string;
+  actorUserId: string;
   connectionId: string;
   failure: HisConnectionCredentialProviderFailure;
 }): Promise<HisConnectionCredentialServiceResult> {
@@ -304,6 +337,8 @@ async function runStoredCredentialReferenceService(
           dependencies: input,
           database: transactionDatabase,
           accessContext: input.accessContext,
+          tenantId,
+          actorUserId,
           connectionId,
         });
       }
@@ -316,6 +351,8 @@ async function runStoredCredentialReferenceService(
         dependencies: input,
         database: input.database,
         accessContext: input.accessContext,
+        tenantId,
+        actorUserId,
         connectionId,
         failure: error,
       });
@@ -359,6 +396,8 @@ async function runClearCredentialReferenceService(
           dependencies: input,
           database: transactionDatabase,
           accessContext: input.accessContext,
+          tenantId,
+          actorUserId,
           connectionId,
         });
       }
@@ -371,6 +410,8 @@ async function runClearCredentialReferenceService(
         dependencies: input,
         database: input.database,
         accessContext: input.accessContext,
+        tenantId,
+        actorUserId,
         connectionId,
         failure: error,
       });
