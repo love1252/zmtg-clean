@@ -1,5 +1,75 @@
 # 智美天工架构文档索引
 
+<!-- POST_V2_R1C_AUDIT_OWNER_ATTRIBUTION_CONTRACT_ADMISSION_START -->
+
+## POST-V2-R1C Audit Owner 机构归因契约精确 Runtime 准入（2026-08-13）
+
+```text
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_FRESH_AUDIT=passed
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME_ELIGIBLE=true
+ADMISSION_MODE=ADMISSION_READY
+EXACT_RUNTIME_SCOPE_FROZEN=true
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_EXACT_RUNTIME_ADMISSION=passed
+
+RECOMMENDED_RUNTIME_DESIGN=方案 B：保留 legacy TenantAuditEvent + record 路径，新增 Audit-owned discriminated attributed contract + recordAttributed 路径
+CANONICAL_ATTRIBUTION_CONTRACT_OWNER=src/modules/audit
+
+LEGACY_CALLER_CAN_WRITE_VERIFIED=false
+LEGACY_UNATTRIBUTED_NEW_WRITE_ALLOWED=false
+AUDIT_CONTRACT_PROVES_FORMAL_SCOPE=false
+AUDIT_OWNER_IMPORTS_SCOPE_PORT=false
+PLATFORM_NOT_APPLICABLE_CONTRACT_SAFE=true
+AUTH_NOT_APPLICABLE_CONTRACT_SAFE=true
+
+EXACT_RUNTIME_FILE_COUNT=4
+EXISTING_RUNTIME_FILE_COUNT=4
+NEW_RUNTIME_FILE_COUNT=0
+DELETE_RUNTIME_FILE_COUNT=0
+EXACT_PRODUCTION_FILE_COUNT=2
+EXACT_TEST_FILE_COUNT=2
+
+SCHEMA_CHANGE_REQUIRED=false
+MIGRATION_REQUIRED=false
+DDL_REQUIRED=false
+DML_REQUIRED=false
+ARCHITECTURE_EXCEPTION_REQUIRED=false
+DATABASE_CONNECTION=false
+DATABASE_WRITE_EXECUTION=false
+
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME_AUTHORIZED=false
+AUDIT_WRITER_ATTRIBUTION_CLOSED=false
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_CLOSED=false
+AUDIT_CALLER_MIGRATION_CLOSED=false
+HISTORICAL_BACKFILL_CLOSED=false
+WORKBENCH_MULTI_CAPABILITY_SAFE=false
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+```
+
+架构结论：
+
+- 现有 19 个 caller 不能因 contract 切片被强制同步迁移；保留 legacy `TenantAuditEvent + record()` 暂时映射 `NULL/NULL`，新增独立 attributed contract 与 `recordAttributed()` 是唯一可独立实施的方案；
+- 新 contract 只允许 `verified` 的非空 tenant / institution pair，或 `not_applicable` 的 null institution；unknown、非法组合与所有新 `legacy_unattributed` 写入 fail-closed；
+- Audit contract 只证明 shape 和 pair self-consistency，不证明 formal provenance；future orchestration 消费 S6 scope handle 后负责 provenance 与 transaction-bound pair 比较；
+- Audit module 不反向导入 orchestration，Repository 不解析 session、不查询业务 Owner、不猜 attribution，也不新开 transaction；
+- Platform 7 与 Auth 1 个 caller 后续可显式迁入 `not_applicable`，但 S7 不修改 caller；
+- exact Runtime 只允许修改 Audit Owner 的 2 个既有生产文件和 2 个既有测试文件；不新增文件，不改 Schema、Migration、scope port、Workbench 或页面；
+- targeted 15 files / 240 tests、typecheck、Architecture Quality 148/148、增量架构与 ProductionReadinessDocs 均通过；未连接数据库。
+
+证据：
+
+- `docs/operations/post-v2-r1c-audit-owner-institution-attribution-contract-admission-20260813.md`
+- `docs/operations/post-v2-r1c-audit-owner-institution-attribution-contract-exact-runtime-allowlist-20260813.csv`
+
+唯一下一任务：
+
+`POST-V2-R1C Audit Owner institution attribution contract exact 4-file Runtime implementation explicit authorization`
+
+<!-- POST_V2_R1C_AUDIT_OWNER_ATTRIBUTION_CONTRACT_ADMISSION_END -->
+
 <!-- POST_V2_R1C_AUDIT_WRITER_FORMAL_SCOPE_PORT_RUNTIME_START -->
 
 ## POST-V2-R1C Audit Writer 正式机构范围端口 Runtime 闭环（2026-08-13）

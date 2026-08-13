@@ -16,6 +16,7 @@
 - S5 Phase 0：caller inventory docs-only follow-up PR #1174 已合并；合并后仅回复并解决 PR #1173 指定 Review thread
 - S5 Phase 1：首个原子前置 formal institution Audit Writer scope port fresh audit 已通过，冻结 exact 2-file Runtime Admission
 - S6：formal institution Audit Writer scope port exact 2-file Runtime、Required Check、合并后独立验证与 Handoff 均已闭环
+- S7：Audit Owner institution attribution contract fresh audit 已通过，冻结 exact 4-file Runtime Admission；当前未授权或实施 Runtime
 - 当前经审查接受的受治理只读页面切片：1 / 26
 - 剩余未放行页面：25
 - 受控创建能力放行：0 / 3
@@ -100,6 +101,28 @@ AUDIT_WRITER_SCOPE_PORT_RUNTIME_VERIFIED=true
 AUDIT_WRITER_SCOPE_PORT_INDEPENDENT_VERIFICATION=passed
 AUDIT_WRITER_SCOPE_PORT_HANDOFF_COMPLETE=true
 
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_FRESH_AUDIT=passed
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME_ELIGIBLE=true
+ADMISSION_MODE=ADMISSION_READY
+EXACT_RUNTIME_SCOPE_FROZEN=true
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_EXACT_RUNTIME_ADMISSION=passed
+
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_RECOMMENDED_RUNTIME_DESIGN=方案 B：保留 legacy TenantAuditEvent + record 路径，新增 Audit-owned discriminated attributed contract + recordAttributed 路径
+CANONICAL_ATTRIBUTION_CONTRACT_OWNER=src/modules/audit
+LEGACY_CALLER_CAN_WRITE_VERIFIED=false
+LEGACY_UNATTRIBUTED_NEW_WRITE_ALLOWED=false
+AUDIT_CONTRACT_PROVES_FORMAL_SCOPE=false
+AUDIT_OWNER_IMPORTS_SCOPE_PORT=false
+PLATFORM_NOT_APPLICABLE_CONTRACT_SAFE=true
+AUTH_NOT_APPLICABLE_CONTRACT_SAFE=true
+
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_EXACT_RUNTIME_FILE_COUNT=4
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_EXISTING_RUNTIME_FILE_COUNT=4
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_NEW_RUNTIME_FILE_COUNT=0
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_DELETE_RUNTIME_FILE_COUNT=0
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_EXACT_PRODUCTION_FILE_COUNT=2
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_EXACT_TEST_FILE_COUNT=2
+
 RECOMMENDED_RUNTIME_DESIGN=方案 B：src/server/orchestration 持有的无输入 one-shot formal scope port
 FORMAL_SCOPE_SOURCE=formal server-session verified claims corroborated by current authoritative Identity + active Membership/Binding + active Tenancy Institution Scope
 PORT_OWNER=src/server/orchestration
@@ -146,7 +169,7 @@ LINT=passed_with_4_existing_warnings
 BUILD=passed
 
 DATABASE_CONNECTION=false
-AUDIT_OWNER_ATTRIBUTION_CONTRACT_AUTHORIZED=false
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME_AUTHORIZED=false
 CALLER_MIGRATION_AUTHORIZED=false
 AUDIT_OWNER_ATTRIBUTION_CONTRACT_CLOSED=false
 AUDIT_CALLER_MIGRATION_CLOSED=false
@@ -186,7 +209,7 @@ POST_V2_R1C_RELEASE_COMPLETE=false
 
 ### 唯一下一任务
 
-`POST-V2-R1C Audit Owner institution attribution contract fresh audit + exact Runtime admission`
+`POST-V2-R1C Audit Owner institution attribution contract exact 4-file Runtime implementation explicit authorization`
 
 ```text
 AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME_AUTHORIZED=false

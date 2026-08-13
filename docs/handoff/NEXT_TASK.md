@@ -3,7 +3,7 @@
 ## 唯一技术任务
 
 ```text
-NEXT_TASK=POST-V2-R1C Audit Owner institution attribution contract fresh audit + exact Runtime admission
+NEXT_TASK=POST-V2-R1C Audit Owner institution attribution contract exact 4-file Runtime implementation explicit authorization
 AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME_AUTHORIZED=false
 CALLER_MIGRATION_AUTHORIZED=false
 PAGE_SYSTEM_AUDIT_RUNTIME_AUTHORIZED=false
@@ -55,28 +55,68 @@ PRODUCTION_CHANGE=false
 PRODUCTION_DEPLOYMENT=false
 ```
 
-## Fresh audit 与 Admission 范围
+## 已完成准入
 
-下一任务只允许审计并形成精确 Runtime Admission，不实施 Runtime。至少重新核对：
+```text
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_FRESH_AUDIT=passed
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME_ELIGIBLE=true
+ADMISSION_MODE=ADMISSION_READY
+EXACT_RUNTIME_SCOPE_FROZEN=true
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_EXACT_RUNTIME_ADMISSION=passed
 
-1. `TenantAuditEvent`；
-2. `createAuditEvent`；
-3. `createDeniedAccessAuditEvent`；
-4. `mapAuditEventToInsert`；
-5. `AuditEventRepository.record`；
-6. `verified / not_applicable / legacy_unattributed` contract shape；
-7. Platform / Auth compatibility；
-8. exact Runtime / test 文件闭包、Owner、验证与回滚边界。
+RECOMMENDED_RUNTIME_DESIGN=方案 B：保留 legacy TenantAuditEvent + record 路径，新增 Audit-owned discriminated attributed contract + recordAttributed 路径
+CANONICAL_ATTRIBUTION_CONTRACT_OWNER=src/modules/audit
+LEGACY_CALLER_CAN_WRITE_VERIFIED=false
+LEGACY_UNATTRIBUTED_NEW_WRITE_ALLOWED=false
+AUDIT_CONTRACT_PROVES_FORMAL_SCOPE=false
+AUDIT_OWNER_IMPORTS_SCOPE_PORT=false
+PLATFORM_NOT_APPLICABLE_CONTRACT_SAFE=true
+AUTH_NOT_APPLICABLE_CONTRACT_SAFE=true
 
-审计必须回答 institution attribution 字段的 canonical Owner、formal scope handle 的消费边界、Platform / Auth 非机构事件如何保持兼容，以及下一 Runtime 是否能在不迁移 caller 的情况下成为独立原子切片。若无法形成小范围闭包，应输出 blocker / prerequisite，不得扩大为 caller migration。
+EXACT_RUNTIME_FILE_COUNT=4
+EXISTING_RUNTIME_FILE_COUNT=4
+NEW_RUNTIME_FILE_COUNT=0
+DELETE_RUNTIME_FILE_COUNT=0
+EXACT_PRODUCTION_FILE_COUNT=2
+EXACT_TEST_FILE_COUNT=2
+
+SCHEMA_CHANGE_REQUIRED=false
+MIGRATION_REQUIRED=false
+DDL_REQUIRED=false
+DML_REQUIRED=false
+ARCHITECTURE_EXCEPTION_REQUIRED=false
+DATABASE_CONNECTION=false
+DATABASE_WRITE_EXECUTION=false
+```
+
+## Exact Runtime allowlist
+
+只有用户明确授权下一 Runtime 后，才允许修改以下 4 个既有文件：
+
+1. `src/modules/audit/domain/audit-events.ts`；
+2. `src/modules/audit/server/audit-event-repository.ts`；
+3. `src/modules/audit/tests/AuditEventsDomain.test.ts`；
+4. `src/modules/audit/tests/AuditEventRepository.test.ts`。
+
+不允许第 5 个 Runtime/Test 文件、新文件或删除文件。实现必须保留 legacy `TenantAuditEvent + record()` 临时兼容，新增严格 attributed contract、validator、mapper 与 `recordAttributed()`；legacy path 显式映射 `NULL/NULL`，不能产生 `verified`。
+
+## Runtime 验收重点
+
+1. `verified` 必须具有非空 `tenantId + institutionId`，且 base event tenant 完全一致；
+2. `not_applicable` 必须 `institutionId=null`，tenant 可为非空 string 或 null；
+3. unknown、非法组合与所有新 `legacy_unattributed` 写入 fail-closed，不得 silent fallback；
+4. mapper / Repository 必须二次验证，cast / fake 输入不得 insert；
+5. Audit contract 不证明 formal scope，Audit module 不反向 import scope port；
+6. Repository 不查询业务 Owner、不调用 `getDatabase`、不自行开启 transaction；
+7. 现有 19 callers、Reader queries、Platform/Auth authorization 与 transaction rollback semantics 不变。
 
 ## 停止边界
 
-- 本 Handoff 只建议 fresh audit + exact Runtime Admission；不构成 Audit Owner attribution contract Runtime 授权；
-- 不得修改 `TenantAuditEvent`、factory、mapper、Repository 或现有测试；
+- 本 Admission 只建议 exact 4-file Runtime；未获用户当前明确授权前不得实施；
+- 不得修改 19 个 production caller、S6 formal scope port 或第 5 个 Runtime/Test 文件；
 - 不得实施 caller migration、历史 backfill 或 `page_system_audit` Runtime；
 - 不得执行历史 backfill、数据库写入、Schema、Migration、DDL、DML 或 Seed；
 - 不得修改 Workbench、Capability Authority、Platform Audit semantics、Architecture exception 或 AQ004～AQ008；
 - 不得连接 Staging / Production；
 - 不得把 scope port 完成误写成 Audit Writer attribution closure、历史数据就绪或页面放行；
-- caller migration 必须在 Audit Owner contract 合并后另行 fresh audit + Admission，不得随下一原子任务自动启动。
+- contract Runtime 合并后仍须对 caller migration 另行 fresh audit + Admission，不得自动启动。
