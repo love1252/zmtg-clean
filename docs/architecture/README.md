@@ -1,5 +1,80 @@
 # 智美天工架构文档索引
 
+<!-- POST_V2_R1C_AUDIT_WRITER_CLASSIFIED_CALLER_MIGRATION_ADMISSION_START -->
+
+## POST-V2-R1C Audit Writer 分类 caller migration 精确 Runtime 准入（2026-08-13）
+
+```text
+CALLER_MIGRATION_FRESH_AUDIT=passed
+COMPLETION_MODE=ADMISSION_READY_SPLIT
+MIGRATION_STRATEGY=SPLIT
+EXACT_RUNTIME_SCOPE_FROZEN=true
+FIRST_SLICE_EXACT_RUNTIME_ADMISSION=passed
+
+PRODUCTION_AUDIT_WRITER_CALLER_FILE_COUNT=19
+PRODUCTION_LEGACY_WRITER_CALLER_FILE_COUNT=19
+PRODUCTION_ATTRIBUTED_WRITER_CALLER_FILE_COUNT=0
+HELPER_CONSTRUCTION_CALLER_FILE_COUNT=16
+DIRECT_OBJECT_CONSTRUCTION_CALLER_FILE_COUNT=3
+TRANSACTIONAL_AUDIT_WRITER_CALLER_FILE_COUNT=10
+
+TARGET_VERIFIED_CALLER_FILE_COUNT=5
+TARGET_NOT_APPLICABLE_CALLER_FILE_COUNT=12
+BLOCKED_UNCLASSIFIED_CALLER_FILE_COUNT=2
+
+ADMITTED_SLICE_ID=AUTH_LOGIN_NOT_APPLICABLE_V1
+ADMITTED_CALLER_FILE_COUNT=1
+REMAINING_LEGACY_CALLER_FILE_COUNT_AFTER_SLICE=18
+EXACT_RUNTIME_FILE_COUNT=2
+EXISTING_RUNTIME_FILE_COUNT=2
+NEW_RUNTIME_FILE_COUNT=0
+DELETE_RUNTIME_FILE_COUNT=0
+EXACT_PRODUCTION_FILE_COUNT=1
+EXACT_TEST_FILE_COUNT=1
+EXACT_DOC_FILE_COUNT=6
+EXISTING_DOC_FILE_COUNT=4
+NEW_DOC_FILE_COUNT=2
+
+SCHEMA_CHANGE_REQUIRED=false
+MIGRATION_REQUIRED=false
+DDL_REQUIRED=false
+DML_REQUIRED=false
+ARCHITECTURE_EXCEPTION_REQUIRED=false
+DATABASE_CONNECTION=false
+DATABASE_WRITE_EXECUTION=false
+
+CALLER_MIGRATION_RUNTIME_AUTHORIZED=false
+AUDIT_WRITER_ATTRIBUTION_CLOSED=false
+AUDIT_CALLER_MIGRATION_CLOSED=false
+HISTORICAL_BACKFILL_CLOSED=false
+WORKBENCH_MULTI_CAPABILITY_SAFE=false
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+```
+
+架构结论：
+
+- fresh union search 重新确认 16 个 helper + 3 个直接对象构造 caller、0 个 attributed production caller 与 10 个事务持久化／组合文件；
+- 目标分类为 5 个 `VERIFIED`、12 个 `NOT_APPLICABLE`、2 个 `BLOCKED_UNCLASSIFIED`，不允许新生产写入使用 `legacy_unattributed`；
+- `VERIFIED` operation 必须由 orchestration 每次 top-level operation 只 resolve/consume 一次 S6 scope，并复用冻结 pair 对照 transaction-bound business pair；不得重复 ownership query；
+- 两个 mixed pre-scope caller 当前无法由 S8 contract 安全表达 attempted institution denial，必须独立准入，不能伪标为 `verified` 或 `not_applicable`；
+- 迁移采用 composition-family split；首切片只处理 active Auth formal login 的明确 `not_applicable`，exact allowlist 为 1 个既有 Route + 1 个既有测试文件；
+- 首切片不需要 Schema、Migration、数据库、transaction、new file 或 Architecture exception；S6 scope port 与 S8 contract 均不修改。
+
+证据：
+
+- `docs/operations/post-v2-r1c-audit-writer-classified-caller-migration-admission-20260813.md`
+- `docs/operations/post-v2-r1c-audit-writer-classified-caller-migration-exact-runtime-allowlist-20260813.csv`
+
+唯一下一任务：
+
+`POST-V2-R1C Audit Writer caller migration AUTH_LOGIN_NOT_APPLICABLE_V1 exact 2-file Runtime implementation explicit authorization`
+
+<!-- POST_V2_R1C_AUDIT_WRITER_CLASSIFIED_CALLER_MIGRATION_ADMISSION_END -->
+
 <!-- POST_V2_R1C_AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME_START -->
 
 ## POST-V2-R1C Audit Owner 机构归因契约 Runtime 闭环（2026-08-13）

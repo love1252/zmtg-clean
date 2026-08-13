@@ -1,0 +1,3 @@
+path,file_class,role,change,reason
+src/app/api/auth/login/route.ts,production,Auth formal login Audit caller,existing_runtime,replace this caller legacy record with attributed not_applicable recordAttributed while preserving allowed denied and best effort response isolation
+src/modules/auth/tests/FormalAuthRoutes.test.ts,test,formal login Route Audit attribution regression,existing_test,prove not_applicable exact shape zero legacy record unchanged login responses no extra transaction and no extra query

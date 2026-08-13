@@ -1,5 +1,81 @@
 # 项目重构历史
 
+<!-- POST_V2_R1C_AUDIT_WRITER_CLASSIFIED_CALLER_MIGRATION_ADMISSION_HISTORY -->
+
+## 2026-08-13：POST-V2-R1C Audit Writer 分类 caller migration 获得 Auth login exact 2-file Runtime 准入
+
+```text
+CALLER_MIGRATION_FRESH_AUDIT=passed
+COMPLETION_MODE=ADMISSION_READY_SPLIT
+MIGRATION_STRATEGY=SPLIT
+EXACT_RUNTIME_SCOPE_FROZEN=true
+FIRST_SLICE_EXACT_RUNTIME_ADMISSION=passed
+
+PRODUCTION_AUDIT_WRITER_CALLER_FILE_COUNT=19
+PRODUCTION_LEGACY_WRITER_CALLER_FILE_COUNT=19
+PRODUCTION_ATTRIBUTED_WRITER_CALLER_FILE_COUNT=0
+HELPER_CONSTRUCTION_CALLER_FILE_COUNT=16
+DIRECT_OBJECT_CONSTRUCTION_CALLER_FILE_COUNT=3
+TRANSACTIONAL_AUDIT_WRITER_CALLER_FILE_COUNT=10
+
+TARGET_VERIFIED_CALLER_FILE_COUNT=5
+TARGET_NOT_APPLICABLE_CALLER_FILE_COUNT=12
+BLOCKED_UNCLASSIFIED_CALLER_FILE_COUNT=2
+
+FORMAL_SCOPE_RESOLUTION_CARDINALITY=exactly_once_per_top_level_operation
+FORMAL_SCOPE_REUSE_WITHIN_OPERATION_SAFE=true
+
+ADMITTED_SLICE_ID=AUTH_LOGIN_NOT_APPLICABLE_V1
+ADMITTED_CALLER_FILE_COUNT=1
+REMAINING_LEGACY_CALLER_FILE_COUNT_AFTER_SLICE=18
+EXACT_RUNTIME_FILE_COUNT=2
+EXISTING_RUNTIME_FILE_COUNT=2
+NEW_RUNTIME_FILE_COUNT=0
+DELETE_RUNTIME_FILE_COUNT=0
+EXACT_PRODUCTION_FILE_COUNT=1
+EXACT_TEST_FILE_COUNT=1
+EXACT_DOC_FILE_COUNT=6
+EXISTING_DOC_FILE_COUNT=4
+NEW_DOC_FILE_COUNT=2
+
+SCHEMA_CHANGE_REQUIRED=false
+MIGRATION_REQUIRED=false
+DDL_REQUIRED=false
+DML_REQUIRED=false
+ARCHITECTURE_EXCEPTION_REQUIRED=false
+DATABASE_CONNECTION=false
+DATABASE_WRITE_EXECUTION=false
+
+CALLER_MIGRATION_RUNTIME_AUTHORIZED=false
+AUDIT_CALLER_MIGRATION_CLOSED=false
+AUDIT_WRITER_ATTRIBUTION_CLOSED=false
+HISTORICAL_BACKFILL_CLOSED=false
+WORKBENCH_MULTI_CAPABILITY_SAFE=false
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+```
+
+- fresh union search 重新确认 16 个 helper 构造文件、3 个直接对象构造文件、19 个 legacy caller、0 个 attributed production caller 与 10 个事务持久化／组合文件；
+- 逐业务事实分类为 5 个 `VERIFIED`、12 个 `NOT_APPLICABLE`、2 个 `BLOCKED_UNCLASSIFIED`；Institution 目录不自动等于 verified，4 个 tenant-wide HIS caller 明确属于 not_applicable；
+- `followup-message-draft-api.ts` 与 `tenant-business-api.ts` 混有 formal scope 尚未成立时的 institution denial，现有 contract 无法安全表达 attempted provenance，必须独立准入，不能伪分类；
+- 所有 verified top-level operation 只允许 resolve/consume 一次 S6 formal scope，复用冻结 pair 对照已有 transaction-bound business pair，不执行重复 ownership query；
+- 比较 single wave、完整 not_applicable wave、verified 非事务 wave 与 composition family split 后，选择 split；首切片为 active Auth formal login 的明确 not_applicable；
+- exact Runtime 只允许修改 `src/app/api/auth/login/route.ts` 与 `src/modules/auth/tests/FormalAuthRoutes.test.ts`，共 2 个既有文件；切片完成后 legacy caller residual 预计从 19 降至 18；
+- 首切片保持登录 allowed/denied、Cookie、低敏响应、Audit failure isolation 与 query/transaction 基数；不修改 S6 scope port、S8 contract、Schema、Architecture rules、Workbench 或页面；
+- S9 只交付 docs-only Admission，未连接数据库，未实施 caller Runtime、DDL/DML、backfill、Staging 或 Production。
+
+证据：
+
+- `docs/operations/post-v2-r1c-audit-writer-classified-caller-migration-admission-20260813.md`
+- `docs/operations/post-v2-r1c-audit-writer-classified-caller-migration-exact-runtime-allowlist-20260813.csv`
+
+下一任务：`POST-V2-R1C Audit Writer caller migration AUTH_LOGIN_NOT_APPLICABLE_V1 exact 2-file Runtime implementation explicit authorization`，`CALLER_MIGRATION_RUNTIME_AUTHORIZED=false`。
+
+<!-- POST_V2_R1C_AUDIT_WRITER_CLASSIFIED_CALLER_MIGRATION_ADMISSION_HISTORY_END -->
+
 <!-- POST_V2_R1C_AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME_HISTORY -->
 
 ## 2026-08-13：POST-V2-R1C Audit Owner 机构归因契约 Runtime 闭环
