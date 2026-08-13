@@ -460,11 +460,15 @@ describe('审计事件仓储映射', () => {
     expect(serialized).not.toContain('secret');
   });
 
-  it('按 institution scope 的 tenantId、筛选条件和 occurredAt 倒序查询审计事件', async () => {
+  it('按 institution scope 的双键、verified 归属、筛选条件和 occurredAt 倒序查询审计事件', async () => {
     const query = createAuditQueryDatabase([auditEventRow, secondAuditEventRow]);
 
     const result = await createAuditEventRepository(query.database).listAuditEvents({
-      scope: { kind: 'institution', tenantId: 'demo-tenant-001' },
+      scope: {
+        kind: 'institution',
+        tenantId: 'demo-tenant-001',
+        institutionId: 'demo-institution-001',
+      },
       query: {
         filters: {
           from: '2026-05-30T07:30:00.000Z',
@@ -484,6 +488,8 @@ describe('审计事件仓储映射', () => {
     expect(query.where).toHaveBeenCalledWith({
       conditions: [
         { column: auditEvents.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: auditEvents.institutionId, operator: 'eq', value: 'demo-institution-001' },
+        { column: auditEvents.institutionAttribution, operator: 'eq', value: 'verified' },
         { column: auditEvents.occurredAt, operator: 'gte', value: new Date('2026-05-30T07:30:00.000Z') },
         { column: auditEvents.occurredAt, operator: 'lte', value: new Date('2026-05-30T09:30:00.000Z') },
         { column: auditEvents.resource, operator: 'eq', value: 'customer' },
@@ -509,6 +515,39 @@ describe('审计事件仓储映射', () => {
       limit: 50,
       nextCursor: null,
     });
+  });
+
+  it('institution scope 不返回其他机构或 legacy/unattributed 事件', async () => {
+    const query = createAuditQueryDatabase([
+      auditEventRow,
+      {
+        ...auditEventRow,
+        eventId: 'audit_other_institution_001',
+        institutionId: 'demo-institution-002',
+      },
+      {
+        ...auditEventRow,
+        eventId: 'audit_legacy_001',
+        institutionAttribution: 'legacy_unattributed',
+      },
+      {
+        ...auditEventRow,
+        eventId: 'audit_unattributed_001',
+        institutionId: null,
+        institutionAttribution: null,
+      },
+    ]);
+
+    const result = await createAuditEventRepository(query.database).listAuditEvents({
+      scope: {
+        kind: 'institution',
+        tenantId: 'demo-tenant-001',
+        institutionId: 'demo-institution-001',
+      },
+      query: { filters: {}, limit: 50 },
+    });
+
+    expect(result.records.map((record) => record.id)).toEqual(['audit_evt_001']);
   });
 
   it('platform scope 不由 parser 决定租户范围，可查询平台级事件或受控跨租户事件', async () => {
@@ -573,7 +612,11 @@ describe('审计事件仓储映射', () => {
     ]);
 
     const result = await createAuditEventRepository(query.database).listAuditEvents({
-      scope: { kind: 'institution', tenantId: 'demo-tenant-001' },
+      scope: {
+        kind: 'institution',
+        tenantId: 'demo-tenant-001',
+        institutionId: 'demo-institution-001',
+      },
       query: {
         filters: {},
         limit: 2,
@@ -584,6 +627,8 @@ describe('审计事件仓储映射', () => {
     expect(query.where).toHaveBeenCalledWith({
       conditions: [
         { column: auditEvents.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: auditEvents.institutionId, operator: 'eq', value: 'demo-institution-001' },
+        { column: auditEvents.institutionAttribution, operator: 'eq', value: 'verified' },
         {
           conditions: [
             { column: auditEvents.occurredAt, operator: 'lt', value: new Date('2026-05-30T09:00:00.000Z') },

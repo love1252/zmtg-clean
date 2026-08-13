@@ -1,21 +1,34 @@
 import { withInstitutionSectionRouteGuardV1 } from '@/app/api/institution/_shared/institution-route-guard';
-
+import { parseAuditEventQueryParams } from '@/modules/audit/server/audit-event-query-parser';
+import { readCurrentInstitutionAuditEventsV1 } from '@/server/orchestration/institution-audit-reader';
 import { NextResponse } from 'next/server';
 
-const institutionAuditEventsReadDisabled = Object.freeze({
-  code: 'institution_audit_events_capability_disabled',
-  error: '机构审计日志能力暂未启用',
+const institutionAuditEventsUnavailable = Object.freeze({
+  code: 'institution_audit_events_service_unavailable',
+  error: '机构审计日志服务暂时不可用',
 });
 
-/**
- * No request data is inspected until an institution-scoped audit reader exists.
- * This deliberately avoids demo-session, authorization, query parsing, database, repository, and fetch side effects.
- */
-async function GET(_request: Request) {
-  return NextResponse.json(institutionAuditEventsReadDisabled, {
-    status: 503,
-    headers: { 'Cache-Control': 'no-store' },
-  });
+async function GET(request: Request) {
+  const parsedQuery = parseAuditEventQueryParams(new URL(request.url).searchParams);
+  if (!parsedQuery.ok) {
+    return NextResponse.json(
+      { error: parsedQuery.error },
+      { status: 400, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
+
+  const result = await readCurrentInstitutionAuditEventsV1(parsedQuery.query);
+  if (result.kind !== 'ready') {
+    return NextResponse.json(institutionAuditEventsUnavailable, {
+      status: 503,
+      headers: { 'Cache-Control': 'no-store' },
+    });
+  }
+
+  return NextResponse.json(
+    { records: result.records, pageInfo: result.pageInfo },
+    { headers: { 'Cache-Control': 'no-store' } },
+  );
 }
 
 const _base02B4GuardedGET = withInstitutionSectionRouteGuardV1({

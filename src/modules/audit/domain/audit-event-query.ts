@@ -215,7 +215,7 @@ export type AuditEventQuery = {
 };
 
 export type AuditEventQueryScope =
-  | { kind: 'institution'; tenantId: string }
+  | { kind: 'institution'; tenantId: string; institutionId: string }
   | { kind: 'platform'; tenantId?: string | null };
 
 export type AuditEventListItem = {

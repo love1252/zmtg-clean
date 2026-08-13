@@ -78,6 +78,8 @@ function buildAuditEventQueryConditions(input: {
 
   if (input.scope.kind === 'institution') {
     conditions.push(eq(auditEvents.tenantId, input.scope.tenantId));
+    conditions.push(eq(auditEvents.institutionId, input.scope.institutionId));
+    conditions.push(eq(auditEvents.institutionAttribution, 'verified'));
   } else {
     const platformTenantId = input.scope.tenantId;
     if (platformTenantId === null) {
@@ -243,7 +245,18 @@ export function createAuditEventRepository(database: TenantDatabase) {
         .orderBy(desc(auditEvents.occurredAt), asc(auditEvents.eventId))
         .limit(input.query.limit + 1);
 
-      return mapRowsToAuditQueryResult(rows, input.query.limit);
+      const scope = input.scope;
+      const scopedRows =
+        scope.kind === 'institution'
+          ? rows.filter(
+              (row) =>
+                row.tenantId === scope.tenantId &&
+                row.institutionId === scope.institutionId &&
+                row.institutionAttribution === 'verified',
+            )
+          : rows;
+
+      return mapRowsToAuditQueryResult(scopedRows, input.query.limit);
     },
     async listFollowUpPathAnalysisAuditEventsByTenant(
       tenantId: string,

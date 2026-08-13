@@ -5,8 +5,8 @@ import { describe, expect, it } from 'vitest';
 
 const ROUTE_PATH = 'src/app/api/institution/audit-events/route.ts';
 
-describe('BASE-B4-ROUTE-SECOND-01 Route Guard wiring', () => {
-  it('uses the frozen system Section Guard and preserves the existing handler boundary', async () => {
+describe('机构端审计日志正式 Route wiring', () => {
+  it('保留 system Section Guard，并只连接 parser 与 orchestration Reader', async () => {
     const source = await readFile(
       resolve(process.cwd(), ROUTE_PATH),
       'utf8',
@@ -17,8 +17,12 @@ describe('BASE-B4-ROUTE-SECOND-01 Route Guard wiring', () => {
 
     expect(imports).toEqual([
       "import { withInstitutionSectionRouteGuardV1 } from '@/app/api/institution/_shared/institution-route-guard';",
+      "import { parseAuditEventQueryParams } from '@/modules/audit/server/audit-event-query-parser';",
+      "import { readCurrentInstitutionAuditEventsV1 } from '@/server/orchestration/institution-audit-reader';",
       "import { NextResponse } from 'next/server';",
     ]);
+    expect(source).toContain('parseAuditEventQueryParams');
+    expect(source).toContain('readCurrentInstitutionAuditEventsV1');
     expect(source).toContain(
       'const _base02B4GuardedGET = withInstitutionSectionRouteGuardV1({',
     );
@@ -33,6 +37,11 @@ describe('BASE-B4-ROUTE-SECOND-01 Route Guard wiring', () => {
     expect(source).not.toContain(
       'authorizeCurrentInstitutionObjectV1',
     );
+    expect(source).not.toContain('getDemoAccessContextFromRequest');
+    expect(source).not.toContain('createAuditEventRepository');
+    expect(source).not.toContain('getDatabase');
+    expect(source).not.toContain('page_system_audit');
+    expect(source).not.toContain('pilot_released');
     expect(source.match(/withInstitutionSectionRouteGuardV1/g)).toHaveLength(2);
   });
 });
