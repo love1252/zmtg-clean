@@ -531,6 +531,44 @@ describe('HIS 连接配置凭证 service 最小边界', () => {
     expectNoCredentialLeak(harness.auditEventRepository.recordAttributed.mock.calls);
   });
 
+  it('归一化 tenant 与 actor 身份后，业务写入和 attributed audit 使用同一 canonical 值', async () => {
+    const harness = createServiceHarness();
+
+    const result = await createHisConnectionCredentialForTenantService({
+      accessContext: {
+        ...accessContext,
+        tenantId: ' demo-tenant-001 ',
+        userId: ' demo-user-admin ',
+      },
+      connectionId: ' his_conn_001 ',
+      database: harness.database,
+      credentialStorage: harness.credentialStorage,
+      credentialInput: parsedCredentialInput,
+      hisConnectionRepositoryFactory: harness.hisConnectionRepositoryFactory,
+      auditEventRepositoryFactory: harness.auditEventRepositoryFactory,
+    });
+
+    expect(result).toEqual({
+      status: 'created',
+      dto: { ok: true, credentialConfigured: true },
+    });
+    expect(harness.hisConnectionRepository.setHisConnectionCredentialReferenceForTenant)
+      .toHaveBeenCalledWith(expect.objectContaining({
+        tenantId: 'demo-tenant-001',
+        actorUserId: 'demo-user-admin',
+        connectionId: 'his_conn_001',
+      }));
+    expect(harness.auditEventRepository.recordAttributed).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'demo-tenant-001',
+        actorId: 'demo-user-admin',
+        resourceId: 'his_conn_001',
+        institutionAttribution: 'not_applicable',
+        institutionId: null,
+      }),
+    );
+  });
+
   it('allowed audit 写入失败时 fail closed 为 service_unavailable，且不泄露敏感信息', async () => {
     const harness = createServiceHarness({
       auditError: new Error('credentialRef=cred_ref_service_demo_safe_001 sk_live stack'),
