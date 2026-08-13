@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
+import type { AttributedTenantAuditEventV1 } from '@/modules/audit/domain/audit-events';
 import type {
   HisConnectionHealthSummaryWriteResult,
   HisConnectionReadModel,
@@ -60,7 +60,11 @@ type ServiceHarnessInput = {
 function createServiceHarness(input: ServiceHarnessInput = {}) {
   const database = { kind: 'database' } as unknown as TenantDatabase;
   const auditEventRepository = {
-    record: vi.fn(async (_event: TenantAuditEvent) => {
+    recordAttributed: vi.fn(async (_event: AttributedTenantAuditEventV1) => {
+      expect(_event).toMatchObject({
+        institutionAttribution: 'not_applicable',
+        institutionId: null,
+      });
       if (input.auditError) throw input.auditError;
     }),
   };
@@ -111,8 +115,8 @@ function expectNoSensitiveAuditData(payload: unknown) {
 function expectTestConnectionAuditEvent(
   event: unknown,
   input: {
-    result: TenantAuditEvent['result'];
-    reason: TenantAuditEvent['reason'];
+    result: AttributedTenantAuditEventV1['result'];
+    reason: AttributedTenantAuditEventV1['reason'];
     connectionId?: string;
   },
 ) {
@@ -130,8 +134,8 @@ function expectTestConnectionAuditEvent(
   if (input.connectionId !== undefined) {
     expect(event).toMatchObject({ resourceId: input.connectionId });
   }
-  expect((event as TenantAuditEvent).eventId).toEqual(expect.any(String));
-  expect(Number.isFinite(Date.parse((event as TenantAuditEvent).occurredAt))).toBe(true);
+  expect((event as AttributedTenantAuditEventV1).eventId).toEqual(expect.any(String));
+  expect(Number.isFinite(Date.parse((event as AttributedTenantAuditEventV1).occurredAt))).toBe(true);
   expectNoSensitiveAuditData(event);
 }
 
@@ -296,18 +300,18 @@ describe('HIS 测试连接 service 最小 runtime', () => {
       lastErrorCode: null,
       actorUserId: 'demo-user-admin',
     });
-    expect(harness.auditEventRepository.record).toHaveBeenCalledTimes(3);
-    expectTestConnectionAuditEvent(harness.auditEventRepository.record.mock.calls[0]?.[0], {
+    expect(harness.auditEventRepository.recordAttributed).toHaveBeenCalledTimes(3);
+    expectTestConnectionAuditEvent(harness.auditEventRepository.recordAttributed.mock.calls[0]?.[0], {
       result: 'allowed',
       reason: 'test_connection_requested',
       connectionId: 'his_conn_001',
     });
-    expectTestConnectionAuditEvent(harness.auditEventRepository.record.mock.calls[1]?.[0], {
+    expectTestConnectionAuditEvent(harness.auditEventRepository.recordAttributed.mock.calls[1]?.[0], {
       result: 'allowed',
       reason: 'test_connection_provider_healthy',
       connectionId: 'his_conn_001',
     });
-    expectTestConnectionAuditEvent(harness.auditEventRepository.record.mock.calls[2]?.[0], {
+    expectTestConnectionAuditEvent(harness.auditEventRepository.recordAttributed.mock.calls[2]?.[0], {
       result: 'allowed',
       reason: 'test_connection_completed',
       connectionId: 'his_conn_001',
@@ -369,7 +373,7 @@ describe('HIS 测试连接 service 最小 runtime', () => {
           lastErrorCode: routeCase.expectedCode,
         }),
       );
-      expect(harness.auditEventRepository.record).toHaveBeenCalledWith(
+      expect(harness.auditEventRepository.recordAttributed).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'test_connection',
           resourceId: routeCase.record.connectionId,
@@ -384,7 +388,7 @@ describe('HIS 测试连接 service 最小 runtime', () => {
                   : 'test_connection_provider_timeout',
         }),
       );
-      expect(harness.auditEventRepository.record).toHaveBeenCalledWith(
+      expect(harness.auditEventRepository.recordAttributed).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'test_connection',
           resourceId: routeCase.record.connectionId,
@@ -392,7 +396,7 @@ describe('HIS 测试连接 service 最小 runtime', () => {
           reason: 'test_connection_completed',
         }),
       );
-      expectNoSensitiveAuditData(harness.auditEventRepository.record.mock.calls);
+      expectNoSensitiveAuditData(harness.auditEventRepository.recordAttributed.mock.calls);
       expectSafeTestConnectionPayload(result);
     }
   });
@@ -440,20 +444,20 @@ describe('HIS 测试连接 service 最小 runtime', () => {
     expect(crossTenantHarness.fakeProvider).not.toHaveBeenCalled();
     expect(notFoundHarness.repository.writeHisConnectionHealthSummaryForTenant).not.toHaveBeenCalled();
     expect(crossTenantHarness.repository.writeHisConnectionHealthSummaryForTenant).not.toHaveBeenCalled();
-    expect(invalidHarness.auditEventRepository.record).not.toHaveBeenCalled();
-    expect(notFoundHarness.auditEventRepository.record).toHaveBeenCalledTimes(2);
-    expect(crossTenantHarness.auditEventRepository.record).toHaveBeenCalledTimes(2);
-    expectTestConnectionAuditEvent(notFoundHarness.auditEventRepository.record.mock.calls[0]?.[0], {
+    expect(invalidHarness.auditEventRepository.recordAttributed).not.toHaveBeenCalled();
+    expect(notFoundHarness.auditEventRepository.recordAttributed).toHaveBeenCalledTimes(2);
+    expect(crossTenantHarness.auditEventRepository.recordAttributed).toHaveBeenCalledTimes(2);
+    expectTestConnectionAuditEvent(notFoundHarness.auditEventRepository.recordAttributed.mock.calls[0]?.[0], {
       result: 'allowed',
       reason: 'test_connection_requested',
       connectionId: 'his_conn_missing',
     });
-    expectTestConnectionAuditEvent(notFoundHarness.auditEventRepository.record.mock.calls[1]?.[0], {
+    expectTestConnectionAuditEvent(notFoundHarness.auditEventRepository.recordAttributed.mock.calls[1]?.[0], {
       result: 'denied',
       reason: 'not_found_or_not_owned',
       connectionId: 'his_conn_missing',
     });
-    expectTestConnectionAuditEvent(crossTenantHarness.auditEventRepository.record.mock.calls[1]?.[0], {
+    expectTestConnectionAuditEvent(crossTenantHarness.auditEventRepository.recordAttributed.mock.calls[1]?.[0], {
       result: 'denied',
       reason: 'not_found_or_not_owned',
       connectionId: 'his_conn_other',
@@ -496,7 +500,7 @@ describe('HIS 测试连接 service 最小 runtime', () => {
       expect(harness.fakeProvider).not.toHaveBeenCalled();
       expect(harness.repository.writeHisConnectionHealthSummaryForTenant).not.toHaveBeenCalled();
       if (record.status === 'deleted') {
-        expect(harness.auditEventRepository.record).toHaveBeenCalledWith(
+        expect(harness.auditEventRepository.recordAttributed).toHaveBeenCalledWith(
           expect.objectContaining({
             action: 'test_connection',
             result: 'denied',
@@ -504,7 +508,7 @@ describe('HIS 测试连接 service 最小 runtime', () => {
           }),
         );
       } else {
-        expect(harness.auditEventRepository.record).toHaveBeenCalledWith(
+        expect(harness.auditEventRepository.recordAttributed).toHaveBeenCalledWith(
           expect.objectContaining({
             action: 'test_connection',
             result: 'denied',
@@ -512,7 +516,7 @@ describe('HIS 测试连接 service 最小 runtime', () => {
           }),
         );
       }
-      expectNoSensitiveAuditData(harness.auditEventRepository.record.mock.calls);
+      expectNoSensitiveAuditData(harness.auditEventRepository.recordAttributed.mock.calls);
     }
   });
 
@@ -542,7 +546,7 @@ describe('HIS 测试连接 service 最小 runtime', () => {
         auditEventRepositoryFactory: writeErrorHarness.auditEventRepositoryFactory,
       }),
     ).resolves.toEqual({ status: 'service_unavailable' });
-    expect(writeNotFoundHarness.auditEventRepository.record).toHaveBeenCalledWith(
+    expect(writeNotFoundHarness.auditEventRepository.recordAttributed).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'test_connection',
         resourceId: 'his_conn_001',
@@ -550,7 +554,7 @@ describe('HIS 测试连接 service 最小 runtime', () => {
         reason: 'repository_after_provider_failed',
       }),
     );
-    expect(writeErrorHarness.auditEventRepository.record).toHaveBeenCalledWith(
+    expect(writeErrorHarness.auditEventRepository.recordAttributed).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'test_connection',
         resourceId: 'his_conn_001',
@@ -558,8 +562,8 @@ describe('HIS 测试连接 service 最小 runtime', () => {
         reason: 'repository_after_provider_failed',
       }),
     );
-    expectNoSensitiveAuditData(writeNotFoundHarness.auditEventRepository.record.mock.calls);
-    expectNoSensitiveAuditData(writeErrorHarness.auditEventRepository.record.mock.calls);
+    expectNoSensitiveAuditData(writeNotFoundHarness.auditEventRepository.recordAttributed.mock.calls);
+    expectNoSensitiveAuditData(writeErrorHarness.auditEventRepository.recordAttributed.mock.calls);
   });
 
   it('audit 写入失败时 fail closed 为 service_unavailable，且不泄露 audit 原始错误', async () => {
@@ -577,7 +581,7 @@ describe('HIS 测试连接 service 最小 runtime', () => {
     });
 
     expect(result).toEqual({ status: 'service_unavailable' });
-    expect(harness.auditEventRepository.record).toHaveBeenCalledTimes(1);
+    expect(harness.auditEventRepository.recordAttributed).toHaveBeenCalledTimes(1);
     expect(harness.fakeProvider).not.toHaveBeenCalled();
     expect(harness.repository.writeHisConnectionHealthSummaryForTenant).not.toHaveBeenCalled();
     expectNoSensitiveAuditData(result);

@@ -1,4 +1,10 @@
-import { createAuditEvent, type AuditReason } from '@/modules/audit/domain/audit-events';
+import {
+  createAttributedTenantAuditEventV1,
+  createAuditEvent,
+  type AttributedTenantAuditEventV1,
+  type AuditReason,
+  type TenantAuditEvent,
+} from '@/modules/audit/domain/audit-events';
 import {
   createAuditEventRepository,
   type AuditEventRepository,
@@ -47,7 +53,7 @@ export type HisConnectionTestConnectionRepository =
   Pick<HisConnectionRepository, 'getHisConnectionByTenant'> &
   Pick<HisConnectionWriter, 'writeHisConnectionHealthSummaryForTenant'>;
 
-type HisConnectionTestConnectionAuditRepository = Pick<AuditEventRepository, 'record'>;
+type HisConnectionTestConnectionAuditRepository = Pick<AuditEventRepository, 'recordAttributed'>;
 
 type HisConnectionTestConnectionServiceDependencies = {
   database: TenantDatabase;
@@ -85,6 +91,19 @@ function createAuditEventId() {
     globalThis.crypto?.randomUUID?.() ??
     `audit_${Date.now()}_${Math.random().toString(36).slice(2)}`
   );
+}
+
+function createNotApplicableAuditEvent(event: TenantAuditEvent): AttributedTenantAuditEventV1 {
+  const attributedEvent = createAttributedTenantAuditEventV1({
+    event,
+    attribution: {
+      institutionAttribution: 'not_applicable',
+      tenantId: event.tenantId,
+      institutionId: null,
+    },
+  });
+  if (!attributedEvent) throw new Error('invalid_his_connection_test_audit_attribution');
+  return attributedEvent;
 }
 
 function createFailureDto(input: {
@@ -201,8 +220,8 @@ async function recordTestConnectionAudit(input: {
   result: 'allowed' | 'denied';
   reason: AuditReason;
 }) {
-  await input.auditRepository.record(
-    createAuditEvent({
+  await input.auditRepository.recordAttributed(
+    createNotApplicableAuditEvent(createAuditEvent({
       eventId: createAuditEventId(),
       context: {
         ...input.accessContext,
@@ -215,7 +234,7 @@ async function recordTestConnectionAudit(input: {
       result: input.result,
       reason: input.reason,
       occurredAt: new Date().toISOString(),
-    }),
+    })),
   );
 }
 

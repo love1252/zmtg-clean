@@ -1,4 +1,9 @@
-import { createAuditEvent } from '@/modules/audit/domain/audit-events';
+import {
+  createAttributedTenantAuditEventV1,
+  createAuditEvent,
+  type AttributedTenantAuditEventV1,
+  type TenantAuditEvent,
+} from '@/modules/audit/domain/audit-events';
 import {
   createAuditEventRepository,
   type AuditEventRepository,
@@ -38,7 +43,7 @@ type HisConnectionWriteRepository = Pick<
   'createHisConnectionForTenant' | 'updateHisConnectionForTenant'
 >;
 
-type HisConnectionWriteAuditRepository = Pick<AuditEventRepository, 'record'>;
+type HisConnectionWriteAuditRepository = Pick<AuditEventRepository, 'recordAttributed'>;
 
 export type CreateHisConnectionForTenantServiceInput =
   HisConnectionWriteServiceDependencies & {
@@ -67,6 +72,19 @@ function normalizeTrustedText(value: unknown) {
 
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
+}
+
+function createNotApplicableAuditEvent(event: TenantAuditEvent): AttributedTenantAuditEventV1 {
+  const attributedEvent = createAttributedTenantAuditEventV1({
+    event,
+    attribution: {
+      institutionAttribution: 'not_applicable',
+      tenantId: event.tenantId,
+      institutionId: null,
+    },
+  });
+  if (!attributedEvent) throw new Error('invalid_his_connection_write_audit_attribution');
+  return attributedEvent;
 }
 
 function pickCreateMetadata(metadata: CreateHisConnectionInput): CreateHisConnectionInput {
@@ -106,7 +124,7 @@ function createAllowedAuditEvent(input: {
   resourceId: string;
   action: 'create' | 'update';
 }) {
-  return createAuditEvent({
+  return createNotApplicableAuditEvent(createAuditEvent({
     eventId: createAuditEventId(),
     context: {
       ...input.accessContext,
@@ -119,7 +137,7 @@ function createAllowedAuditEvent(input: {
     result: 'allowed',
     reason: 'allowed_by_policy',
     occurredAt: new Date().toISOString(),
-  });
+  }));
 }
 
 function createDeniedAuditEvent(input: {
@@ -130,7 +148,7 @@ function createDeniedAuditEvent(input: {
   action: 'create' | 'update';
   reason: 'invalid_his_connection_payload' | 'his_connection_name_conflict' | 'not_found_or_not_owned';
 }) {
-  return createAuditEvent({
+  return createNotApplicableAuditEvent(createAuditEvent({
     eventId: createAuditEventId(),
     context: {
       ...input.accessContext,
@@ -143,7 +161,7 @@ function createDeniedAuditEvent(input: {
     result: 'denied',
     reason: input.reason,
     occurredAt: new Date().toISOString(),
-  });
+  }));
 }
 
 function createSuccessDto(): HisConnectionWriteSuccessDto {
@@ -180,7 +198,7 @@ export async function createHisConnectionForTenantService(
       });
 
       if (result.status === 'validation_failed') {
-        await auditEventRepository.record(
+        await auditEventRepository.recordAttributed(
           createDeniedAuditEvent({
             accessContext: input.accessContext,
             tenantId,
@@ -194,7 +212,7 @@ export async function createHisConnectionForTenantService(
       }
 
       if (result.status === 'conflict') {
-        await auditEventRepository.record(
+        await auditEventRepository.recordAttributed(
           createDeniedAuditEvent({
             accessContext: input.accessContext,
             tenantId,
@@ -211,7 +229,7 @@ export async function createHisConnectionForTenantService(
         return { status: 'service_unavailable' };
       }
 
-      await auditEventRepository.record(
+      await auditEventRepository.recordAttributed(
         createAllowedAuditEvent({
           accessContext: input.accessContext,
           tenantId,
@@ -257,7 +275,7 @@ export async function updateHisConnectionForTenantService(
       });
 
       if (result.status === 'validation_failed') {
-        await auditEventRepository.record(
+        await auditEventRepository.recordAttributed(
           createDeniedAuditEvent({
             accessContext: input.accessContext,
             tenantId,
@@ -272,7 +290,7 @@ export async function updateHisConnectionForTenantService(
       }
 
       if (result.status === 'conflict') {
-        await auditEventRepository.record(
+        await auditEventRepository.recordAttributed(
           createDeniedAuditEvent({
             accessContext: input.accessContext,
             tenantId,
@@ -287,7 +305,7 @@ export async function updateHisConnectionForTenantService(
       }
 
       if (result.status === 'not_found') {
-        await auditEventRepository.record(
+        await auditEventRepository.recordAttributed(
           createDeniedAuditEvent({
             accessContext: input.accessContext,
             tenantId,
@@ -305,7 +323,7 @@ export async function updateHisConnectionForTenantService(
         return { status: 'service_unavailable' };
       }
 
-      await auditEventRepository.record(
+      await auditEventRepository.recordAttributed(
         createAllowedAuditEvent({
           accessContext: input.accessContext,
           tenantId,

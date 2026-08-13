@@ -2,7 +2,13 @@ import {
   mapHisConnectionCredentialSuccessToDto,
   type HisConnectionCredentialSuccessDto,
 } from '@/modules/institution/server/his-connection-credential-dto';
-import { createAuditEvent, type AuditReason } from '@/modules/audit/domain/audit-events';
+import {
+  createAttributedTenantAuditEventV1,
+  createAuditEvent,
+  type AttributedTenantAuditEventV1,
+  type AuditReason,
+  type TenantAuditEvent,
+} from '@/modules/audit/domain/audit-events';
 import type { AuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import type {
   HisConnectionCredentialMutationInput,
@@ -52,7 +58,7 @@ type HisConnectionCredentialRepository = Pick<
   | 'revokeHisConnectionCredentialReferenceForTenant'
 >;
 
-type HisConnectionCredentialAuditRepository = Pick<AuditEventRepository, 'record'>;
+type HisConnectionCredentialAuditRepository = Pick<AuditEventRepository, 'recordAttributed'>;
 
 type HisConnectionCredentialStorage = Pick<
   HisConnectionCredentialProvider,
@@ -167,6 +173,19 @@ function createAuditEventId() {
   );
 }
 
+function createNotApplicableAuditEvent(event: TenantAuditEvent): AttributedTenantAuditEventV1 {
+  const attributedEvent = createAttributedTenantAuditEventV1({
+    event,
+    attribution: {
+      institutionAttribution: 'not_applicable',
+      tenantId: event.tenantId,
+      institutionId: null,
+    },
+  });
+  if (!attributedEvent) throw new Error('invalid_his_credential_audit_attribution');
+  return attributedEvent;
+}
+
 async function recordAllowedCredentialAudit(input: {
   dependencies: HisConnectionCredentialServiceDependencies;
   database: TenantDatabase;
@@ -179,8 +198,8 @@ async function recordAllowedCredentialAudit(input: {
     return;
   }
 
-  await auditRepository.record(
-    createAuditEvent({
+  await auditRepository.recordAttributed(
+    createNotApplicableAuditEvent(createAuditEvent({
       eventId: createAuditEventId(),
       context: input.accessContext,
       resource: 'open_connection',
@@ -189,7 +208,7 @@ async function recordAllowedCredentialAudit(input: {
       result: 'allowed',
       reason: 'allowed_by_policy',
       occurredAt: new Date().toISOString(),
-    }),
+    })),
   );
 }
 
@@ -207,8 +226,8 @@ async function recordProviderFailureCredentialAudit(input: {
       return { ok: true as const };
     }
 
-    await auditRepository.record(
-      createAuditEvent({
+    await auditRepository.recordAttributed(
+      createNotApplicableAuditEvent(createAuditEvent({
         eventId: createAuditEventId(),
         context: input.accessContext,
         resource: 'open_connection',
@@ -217,7 +236,7 @@ async function recordProviderFailureCredentialAudit(input: {
         result: 'denied',
         reason: providerFailureAuditReasonByCategory[input.failure.category],
         occurredAt: new Date().toISOString(),
-      }),
+      })),
     );
 
     return { ok: true as const };

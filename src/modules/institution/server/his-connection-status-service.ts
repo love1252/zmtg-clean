@@ -1,4 +1,10 @@
-import { createAuditEvent, type AuditReason } from '@/modules/audit/domain/audit-events';
+import {
+  createAttributedTenantAuditEventV1,
+  createAuditEvent,
+  type AttributedTenantAuditEventV1,
+  type AuditReason,
+  type TenantAuditEvent,
+} from '@/modules/audit/domain/audit-events';
 import {
   createAuditEventRepository,
   type AuditEventRepository,
@@ -32,7 +38,7 @@ type HisConnectionStatusRepository = Pick<
   | 'softDeleteHisConnectionForTenant'
 >;
 
-type HisConnectionStatusAuditRepository = Pick<AuditEventRepository, 'record'>;
+type HisConnectionStatusAuditRepository = Pick<AuditEventRepository, 'recordAttributed'>;
 
 type HisConnectionStatusServiceDependencies = {
   database: TenantDatabase;
@@ -71,6 +77,19 @@ function normalizeTrustedText(value: unknown) {
   return normalized.length > 0 ? normalized : null;
 }
 
+function createNotApplicableAuditEvent(event: TenantAuditEvent): AttributedTenantAuditEventV1 {
+  const attributedEvent = createAttributedTenantAuditEventV1({
+    event,
+    attribution: {
+      institutionAttribution: 'not_applicable',
+      tenantId: event.tenantId,
+      institutionId: null,
+    },
+  });
+  if (!attributedEvent) throw new Error('invalid_his_connection_status_audit_attribution');
+  return attributedEvent;
+}
+
 function normalizeOptionalText(value: unknown) {
   if (value === undefined) return undefined;
 
@@ -95,7 +114,7 @@ function createStatusAuditEvent(input: {
   result: 'allowed' | 'denied';
   reason: AuditReason;
 }) {
-  return createAuditEvent({
+  return createNotApplicableAuditEvent(createAuditEvent({
     eventId: createAuditEventId(),
     context: {
       ...input.accessContext,
@@ -108,7 +127,7 @@ function createStatusAuditEvent(input: {
     result: input.result,
     reason: input.reason,
     occurredAt: new Date().toISOString(),
-  });
+  }));
 }
 
 function createSuccessDto(): HisConnectionStatusSuccessDto {
@@ -167,7 +186,7 @@ async function runHisConnectionStatusService(
       const result = await hisConnectionRepository[config.repositoryMethod](command);
 
       if (result.status !== 'ok') {
-        await auditEventRepository.record(
+        await auditEventRepository.recordAttributed(
           createStatusAuditEvent({
             accessContext: input.accessContext,
             tenantId,
@@ -182,7 +201,7 @@ async function runHisConnectionStatusService(
         return mapRepositoryFailureResult(result);
       }
 
-      await auditEventRepository.record(
+      await auditEventRepository.recordAttributed(
         createStatusAuditEvent({
           accessContext: input.accessContext,
           tenantId,

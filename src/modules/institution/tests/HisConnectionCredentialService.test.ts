@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
+import type { AttributedTenantAuditEventV1 } from '@/modules/audit/domain/audit-events';
 import type { HisConnectionCredentialReferenceResult } from '@/modules/institution/server/his-connection-repository';
 import type {
   HisConnectionCredentialProvider,
@@ -216,8 +216,11 @@ function createServiceHarness(input: {
   };
   const hisConnectionRepositoryFactory = vi.fn(() => hisConnectionRepository);
   const auditEventRepository = {
-    record: vi.fn(async (event: TenantAuditEvent) => {
-      void event;
+    recordAttributed: vi.fn(async (event: AttributedTenantAuditEventV1) => {
+      expect(event).toMatchObject({
+        institutionAttribution: 'not_applicable',
+        institutionId: null,
+      });
       if (input.auditError) throw input.auditError;
     }),
   };
@@ -241,8 +244,8 @@ function expectNoCredentialLeak(payload: unknown) {
 }
 
 function expectProviderFailureAuditEvent(
-  event: TenantAuditEvent,
-  reason: TenantAuditEvent['reason'],
+  event: AttributedTenantAuditEventV1,
+  reason: AttributedTenantAuditEventV1['reason'],
 ) {
   expect(event).toMatchObject({
     actorId: 'demo-user-admin',
@@ -512,7 +515,7 @@ describe('HIS 连接配置凭证 service 最小边界', () => {
     expect(harness.auditEventRepositoryFactory).toHaveBeenCalledWith(
       harness.transactionDatabase,
     );
-    expect(harness.auditEventRepository.record).toHaveBeenCalledWith(
+    expect(harness.auditEventRepository.recordAttributed).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: 'demo-user-admin',
         actorRole: 'tenant_admin',
@@ -525,7 +528,7 @@ describe('HIS 连接配置凭证 service 最小边界', () => {
         source: 'demo_session',
       }),
     );
-    expectNoCredentialLeak(harness.auditEventRepository.record.mock.calls);
+    expectNoCredentialLeak(harness.auditEventRepository.recordAttributed.mock.calls);
   });
 
   it('allowed audit 写入失败时 fail closed 为 service_unavailable，且不泄露敏感信息', async () => {
@@ -544,7 +547,7 @@ describe('HIS 连接配置凭证 service 最小边界', () => {
     });
 
     expect(result).toEqual({ status: 'service_unavailable' });
-    expect(harness.auditEventRepository.record).toHaveBeenCalledTimes(1);
+    expect(harness.auditEventRepository.recordAttributed).toHaveBeenCalledTimes(1);
     expectNoCredentialLeak(result);
   });
 
@@ -602,12 +605,12 @@ describe('HIS 连接配置凭证 service 最小边界', () => {
 
       expect(result).toEqual({ status: expectedStatus });
       expect(harness.database.transaction).not.toHaveBeenCalled();
-      expect(harness.auditEventRepository.record).toHaveBeenCalledTimes(1);
+      expect(harness.auditEventRepository.recordAttributed).toHaveBeenCalledTimes(1);
       expectProviderFailureAuditEvent(
-        harness.auditEventRepository.record.mock.calls[0][0] as TenantAuditEvent,
+        harness.auditEventRepository.recordAttributed.mock.calls[0][0] as AttributedTenantAuditEventV1,
         expectedReason,
       );
-      expect(harness.auditEventRepository.record.mock.calls[0][0]).not.toMatchObject({
+      expect(harness.auditEventRepository.recordAttributed.mock.calls[0][0]).not.toMatchObject({
         result: 'allowed',
         reason: 'allowed_by_policy',
       });
@@ -638,12 +641,12 @@ describe('HIS 连接配置凭证 service 最小边界', () => {
 
     expect(result).toEqual({ status: 'service_unavailable' });
     expect(harness.database.transaction).toHaveBeenCalledTimes(1);
-    expect(harness.auditEventRepository.record).toHaveBeenCalledTimes(1);
+    expect(harness.auditEventRepository.recordAttributed).toHaveBeenCalledTimes(1);
     expectProviderFailureAuditEvent(
-      harness.auditEventRepository.record.mock.calls[0][0] as TenantAuditEvent,
+      harness.auditEventRepository.recordAttributed.mock.calls[0][0] as AttributedTenantAuditEventV1,
       'provider_revoke_failed',
     );
-    expectNoCredentialLeak(harness.auditEventRepository.record.mock.calls);
+    expectNoCredentialLeak(harness.auditEventRepository.recordAttributed.mock.calls);
   });
 
   it('provider failure audit 写入失败时 fail closed 为 service_unavailable，且不泄露 audit 原始错误', async () => {
@@ -670,7 +673,7 @@ describe('HIS 连接配置凭证 service 最小边界', () => {
     });
 
     expect(result).toEqual({ status: 'service_unavailable' });
-    expect(harness.auditEventRepository.record).toHaveBeenCalledTimes(1);
+    expect(harness.auditEventRepository.recordAttributed).toHaveBeenCalledTimes(1);
     expectNoCredentialLeak(result);
   });
 
@@ -692,7 +695,7 @@ describe('HIS 连接配置凭证 service 最小边界', () => {
     });
 
     expect(result).toEqual({ status: 'service_unavailable' });
-    expect(harness.auditEventRepository.record).not.toHaveBeenCalled();
+    expect(harness.auditEventRepository.recordAttributed).not.toHaveBeenCalled();
     expectNoCredentialLeak(result);
   });
 });
