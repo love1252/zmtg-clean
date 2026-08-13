@@ -163,7 +163,7 @@ CALLER_MIGRATION_RUNTIME_AUTHORIZED=false
 AUDIT_CALLER_MIGRATION_CLOSED=false
 
 PR1181_POST_MERGE_P1_DETECTED=true
-S9_RD1_CORRECTIVE_SCOPE=5 Markdown documents plus deletion of the non-Markdown standalone allowlist CSV
+S9_RD1_CORRECTIVE_SCOPE=修改 5 个 Markdown 文档并删除 1 个非 Markdown 独立 allowlist CSV
 S9_CANONICAL_EXACT_RUNTIME_ALLOWLIST_LOCATION=docs/operations/post-v2-r1c-audit-writer-classified-caller-migration-admission-20260813.md
 
 AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME_AUTHORIZATION_USED=A2 exact 4 files
