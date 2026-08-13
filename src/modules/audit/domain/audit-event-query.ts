@@ -240,6 +240,35 @@ export type AuditEventQueryResult = {
   };
 };
 
+export const INSTITUTION_AUDIT_COVERAGE_STATES = [
+  'complete',
+  'partial_verified_only',
+] as const;
+
+export type InstitutionAuditCoverageState =
+  (typeof INSTITUTION_AUDIT_COVERAGE_STATES)[number];
+
+export type InstitutionAuditCoverage =
+  | Readonly<{
+      state: 'complete';
+      safeDataAvailable: boolean;
+      historicalCoverageComplete: true;
+      partialCoverageSafe: false;
+    }>
+  | Readonly<{
+      state: 'partial_verified_only';
+      safeDataAvailable: boolean;
+      historicalCoverageComplete: false;
+      partialCoverageSafe: true;
+    }>;
+
+const INSTITUTION_AUDIT_COVERAGE_KEYS = Object.freeze([
+  'state',
+  'safeDataAvailable',
+  'historicalCoverageComplete',
+  'partialCoverageSafe',
+] as const);
+
 export type ParseAuditEventQueryResult =
   | { ok: true; query: AuditEventQuery }
   | { ok: false; error: string };
@@ -250,6 +279,57 @@ export type DecodeAuditEventQueryCursorResult =
 
 function isJsonObject(input: unknown): input is Record<string, unknown> {
   return Object.prototype.toString.call(input) === '[object Object]';
+}
+
+export function createInstitutionAuditCoverage(input: {
+  verifiedRecordCount: number;
+  unclassifiableHistoricalRecordCount: number;
+}): InstitutionAuditCoverage | null {
+  if (
+    !Number.isSafeInteger(input.verifiedRecordCount) ||
+    input.verifiedRecordCount < 0 ||
+    !Number.isSafeInteger(input.unclassifiableHistoricalRecordCount) ||
+    input.unclassifiableHistoricalRecordCount < 0
+  ) {
+    return null;
+  }
+
+  const safeDataAvailable = input.verifiedRecordCount > 0;
+  return input.unclassifiableHistoricalRecordCount > 0
+    ? Object.freeze({
+        state: 'partial_verified_only',
+        safeDataAvailable,
+        historicalCoverageComplete: false,
+        partialCoverageSafe: true,
+      })
+    : Object.freeze({
+        state: 'complete',
+        safeDataAvailable,
+        historicalCoverageComplete: true,
+        partialCoverageSafe: false,
+      });
+}
+
+export function isInstitutionAuditCoverage(
+  input: unknown,
+): input is InstitutionAuditCoverage {
+  if (
+    !isJsonObject(input) ||
+    Reflect.ownKeys(input).length !== INSTITUTION_AUDIT_COVERAGE_KEYS.length ||
+    !INSTITUTION_AUDIT_COVERAGE_KEYS.every((key) =>
+      Object.prototype.hasOwnProperty.call(input, key),
+    ) ||
+    typeof input.safeDataAvailable !== 'boolean'
+  ) {
+    return false;
+  }
+
+  return input.state === 'complete'
+    ? input.historicalCoverageComplete === true &&
+        input.partialCoverageSafe === false
+    : input.state === 'partial_verified_only' &&
+        input.historicalCoverageComplete === false &&
+        input.partialCoverageSafe === true;
 }
 
 function encodeBase64Url(value: string) {

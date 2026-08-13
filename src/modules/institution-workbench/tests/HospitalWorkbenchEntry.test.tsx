@@ -268,7 +268,23 @@ function authorizationFixture(
   return { authorization, owner, anchorProvider, codec, membershipRead, anchorRead };
 }
 
-function readonlyWorkbenchCapabilityStatus(): CapabilityStatusV1 {
+type WorkbenchFixtureCapabilityKey =
+  | 'page_workbench'
+  | 'page_system_audit'
+  | 'page_system_overview';
+
+function capabilityLabel(key: WorkbenchFixtureCapabilityKey): string {
+  if (key === 'page_system_audit') return '审计与安全';
+  if (key === 'page_system_overview') return '系统概览';
+  return '工作台';
+}
+
+function readonlyWorkbenchCapabilityStatus(
+  entries: readonly Readonly<{
+    key: WorkbenchFixtureCapabilityKey;
+    decision?: 'hidden' | 'read_only';
+  }>[] = [{ key: 'page_workbench' }],
+): CapabilityStatusV1 {
   const freshness = {
     observedAt: NOW.toISOString(),
     freshUntil: new Date(NOW.getTime() + 5_000).toISOString(),
@@ -282,30 +298,28 @@ function readonlyWorkbenchCapabilityStatus(): CapabilityStatusV1 {
     },
     readiness: 'ready',
     freshness,
-    partitions: [
-      {
-        key: 'page_workbench',
+    partitions: entries.map(({ key }) => ({
+        key,
         readiness: 'ready',
         freshness,
         failureCode: null,
-      },
-    ],
+      })),
     data: {
-      capabilities: [
-        {
-          key: 'page_workbench',
-          decision: 'read_only',
+      capabilities: entries.map(({ key, decision = 'read_only' }) => ({
+          key,
+          decision,
           dimensions: {
             codeMaturity: 'verified',
             institutionAuthorization: 'authorized',
             connectionAvailability: 'not_required',
             dataReadiness: 'not_required',
-            productionRelease: 'pilot_released',
+            productionRelease:
+              key === 'page_workbench' ? 'pilot_released' : 'not_released',
           },
-          safeSummary: '工作台仅供查看',
+          safeSummary:
+            decision === 'hidden' ? null : `${capabilityLabel(key)}仅供查看`,
           diagnosticTargetKey: null,
-        },
-      ],
+        })),
     },
     failureCode: null,
   };
@@ -694,6 +708,102 @@ describe('BASE-WIRE-01 /hospital server navigation authorization', () => {
     expect(
       capabilityAuthorityMocks.resolveInstitutionCapabilityAuthorityStatusV1,
     ).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    {
+      name: 'page_workbench 后出现第二个 governed summary',
+      entries: [
+        { key: 'page_workbench' },
+        { key: 'page_system_audit' },
+      ],
+    },
+    {
+      name: '第二个 governed summary 位于 page_workbench 之前',
+      entries: [
+        { key: 'page_system_audit' },
+        { key: 'page_workbench' },
+      ],
+    },
+    {
+      name: '存在无关的第二个 governed summary',
+      entries: [
+        { key: 'page_workbench' },
+        { key: 'page_system_overview' },
+      ],
+    },
+    {
+      name: '存在无关的 hidden capability',
+      entries: [
+        { key: 'page_workbench' },
+        { key: 'page_system_audit', decision: 'hidden' },
+      ],
+    },
+  ] satisfies readonly {
+    name: string;
+    entries: readonly Readonly<{
+      key: WorkbenchFixtureCapabilityKey;
+      decision?: 'hidden' | 'read_only';
+    }>[];
+  }[])('按 capability key 稳定选择 Workbench：$name', async ({ entries }) => {
+    const created = authorizationFixture('tenant_admin');
+    vi.spyOn(Date, 'now').mockReturnValue(NOW.getTime());
+    serverRuntimeMocks.resolveInstitutionServerAuthorizationV1.mockResolvedValueOnce(
+      created.authorization,
+    );
+    capabilityAuthorityMocks.resolveInstitutionCapabilityAuthorityStatusV1.mockResolvedValueOnce(
+      readonlyWorkbenchCapabilityStatus(entries),
+    );
+
+    render(await HospitalPage());
+
+    const main = screen.getByRole('main');
+    expect(
+      main.querySelector('[data-capability-state="readonly-pilot"]'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('工作台仅供查看')).toBeInTheDocument();
+    expect(screen.queryByText('审计与安全仅供查看')).not.toBeInTheDocument();
+    expect(screen.queryByText('系统概览仅供查看')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    {
+      name: 'duplicate page_workbench',
+      entries: [
+        { key: 'page_workbench' },
+        { key: 'page_workbench' },
+      ],
+    },
+    {
+      name: 'missing page_workbench',
+      entries: [{ key: 'page_system_audit' }],
+    },
+  ] satisfies readonly {
+    name: string;
+    entries: readonly Readonly<{
+      key: WorkbenchFixtureCapabilityKey;
+      decision?: 'hidden' | 'read_only';
+    }>[];
+  }[])('异常 multi-capability 输入 fail closed：$name', async ({ entries }) => {
+    const created = authorizationFixture('tenant_admin');
+    vi.spyOn(Date, 'now').mockReturnValue(NOW.getTime());
+    serverRuntimeMocks.resolveInstitutionServerAuthorizationV1.mockResolvedValueOnce(
+      created.authorization,
+    );
+    capabilityAuthorityMocks.resolveInstitutionCapabilityAuthorityStatusV1.mockResolvedValueOnce(
+      readonlyWorkbenchCapabilityStatus(entries),
+    );
+
+    render(await HospitalPage());
+
+    const main = screen.getByRole('main');
+    expect(
+      main.querySelector('[data-capability-state="readonly-pilot"]'),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: '工作台访问已核验', level: 2 }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('审计与安全仅供查看')).not.toBeInTheDocument();
   });
 
   it('keeps the genuine navigation boundary when capability authority resolution throws', async () => {

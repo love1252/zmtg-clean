@@ -5,6 +5,7 @@ import { Filter, Loader2, Search, ShieldCheck } from 'lucide-react';
 import {
   AUDIT_REASON_VALUES,
   AUDIT_RESULT_VALUES,
+  type InstitutionAuditCoverage,
 } from '@/modules/audit/domain/audit-event-query';
 import {
   listInstitutionAuditEvents,
@@ -130,9 +131,32 @@ function copyAuditRecords(records: InstitutionAuditEventRecord[]) {
   return records.map((record) => ({ ...record }));
 }
 
+function auditCoverageDescription(coverage: InstitutionAuditCoverage) {
+  if (coverage.state === 'partial_verified_only') {
+    return coverage.safeDataAvailable
+      ? '当前仅展示可信归属于本机构的记录。历史覆盖不完整，未归因旧记录没有被猜测纳入，当前结果不代表完整历史。'
+      : '当前没有可安全归属于本机构的记录。历史覆盖不完整，不能据此判断本机构从未发生审计事件。';
+  }
+
+  return coverage.safeDataAvailable
+    ? '当前仅展示可信归属于本机构的记录，历史覆盖状态完整。'
+    : '当前没有可信归属于本机构的记录，历史覆盖状态完整。';
+}
+
+function emptyAuditDescription(coverage: InstitutionAuditCoverage | null) {
+  if (coverage?.state === 'partial_verified_only') {
+    return '当前筛选条件下没有已验证记录；历史覆盖不完整，不能据此声明从未发生相关事件。';
+  }
+
+  return coverage?.state === 'complete'
+    ? '当前筛选条件在完整覆盖范围内没有可展示的关键操作记录。'
+    : '当前筛选条件下没有可展示的关键操作记录。';
+}
+
 export function InstitutionAuditEventsShell() {
   const [records, setRecords] = useState<InstitutionAuditEventRecord[]>([]);
   const [pageInfo, setPageInfo] = useState<InstitutionAuditEventsPageInfo | null>(null);
+  const [coverage, setCoverage] = useState<InstitutionAuditCoverage | null>(null);
   const [form, setForm] = useState<AuditFilterForm>(emptyAuditFilterForm);
   const [activeQuery, setActiveQuery] = useState<InstitutionAuditEventsQuery>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -158,6 +182,7 @@ export function InstitutionAuditEventsShell() {
     }
     setRecords([]);
     setPageInfo(null);
+    setCoverage(null);
     setHasAuthoritativeSnapshot(false);
   }
 
@@ -199,6 +224,7 @@ export function InstitutionAuditEventsShell() {
         authoritativeRecordsRef.current = nextRecords;
         setRecords(nextRecords);
         setPageInfo(result.pageInfo);
+        setCoverage(result.coverage);
         setHasAuthoritativeSnapshot(true);
       } else {
         clearAuditSnapshot();
@@ -241,6 +267,7 @@ export function InstitutionAuditEventsShell() {
           authoritativeRecordsRef.current = nextRecords;
           setRecords(nextRecords);
           setPageInfo(result.pageInfo);
+          setCoverage(result.coverage);
           setHasAuthoritativeSnapshot(true);
         } else {
           clearAuditSnapshot();
@@ -472,11 +499,30 @@ export function InstitutionAuditEventsShell() {
         ))}
       </section>
 
+      {!isAuditLoading && !errorState && hasAuthoritativeSnapshot && coverage ? (
+        <aside
+          role="status"
+          data-audit-coverage-state={coverage.state}
+          className={coverage.state === 'partial_verified_only'
+            ? 'rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900'
+            : 'rounded-[22px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900'}
+        >
+          <div className="font-semibold">
+            {coverage.state === 'partial_verified_only'
+              ? coverage.safeDataAvailable
+                ? '可信记录可用，历史覆盖不完整'
+                : '暂无可信记录，历史覆盖不完整'
+              : '可信历史覆盖完整'}
+          </div>
+          <p className="mt-1">{auditCoverageDescription(coverage)}</p>
+        </aside>
+      ) : null}
+
       <article className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-lg font-semibold text-slate-950">关键操作记录</h3>
-            <p className="mt-1 text-sm text-slate-500">按发生时间倒序排列，不展示请求体或服务端错误细节。</p>
+            <p className="mt-1 text-sm text-slate-500">按发生时间倒序排列；页内统计不是完整历史总量，且不展示请求体或服务端错误细节。</p>
           </div>
           <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">
             {pageInfo ? `limit ${pageInfo.limit}` : 'limit 默认'}
@@ -499,7 +545,7 @@ export function InstitutionAuditEventsShell() {
           <InstitutionPageState
             kind="empty"
             title="暂无审计事件"
-            description="当前筛选条件下没有可展示的关键操作记录。"
+            description={emptyAuditDescription(coverage)}
             className="mt-4"
           />
         ) : null}

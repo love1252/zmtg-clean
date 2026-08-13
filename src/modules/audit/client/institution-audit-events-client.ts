@@ -1,4 +1,8 @@
-import type { AuditEventListItem } from '@/modules/audit/domain/audit-event-query';
+import {
+  isInstitutionAuditCoverage,
+  type AuditEventListItem,
+  type InstitutionAuditCoverage,
+} from '@/modules/audit/domain/audit-event-query';
 
 export type InstitutionAuditEventRecord = Omit<AuditEventListItem, 'tenantId'>;
 
@@ -13,6 +17,7 @@ export type InstitutionAuditEventsClientResult =
       ok: true;
       records: InstitutionAuditEventRecord[];
       pageInfo: InstitutionAuditEventsPageInfo;
+      coverage: InstitutionAuditCoverage;
     }
   | { ok: false; error: InstitutionAuditEventsClientError };
 
@@ -151,7 +156,8 @@ export async function listInstitutionAuditEvents(
     if (
       !isJsonObject(payload) ||
       !Array.isArray(payload.records) ||
-      !isValidPageInfo(payload.pageInfo)
+      !isValidPageInfo(payload.pageInfo) ||
+      !isInstitutionAuditCoverage(payload.coverage)
     ) {
       return {
         ok: false,
@@ -163,6 +169,7 @@ export async function listInstitutionAuditEvents(
       ok: true,
       records: payload.records as InstitutionAuditEventRecord[],
       pageInfo: payload.pageInfo,
+      coverage: payload.coverage,
     };
   } catch {
     return {

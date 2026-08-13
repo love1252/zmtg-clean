@@ -17,6 +17,7 @@ describe('机构端审计日志正式 Route wiring', () => {
 
     expect(imports).toEqual([
       "import { withInstitutionSectionRouteGuardV1 } from '@/app/api/institution/_shared/institution-route-guard';",
+      "import { isInstitutionAuditCoverage } from '@/modules/audit/domain/audit-event-query';",
       "import { parseAuditEventQueryParams } from '@/modules/audit/server/audit-event-query-parser';",
       "import { readCurrentInstitutionAuditEventsV1 } from '@/server/orchestration/institution-audit-reader';",
       "import { NextResponse } from 'next/server';",

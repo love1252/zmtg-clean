@@ -31,12 +31,20 @@ const safeRecord = Object.freeze({
   occurredAt: '2026-08-13T08:00:00.000Z',
 });
 
+const partialCoverage = Object.freeze({
+  state: 'partial_verified_only',
+  safeDataAvailable: true,
+  historicalCoverageComplete: false,
+  partialCoverageSafe: true,
+});
+
 beforeEach(() => {
   routeMocks.readCurrentInstitutionAuditEventsV1.mockReset();
   routeMocks.readCurrentInstitutionAuditEventsV1.mockResolvedValue({
     kind: 'ready',
     records: [safeRecord],
     pageInfo: { hasMore: false, limit: 20, nextCursor: null },
+    coverage: partialCoverage,
   });
 });
 
@@ -58,6 +66,7 @@ describe('机构端审计日志只读 Route', () => {
     expect(payload).toEqual({
       records: [safeRecord],
       pageInfo: { hasMore: false, limit: 20, nextCursor: null },
+      coverage: partialCoverage,
     });
     const serialized = JSON.stringify(payload);
     expect(serialized).not.toContain('tenantId');
@@ -112,5 +121,42 @@ describe('机构端审计日志只读 Route', () => {
     });
     expect(JSON.stringify(payload)).not.toContain('stack');
     expect(JSON.stringify(payload)).not.toContain('DATABASE_URL');
+  });
+
+  it.each([
+    null,
+    {
+      state: 'complete',
+      safeDataAvailable: true,
+      historicalCoverageComplete: false,
+      partialCoverageSafe: false,
+    },
+    {
+      state: 'partial_verified_only',
+      safeDataAvailable: false,
+      historicalCoverageComplete: true,
+      partialCoverageSafe: true,
+    },
+    {
+      ...partialCoverage,
+      tenantId: 'must-not-cross-the-route-contract',
+    },
+  ])('非法 coverage state fail-closed 且不返回 records：%j', async (coverage) => {
+    routeMocks.readCurrentInstitutionAuditEventsV1.mockResolvedValue({
+      kind: 'ready',
+      records: [safeRecord],
+      pageInfo: { hasMore: false, limit: 20, nextCursor: null },
+      coverage,
+    });
+
+    const response = await institutionAuditEventsGet(
+      new Request('http://localhost/api/institution/audit-events'),
+    );
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      code: 'institution_audit_events_service_unavailable',
+      error: '机构审计日志服务暂时不可用',
+    });
   });
 });

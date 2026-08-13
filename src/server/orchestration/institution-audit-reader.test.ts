@@ -5,6 +5,7 @@ const runtimeMocks = vi.hoisted(() => ({
   createAuditEventRepository: vi.fn(),
   getDatabase: vi.fn(),
   listAuditEvents: vi.fn(),
+  readInstitutionAuditCoverage: vi.fn(),
   resolveInstitutionCapabilityAuthorityRuntimeContextV1: vi.fn(),
 }));
 
@@ -46,6 +47,11 @@ beforeEach(() => {
   runtimeMocks.getDatabase.mockReturnValue({ database: 'local' });
   runtimeMocks.createAuditEventRepository.mockReturnValue({
     listAuditEvents: runtimeMocks.listAuditEvents,
+    readInstitutionAuditCoverage: runtimeMocks.readInstitutionAuditCoverage,
+  });
+  runtimeMocks.readInstitutionAuditCoverage.mockResolvedValue({
+    verifiedRecordCount: 7,
+    unclassifiableHistoricalRecordCount: 267,
   });
   runtimeMocks.listAuditEvents.mockResolvedValue({
     records: [
@@ -84,6 +90,10 @@ describe('机构范围审计只读编排', () => {
         institutionId: 'institution-formal-001',
       },
       query,
+    });
+    expect(runtimeMocks.readInstitutionAuditCoverage).toHaveBeenCalledWith({
+      tenantId: 'tenant-formal-001',
+      institutionId: 'institution-formal-001',
     });
     expect(result.kind).toBe('ready');
   });
@@ -154,12 +164,82 @@ describe('机构范围审计只读编排', () => {
         },
       ],
       pageInfo: { hasMore: false, limit: 25, nextCursor: null },
+      coverage: {
+        state: 'partial_verified_only',
+        safeDataAvailable: true,
+        historicalCoverageComplete: false,
+        partialCoverageSafe: true,
+      },
     });
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain('tenantId');
     expect(serialized).not.toContain('institutionId');
     expect(serialized).not.toContain('institutionAttribution');
     expect(serialized).not.toContain('connectionString');
+    expect(serialized).not.toContain('267');
+  });
+
+  it('零 verified 且存在历史 residual 时明确返回安全 partial，而不是 authoritative empty', async () => {
+    runtimeMocks.readInstitutionAuditCoverage.mockResolvedValue({
+      verifiedRecordCount: 0,
+      unclassifiableHistoricalRecordCount: 267,
+    });
+    runtimeMocks.listAuditEvents.mockResolvedValue({
+      records: [],
+      pageInfo: { hasMore: false, limit: 25, nextCursor: null },
+    });
+
+    const result = await readCurrentInstitutionAuditEventsV1(query);
+
+    expect(result).toEqual({
+      kind: 'ready',
+      records: [],
+      pageInfo: { hasMore: false, limit: 25, nextCursor: null },
+      coverage: {
+        state: 'partial_verified_only',
+        safeDataAvailable: false,
+        historicalCoverageComplete: false,
+        partialCoverageSafe: true,
+      },
+    });
+  });
+
+  it('零 residual 且零 verified 时才形成 complete authoritative-empty 事实', async () => {
+    runtimeMocks.readInstitutionAuditCoverage.mockResolvedValue({
+      verifiedRecordCount: 0,
+      unclassifiableHistoricalRecordCount: 0,
+    });
+    runtimeMocks.listAuditEvents.mockResolvedValue({
+      records: [],
+      pageInfo: { hasMore: false, limit: 25, nextCursor: null },
+    });
+
+    const result = await readCurrentInstitutionAuditEventsV1(query);
+
+    expect(result).toEqual({
+      kind: 'ready',
+      records: [],
+      pageInfo: { hasMore: false, limit: 25, nextCursor: null },
+      coverage: {
+        state: 'complete',
+        safeDataAvailable: false,
+        historicalCoverageComplete: true,
+        partialCoverageSafe: false,
+      },
+    });
+  });
+
+  it.each([
+    { verifiedRecordCount: -1, unclassifiableHistoricalRecordCount: 0 },
+    { verifiedRecordCount: 0, unclassifiableHistoricalRecordCount: -1 },
+    { verifiedRecordCount: Number.NaN, unclassifiableHistoricalRecordCount: 0 },
+  ])('非法 coverage facts fail-closed：%j', async (facts) => {
+    runtimeMocks.readInstitutionAuditCoverage.mockResolvedValue(facts);
+
+    const result = await readCurrentInstitutionAuditEventsV1(query);
+
+    expect(result).toEqual({ kind: 'unavailable' });
+    expect(runtimeMocks.listAuditEvents).not.toHaveBeenCalled();
   });
 
   it('正式上下文不可用时 fail-closed 且不访问数据库', async () => {
@@ -176,13 +256,17 @@ describe('机构范围审计只读编排', () => {
     expect(runtimeMocks.getDatabase).not.toHaveBeenCalled();
   });
 
-  it.each(['database', 'repository'] as const)(
+  it.each(['database', 'coverage', 'repository'] as const)(
     '%s failure 安全降级且不泄漏内部错误',
     async (failurePoint) => {
       if (failurePoint === 'database') {
         runtimeMocks.getDatabase.mockImplementation(() => {
           throw new Error('DATABASE_URL=postgres://user:secret@localhost/zmtg');
         });
+      } else if (failurePoint === 'coverage') {
+        runtimeMocks.readInstitutionAuditCoverage.mockRejectedValue(
+          new Error('select count(*) from audit_events; stack=secret'),
+        );
       } else {
         runtimeMocks.listAuditEvents.mockRejectedValue(
           new Error('select * from audit_events; stack=secret'),
