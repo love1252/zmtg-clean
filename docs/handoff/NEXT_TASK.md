@@ -3,23 +3,26 @@
 ## 唯一技术任务
 
 ```text
-NEXT_TASK=POST-V2-R1C Audit Writer verified attribution business-pair corrective closure
+NEXT_TASK=POST-V2-R1C Audit Writer Historical Backfill explicit authorization
 HISTORICAL_BACKFILL_AUTHORIZED=false
 DATABASE_CONNECTION_AUTHORIZED=false
 DATABASE_WRITE_EXECUTION_AUTHORIZED=false
 PAGE_SYSTEM_AUDIT_RUNTIME_AUTHORIZED=false
 ```
 
-## 当前 S10 corrective 状态
+## S10 最终闭环状态
 
 ```text
-S10_CALLER_MIGRATION_COMPLETE=false
-AUDIT_CALLER_MIGRATION_CLOSED=false
-AUDIT_WRITER_ATTRIBUTION_CLOSED=false
+S10_CALLER_MIGRATION_COMPLETE=true
+AUDIT_CALLER_MIGRATION_CLOSED=true
+AUDIT_WRITER_ATTRIBUTION_CLOSED=true
 S10_CORRECTIVE_RUNTIME_PR=1188
-S10_ACTIONABLE_P0_P1=1
-POST_MERGE_REVIEW_DEBT=1
-PR1186_P1_THREAD_RESOLVED=false
+S10_CORRECTIVE_RUNTIME_HEAD=f9611e95b5ca62f6f2cc95d7395ccd54e2a415e6
+S10_CORRECTIVE_RUNTIME_MERGE=cc8f0551e6e098e60b4d01028184729c0cf3cb56
+S10_ACTIONABLE_P0_P1=0
+POST_MERGE_REVIEW_DEBT=0
+PR1186_P1_THREAD_RESOLVED=true
+PR1188_P1_THREAD_RESOLVED=true
 
 PRODUCTION_AUDIT_WRITER_CALLER_FILE_COUNT=19
 PRODUCTION_LEGACY_WRITER_CALLER_FILE_COUNT=0
@@ -33,15 +36,15 @@ FORMAL_SCOPE_RESOLUTION_CARDINALITY=exactly_once_per_top_level_operation
 FORMAL_SCOPE_REUSE_WITHIN_OPERATION_SAFE=true
 ```
 
-19 个 production caller 的 persistence 迁移与 legacy residual=0 事实保持不变，但 PR #1186 post-merge P1 证明 WeCom verified transaction callback 仍可把机构 A 的 attribution handle 与机构 B 的业务写组合。corrective Runtime PR #1188 合并、指定 thread 解决并完成全 S10 Review sweep 前，不得宣称 caller migration 或 Audit Writer attribution 已闭环。
+19 个 production caller 的 attributed persistence 与 legacy residual=0 均保持成立。corrective Runtime PR #1188 已把 callback 可见的业务与 Audit 写 capability 绑定到 verified business pair；PR #1186 与 #1188 的相关 P1 均在实际修复合并后解决，全 S10 Review sweep 与 merged-main 独立复核已通过。
 
-## Corrective 完成门禁
+## Corrective 完成证据
 
-1. PR #1188 Required Check 与完整本地验证通过并合并；
-2. `PRRT_kwDOSrGMn86Y6gdv` 只在实际修复合并后回复并解决；
-3. 全部 S10 PR post-merge Review sweep 无 P0/P1/P2 debt；
-4. merged main 独立复核通过；
-5. 通过最终同属 S10 的 docs-only Handoff PR 重新记录 closure=true。
+1. PR #1188 Final Head `f9611e95b5ca62f6f2cc95d7395ccd54e2a415e6`、Merge `cc8f0551e6e098e60b4d01028184729c0cf3cb56`，Required Check 通过；
+2. `PRRT_kwDOSrGMn86Y6gdv` 与 `PRRT_kwDOSrGMn86Y7fvl` 均在实际修复后回复并解决；
+3. PR #1183—#1188 post-merge Review sweep 的 actionable non-outdated P0/P1/P2 debt 为 0；
+4. merged main 独立复核为 2 files / 17 tests、typecheck 与 Architecture incremental 全部通过；
+5. 最终同属 S10 的 docs-only Handoff PR 记录 closure=true，不授权自动开始 Historical Backfill。
 
 ## 后续 Historical Backfill 重新授权要求
 
