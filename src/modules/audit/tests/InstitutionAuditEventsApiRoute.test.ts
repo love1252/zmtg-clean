@@ -7,83 +7,110 @@ vi.mock('@/app/api/institution/_shared/institution-route-guard', () => ({
     handler: (...args: unknown[]) => Response | Promise<Response>;
   }) => handler,
 }));
-import { GET as institutionAuditEventsGet } from '@/app/api/institution/audit-events/route';
 
 const routeMocks = vi.hoisted(() => ({
-  createAuditEventRepository: vi.fn(),
-  getDatabase: vi.fn(),
-  getDemoAccessContextFromRequest: vi.fn(),
-  parseAuditEventQueryParams: vi.fn(),
+  readCurrentInstitutionAuditEventsV1: vi.fn(),
 }));
 
-vi.mock('@/server/db/client', () => ({ getDatabase: routeMocks.getDatabase }));
-vi.mock('@/modules/security/server/access-context', () => ({
-  getDemoAccessContextFromRequest: routeMocks.getDemoAccessContextFromRequest,
-}));
-vi.mock('@/modules/audit/server/audit-event-query-parser', () => ({
-  parseAuditEventQueryParams: routeMocks.parseAuditEventQueryParams,
-}));
-vi.mock('@/modules/audit/server/audit-event-repository', () => ({
-  createAuditEventRepository: routeMocks.createAuditEventRepository,
+vi.mock('@/server/orchestration/institution-audit-reader', () => ({
+  readCurrentInstitutionAuditEventsV1:
+    routeMocks.readCurrentInstitutionAuditEventsV1,
 }));
 
-beforeEach(() => {
-  for (const mock of Object.values(routeMocks)) mock.mockReset();
+import { GET as institutionAuditEventsGet } from '@/app/api/institution/audit-events/route';
+
+const safeRecord = Object.freeze({
+  id: 'audit_evt_001',
+  resource: 'customer',
+  resourceId: 'cust_001',
+  action: 'read_own_tenant',
+  result: 'allowed',
+  reason: 'allowed_by_policy',
+  actorId: 'actor_001',
+  actorRole: 'tenant_admin',
+  occurredAt: '2026-08-13T08:00:00.000Z',
 });
 
-describe('机构端审计日志 capability gate', () => {
-  it('固定返回低敏 503，且 hostile Request 不触发任何读取或服务副作用', async () => {
-    const traps = { get: 0, ownKeys: 0, descriptor: 0 };
-    const hostileRequest = new Proxy({}, {
-      get() { traps.get += 1; throw new Error('request must not be read'); },
-      ownKeys() { traps.ownKeys += 1; throw new Error('request must not be enumerated'); },
-      getOwnPropertyDescriptor() { traps.descriptor += 1; throw new Error('request must not be described'); },
-    }) as Request;
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+beforeEach(() => {
+  routeMocks.readCurrentInstitutionAuditEventsV1.mockReset();
+  routeMocks.readCurrentInstitutionAuditEventsV1.mockResolvedValue({
+    kind: 'ready',
+    records: [safeRecord],
+    pageInfo: { hasMore: false, limit: 20, nextCursor: null },
+  });
+});
 
-    try {
-      const response = await institutionAuditEventsGet(hostileRequest);
-      const payload = await response.json();
+describe('机构端审计日志只读 Route', () => {
+  it('解析正式查询并返回 200、no-store 与低敏结果', async () => {
+    const response = await institutionAuditEventsGet(
+      new Request(
+        'http://localhost/api/institution/audit-events?resource=customer&limit=20',
+      ),
+    );
+    const payload = await response.json();
 
-      expect(response.status).toBe(503);
-      expect(response.headers.get('Cache-Control')).toBe('no-store');
-      expect(payload).toEqual({
-        code: 'institution_audit_events_capability_disabled',
-        error: '机构审计日志能力暂未启用',
-      });
-      expect(payload).not.toHaveProperty('records');
-      expect(payload).not.toHaveProperty('pageInfo');
-      expect(payload).not.toHaveProperty('tenant');
-      expect(payload).not.toHaveProperty('customer');
-      expect(payload).not.toHaveProperty('actor');
-      expect(payload).not.toHaveProperty('resource');
-      expect(traps).toEqual({ get: 0, ownKeys: 0, descriptor: 0 });
-      expect(fetchSpy).not.toHaveBeenCalled();
-      expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
-      expect(routeMocks.parseAuditEventQueryParams).not.toHaveBeenCalled();
-      expect(routeMocks.getDatabase).not.toHaveBeenCalled();
-      expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
-    } finally {
-      fetchSpy.mockRestore();
-    }
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(routeMocks.readCurrentInstitutionAuditEventsV1).toHaveBeenCalledWith({
+      filters: { resource: 'customer' },
+      limit: 20,
+    });
+    expect(payload).toEqual({
+      records: [safeRecord],
+      pageInfo: { hasMore: false, limit: 20, nextCursor: null },
+    });
+    const serialized = JSON.stringify(payload);
+    expect(serialized).not.toContain('tenantId');
+    expect(serialized).not.toContain('institutionId');
+    expect(serialized).not.toContain('institutionAttribution');
+    expect(serialized).not.toContain('secret');
+  });
+
+  it('非法查询返回低敏 400、no-store 且不调用 Reader', async () => {
+    const response = await institutionAuditEventsGet(
+      new Request('http://localhost/api/institution/audit-events?limit=101'),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(payload).toEqual({ error: expect.any(String) });
+    expect(routeMocks.readCurrentInstitutionAuditEventsV1).not.toHaveBeenCalled();
   });
 
   it.each([
-    'http://localhost/api/institution/audit-events',
-    'http://localhost/api/institution/audit-events?tenantId=other-tenant&resource=customer',
-    'http://localhost/api/institution/audit-events?limit=101',
-  ])('任意旧查询输入仍固定返回低敏 503：%s', async (path) => {
-    const response = await institutionAuditEventsGet(new Request(path));
+    'tenantId=tenant-attacker',
+    'institutionId=institution-attacker',
+    'scope=platform',
+    'role=platform_admin',
+  ])('拒绝 caller scope 注入：%s', async (queryString) => {
+    const response = await institutionAuditEventsGet(
+      new Request(`http://localhost/api/institution/audit-events?${queryString}`),
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(await response.json()).toEqual({ error: expect.any(String) });
+    expect(routeMocks.readCurrentInstitutionAuditEventsV1).not.toHaveBeenCalled();
+  });
+
+  it('Reader unavailable 返回低敏 503 与 no-store', async () => {
+    routeMocks.readCurrentInstitutionAuditEventsV1.mockResolvedValue({
+      kind: 'unavailable',
+    });
+
+    const response = await institutionAuditEventsGet(
+      new Request('http://localhost/api/institution/audit-events'),
+    );
+    const payload = await response.json();
 
     expect(response.status).toBe(503);
     expect(response.headers.get('Cache-Control')).toBe('no-store');
-    await expect(response.json()).resolves.toEqual({
-      code: 'institution_audit_events_capability_disabled',
-      error: '机构审计日志能力暂未启用',
+    expect(payload).toEqual({
+      code: 'institution_audit_events_service_unavailable',
+      error: '机构审计日志服务暂时不可用',
     });
-    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
-    expect(routeMocks.parseAuditEventQueryParams).not.toHaveBeenCalled();
-    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
-    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(JSON.stringify(payload)).not.toContain('stack');
+    expect(JSON.stringify(payload)).not.toContain('DATABASE_URL');
   });
 });
