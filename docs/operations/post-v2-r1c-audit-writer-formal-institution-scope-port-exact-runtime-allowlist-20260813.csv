@@ -1,0 +1,3 @@
+path,file_class,file_role,change_kind,new_file_allowed,reason
+src/server/orchestration/institution-audit-writer-scope.ts,production,Audit Writer current formal institution scope provenance port,new_runtime,true,verify current formal server-session claims against authoritative Identity active Membership and Binding and active Tenancy Institution Scope then mint a capability-independent one-shot opaque tenant and institution pair
+src/server/orchestration/institution-audit-writer-scope.test.ts,test,formal scope port trust and fail-closed tests,new_test,true,prove exact pair corroboration genuine opaque one-shot consumption replay rejection stale and mismatch closure and zero navigation capability or database-write coupling
