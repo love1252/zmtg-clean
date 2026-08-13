@@ -17,6 +17,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   CLASSIFICATION_RULES,
   EXECUTED_MANIFEST_DIGEST,
+  EXECUTED_MANIFEST_COMPATIBLE_TOOL_SOURCE_DIGEST,
   EXECUTED_TOOLING_SHA,
   MANIFEST_VERSION,
   S11BackfillError,
@@ -27,6 +28,7 @@ import {
   buildManifest,
   canonicalJson,
   classifySnapshotRows,
+  compatibleToolSourceDigest,
   immutableAuditEventDigest,
   parseCli,
   readSecureManifest,
@@ -181,23 +183,52 @@ describe('S11 CLI 与环境门禁', () => {
 
   it('只允许同 SHA manifest 或已执行 S11 manifest 的 exact digest 跨 corrective SHA', () => {
     const manifest = manifestFor([loginRow()]);
-    expect(assertValidatedManifestCodeCompatibility(manifest, CODE_SHA)).toBe('exact_code_sha');
+    expect(assertValidatedManifestCodeCompatibility(manifest, CODE_SHA, 'wrong-tool'))
+      .toBe('exact_code_sha');
 
     const executedManifest = {
       ...manifest,
       codeSha: EXECUTED_TOOLING_SHA,
       manifestDigest: EXECUTED_MANIFEST_DIGEST,
     };
-    expect(assertValidatedManifestCodeCompatibility(executedManifest, 'c'.repeat(40)))
+    expect(assertValidatedManifestCodeCompatibility(
+      executedManifest,
+      'c'.repeat(40),
+      EXECUTED_MANIFEST_COMPATIBLE_TOOL_SOURCE_DIGEST,
+    ))
       .toBe('executed_s11_manifest');
     expect(() => assertValidatedManifestCodeCompatibility(
       { ...executedManifest, manifestDigest: 'd'.repeat(64) },
       'c'.repeat(40),
+      EXECUTED_MANIFEST_COMPATIBLE_TOOL_SOURCE_DIGEST,
     )).toThrow('code_sha_drift');
     expect(() => assertValidatedManifestCodeCompatibility(
       { ...executedManifest, codeSha: 'e'.repeat(40) },
       'c'.repeat(40),
+      EXECUTED_MANIFEST_COMPATIBLE_TOOL_SOURCE_DIGEST,
     )).toThrow('code_sha_drift');
+    expect(() => assertValidatedManifestCodeCompatibility(
+      executedManifest,
+      'c'.repeat(40),
+      'f'.repeat(64),
+    )).toThrow('code_sha_drift');
+  });
+
+  it('跨 SHA 例外绑定到当前 runner 的 frozen source digest', async () => {
+    const source = await readFile(
+      path.join(REPOSITORY_ROOT, 'scripts/db/post-v2-r1c-audit-historical-backfill.mjs'),
+      'utf8',
+    );
+    expect(compatibleToolSourceDigest(source))
+      .toBe(EXECUTED_MANIFEST_COMPATIBLE_TOOL_SOURCE_DIGEST);
+    expect(compatibleToolSourceDigest(source.replace(
+      'const MAX_MANIFEST_BYTES = 8 * 1024 * 1024;',
+      'const MAX_MANIFEST_BYTES = 7 * 1024 * 1024;',
+    ))).not.toBe(EXECUTED_MANIFEST_COMPATIBLE_TOOL_SOURCE_DIGEST);
+    expect(() => compatibleToolSourceDigest(source.replace(
+      'export const EXECUTED_MANIFEST_COMPATIBLE_TOOL_SOURCE_DIGEST =',
+      'export const REMOVED_TOOL_SOURCE_DIGEST =',
+    ))).toThrow('invalid_tool_source_identity_marker');
   });
 });
 

@@ -19,6 +19,8 @@ export const MANIFEST_VERSION = 'post-v2-r1c-audit-historical-backfill/v1';
 export const EXECUTED_TOOLING_SHA = '54c191ec06b6d3766d990d8b8a12d44d5fd22516';
 export const EXECUTED_MANIFEST_DIGEST =
   '692be7b548fcb74c7079ad91c9c40e282ffcf91aa52fdb75641febbf04e4f632';
+export const EXECUTED_MANIFEST_COMPATIBLE_TOOL_SOURCE_DIGEST =
+  'f27432593cfe9c7d21e83a19d4ada611452d7d2e8a9c6ddad195e7d75be79a00';
 
 const ALLOWED_DATABASE_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const MAX_MANIFEST_BYTES = 8 * 1024 * 1024;
@@ -852,14 +854,38 @@ export function getGitState(repositoryRoot) {
   const root = execFileSync('git', ['rev-parse', '--show-toplevel'], options).trim();
   if (resolve(root) !== resolve(repositoryRoot)) fail('unexpected_repository_root');
   if (status !== '') fail('worktree_not_clean');
-  return { codeSha, repositoryRoot: root };
+  const toolSource = execFileSync(
+    'git',
+    ['show', `${codeSha}:scripts/db/post-v2-r1c-audit-historical-backfill.mjs`],
+    options,
+  );
+  return {
+    codeSha,
+    repositoryRoot: root,
+    toolSourceDigest: compatibleToolSourceDigest(toolSource),
+  };
 }
 
-export function assertValidatedManifestCodeCompatibility(manifest, currentCodeSha) {
+export function compatibleToolSourceDigest(source) {
+  const pattern = /export const EXECUTED_MANIFEST_COMPATIBLE_TOOL_SOURCE_DIGEST =\n  '[0-9a-f]{64}';/gu;
+  const matches = source.match(pattern);
+  if (matches?.length !== 1) fail('invalid_tool_source_identity_marker');
+  return sha256(source.replace(
+    pattern,
+    "export const EXECUTED_MANIFEST_COMPATIBLE_TOOL_SOURCE_DIGEST =\n  '<frozen-tool-source-digest>';",
+  ));
+}
+
+export function assertValidatedManifestCodeCompatibility(
+  manifest,
+  currentCodeSha,
+  currentToolSourceDigest,
+) {
   if (manifest.codeSha === currentCodeSha) return 'exact_code_sha';
   if (
     manifest.codeSha === EXECUTED_TOOLING_SHA &&
-    manifest.manifestDigest === EXECUTED_MANIFEST_DIGEST
+    manifest.manifestDigest === EXECUTED_MANIFEST_DIGEST &&
+    currentToolSourceDigest === EXECUTED_MANIFEST_COMPATIBLE_TOOL_SOURCE_DIGEST
   ) return 'executed_s11_manifest';
   fail('code_sha_drift');
 }
@@ -1198,7 +1224,11 @@ export async function runCli({
   let manifest = null;
   if (command.mode !== 'dry-run') {
     manifest = await readSecureManifest(command.manifestPath, git.repositoryRoot);
-    assertValidatedManifestCodeCompatibility(manifest, git.codeSha);
+    assertValidatedManifestCodeCompatibility(
+      manifest,
+      git.codeSha,
+      git.toolSourceDigest,
+    );
   }
   const client = createClient(databaseUrl);
   try {
