@@ -111,7 +111,8 @@ ROUTE_STRATEGY=dedicated_static_route_after_data_prerequisite
 CANONICAL_ROUTE_SAFE=true
 
 SHELL_READONLY_SAFE=true
-AUTHORIZATION_SAFE=true
+AUDIT_READER_API_AUTHORIZATION_SAFE=true
+PAGE_SYSTEM_AUDIT_AUTHORIZATION_VERIFIED=false
 LOW_SENSITIVE_OUTPUT_SAFE=true
 ```
 
@@ -120,7 +121,8 @@ LOW_SENSITIVE_OUTPUT_SAFE=true
 - `InstitutionAuditEventsShell` 只有筛选、刷新和分页，只调用 GET-only client；
 - client 只请求 `/api/institution/audit-events`，没有 POST / PUT / PATCH / DELETE；
 - Shell 已覆盖 loading、权威成功空态、错误、分页与晚到响应失效语义；
-- 页面仍需独立验证正式 `system` navigation authorization 与 exact capability authority，不能从 Reader 成功反推页面授权。
+- Reader/API 边界已通过 `system` Section Guard、formal institution context、tenant/institution scope 与低敏响应验证；
+- 页面授权尚未验证，仍需独立核对正式 `system` navigation authorization、exact capability authority、canonical page Route 与 multi-capability projection，不能从 Reader 成功反推页面授权。
 
 ## 7. Architecture 与禁止范围
 

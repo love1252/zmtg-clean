@@ -29,7 +29,8 @@ WORKBENCH_MULTI_CAPABILITY_SAFE=false
 CANONICAL_ROUTE=/hospital/system/audit
 ROUTE_STRATEGY=dedicated_static_route_after_data_prerequisite
 SHELL_READONLY_SAFE=true
-AUTHORIZATION_SAFE=true
+AUDIT_READER_API_AUTHORIZATION_SAFE=true
+PAGE_SYSTEM_AUDIT_AUTHORIZATION_VERIFIED=false
 LOW_SENSITIVE_OUTPUT_SAFE=true
 
 DATABASE_ENVIRONMENT=local_development
@@ -75,7 +76,8 @@ PRODUCTION_DEPLOYMENT=false
 
 ## 停止边界
 
-- 本 Handoff 只授权 Writer attribution prerequisite 的 fresh audit + exact Runtime admission，不授权 Writer Runtime implementation；
+- 本 Handoff 仅定义并建议 Writer attribution prerequisite 的 fresh audit + exact Runtime admission 范围；实际执行仍必须取得用户当前明确授权，Handoff 本身不构成任何 Runtime、数据库、GitHub 写入或后续任务授权；
+- `AUDIT_WRITER_ATTRIBUTION_RUNTIME_AUTHORIZED=false` 与 `PAGE_SYSTEM_AUDIT_RUNTIME_AUTHORIZED=false` 保持不变；
 - 不得实施 `page_system_audit` Runtime；
 - 不得执行历史 backfill、数据库写入、Schema、Migration、DDL、DML 或 Seed；
 - 不得修改 Platform Audit、第二个 capability、Architecture exception 或 AQ004；

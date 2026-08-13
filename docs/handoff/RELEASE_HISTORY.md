@@ -19,7 +19,8 @@ WORKBENCH_MULTI_CAPABILITY_SAFE=false
 CANONICAL_ROUTE=/hospital/system/audit
 ROUTE_STRATEGY=dedicated_static_route_after_data_prerequisite
 SHELL_READONLY_SAFE=true
-AUTHORIZATION_SAFE=true
+AUDIT_READER_API_AUTHORIZATION_SAFE=true
+PAGE_SYSTEM_AUDIT_AUTHORIZATION_VERIFIED=false
 LOW_SENSITIVE_OUTPUT_SAFE=true
 
 DATABASE_ENVIRONMENT=local_development
@@ -47,6 +48,7 @@ PRODUCTION_DEPLOYMENT=false
 - fresh re-audit 重新证明机构 Audit API、Section Guard、query parser、one-shot formal context、Reader、tenant + institution + `verified` Repository 条件与低敏响应链均存在；
 - relevant targeted 10 files / 215 tests、typecheck、Architecture Quality 148/148 与增量检查均通过；
 - `InstitutionAuditEventsShell` 与 client 仍为 GET-only，支持 loading、空态、错误、分页与迟到响应治理；
+- Reader/API 边界已经验证，但 `page_system_audit` 页面仍须独立验证正式 system navigation authorization、exact capability authority、canonical Route 与 multi-capability projection；
 - Platform Audit semantics 未改变，Schema、Migration、Architecture exception 与 AQ004 均无漂移；
 - 本地 loopback PostgreSQL 只读验证发现 275 条记录全部缺少 attribution，且 `institutionId` / `verified` 均为 0；
 - canonical Writer 映射不写入 `institutionId` / `institutionAttribution`，因此 Reader 返回空不能证明权威空数据；
