@@ -6,9 +6,12 @@ import type { TenantDatabase } from '@/server/db/client';
 import { runAttributedWeComReachOutTransaction } from '@/server/orchestration/wecom-reachout-transaction';
 
 type WeComCustomerMappingTransactionDependencies = {
-  customerRepository: TenantBusinessRepository;
+  customerRepository: Pick<
+    TenantBusinessRepository,
+    'getCustomerByTenantAndInstitution' | 'listCustomersByTenantAndInstitution'
+  >;
   mappingRepository: WeComCustomerMappingRepository;
-  auditRepository: AuditEventRepository;
+  auditRepository: Pick<AuditEventRepository, 'recordAttributed'>;
   auditAttribution: VerifiedInstitutionAuditAttributionHandleV1;
 };
 

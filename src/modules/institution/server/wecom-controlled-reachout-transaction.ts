@@ -1,17 +1,19 @@
 import type { AuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import type { VerifiedInstitutionAuditAttributionHandleV1 } from '@/modules/audit/domain/audit-events';
-import type { TenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
-import type { TrustedReachOutSafetyRepository } from '@/modules/institution/server/trusted-reachout-safety-repository';
-import type { WeComCustomerMappingRepository } from '@/modules/institution/server/wecom-customer-mapping-repository';
-import type { WeComControlledReachOutCareDraftPort } from '@/modules/institution/server/wecom-controlled-reachout-service';
+import type {
+  WeComControlledReachOutCareDraftPort,
+  WeComControlledReachOutMappingRepository,
+  WeComControlledReachOutRepository,
+  WeComControlledReachOutSafetyRepository,
+} from '@/modules/institution/server/wecom-controlled-reachout-service';
 import type { TenantDatabase } from '@/server/db/client';
 import { runAttributedWeComReachOutTransaction } from '@/server/orchestration/wecom-reachout-transaction';
 
 type WeComControlledReachOutTransactionDependencies = {
-  repository: TenantBusinessRepository;
-  mappingRepository: WeComCustomerMappingRepository;
-  safetyRepository: TrustedReachOutSafetyRepository;
-  auditRepository: AuditEventRepository;
+  repository: WeComControlledReachOutRepository;
+  mappingRepository: WeComControlledReachOutMappingRepository;
+  safetyRepository: WeComControlledReachOutSafetyRepository;
+  auditRepository: Pick<AuditEventRepository, 'recordAttributed'>;
   auditAttribution: VerifiedInstitutionAuditAttributionHandleV1;
   careMessageDraftCommandService: WeComControlledReachOutCareDraftPort;
 };
