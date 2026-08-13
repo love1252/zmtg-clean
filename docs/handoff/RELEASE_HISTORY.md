@@ -1,5 +1,89 @@
 # 项目重构历史
 
+<!-- POST_V2_R1C_AUDIT_WRITER_HISTORICAL_BACKFILL_HISTORY -->
+
+## 2026-08-13：POST-V2-R1C Audit Writer Historical Backfill 完整闭环
+
+```text
+STAGE=S11
+TASK=POST_V2_R1C_AUDIT_WRITER_HISTORICAL_BACKFILL
+COMPLETION_MODE=COMPLETE
+BASELINE=5dedc54da98ee5a028216980049e245807630150
+
+S11_TOOLING_PR=1190
+S11_TOOLING_HEAD=5220cab1892b3c89ecda0283e3c16929709e317e
+S11_TOOLING_MERGE=54c191ec06b6d3766d990d8b8a12d44d5fd22516
+S11_HANDOFF_PR=PENDING_CURRENT_DOCS_PR
+S11_TOOLING_REQUIRED_CHECK=passed
+S11_TOOLING_ACTIONABLE_P0_P1=0
+S11_TOOLING_POST_MERGE_REVIEW_DEBT=0
+
+FRESH_DATABASE_AUDIT=passed
+CLASSIFICATION_MANIFEST=passed
+HISTORICAL_CUTOFF_KIND=EXACT_EVENT_ID_SNAPSHOT
+HISTORICAL_TOTAL_ROW_COUNT=275
+HISTORICAL_VERIFIED_ROW_COUNT=7
+HISTORICAL_NOT_APPLICABLE_ROW_COUNT=1
+HISTORICAL_ATTEMPTED_DENIAL_ROW_COUNT=0
+HISTORICAL_UNCLASSIFIABLE_ROW_COUNT=267
+RULE_COUNT=10
+RULE_OVERLAP_COUNT=0
+UNSAFE_GUESSED_ATTRIBUTION_COUNT=0
+
+BACKFILL_DRY_RUN=passed
+BACKFILL_EXPECTED_UPDATE_COUNT=8
+BACKFILL_ACTUAL_UPDATE_COUNT=8
+ROLLBACK_RECOVERY=passed
+BACKFILL_POSTCHECK=passed
+BACKFILL_IDEMPOTENCY=passed
+SECOND_RUN_UPDATE_COUNT=0
+
+HISTORICAL_BACKFILL_CLOSED=true
+AUDIT_READER_DATA_READINESS=false
+
+TARGETED_TEST_FILES=10
+TARGETED_TESTS=123
+FULL_TEST_FILES=494
+FULL_TESTS=6740
+TYPECHECK=passed
+ARCHITECTURE_UNIT=148/148 passed
+ARCHITECTURE_INCREMENTAL=passed
+LINT=passed_with_4_existing_warnings
+BUILD=passed
+PRODUCTION_READINESS_DOCS=8/8 passed
+
+DATABASE_ENVIRONMENT=local_development_only
+DATABASE_HOST_CLASS=loopback
+DATABASE_CONNECTION=true
+DATABASE_WRITE_EXECUTION=true
+SCHEMA_CHANGE=false
+MIGRATION=false
+DDL_EXECUTION=false
+
+WORKBENCH_MULTI_CAPABILITY_SAFE=false
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+```
+
+- `audit_events` 没有 Writer epoch 或写入时间列，S11 没有用 PR 时间或 `occurred_at` 猜 cutoff；tooling 在 merged SHA `54c191ec` 上以首次稳定快照的 exact `event_id` cohort + immutable digest 冻结 275 行；
+- deterministic 10-rule manifest 只接受 canonical attributed shape、unique same-operation persisted pair 与明确 Auth login 语义；7 行安全进入 `verified`、1 行进入 `not_applicable`、267 行证据不足保持 `UNCLASSIFIABLE`，rule overlap 与 guessed attribution 均为 0；
+- 正式 DML 使用 repo 外 0600 manifest、`SERIALIZABLE` transaction、exact identity/current-state precondition 与 `RETURNING` count，只修改 `institution_id` / `institution_attribution`；预计 8、实际 8，总行数保持 275；
+- actual recovery 已精确恢复本次 8 行的旧 attribution state，随后 final re-apply 再更新 8；postcheck 保持 immutable digest 与 unclassifiable residual 不变，同一 execute command 第二次 actual update 为 0；
+- postcheck 形成 7 `verified`、1 `not_applicable`、0 attempted-denial、267 residual；正式 Reader query 对 1 个 active pair 返回 7 行，但 residual 使完整页面 data semantics 不成立，因此 `AUDIT_READER_DATA_READINESS=false`；
+- tooling PR #1190 Required Check、local targeted/full/typecheck/AQ/lint/build/ProductionReadinessDocs 与 post-merge Review sweep 均通过；未执行 Schema、Migration、DDL、Seed、Workbench、页面、Staging 或 Production。
+
+证据：
+
+- `docs/operations/post-v2-r1c-audit-writer-historical-backfill-closure-20260813.md`
+- tooling PR #1190
+
+下一任务：`POST-V2-R1C Audit Reader Data Readiness / Workbench Multi-Capability prerequisite explicit authorization`；当前未授权自动开始。
+
+<!-- POST_V2_R1C_AUDIT_WRITER_HISTORICAL_BACKFILL_HISTORY_END -->
+
 <!-- POST_V2_R1C_AUDIT_WRITER_CALLER_MIGRATION_RUNTIME_HISTORY -->
 
 ## 2026-08-13：POST-V2-R1C Audit Writer production caller migration corrective closure 完成

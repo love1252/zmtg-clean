@@ -3,85 +3,89 @@
 ## 唯一技术任务
 
 ```text
-NEXT_TASK=POST-V2-R1C Audit Writer Historical Backfill explicit authorization
-HISTORICAL_BACKFILL_AUTHORIZED=false
+NEXT_TASK=POST-V2-R1C Audit Reader Data Readiness / Workbench Multi-Capability prerequisite explicit authorization
+NEXT_TASK_AUTHORIZED=false
+AUDIT_READER_DATA_READINESS_RUNTIME_AUTHORIZED=false
+WORKBENCH_MULTI_CAPABILITY_AUTHORIZED=false
+PAGE_SYSTEM_AUDIT_RUNTIME_AUTHORIZED=false
 DATABASE_CONNECTION_AUTHORIZED=false
 DATABASE_WRITE_EXECUTION_AUTHORIZED=false
-PAGE_SYSTEM_AUDIT_RUNTIME_AUTHORIZED=false
 ```
 
-## S10 最终闭环状态
+## S11 完整闭环状态
 
 ```text
-S10_CALLER_MIGRATION_COMPLETE=true
-AUDIT_CALLER_MIGRATION_CLOSED=true
-AUDIT_WRITER_ATTRIBUTION_CLOSED=true
-S10_CORRECTIVE_RUNTIME_PR=1188
-S10_CORRECTIVE_RUNTIME_HEAD=f9611e95b5ca62f6f2cc95d7395ccd54e2a415e6
-S10_CORRECTIVE_RUNTIME_MERGE=cc8f0551e6e098e60b4d01028184729c0cf3cb56
-S10_ACTIONABLE_P0_P1=0
-POST_MERGE_REVIEW_DEBT=0
-PR1186_P1_THREAD_RESOLVED=true
-PR1188_P1_THREAD_RESOLVED=true
+STAGE=S11
+S11_HISTORICAL_BACKFILL_COMPLETE=true
+HISTORICAL_BACKFILL_CLOSED=true
 
-PRODUCTION_AUDIT_WRITER_CALLER_FILE_COUNT=19
-PRODUCTION_LEGACY_WRITER_CALLER_FILE_COUNT=0
-PRODUCTION_ATTRIBUTED_WRITER_CALLER_FILE_COUNT=19
-TARGET_VERIFIED_MIGRATED=5
-TARGET_NOT_APPLICABLE_MIGRATED=12
-ATTEMPTED_DENIAL_MIGRATED=2
-BLOCKED_UNCLASSIFIED_CALLER_FILE_COUNT=0
+S11_TOOLING_PR=1190
+S11_TOOLING_HEAD=5220cab1892b3c89ecda0283e3c16929709e317e
+S11_TOOLING_MERGE=54c191ec06b6d3766d990d8b8a12d44d5fd22516
+S11_TOOLING_REQUIRED_CHECK=passed
+S11_TOOLING_ACTIONABLE_P0_P1=0
+S11_TOOLING_POST_MERGE_REVIEW_DEBT=0
 
-FORMAL_SCOPE_RESOLUTION_CARDINALITY=exactly_once_per_top_level_operation
-FORMAL_SCOPE_REUSE_WITHIN_OPERATION_SAFE=true
+HISTORICAL_CUTOFF_KIND=EXACT_EVENT_ID_SNAPSHOT
+HISTORICAL_TOTAL_ROW_COUNT=275
+HISTORICAL_VERIFIED_ROW_COUNT=7
+HISTORICAL_NOT_APPLICABLE_ROW_COUNT=1
+HISTORICAL_ATTEMPTED_DENIAL_ROW_COUNT=0
+HISTORICAL_UNCLASSIFIABLE_ROW_COUNT=267
+
+RULE_COUNT=10
+RULE_OVERLAP_COUNT=0
+UNSAFE_GUESSED_ATTRIBUTION_COUNT=0
+
+BACKFILL_DRY_RUN=passed
+BACKFILL_EXPECTED_UPDATE_COUNT=8
+BACKFILL_ACTUAL_UPDATE_COUNT=8
+ROLLBACK_RECOVERY=passed
+BACKFILL_POSTCHECK=passed
+BACKFILL_IDEMPOTENCY=passed
+SECOND_RUN_UPDATE_COUNT=0
+
+AUDIT_READER_DATA_READINESS=false
 ```
 
-19 个 production caller 的 attributed persistence 与 legacy residual=0 均保持成立。corrective Runtime PR #1188 已把 callback 可见的业务与 Audit 写 capability 绑定到 verified business pair；PR #1186 与 #1188 的相关 P1 均在实际修复合并后解决，全 S10 Review sweep 与 merged-main 独立复核已通过。
+S11 在 merged clean main 的 local-development loopback PostgreSQL 上 fresh 冻结 275-row exact cohort。7 行通过 unique same-operation persisted pair 证据进入 `VERIFIED`，1 条 Auth login 通过业务语义进入 `NOT_APPLICABLE`，267 行因缺少历史时点 provenance 保持 `UNCLASSIFIABLE`。正式 DML 预计 8、实际 8；repo 外 0600 manifest 已实际恢复 exact 8 行并重新应用，final postcheck 守恒，同一 execute command 第二次实际更新 0。
 
-## Corrective 完成证据
+## Reader data readiness 仍为 false
 
-1. PR #1188 Final Head `f9611e95b5ca62f6f2cc95d7395ccd54e2a415e6`、Merge `cc8f0551e6e098e60b4d01028184729c0cf3cb56`，Required Check 通过；
-2. `PRRT_kwDOSrGMn86Y6gdv` 与 `PRRT_kwDOSrGMn86Y7fvl` 均在实际修复后回复并解决；
-3. PR #1183—#1188 post-merge Review sweep 的 actionable non-outdated P0/P1/P2 debt 为 0；
-4. merged main 独立复核为 2 files / 17 tests、typecheck 与 Architecture incremental 全部通过；
-5. 最终同属 S10 的 docs-only Handoff PR 记录 closure=true，不授权自动开始 Historical Backfill。
+机构 Reader 的正式 `tenantId + institutionId + institutionAttribution='verified'` 查询可以对 1 个 active pair 返回 7 条安全历史记录，但 267 条不可分类 residual 不能被猜测归因，也不能被页面当作不存在。因此：
 
-## 后续 Historical Backfill 重新授权要求
+```text
+HISTORICAL_BACKFILL_CLOSED=true
+AUDIT_READER_DATA_READINESS=false
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+```
 
-corrective closure 完成后的后续任务涉及独立数据治理与数据库写权限，必须由用户重新明确授权；当前 S10 corrective 不授权连接数据库、读取当前历史分布或执行任何回填。
-
-新阶段开始时必须 fresh 决定：
-
-1. 允许连接的环境与只读审计范围；
-2. 历史记录的可证明分类规则、不可分类处理和审计证据；
-3. exact Schema / Migration / DDL / DML 边界；
-4. backfill dry-run、批次、幂等、回滚与 postcheck；
-5. `page_system_audit` release eligibility 是否需要在 backfill 后重新审计。
-
-继承的旧快照仅用于说明缺口，不构成当前数据库事实：此前 local-development readonly 观察到 275 条旧记录均未设置 institution attribution。下一阶段如获授权，必须重新读取并核验，不能直接以 275 作为执行输入。
+Backfill governance closure 不自动放行 Reader coverage、Workbench 第二 capability 或 `page_system_audit`。下一任务必须 fresh 审计：Reader 对 incomplete historical coverage 的产品语义、明确 unavailable/partial coverage contract、Workbench exact-one guard 与第二 capability composition prerequisite。任何 Runtime、数据库或页面变更都需要新的明确授权。
 
 ## 当前停止边界
 
-- 不得自动执行 Historical Backfill；
-- 不得连接任何数据库，不得执行 `SELECT`、`INSERT`、`UPDATE`、`DELETE`、DDL、DML、Migration 或 Seed；
-- 不得修改 Workbench、Capability Authority、`page_system_audit` 或 Audit Reader page shell；
-- 不得进入 Staging 或 Production；
-- 不得把 caller migration closure 推导为页面 release。
+- 不得自动开始 Audit Reader data-readiness Runtime；
+- 不得自动修改 Workbench、Capability Authority、`page_system_audit` 或 Audit Reader page shell；
+- 不得自动连接数据库或再次执行 backfill/recovery；
+- 不得执行 Schema、Migration、DDL、Seed、Staging 或 Production；
+- 不得把 7 条 verified readable rows 误报为完整历史覆盖；
+- 不得把 `HISTORICAL_BACKFILL_CLOSED=true` 推导为页面 release。
 
 ```text
-HISTORICAL_BACKFILL_CLOSED=false
+AUDIT_CALLER_MIGRATION_CLOSED=true
+AUDIT_WRITER_ATTRIBUTION_CLOSED=true
+HISTORICAL_BACKFILL_CLOSED=true
+AUDIT_READER_DATA_READINESS=false
+
 WORKBENCH_MULTI_CAPABILITY_SAFE=false
 PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
 PAGE_SYSTEM_AUDIT_RELEASE=false
 REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
 
-DATABASE_CONNECTION=false
-DATABASE_WRITE_EXECUTION=false
 SCHEMA_CHANGE=false
 MIGRATION=false
 DDL_EXECUTION=false
-DML_EXECUTION=false
-
 PRODUCTION_CHANGE=false
 PRODUCTION_DEPLOYMENT=false
 ```
