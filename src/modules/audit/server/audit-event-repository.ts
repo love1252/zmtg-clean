@@ -1,5 +1,9 @@
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or } from 'drizzle-orm';
-import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
+import {
+  isAttributedTenantAuditEventV1,
+  type AttributedTenantAuditEventV1,
+  type TenantAuditEvent,
+} from '@/modules/audit/domain/audit-events';
 import type { FollowUpPathAnalysisAuditEvent } from '@/modules/institution/domain/followup-path-analysis';
 import {
   createAuditEventQueryCursor,
@@ -12,6 +16,12 @@ import type { TenantDatabase } from '@/server/db/client';
 import { auditEvents, customers, followUpMessageDrafts } from '@/server/db/schema';
 
 type AuditEventRow = typeof auditEvents.$inferSelect;
+
+const INVALID_AUDIT_INSTITUTION_ATTRIBUTION = 'INVALID_AUDIT_INSTITUTION_ATTRIBUTION';
+
+function createInvalidAuditInstitutionAttributionError(): Error {
+  return new Error(INVALID_AUDIT_INSTITUTION_ATTRIBUTION);
+}
 
 export type CustomerAuditEventSummary = {
   id: string;
@@ -33,6 +43,33 @@ export function mapAuditEventToInsert(event: TenantAuditEvent): typeof auditEven
     actorId: event.actorId,
     actorRole: event.actorRole,
     tenantId: event.tenantId,
+    institutionId: null,
+    institutionAttribution: null,
+    scope: event.scope,
+    resource: event.resource,
+    resourceId: event.resourceId ?? null,
+    action: event.action,
+    result: event.result,
+    reason: event.reason,
+    occurredAt: new Date(event.occurredAt),
+    source: event.source,
+  };
+}
+
+export function mapAttributedAuditEventToInsert(
+  event: AttributedTenantAuditEventV1,
+): typeof auditEvents.$inferInsert {
+  if (!isAttributedTenantAuditEventV1(event)) {
+    throw createInvalidAuditInstitutionAttributionError();
+  }
+
+  return {
+    eventId: event.eventId,
+    actorId: event.actorId,
+    actorRole: event.actorRole,
+    tenantId: event.tenantId,
+    institutionId: event.institutionId,
+    institutionAttribution: event.institutionAttribution,
     scope: event.scope,
     resource: event.resource,
     resourceId: event.resourceId ?? null,
@@ -165,6 +202,13 @@ export function createAuditEventRepository(database: TenantDatabase) {
   return {
     async record(event: TenantAuditEvent) {
       await database.insert(auditEvents).values(mapAuditEventToInsert(event));
+    },
+    async recordAttributed(event: AttributedTenantAuditEventV1) {
+      if (!isAttributedTenantAuditEventV1(event)) {
+        throw createInvalidAuditInstitutionAttributionError();
+      }
+
+      await database.insert(auditEvents).values(mapAttributedAuditEventToInsert(event));
     },
     async listCustomerAuditEventsByResourceId(input: {
       tenantId: string;

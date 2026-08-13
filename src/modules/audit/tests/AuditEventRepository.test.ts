@@ -1,11 +1,18 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { auditEvents, customers, followUpMessageDrafts } from '@/server/db/schema';
 import type { TenantDatabase } from '@/server/db/client';
 import {
   createAuditEventRepository,
+  mapAttributedAuditEventToInsert,
   mapAuditEventToInsert,
 } from '@/modules/audit/server/audit-event-repository';
-import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
+import {
+  createAttributedTenantAuditEventV1,
+  type AttributedTenantAuditEventV1,
+  type TenantAuditEvent,
+} from '@/modules/audit/domain/audit-events';
 import {
   decodeAuditEventQueryCursor,
   encodeAuditEventQueryCursor,
@@ -117,11 +124,43 @@ const event: TenantAuditEvent = {
   source: 'demo_session',
 };
 
+function createVerifiedAttributedEvent(): AttributedTenantAuditEventV1 {
+  const attributed = createAttributedTenantAuditEventV1({
+    event,
+    attribution: {
+      institutionAttribution: 'verified',
+      tenantId: 'demo-tenant-001',
+      institutionId: 'demo-institution-001',
+    },
+  });
+
+  if (!attributed) throw new Error('failed to create attributed audit test event');
+  return attributed;
+}
+
+function createNotApplicableAttributedEvent(
+  tenantId: string | null = 'demo-tenant-001',
+): AttributedTenantAuditEventV1 {
+  const attributed = createAttributedTenantAuditEventV1({
+    event: { ...event, tenantId },
+    attribution: {
+      institutionAttribution: 'not_applicable',
+      tenantId,
+      institutionId: null,
+    },
+  });
+
+  if (!attributed) throw new Error('failed to create not-applicable audit test event');
+  return attributed;
+}
+
 const expectedInsertRow = {
   eventId: 'audit_evt_001',
   actorId: 'demo-user-admin',
   actorRole: 'tenant_admin',
   tenantId: 'demo-tenant-001',
+  institutionId: null,
+  institutionAttribution: null,
   scope: 'tenant',
   resource: 'customer',
   resourceId: null,
@@ -276,8 +315,43 @@ beforeEach(() => {
 });
 
 describe('审计事件仓储映射', () => {
-  it('把审计事件映射为数据库写入行', () => {
+  it('把 legacy 审计事件显式映射为机构归因 NULL/NULL 写入行', () => {
     expect(mapAuditEventToInsert(event)).toEqual(expectedInsertRow);
+  });
+
+  it('精确映射 verified 与 not_applicable attributed 写入行', () => {
+    expect(mapAttributedAuditEventToInsert(createVerifiedAttributedEvent())).toEqual({
+      ...expectedInsertRow,
+      institutionId: 'demo-institution-001',
+      institutionAttribution: 'verified',
+    });
+    expect(mapAttributedAuditEventToInsert(createNotApplicableAttributedEvent())).toEqual({
+      ...expectedInsertRow,
+      institutionId: null,
+      institutionAttribution: 'not_applicable',
+    });
+    expect(mapAttributedAuditEventToInsert(createNotApplicableAttributedEvent(null))).toEqual({
+      ...expectedInsertRow,
+      tenantId: null,
+      institutionId: null,
+      institutionAttribution: 'not_applicable',
+    });
+  });
+
+  it('attributed mapper 对 cast、fake 与 legacy_unattributed 固定低敏失败', () => {
+    const verified = createVerifiedAttributedEvent();
+    const invalidEvents = [
+      { ...verified, institutionId: null },
+      { ...verified, credential: 'must-not-pass' },
+      { ...verified, institutionAttribution: 'legacy_unattributed', institutionId: null },
+      { ...verified, institutionAttribution: 'unknown' },
+    ] as unknown as AttributedTenantAuditEventV1[];
+
+    for (const invalidEvent of invalidEvents) {
+      expect(() => mapAttributedAuditEventToInsert(invalidEvent)).toThrow(
+        'INVALID_AUDIT_INSTITUTION_ATTRIBUTION',
+      );
+    }
   });
 
   it('把目标资源 id 映射为固定 resource_id 列', () => {
@@ -322,13 +396,68 @@ describe('审计事件仓储映射', () => {
     expect(insertRow).not.toHaveProperty('treatmentRecord');
   });
 
-  it('把审计事件写入 audit_events 表', async () => {
+  it('legacy record 仅把机构归因 NULL/NULL 写入 audit_events 表', async () => {
     const query = createInsertDatabase();
 
     await createAuditEventRepository(query.database).record(event);
 
     expect(query.insert).toHaveBeenCalledWith(auditEvents);
     expect(query.values).toHaveBeenCalledWith(expectedInsertRow);
+  });
+
+  it('recordAttributed 使用 caller-provided database 精确写入且不开新事务', async () => {
+    const query = createInsertDatabase();
+    const transaction = vi.fn();
+    const database = {
+      insert: query.insert,
+      transaction,
+    } as unknown as TenantDatabase;
+
+    await createAuditEventRepository(database).recordAttributed(
+      createVerifiedAttributedEvent(),
+    );
+
+    expect(query.insert).toHaveBeenCalledWith(auditEvents);
+    expect(query.values).toHaveBeenCalledWith({
+      ...expectedInsertRow,
+      institutionId: 'demo-institution-001',
+      institutionAttribution: 'verified',
+    });
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it('recordAttributed 对非法 cast/fake object 二次验证并保持零 insert', async () => {
+    const query = createInsertDatabase();
+    const invalid = {
+      ...createVerifiedAttributedEvent(),
+      institutionAttribution: 'legacy_unattributed',
+      institutionId: null,
+    } as unknown as AttributedTenantAuditEventV1;
+
+    await expect(
+      createAuditEventRepository(query.database).recordAttributed(invalid),
+    ).rejects.toThrow('INVALID_AUDIT_INSTITUTION_ATTRIBUTION');
+
+    expect(query.insert).not.toHaveBeenCalled();
+    expect(query.values).not.toHaveBeenCalled();
+  });
+
+  it('attributed 写入边界不获取全局数据库、不反向依赖 orchestration 或推断业务 Owner', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'src/modules/audit/server/audit-event-repository.ts'),
+      'utf8',
+    );
+    const recordAttributedSource = source.match(
+      /async recordAttributed[\s\S]*?(?=\n    async listCustomerAuditEventsByResourceId)/,
+    )?.[0];
+
+    expect(source).not.toMatch(/from ['"]@\/server\/orchestration\//);
+    expect(source).not.toMatch(/\bgetDatabase\b/);
+    expect(source).not.toMatch(/database\.transaction\s*\(/);
+    expect(recordAttributedSource).toContain('database.insert(auditEvents)');
+    expect(recordAttributedSource).not.toMatch(
+      /\.(?:select|transaction)\s*\(|\bcustomers\b|\bappointments\b|\bmemberships\b|\bbindings\b/,
+    );
   });
 
   it('按当前租户、机构和 customer resourceId 查询安全审计摘要', async () => {
