@@ -5,12 +5,12 @@
 
 ## Post-V2 当前状态
 
-- 更新日期：2026-08-13
+- 更新日期：2026-08-14
 - Architecture V2：已完成
 - POST-V2-R1B `page_workbench`：稳定且已完成治理闭环
 - POST-V2-R1C 错误放行尝试：精确 4 文件 Runtime 回滚、独立验证及两个指定 P1 审查线程均已完成治理收尾
 - POST-V2-R1C Audit Reader Foundation：exact 8-file Runtime、Required Check、合并后独立验证与 Handoff 均已闭环
-- POST-V2-R1C `page_system_audit`：既有 fresh release re-audit 已完成；Audit Writer attribution 与 historical backfill 已闭环，但 Reader data readiness 仍为 false，页面继续 hidden/not-released
+- POST-V2-R1C `page_system_audit`：既有 fresh release re-audit 已完成；Audit Writer attribution、historical backfill、Reader coverage honesty 与 Workbench multi-capability prerequisite 已闭环，页面仍继续 hidden/not-released
 - S4 Phase 0：PR #1172 已修正 Handoff 授权来源与页面授权状态，PR #1171 两个 post-merge Review thread 已回复并解决
 - S4 Phase 1 / S5 Phase 0 修正：Audit Writer attribution fresh audit 已通过；重新核算为 19 个生产 caller 与 10 个 transaction persistence / composition 点，完整 closure 仍必须拆分
 - S5 Phase 0：caller inventory docs-only follow-up PR #1174 已合并；合并后仅回复并解决 PR #1173 指定 Review thread
@@ -24,15 +24,18 @@
 - S11：Historical Backfill tooling PR #1190、initial Handoff #1191、corrective Runtime #1192、tool-identity corrective Runtime #1194 与 final Handoff #1193 已闭环；在 merged clean main 的 local-development loopback PostgreSQL 上完成 fresh 275-row exact cohort、dry-run、8-row DML、actual recovery、final re-apply、postcheck 与 second-run no-op
 - S11 历史终态：7 `VERIFIED`、1 `NOT_APPLICABLE`、0 `ATTEMPTED_DENIAL`、267 `UNCLASSIFIABLE`；Historical Backfill governance 已闭环，不等于 Reader data readiness 或页面 release
 - S11 post-merge Review：#1190 两个 P2 已由 #1192 修复并解决；#1191 两个 docs P2 已由 final Handoff #1193 修复并解决；#1192 的 runner identity P2 已由 #1194 修复并解决
+- S12：Reader coverage contract 与 Workbench multi-capability prerequisite Runtime PR #1195 已合并；Required Check、全量与合并后独立验证均通过
+- S12 Reader：当前 7 条 `verified` 安全可读、267 条历史记录保持不可分类；正式 coverage 为 `partial_verified_only`，不再把安全可读与完整历史覆盖混成一个 boolean
+- S12 Workbench：`/hospital` 已按 `page_workbench` key 精确选择并缩小自身投影；第二 summary、顺序变化与 hidden/unrelated capability 不影响 Workbench，duplicate/missing 继续 fail-closed
 - 当前经审查接受的受治理只读页面切片：1 / 26
 - 剩余未放行页面：25
 - 受控创建能力放行：0 / 3
 - PR #1163 两个指定 P1：均已回复并解决，目标未解决线程数为 0
 - 审计读取器：机构范围 Reader 已实现，只消费正式 one-shot opaque context，并强制 tenant + institution + `verified`
 - Audit Writer caller migration / attribution 与 Historical Backfill：均已闭环，S11 五个 post-merge P2 已实际修复并解决
-- Reader readiness：ready；Reader data readiness：false
+- Reader readiness：ready；Reader data readiness：`partial_safe`；完整历史覆盖：false
 - 本地 postcheck：275 条审计记录中 `verified=7`、`not_applicable=1`、`attempted_denial=0`、`unclassifiable=267`；机构 Reader 对 1 个 active pair 可安全返回 7 行，但 residual 不允许宣称完整历史
-- Workbench multi-capability：当前不安全，第二条可见摘要仍会触发 `/hospital` 的 exact-one guard
+- Workbench multi-capability：安全；`page_workbench` 当前 read_only/pilot_released 行为保持稳定
 - 生产就绪 / 部署：未推导、未执行
 
 ```text
@@ -158,6 +161,45 @@ PR1192_TOOL_IDENTITY_P2_THREAD_RESOLVED=true
 S11_ACTIONABLE_P0_P1=0
 POST_MERGE_REVIEW_DEBT=0
 
+S12_COMPLETE=true
+S12_RUNTIME_PR=1195
+S12_RUNTIME_HEAD=52914e1d4c81b9444878ed41553a4bd44864cdd6
+S12_RUNTIME_MERGE=9cf3ac78bbd0bafdcbf4c56afd4af8f2badf84df
+S12_RUNTIME_REQUIRED_CHECK=passed
+S12_RUNTIME_ACTIONABLE_P0_P1=0
+S12_HANDOFF_PR=1196
+S12_PRS=1195,1196
+S12_PR_COUNT=2
+S12_REQUIRED_CHECKS=passed
+S12_ACTIONABLE_P0_P1=0
+S12_POST_MERGE_REVIEW_DEBT=0
+S12_CURRENT_AUDIT_TOTAL_ROW_COUNT=275
+S12_CURRENT_VERIFIED_ROW_COUNT=7
+S12_CURRENT_NOT_APPLICABLE_ROW_COUNT=1
+S12_CURRENT_ATTEMPTED_DENIAL_ROW_COUNT=0
+S12_CURRENT_UNCLASSIFIABLE_HISTORICAL_ROW_COUNT=267
+S12_CURRENT_VERIFIED_PAIR_COUNT=1
+S12_TARGET_VERIFIED_READABLE_ROW_COUNT=7
+AUDIT_READER_SAFE_DATA_AVAILABLE=true
+AUDIT_READER_COVERAGE_STATE=partial_verified_only
+AUDIT_READER_HISTORICAL_COVERAGE_COMPLETE=false
+AUDIT_READER_PARTIAL_COVERAGE_SAFE=true
+AUDIT_READER_DATA_READINESS=partial_safe
+WORKBENCH_MULTI_CAPABILITY_SAFE=true
+WORKBENCH_PAGE_WORKBENCH_PROJECTION_STABLE=true
+S12_TARGETED_TEST_FILES=12
+S12_TARGETED_TESTS=231
+S12_FULL_TEST_FILES=494
+S12_FULL_TESTS=6769
+S12_POST_MERGE_INDEPENDENT_TEST_FILES=10
+S12_POST_MERGE_INDEPENDENT_TESTS=248
+S12_TYPECHECK=passed
+S12_ARCHITECTURE_UNIT=148/148 passed
+S12_ARCHITECTURE_INCREMENTAL=passed
+S12_LINT=passed_with_4_existing_warnings
+S12_BUILD=passed
+S12_PRODUCTION_READINESS_DOCS=8/8 passed
+
 RUNTIME_EXACT_FILE_COUNT=8
 RUNTIME_PR=1169
 RUNTIME_HEAD=c927fdfc9a37a865d3df2082ec350b7e01806c45
@@ -177,7 +219,7 @@ DML_EXECUTION=true
 
 AUDIT_WRITER_ATTRIBUTION_CLOSED=true
 HISTORICAL_BACKFILL_CLOSED=true
-AUDIT_READER_DATA_READINESS=false
+AUDIT_READER_DATA_READINESS=partial_safe
 
 PR1171_POST_MERGE_P1_RESOLVED=true
 PR1171_POST_MERGE_P2_RESOLVED=true
@@ -364,8 +406,8 @@ POST_V2_R1C_PAGE_SYSTEM_AUDIT_RELEASE_REAUDIT=passed
 PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=false
 AUDIT_READER_SUCCESS_PATH_EXISTS=true
 AUDIT_READER_READINESS=ready
-AUDIT_DATA_READINESS=false
-WORKBENCH_MULTI_CAPABILITY_SAFE=false
+AUDIT_DATA_READINESS=partial_safe
+WORKBENCH_MULTI_CAPABILITY_SAFE=true
 
 CANONICAL_ROUTE=/hospital/system/audit
 ROUTE_STRATEGY=dedicated_static_route_after_data_prerequisite

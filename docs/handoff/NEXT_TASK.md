@@ -3,14 +3,64 @@
 ## 唯一技术任务
 
 ```text
-NEXT_TASK=POST-V2-R1C Audit Reader Data Readiness / Workbench Multi-Capability prerequisite explicit authorization
+NEXT_TASK=POST-V2-R1C page_system_audit fresh release re-audit + exact Runtime re-admission explicit authorization
 NEXT_TASK_AUTHORIZED=false
-AUDIT_READER_DATA_READINESS_RUNTIME_AUTHORIZED=false
-WORKBENCH_MULTI_CAPABILITY_AUTHORIZED=false
 PAGE_SYSTEM_AUDIT_RUNTIME_AUTHORIZED=false
 DATABASE_CONNECTION_AUTHORIZED=false
 DATABASE_WRITE_EXECUTION_AUTHORIZED=false
 ```
+
+## S12 完整闭环状态
+
+```text
+STAGE=S12
+S12_COMPLETE=true
+S12_RUNTIME_PR=1195
+S12_RUNTIME_HEAD=52914e1d4c81b9444878ed41553a4bd44864cdd6
+S12_RUNTIME_MERGE=9cf3ac78bbd0bafdcbf4c56afd4af8f2badf84df
+S12_RUNTIME_REQUIRED_CHECK=passed
+S12_RUNTIME_ACTIONABLE_P0_P1=0
+S12_HANDOFF_PR=1196
+S12_PRS=1195,1196
+S12_PR_COUNT=2
+
+CURRENT_AUDIT_TOTAL_ROW_COUNT=275
+CURRENT_VERIFIED_ROW_COUNT=7
+CURRENT_NOT_APPLICABLE_ROW_COUNT=1
+CURRENT_ATTEMPTED_DENIAL_ROW_COUNT=0
+CURRENT_UNCLASSIFIABLE_HISTORICAL_ROW_COUNT=267
+CURRENT_VERIFIED_PAIR_COUNT=1
+TARGET_VERIFIED_READABLE_ROW_COUNT=7
+
+AUDIT_READER_SAFE_DATA_AVAILABLE=true
+AUDIT_READER_COVERAGE_STATE=partial_verified_only
+AUDIT_READER_HISTORICAL_COVERAGE_COMPLETE=false
+AUDIT_READER_PARTIAL_COVERAGE_SAFE=true
+AUDIT_READER_DATA_READINESS=partial_safe
+
+WORKBENCH_MULTI_CAPABILITY_SAFE=true
+WORKBENCH_PAGE_WORKBENCH_PROJECTION_STABLE=true
+
+S12_TARGETED_TEST_FILES=12
+S12_TARGETED_TESTS=231
+S12_FULL_TEST_FILES=494
+S12_FULL_TESTS=6769
+S12_POST_MERGE_INDEPENDENT_TEST_FILES=10
+S12_POST_MERGE_INDEPENDENT_TESTS=248
+S12_REQUIRED_CHECKS=passed
+S12_ACTIONABLE_P0_P1=0
+POST_MERGE_REVIEW_DEBT=0
+
+HISTORICAL_BACKFILL_CLOSED=true
+HISTORICAL_BACKFILL_REQUIRED_FOR_PAGE_RELEASE=true
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+```
+
+S12 以精确 coverage contract 将“存在安全 verified subset”与“完整历史覆盖”分离：当前 7 条安全可读，267 条不可分类历史记录不猜测、不隐藏，正式状态是 `partial_verified_only / partial_safe`。`/hospital` 已按 `page_workbench` key 选择并缩小自身投影，未来第二条合法 capability summary 不再丢弃 Workbench，也不会被渲染进 Workbench。
+
+S12 没有修改 production Capability Authority、导航或 `page_system_audit` 发布状态。下一任务必须重新 fresh 审计页面放行条件并冻结 exact Runtime Admission；本文件不构成自动实现或 release 授权。
 
 ## S11 完整闭环状态
 
@@ -81,7 +131,7 @@ HISTORICAL_BACKFILL_REQUIRED_FOR_PAGE_RELEASE=true
 
 S11 在 merged clean main 的 local-development loopback PostgreSQL 上 fresh 冻结 275-row exact cohort。7 行通过 unique same-operation persisted pair 证据进入 `VERIFIED`，1 条 Auth login 通过业务语义进入 `NOT_APPLICABLE`，267 行因缺少历史时点 provenance 保持 `UNCLASSIFIABLE`。正式 DML 预计 8、实际 8；repo 外 0600 manifest 已实际恢复 exact 8 行并重新应用，final postcheck 守恒，同一 execute command 第二次实际更新 0。PR #1192 闭合 recovery 可变 evidence 与 manifest 父目录 symlink 两项 P2；PR #1194 又把跨 SHA recovery 绑定到实际执行 runner path/source、clean HEAD blob 与 frozen full-source digest。两次 corrective merge 后原 manifest 均再次 postcheck 通过且 execute 实际更新 0。
 
-## Reader data readiness 仍为 false
+## S11 历史快照：Reader data readiness 当时仍为 false
 
 机构 Reader 的正式 `tenantId + institutionId + institutionAttribution='verified'` 查询可以对 1 个 active pair 返回 7 条安全历史记录，但 267 条不可分类 residual 不能被猜测归因，也不能被页面当作不存在。因此：
 
@@ -93,24 +143,23 @@ PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
 PAGE_SYSTEM_AUDIT_RELEASE=false
 ```
 
-Backfill governance closure 不自动放行 Reader coverage、Workbench 第二 capability 或 `page_system_audit`。下一任务必须 fresh 审计：Reader 对 incomplete historical coverage 的产品语义、明确 unavailable/partial coverage contract、Workbench exact-one guard 与第二 capability composition prerequisite。任何 Runtime、数据库或页面变更都需要新的明确授权。
+该段保留 S11 合并时的历史事实；S12 已在后续正式闭合 Reader coverage 与 Workbench multi-capability prerequisite。
 
 ## 当前停止边界
 
-- 不得自动开始 Audit Reader data-readiness Runtime；
-- 不得自动修改 Workbench、Capability Authority、`page_system_audit` 或 Audit Reader page shell；
+- 不得自动修改 Capability Authority、`page_system_audit` 或发布导航；
 - 不得自动连接数据库或再次执行 backfill/recovery；
 - 不得执行 Schema、Migration、DDL、Seed、Staging 或 Production；
 - 不得把 7 条 verified readable rows 误报为完整历史覆盖；
-- 不得把 `HISTORICAL_BACKFILL_CLOSED=true` 推导为页面 release。
+- 不得把 S12 prerequisite closure 推导为页面 release。
 
 ```text
 AUDIT_CALLER_MIGRATION_CLOSED=true
 AUDIT_WRITER_ATTRIBUTION_CLOSED=true
 HISTORICAL_BACKFILL_CLOSED=true
-AUDIT_READER_DATA_READINESS=false
+AUDIT_READER_DATA_READINESS=partial_safe
 
-WORKBENCH_MULTI_CAPABILITY_SAFE=false
+WORKBENCH_MULTI_CAPABILITY_SAFE=true
 PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
 PAGE_SYSTEM_AUDIT_RELEASE=false
 REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1

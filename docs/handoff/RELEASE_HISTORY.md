@@ -1,5 +1,95 @@
 # 项目重构历史
 
+<!-- POST_V2_R1C_AUDIT_READER_DATA_READINESS_WORKBENCH_MULTI_CAPABILITY_HISTORY -->
+
+## 2026-08-14：POST-V2-R1C Reader coverage / Workbench multi-capability 前置条件闭环
+
+```text
+STAGE=S12
+TASK=POST_V2_R1C_AUDIT_READER_DATA_READINESS_WORKBENCH_MULTI_CAPABILITY_PREREQUISITE
+COMPLETION_MODE=COMPLETE
+BASELINE=f44fe53b49418344e8157c92b6b8d4fa8c8a8853
+
+RUNTIME_PR=1195
+RUNTIME_HEAD=52914e1d4c81b9444878ed41553a4bd44864cdd6
+RUNTIME_MERGE=9cf3ac78bbd0bafdcbf4c56afd4af8f2badf84df
+RUNTIME_REQUIRED_CHECK=passed
+RUNTIME_ACTIONABLE_P0_P1=0
+HANDOFF_PR=1196
+S12_PRS=1195,1196
+S12_PR_COUNT=2
+S12_REQUIRED_CHECKS=passed
+S12_ACTIONABLE_P0_P1=0
+POST_MERGE_REVIEW_DEBT=0
+
+CURRENT_AUDIT_TOTAL_ROW_COUNT=275
+CURRENT_VERIFIED_ROW_COUNT=7
+CURRENT_NOT_APPLICABLE_ROW_COUNT=1
+CURRENT_ATTEMPTED_DENIAL_ROW_COUNT=0
+CURRENT_UNCLASSIFIABLE_HISTORICAL_ROW_COUNT=267
+CURRENT_VERIFIED_PAIR_COUNT=1
+TARGET_VERIFIED_READABLE_ROW_COUNT=7
+
+AUDIT_READER_SAFE_DATA_AVAILABLE=true
+AUDIT_READER_COVERAGE_STATE=partial_verified_only
+AUDIT_READER_HISTORICAL_COVERAGE_COMPLETE=false
+AUDIT_READER_PARTIAL_COVERAGE_SAFE=true
+AUDIT_READER_DATA_READINESS=partial_safe
+
+WORKBENCH_MULTI_CAPABILITY_SAFE=true
+WORKBENCH_PAGE_WORKBENCH_PROJECTION_STABLE=true
+
+RUNTIME_CHANGED_FILE_COUNT=7
+TEST_CHANGED_FILE_COUNT=7
+DOC_CHANGED_FILE_COUNT=5
+TARGETED_TEST_FILES=12
+TARGETED_TESTS=231
+FULL_TEST_FILES=494
+FULL_TESTS=6769
+POST_MERGE_INDEPENDENT_TEST_FILES=10
+POST_MERGE_INDEPENDENT_TESTS=248
+TYPECHECK=passed
+ARCHITECTURE_UNIT=148/148 passed
+ARCHITECTURE_INCREMENTAL=passed
+LINT=passed_with_4_existing_warnings
+BUILD=passed
+PRODUCTION_READINESS_DOCS=8/8 passed
+
+DATABASE_ENVIRONMENT=local_development_only
+DATABASE_HOST_CLASS=loopback
+DATABASE_CONNECTION=true
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+MIGRATION=false
+DDL_EXECUTION=false
+DML_EXECUTION=false
+
+HISTORICAL_BACKFILL_CLOSED=true
+HISTORICAL_BACKFILL_REQUIRED_FOR_PAGE_RELEASE=true
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+```
+
+- local-development loopback PostgreSQL 的 fresh read-only audit 与 post-merge postcheck 均确认 275 行：7 `verified`、1 `not_applicable`、0 attempted denial、267 unclassifiable，1 个 verified pair 可安全读取 7 行；
+- Reader 新增精确四字段 coverage contract；`complete` 与 `partial_verified_only` 明确区分，unavailable 继续由 503 fail-closed 表达，authoritative empty 只从完整覆盖派生；
+- API/client/Shell 不输出 coverage 原始计数、tenant、institution、SQL、manifest 或 provenance；UI 明确 verified subset 与历史不完整，页内统计不再冒充完整历史总量；
+- `/hospital` 改为按 `page_workbench` key 精确选择并缩小自身投影；第二 summary 与顺序变化不再破坏 Workbench，duplicate/missing 继续 fail-closed，第二 capability 内容不会进入 Workbench DOM；
+- Runtime PR #1195 Required Check、定向 12/231、全量 494/6769、合并后独立 10/248、typecheck、AQ 148/148、Architecture incremental、lint、build 与 ProductionReadinessDocs 全部通过；
+- 未修改 Schema、Migration、DDL、DML、Seed、production Capability Authority、`page_system_audit` release、Staging 或 Production。
+
+证据：
+
+- `docs/operations/post-v2-r1c-audit-reader-data-readiness-workbench-multi-capability-prerequisite-closure-20260814.md`
+- Runtime PR #1195 / Merge `9cf3ac78bbd0bafdcbf4c56afd4af8f2badf84df`
+- Handoff PR #1196
+
+唯一下一任务：`POST-V2-R1C page_system_audit fresh release re-audit + exact Runtime re-admission explicit authorization`；当前未授权自动开始。
+
+<!-- POST_V2_R1C_AUDIT_READER_DATA_READINESS_WORKBENCH_MULTI_CAPABILITY_HISTORY_END -->
+
 <!-- POST_V2_R1C_AUDIT_WRITER_HISTORICAL_BACKFILL_HISTORY -->
 
 ## 2026-08-13：POST-V2-R1C Audit Writer Historical Backfill 完整闭环
