@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
-import { createAuditEvent } from '@/modules/audit/domain/audit-events';
-import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
+import {
+  createAttributedTenantAuditEventV1,
+  createAuditEvent,
+  type AttributedTenantAuditEventV1,
+} from '@/modules/audit/domain/audit-events';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 import type {
   CategoryStats,
@@ -96,8 +99,23 @@ type PlatformKnowledgeDirectoryRepository = Pick<
 };
 
 type PlatformKnowledgeDirectoryAuditRepository = {
-  record(event: TenantAuditEvent): Promise<void>;
+  recordAttributed(event: AttributedTenantAuditEventV1): Promise<void>;
 };
+
+function createPlatformNotApplicableAuditEvent(
+  event: ReturnType<typeof createAuditEvent>,
+): AttributedTenantAuditEventV1 {
+  const attributedEvent = createAttributedTenantAuditEventV1({
+    event,
+    attribution: {
+      institutionAttribution: 'not_applicable',
+      tenantId: event.tenantId,
+      institutionId: null,
+    },
+  });
+  if (!attributedEvent) throw new Error('invalid_platform_audit_attribution');
+  return attributedEvent;
+}
 
 type PlatformKnowledgeRenameDirectoryServiceInput = {
   repository: PlatformKnowledgeDirectoryRepository;
@@ -745,8 +763,8 @@ export async function createPlatformKnowledgeDirectoryService(
     })
     : createdLibraryDirectory(safeNextName);
 
-  await input.auditRepository.record(
-    createAuditEvent({
+  await input.auditRepository.recordAttributed(
+    createPlatformNotApplicableAuditEvent(createAuditEvent({
       eventId: createKnowledgeDirectoryAuditId('create', tenantId, directory.directoryId),
       context: {
         ...input.accessContext,
@@ -758,7 +776,7 @@ export async function createPlatformKnowledgeDirectoryService(
       result: 'allowed',
       reason: 'allowed_by_policy',
       occurredAt: new Date().toISOString(),
-    }),
+    })),
   );
 
   return {
@@ -820,8 +838,8 @@ export async function renamePlatformKnowledgeDirectoryService(
     return directoryMutationResponse('not_found', '未找到可重命名的目录');
   }
 
-  await input.auditRepository.record(
-    createAuditEvent({
+  await input.auditRepository.recordAttributed(
+    createPlatformNotApplicableAuditEvent(createAuditEvent({
       eventId: createKnowledgeDirectoryAuditId('rename', tenantId, input.input.directoryId),
       context: {
         ...input.accessContext,
@@ -833,7 +851,7 @@ export async function renamePlatformKnowledgeDirectoryService(
       result: 'allowed',
       reason: 'allowed_by_policy',
       occurredAt: new Date().toISOString(),
-    }),
+    })),
   );
 
   return {
@@ -894,8 +912,8 @@ export async function reorderPlatformKnowledgeDirectoriesService(
     return directoryMutationResponse('not_found', '未找到可排序的目录');
   }
 
-  await input.auditRepository.record(
-    createAuditEvent({
+  await input.auditRepository.recordAttributed(
+    createPlatformNotApplicableAuditEvent(createAuditEvent({
       eventId: createKnowledgeDirectoryAuditId('reorder', tenantId, 'knowledge-directory-order'),
       context: {
         ...input.accessContext,
@@ -907,7 +925,7 @@ export async function reorderPlatformKnowledgeDirectoriesService(
       result: 'allowed',
       reason: 'allowed_by_policy',
       occurredAt: new Date().toISOString(),
-    }),
+    })),
   );
 
   return {
@@ -957,8 +975,8 @@ export async function archivePlatformKnowledgeDirectoryService(
     return directoryMutationResponse('not_found', '未找到可归档的目录');
   }
 
-  await input.auditRepository.record(
-    createAuditEvent({
+  await input.auditRepository.recordAttributed(
+    createPlatformNotApplicableAuditEvent(createAuditEvent({
       eventId: createKnowledgeDirectoryAuditId('archive', tenantId, input.params.directoryId),
       context: {
         ...input.accessContext,
@@ -970,7 +988,7 @@ export async function archivePlatformKnowledgeDirectoryService(
       result: 'allowed',
       reason: 'allowed_by_policy',
       occurredAt: new Date().toISOString(),
-    }),
+    })),
   );
 
   return {

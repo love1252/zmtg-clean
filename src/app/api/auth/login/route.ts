@@ -4,7 +4,10 @@ import { isProxy } from 'node:util/types';
 import { NextResponse } from 'next/server';
 
 import { createAccessControlAuthoritativeMembershipFactReaderV1 } from '@/modules/access-control/application/authoritative-membership-reader';
-import { createAuditEvent } from '@/modules/audit/domain/audit-events';
+import {
+  createAttributedTenantAuditEventV1,
+  createAuditEvent,
+} from '@/modules/audit/domain/audit-events';
 import { createAuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import {
   createFormalInstitutionSessionContextResolverV1,
@@ -301,8 +304,7 @@ async function recordFormalLoginAudit(input: {
   if (!input.membership) return;
 
   try {
-    await createAuditEventRepository(input.database).record(
-      createAuditEvent({
+    const event = createAuditEvent({
         eventId: `audit_evt_login_${randomUUID()}`,
         context: {
           userId: input.account.id,
@@ -317,8 +319,17 @@ async function recordFormalLoginAudit(input: {
         result: input.result,
         reason: input.reason,
         occurredAt: new Date().toISOString(),
-      }),
-    );
+      });
+    const attributedEvent = createAttributedTenantAuditEventV1({
+      event,
+      attribution: {
+        institutionAttribution: 'not_applicable',
+        tenantId: event.tenantId,
+        institutionId: null,
+      },
+    });
+    if (!attributedEvent) throw new Error('invalid_login_audit_attribution');
+    await createAuditEventRepository(input.database).recordAttributed(attributedEvent);
   } catch {
     // 登录审计是安全观察信号；审计写入失败不应改变认证结果。
   }

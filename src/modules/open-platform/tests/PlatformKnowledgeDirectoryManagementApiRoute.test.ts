@@ -19,7 +19,7 @@ const repository = {
   reorderKnowledgeDirectories: vi.fn(),
 };
 const auditRepository = {
-  record: vi.fn(),
+  recordAttributed: vi.fn(),
 };
 const now = new Date('2026-06-13T08:00:00.000Z');
 const libraryDirectoryId = 'directory:library:%E6%BC%94%E7%A4%BA%E7%9F%A5%E8%AF%86';
@@ -130,7 +130,7 @@ describe('平台知识库目录管理 API route', () => {
     repository.createKnowledgeDirectory.mockReset();
     repository.archiveKnowledgeDirectory.mockReset();
     repository.reorderKnowledgeDirectories.mockReset();
-    auditRepository.record.mockReset();
+    auditRepository.recordAttributed.mockReset();
     repository.listKnowledgeOverviewItems.mockResolvedValue(routeRecords);
     repository.listKnowledgeOverviewFiles.mockResolvedValue(routeFiles);
     repository.listKnowledgeOverviewQaAudits.mockResolvedValue([]);
@@ -190,8 +190,11 @@ describe('平台知识库目录管理 API route', () => {
         canRename: true,
       }),
     }));
-    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+    expect(auditRepository.recordAttributed).toHaveBeenCalledWith(expect.objectContaining({
       actorId: 'platform-user-a',
+      tenantId: 'tenant-route-a',
+      institutionId: null,
+      institutionAttribution: 'not_applicable',
       resource: 'knowledge_management',
       action: 'update',
       result: 'allowed',
@@ -245,7 +248,7 @@ describe('平台知识库目录管理 API route', () => {
       message: '目录名称不能包含路径或控制字符',
     }));
     expect(repository.renameKnowledgeDirectory).not.toHaveBeenCalled();
-    expect(auditRepository.record).not.toHaveBeenCalled();
+    expect(auditRepository.recordAttributed).not.toHaveBeenCalled();
     expectSafePayload(payload);
   });
 
@@ -277,8 +280,11 @@ describe('平台知识库目录管理 API route', () => {
         fileCount: 0,
       }),
     }));
-    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+    expect(auditRepository.recordAttributed).toHaveBeenCalledWith(expect.objectContaining({
       actorId: 'platform-user-a',
+      tenantId: 'tenant-route-a',
+      institutionId: null,
+      institutionAttribution: 'not_applicable',
       resource: 'knowledge_management',
       action: 'create',
       result: 'allowed',
@@ -329,7 +335,7 @@ describe('平台知识库目录管理 API route', () => {
       status: 'blocked',
       message: '目录下仍有知识条目或文件，请先迁移后再归档',
     }));
-    expect(auditRepository.record).not.toHaveBeenCalled();
+    expect(auditRepository.recordAttributed).not.toHaveBeenCalled();
     expectSafePayload(payload);
   });
 
@@ -366,8 +372,11 @@ describe('平台知识库目录管理 API route', () => {
         status: 'archived',
       }),
     }));
-    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+    expect(auditRepository.recordAttributed).toHaveBeenCalledWith(expect.objectContaining({
       actorId: 'platform-user-a',
+      tenantId: 'tenant-route-a',
+      institutionId: null,
+      institutionAttribution: 'not_applicable',
       resource: 'knowledge_management',
       action: 'update',
       result: 'allowed',
@@ -397,8 +406,11 @@ describe('平台知识库目录管理 API route', () => {
         sources: 2,
       }),
     }));
-    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+    expect(auditRepository.recordAttributed).toHaveBeenCalledWith(expect.objectContaining({
       actorId: 'platform-user-a',
+      tenantId: 'tenant-route-a',
+      institutionId: null,
+      institutionAttribution: 'not_applicable',
       resource: 'knowledge_management',
       action: 'update',
       result: 'allowed',

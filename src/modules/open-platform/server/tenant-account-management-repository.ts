@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 
-import { mapAuditEventToInsert } from '@/modules/audit/server/audit-event-repository';
+import { mapAttributedAuditEventToInsert } from '@/modules/audit/server/audit-event-repository';
 import { insertOneCommercialRecord } from '@/modules/open-platform/server/tenant-commercial-records-repository';
 import type {
   TenantAccountManagementRecord,
@@ -95,7 +95,7 @@ export function createTenantAccountManagementRepository(
           .update(authUsers)
           .set(buildAccountUpdate(input))
           .where(eq(authUsers.id, input.account.accountId));
-        await tx.insert(auditEvents).values(mapAuditEventToInsert(input.auditEvent));
+        await tx.insert(auditEvents).values(mapAttributedAuditEventToInsert(input.auditEvent));
         // 账号状态变更商业记录
         const actionLabel =
           input.action === 'disable' ? '停用' : input.action === 'enable' ? '启用' : '重置密码';

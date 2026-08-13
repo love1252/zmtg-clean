@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createAuditEvent, type AuditReason } from '@/modules/audit/domain/audit-events';
+import { createAttributedTenantAuditEventV1, createAuditEvent, type AuditReason } from '@/modules/audit/domain/audit-events';
 import { createAuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import { isSupportedVendor, type SupportedVendor } from '@/modules/open-platform/domain/vendor-catalog';
 import {
@@ -46,7 +46,7 @@ async function recordAudit(input: {
 }) {
   try {
     const repository = createAuditEventRepository(getDatabase());
-    await repository.record(createAuditEvent({
+    const event = createAuditEvent({
       eventId: crypto.randomUUID(),
       context: input.context,
       resource: 'ai_model_config',
@@ -55,7 +55,17 @@ async function recordAudit(input: {
       result: input.result,
       reason: input.reason,
       occurredAt: new Date().toISOString(),
-    }));
+    });
+    const attributedEvent = createAttributedTenantAuditEventV1({
+      event,
+      attribution: {
+        institutionAttribution: 'not_applicable',
+        tenantId: event.tenantId,
+        institutionId: null,
+      },
+    });
+    if (!attributedEvent) throw new Error('invalid_platform_audit_attribution');
+    await repository.recordAttributed(attributedEvent);
   } catch {
     // Keep the external operation response low-sensitive and independent from audit persistence failures.
   }

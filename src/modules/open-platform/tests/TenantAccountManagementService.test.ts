@@ -77,6 +77,8 @@ describe('租户初始管理员账号管理 service', () => {
         actorId: 'demo-user-platform',
         actorRole: 'platform_admin',
         tenantId: 'tenant-zhengpu',
+        institutionId: null,
+        institutionAttribution: 'not_applicable',
         scope: 'platform',
         resource: 'tenant_member',
         resourceId: 'tenant-member-zhengpu-admin',

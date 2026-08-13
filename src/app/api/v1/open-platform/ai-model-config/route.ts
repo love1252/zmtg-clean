@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDatabase } from '@/server/db/client';
-import { createAuditEvent } from '@/modules/audit/domain/audit-events';
+import { createAttributedTenantAuditEventV1, createAuditEvent } from '@/modules/audit/domain/audit-events';
 import { createAuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import { canAccessResource, type AccessContext, type AccessDecision, type ProtectedAction } from '@/modules/security/domain/access-control';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
@@ -33,7 +33,7 @@ async function recordAccessAudit(input: {
   reason: AccessDecision['reason'];
 }) {
   try {
-    await repositories().auditRepository.record(createAuditEvent({
+    const event = createAuditEvent({
       eventId: crypto.randomUUID(),
       context: input.context,
       resource: 'ai_model_config',
@@ -41,7 +41,17 @@ async function recordAccessAudit(input: {
       result: input.result,
       reason: input.reason,
       occurredAt: new Date().toISOString(),
-    }));
+    });
+    const attributedEvent = createAttributedTenantAuditEventV1({
+      event,
+      attribution: {
+        institutionAttribution: 'not_applicable',
+        tenantId: event.tenantId,
+        institutionId: null,
+      },
+    });
+    if (!attributedEvent) throw new Error('invalid_platform_audit_attribution');
+    await repositories().auditRepository.recordAttributed(attributedEvent);
   } catch {
     // Audit failures are intentionally not reflected into the low-sensitive API response.
   }

@@ -288,6 +288,8 @@ describe('租户套餐变更 service', () => {
         actorId: 'demo-user-platform',
         actorRole: 'platform_admin',
         tenantId: 'tenant-001',
+        institutionId: null,
+        institutionAttribution: 'not_applicable',
         scope: 'platform',
         resource: 'tenant',
         resourceId: 'tenant-001',
