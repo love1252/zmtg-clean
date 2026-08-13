@@ -12,7 +12,9 @@
 - POST-V2-R1C Audit Reader Foundation：exact 8-file Runtime、Required Check、合并后独立验证与 Handoff 均已闭环
 - POST-V2-R1C `page_system_audit`：fresh release re-audit 已通过，但 eligibility 因 Audit Writer institution attribution 未闭环而阻断
 - S4 Phase 0：PR #1172 已修正 Handoff 授权来源与页面授权状态，PR #1171 两个 post-merge Review thread 已回复并解决
-- S4 Phase 1 / S5 Phase 0 修正：Audit Writer attribution fresh audit 已通过；重新核算为 19 个生产 caller 与 10 个 transaction persistence / composition 点，完整 closure 仍必须拆分，当前不具备单一 Runtime Admission
+- S4 Phase 1 / S5 Phase 0 修正：Audit Writer attribution fresh audit 已通过；重新核算为 19 个生产 caller 与 10 个 transaction persistence / composition 点，完整 closure 仍必须拆分
+- S5 Phase 0：caller inventory docs-only follow-up PR #1174 已合并；合并后仅回复并解决 PR #1173 指定 Review thread
+- S5 Phase 1：首个原子前置 formal institution Audit Writer scope port fresh audit 已通过，冻结 exact 2-file Runtime Admission；当前未授权或实施 Runtime
 - 当前经审查接受的受治理只读页面切片：1 / 26
 - 剩余未放行页面：25
 - 受控创建能力放行：0 / 3
@@ -67,6 +69,11 @@ PR1171_POST_MERGE_P2_RESOLVED=true
 PHASE0_FIX_PR=1172
 PHASE0_FIX_MERGE=44b2f3653fbfd5cc4dd02f33e5c2c8fc80f292cb
 
+PHASE0_CALLER_INVENTORY_FIX_PR=1174
+PHASE0_CALLER_INVENTORY_FIX_HEAD=3c9501da62ef19f2f79a3811672aed29e115d34f
+PHASE0_CALLER_INVENTORY_FIX_MERGE=654b241ce021ecaf08891a98c590867c0393372a
+PR1173_POST_MERGE_P2_RESOLVED=true
+
 AUDIT_WRITER_ATTRIBUTION_FRESH_AUDIT=passed
 AUDIT_WRITER_ATTRIBUTION_RUNTIME_ELIGIBLE=false
 ADMISSION_MODE=SPLIT_REQUIRED
@@ -79,6 +86,46 @@ TRANSACTIONAL_AUDIT_WRITER_CALLER_FILE_COUNT=10
 BLOCKING_PREREQUISITE_COUNT=3
 PRIMARY_BLOCKING_PREREQUISITE=formal institution Audit Writer scope port
 HISTORICAL_BACKFILL_REQUIRED_FOR_PAGE_RELEASE=true
+
+AUDIT_WRITER_SCOPE_PORT_FRESH_AUDIT=passed
+AUDIT_WRITER_SCOPE_PORT_RUNTIME_ELIGIBLE=true
+ADMISSION_MODE=ADMISSION_READY
+EXACT_RUNTIME_SCOPE_FROZEN=true
+AUDIT_WRITER_SCOPE_PORT_EXACT_RUNTIME_ADMISSION=passed
+
+RECOMMENDED_RUNTIME_DESIGN=方案 B：src/server/orchestration 持有的无输入 one-shot formal scope port
+FORMAL_SCOPE_SOURCE=formal server-session verified claims corroborated by current authoritative Identity + active Membership/Binding + active Tenancy Institution Scope
+PORT_OWNER=src/server/orchestration
+HANDLE_OWNER=src/server/orchestration/institution-audit-writer-scope.ts
+HANDLE_CREATOR=resolveInstitutionAuditWriterFormalScopeV1
+HANDLE_CONSUMER=consumeInstitutionAuditWriterFormalScopeV1
+CONSUMPTION_COUNT=1
+WRITER_SCOPE_PORT_IS_AUTHORIZATION_REPLACEMENT=false
+CAPABILITY_COUPLING=false
+PAIR_REVALIDATION_REQUIRED=false
+
+EXACT_RUNTIME_FILE_COUNT=2
+EXISTING_RUNTIME_FILE_COUNT=0
+NEW_RUNTIME_FILE_COUNT=2
+DELETE_RUNTIME_FILE_COUNT=0
+EXACT_PRODUCTION_FILE_COUNT=1
+EXACT_TEST_FILE_COUNT=1
+
+DATABASE_ENVIRONMENT=not_connected
+DATABASE_READONLY_CONNECTION=not_used
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE_REQUIRED=false
+MIGRATION_REQUIRED=false
+DDL_REQUIRED=false
+DML_REQUIRED=false
+ARCHITECTURE_EXCEPTION_REQUIRED=false
+
+AUDIT_WRITER_SCOPE_PORT_RUNTIME_AUTHORIZED=false
+AUDIT_WRITER_SCOPE_PORT_RUNTIME_IMPLEMENTED=false
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_AUTHORIZED=false
+CALLER_MIGRATION_AUTHORIZED=false
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_CLOSED=false
+AUDIT_CALLER_MIGRATION_CLOSED=false
 
 POST_V2_R1C_PAGE_SYSTEM_AUDIT_RELEASE_REAUDIT=passed
 PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=false
@@ -115,10 +162,12 @@ POST_V2_R1C_RELEASE_COMPLETE=false
 
 ### 唯一下一任务
 
-`POST-V2-R1C Audit Writer formal institution scope port fresh audit + exact Runtime admission`
+`POST-V2-R1C Audit Writer formal institution scope port exact 2-file Runtime implementation explicit authorization`
 
 ```text
-AUDIT_WRITER_ATTRIBUTION_RUNTIME_AUTHORIZED=false
+AUDIT_WRITER_SCOPE_PORT_RUNTIME_AUTHORIZED=false
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_AUTHORIZED=false
+CALLER_MIGRATION_AUTHORIZED=false
 PAGE_SYSTEM_AUDIT_RUNTIME_AUTHORIZED=false
 ```
 

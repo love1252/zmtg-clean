@@ -3,44 +3,43 @@
 ## 唯一技术任务
 
 ```text
-NEXT_TASK=POST-V2-R1C Audit Writer formal institution scope port fresh audit + exact Runtime admission
-AUDIT_WRITER_ATTRIBUTION_RUNTIME_AUTHORIZED=false
+NEXT_TASK=POST-V2-R1C Audit Writer formal institution scope port exact 2-file Runtime implementation explicit authorization
+AUDIT_WRITER_SCOPE_PORT_RUNTIME_AUTHORIZED=false
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_AUTHORIZED=false
+CALLER_MIGRATION_AUTHORIZED=false
 PAGE_SYSTEM_AUDIT_RUNTIME_AUTHORIZED=false
 ```
 
-## 继承状态
+## 已完成准入
 
 ```text
-PR1171_POST_MERGE_P1_RESOLVED=true
-PR1171_POST_MERGE_P2_RESOLVED=true
-PHASE0_FIX_PR=1172
-PHASE0_FIX_MERGE=44b2f3653fbfd5cc4dd02f33e5c2c8fc80f292cb
+AUDIT_WRITER_SCOPE_PORT_FRESH_AUDIT=passed
+AUDIT_WRITER_SCOPE_PORT_RUNTIME_ELIGIBLE=true
+ADMISSION_MODE=ADMISSION_READY
+EXACT_RUNTIME_SCOPE_FROZEN=true
+AUDIT_WRITER_SCOPE_PORT_EXACT_RUNTIME_ADMISSION=passed
 
-AUDIT_WRITER_ATTRIBUTION_FRESH_AUDIT=passed
-AUDIT_WRITER_ATTRIBUTION_RUNTIME_ELIGIBLE=false
-ADMISSION_MODE=SPLIT_REQUIRED
+RECOMMENDED_RUNTIME_DESIGN=方案 B：src/server/orchestration 持有的无输入 one-shot formal scope port
+FORMAL_SCOPE_SOURCE=formal server-session verified claims corroborated by current authoritative Identity + active Membership/Binding + active Tenancy Institution Scope
+PORT_OWNER=src/server/orchestration
+HANDLE_OWNER=src/server/orchestration/institution-audit-writer-scope.ts
+HANDLE_CREATOR=resolveInstitutionAuditWriterFormalScopeV1
+HANDLE_CONSUMER=consumeInstitutionAuditWriterFormalScopeV1
+CONSUMPTION_COUNT=1
 
-CALLER_INVENTORY_REAUDIT=passed
-PRODUCTION_AUDIT_WRITER_CALLER_FILE_COUNT=19
-PRODUCTION_INSTITUTION_AUDIT_WRITER_CALLER_FILE_COUNT=11
-PRODUCTION_PLATFORM_AUDIT_WRITER_CALLER_FILE_COUNT=7
-PRODUCTION_NON_INSTITUTION_AUDIT_WRITER_CALLER_FILE_COUNT=1
-TRANSACTIONAL_AUDIT_WRITER_CALLER_FILE_COUNT=10
-
-CANONICAL_AUDIT_WRITER_BOUNDARY=Audit domain event contract and AuditEventRepository mapper; institution composition belongs in src/server/orchestration
-CANONICAL_WRITER_INSTITUTION_SCOPE_SOURCE=one-shot opaque formal server-session institution scope resolved from authoritative Identity + Membership/Binding + Institution Scope and passed through an orchestration-owned port
-TENANT_INSTITUTION_PAIR_PROVENANCE=formal current pair first; transaction-bound business object pair is corroborating evidence and must exactly match
+WRITER_SCOPE_PORT_IS_AUTHORIZATION_REPLACEMENT=false
+CAPABILITY_COUPLING=false
 PAIR_REVALIDATION_REQUIRED=false
 
-BLOCKING_PREREQUISITE_COUNT=3
-PRIMARY_BLOCKING_PREREQUISITE=formal institution Audit Writer scope port
+EXACT_RUNTIME_FILE_COUNT=2
+EXISTING_RUNTIME_FILE_COUNT=0
+NEW_RUNTIME_FILE_COUNT=2
+DELETE_RUNTIME_FILE_COUNT=0
+EXACT_PRODUCTION_FILE_COUNT=1
+EXACT_TEST_FILE_COUNT=1
 
-HISTORICAL_BACKFILL_DECISION=required_under_current_page_release_contract
-HISTORICAL_BACKFILL_REQUIRED_FOR_PAGE_RELEASE=true
-
-DATABASE_ENVIRONMENT=local_development
-DATABASE_READONLY_CONNECTION=passed
-VERIFIED_ATTRIBUTED_ROW_COUNT=0
+DATABASE_ENVIRONMENT=not_connected
+DATABASE_READONLY_CONNECTION=not_used
 DATABASE_WRITE_EXECUTION=false
 
 SCHEMA_CHANGE_REQUIRED=false
@@ -49,31 +48,45 @@ DDL_REQUIRED=false
 DML_REQUIRED=false
 ARCHITECTURE_EXCEPTION_REQUIRED=false
 
-AUDIT_READER_API_AUTHORIZATION_SAFE=true
-PAGE_SYSTEM_AUDIT_AUTHORIZATION_VERIFIED=false
-WORKBENCH_MULTI_CAPABILITY_SAFE=false
+AUDIT_WRITER_ATTRIBUTION_CLOSED=false
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_CLOSED=false
+AUDIT_CALLER_MIGRATION_CLOSED=false
+HISTORICAL_BACKFILL_CLOSED=false
 PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
 PAGE_SYSTEM_AUDIT_RELEASE=false
+WORKBENCH_MULTI_CAPABILITY_SAFE=false
 REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
 PRODUCTION_CHANGE=false
 PRODUCTION_DEPLOYMENT=false
 ```
 
-## Fresh audit 必须回答
+## Exact Runtime allowlist
 
-1. 如何复用现有 formal server session、authoritative Membership/Binding 与 Institution Scope 链，而不创建第二套 authorization framework；
-2. one-shot opaque pair 的 Owner、消费次数、失败关闭与不可重放语义；
-3. port 是否只提供 attribution provenance，不替代具体 Route 的 section/object/action authorization；
-4. 如何让后续 transaction-bound Writer 比较 formal pair 与业务对象 pair，而不重复发起 ownership query；
-5. exact Runtime / test allowlist、AQ004～AQ008 影响与 rollback 边界；
-6. 是否能以单一小范围 Runtime 关闭该 port；若仍需跨 Owner 巨型改动则继续拆分。
+后续只有在用户明确授权该 Runtime 后，才可新增以下两个文件：
+
+1. `src/server/orchestration/institution-audit-writer-scope.ts`
+2. `src/server/orchestration/institution-audit-writer-scope.test.ts`
+
+不允许修改任何既有 Runtime 文件，不允许新增第三个文件或删除文件。发现必须改动 Auth、Security、Access Control、Tenancy、Institution、Audit、Route、caller、配置或测试公共资产时，应视为 Admission drift 并停止。
+
+## Runtime 验收重点
+
+1. resolver 无输入，只读取当前正式 server-session cookie；
+2. verified claims 的 `accountId + tenantId + institutionId` 必须经当前 authoritative Identity、active Membership / Binding 与 active Tenancy Institution Scope 交叉确认；
+3. claims pair 与 authoritative session user pair 必须完全一致；
+4. handle 必须 genuine、opaque、冻结、one-shot，clone / spread / plain object / JSON / Proxy 与 replay 必须失败；
+5. output 只含 `tenantId + institutionId + observedAt`，不含 role、navigation、capability、session 或 credential；
+6. 不得调用 Capability Authority 或 navigation，不得要求 Workbench / `system` capability；
+7. config、cookie、session、Identity、Membership / Binding、Scope、stale、mismatch 与 dependency exception 均 fail-closed；
+8. 端口只提供 attribution provenance，不替代 Route／section／object／action authorization，也不执行对象 ownership query 或数据库写入。
 
 ## 停止边界
 
-- 本 Handoff 仅定义并建议下一原子任务；实际执行必须取得用户当前明确授权，Handoff 本身不构成任何 Runtime、数据库、GitHub 写入或后续任务授权；
-- 不得实施 Audit Writer attribution contract、caller migration 或 `page_system_audit` Runtime；
+- 本 Handoff 仅定义并建议下一原子任务；Handoff 自身不是 Runtime、数据库、GitHub 写入或后续任务授权；
+- 未获用户当前明确授权前，不得实施 exact 2-file Runtime；
+- 不得实施 Audit Owner attribution contract、caller migration 或 `page_system_audit` Runtime；
 - 不得执行历史 backfill、数据库写入、Schema、Migration、DDL、DML 或 Seed；
-- 不得修改 Workbench、Capability Authority、Platform Audit semantics、Architecture exception 或 AQ004；
+- 不得修改 Workbench、Capability Authority、Platform Audit semantics、Architecture exception 或 AQ004～AQ008；
 - 不得连接 Staging / Production；
-- 不得把普通 `AccessContext`、body、query、header、cookie、当前账号绑定或单机构假设提升为 `verified`；
-- formal scope port 合并后仍须独立准入 Audit Owner contract 与 caller migration，不能直接宣布 Writer closure 或页面放行。
+- 不得接受普通 `AccessContext`、body、query、header、raw cookie、当前账号绑定、单机构假设或 Repository inference 作为 formal scope；
+- formal scope port 合并后仍须独立准入 Audit Owner contract 与 classified caller migration，不能直接宣布 Writer closure、历史数据就绪或页面放行。

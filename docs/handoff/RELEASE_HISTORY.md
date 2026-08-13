@@ -1,5 +1,81 @@
 # 项目重构历史
 
+<!-- POST_V2_R1C_AUDIT_WRITER_FORMAL_SCOPE_PORT_ADMISSION_HISTORY -->
+
+## 2026-08-13：POST-V2-R1C Audit Writer 正式机构范围端口获得 exact 2-file Runtime 准入
+
+```text
+PHASE0_CALLER_INVENTORY_FIX_PR=1174
+PHASE0_CALLER_INVENTORY_FIX_HEAD=3c9501da62ef19f2f79a3811672aed29e115d34f
+PHASE0_CALLER_INVENTORY_FIX_MERGE=654b241ce021ecaf08891a98c590867c0393372a
+PR1173_POST_MERGE_P2_RESOLVED=true
+
+AUDIT_WRITER_SCOPE_PORT_FRESH_AUDIT=passed
+AUDIT_WRITER_SCOPE_PORT_RUNTIME_ELIGIBLE=true
+ADMISSION_MODE=ADMISSION_READY
+EXACT_RUNTIME_SCOPE_FROZEN=true
+AUDIT_WRITER_SCOPE_PORT_EXACT_RUNTIME_ADMISSION=passed
+
+RECOMMENDED_RUNTIME_DESIGN=方案 B：src/server/orchestration 持有的无输入 one-shot formal scope port
+FORMAL_SCOPE_SOURCE=formal server-session verified claims corroborated by current authoritative Identity + active Membership/Binding + active Tenancy Institution Scope
+PORT_OWNER=src/server/orchestration
+HANDLE_OWNER=src/server/orchestration/institution-audit-writer-scope.ts
+HANDLE_CREATOR=resolveInstitutionAuditWriterFormalScopeV1
+HANDLE_CONSUMER=consumeInstitutionAuditWriterFormalScopeV1
+CONSUMPTION_COUNT=1
+WRITER_SCOPE_PORT_IS_AUTHORIZATION_REPLACEMENT=false
+CAPABILITY_COUPLING=false
+PAIR_REVALIDATION_REQUIRED=false
+
+EXACT_RUNTIME_FILE_COUNT=2
+EXISTING_RUNTIME_FILE_COUNT=0
+NEW_RUNTIME_FILE_COUNT=2
+DELETE_RUNTIME_FILE_COUNT=0
+EXACT_PRODUCTION_FILE_COUNT=1
+EXACT_TEST_FILE_COUNT=1
+
+DATABASE_ENVIRONMENT=not_connected
+DATABASE_READONLY_CONNECTION=not_used
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE_REQUIRED=false
+MIGRATION_REQUIRED=false
+DDL_REQUIRED=false
+DML_REQUIRED=false
+ARCHITECTURE_EXCEPTION_REQUIRED=false
+
+AUDIT_WRITER_SCOPE_PORT_RUNTIME_AUTHORIZED=false
+AUDIT_WRITER_SCOPE_PORT_RUNTIME_IMPLEMENTED=false
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_AUTHORIZED=false
+CALLER_MIGRATION_AUTHORIZED=false
+AUDIT_WRITER_ATTRIBUTION_CLOSED=false
+AUDIT_OWNER_ATTRIBUTION_CONTRACT_CLOSED=false
+AUDIT_CALLER_MIGRATION_CLOSED=false
+HISTORICAL_BACKFILL_CLOSED=false
+WORKBENCH_MULTI_CAPABILITY_SAFE=false
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+```
+
+- S5 Phase 0 通过 docs-only PR #1174 修正 caller inventory：生产事件构造文件 19 个，transaction persistence / composition 文件 10 个；合并后只回复并解决 PR #1173 指定线程；
+- S5 Phase 1 复核正式 server-session verified claims、authoritative Identity、active Membership / Binding、active Tenancy Institution Scope 与现有 one-shot snapshot；这些资产足以组成单一小范围 formal scope port；
+- 现有 Capability Authority context 强制 `workbench` navigation 并携带 `availableSectionIds`，不适合作为 Writer attribution scope；推荐端口必须与 navigation / capability release 解耦；
+- 唯一推荐是在 `src/server/orchestration` 新增无输入 resolver，交叉确认 claims 与 authoritative session pair 后 mint genuine、opaque、one-shot 的 `tenantId + institutionId + observedAt` consumption；
+- 该端口只提供 attribution provenance，不替代 Route／section／object／action authorization；未来 transaction caller 比较 formal pair 与已有 object pair，不重复查询 ownership；
+- exact Runtime 只允许新增 `institution-audit-writer-scope.ts` 与对应 `.test.ts`，共 2 文件，不修改任何既有 Runtime 文件；
+- targeted 12 files / 401 tests、typecheck、Architecture Quality 148/148 与增量检查通过；静态证据已足够，未连接 local-development PostgreSQL，未执行数据库写入；
+- S5 只完成 Admission；Runtime、Audit Owner contract、caller migration、backfill、`page_system_audit`、Workbench、Staging 与 Production 均未授权或实施；
+- 下一任务：`POST-V2-R1C Audit Writer formal institution scope port exact 2-file Runtime implementation explicit authorization`。
+
+证据：
+
+- `docs/operations/post-v2-r1c-audit-writer-formal-institution-scope-port-admission-20260813.md`
+- `docs/operations/post-v2-r1c-audit-writer-formal-institution-scope-port-exact-runtime-allowlist-20260813.csv`
+
+<!-- POST_V2_R1C_AUDIT_WRITER_FORMAL_SCOPE_PORT_ADMISSION_HISTORY_END -->
+
 <!-- POST_V2_R1C_AUDIT_WRITER_ATTRIBUTION_SPLIT_HISTORY -->
 
 ## 2026-08-13：POST-V2-R1C Audit Writer 机构归因 fresh audit 判定必须拆分
