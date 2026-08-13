@@ -75,7 +75,7 @@ ARCHITECTURE_EXCEPTION_REQUIRED=false
 ```
 
 - Care 与 WeCom orchestration 在进入 caller-provided transaction 前调用 `resolveInstitutionAuditWriterVerifiedAttributionV1()`；该入口内部只 resolve / consume 一次 S6 formal scope。
-- PR #1188 将 callback 可见的 customer repository 收窄为必要只读方法，并把 Safety 4 个写方法、Mapping 2 个写方法、Care metadata 写方法及 real-send repository 手工绑定到 formal/business `tenantId + institutionId`；任一 candidate pair 不一致时在触达底层 repository 前 fail closed。
+- PR #1188 将 callback 可见的 customer repository 收窄为必要只读方法，并把 Safety 4 个写方法、Mapping 2 个写方法、Care metadata 写方法、verified Audit 写入及 real-send repository 手工绑定到 formal/business `tenantId + institutionId`；任一 candidate pair 不一致时在触达底层 repository 前 fail closed。
 - 锁定 A/B 回归：business pair 为 `tenant-a/inst-a`、callback 尝试 `tenant-a/inst-b` 时，业务 writer=0、verified Audit writer=0、transaction callback 失败并回滚。
 - 一个 top-level operation 产生多个 Audit event 时复用同一个 opaque handle，不重复查询 Membership、Binding、Tenancy、customer ownership、appointment 或 mapping。
 - 原本同事务的 business mutation 与 Audit insert 继续使用 transaction database；Repository 不自行调用 `getDatabase()`、不开第二个 transaction。
@@ -111,6 +111,8 @@ S10_PR_COUNT=6
 S10_CORRECTIVE_RUNTIME_PR=1188
 PR1186_P1_THREAD=PRRT_kwDOSrGMn86Y6gdv
 PR1186_P1_THREAD_RESOLVED=false
+PR1188_P1_THREAD=PRRT_kwDOSrGMn86Y7fvl
+PR1188_P1_THREAD_RESOLVED=true
 ```
 
 PR #1184 的 canonical tenant/user normalization Review 与 PR #1185 的 attempted-denial classification Review 均已闭环；PR #1186 当前存在指定 post-merge P1 `PRRT_kwDOSrGMn86Y6gdv`。只有 PR #1188 实际合并后才允许回复并解决该 thread，随后必须复扫全部 S10 PR。
@@ -119,9 +121,9 @@ PR #1184 的 canonical tenant/user normalization Review 与 PR #1185 的 attempt
 
 ```text
 TARGETED_TEST_FILES=31
-TARGETED_TESTS=483
+TARGETED_TESTS=484
 FULL_TEST_FILES=493
-FULL_TESTS=6708
+FULL_TESTS=6709
 
 TYPECHECK=passed
 ARCHITECTURE_UNIT=148/148 passed

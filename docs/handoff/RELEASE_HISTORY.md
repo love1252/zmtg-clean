@@ -37,11 +37,13 @@ S10_RUNTIME_POST_MERGE_REVIEW_DEBT=1
 S10_CORRECTIVE_RUNTIME_PR=1188
 PR1186_P1_THREAD=PRRT_kwDOSrGMn86Y6gdv
 PR1186_P1_THREAD_RESOLVED=false
+PR1188_P1_THREAD=PRRT_kwDOSrGMn86Y7fvl
+PR1188_P1_THREAD_RESOLVED=true
 
 TARGETED_TEST_FILES=31
-TARGETED_TESTS=483
+TARGETED_TESTS=484
 FULL_TEST_FILES=493
-FULL_TESTS=6708
+FULL_TESTS=6709
 TYPECHECK=passed
 ARCHITECTURE_UNIT=148/148 passed
 ARCHITECTURE_INCREMENTAL=passed
@@ -73,7 +75,7 @@ PRODUCTION_DEPLOYMENT=false
 - PR #1184 迁移 4 个 tenant-wide HIS caller 为 `not_applicable`，保持 provider failure、transaction rollback 与低敏响应；
 - PR #1185 为两个 mixed pre-scope caller 增加最小 attempted-institution denial contract：可信 attempted pair 被保留，但 attribution 为 `NULL`，不会冒充 verified 或 not-applicable；
 - PR #1186 迁移 5 个 verified Institution caller，但其 post-merge P1 证明 `runAttributedWeComReachOutTransaction` 把 opaque handle 与未限定机构的 repository 同时暴露给 callback，机构 A attribution 可与机构 B 业务写发生漂移；
-- corrective Runtime PR #1188 在 orchestration 组合根提供绑定 business pair 的 scoped repositories/capability，覆盖 Safety、Mapping、Care metadata 与 real-send 同类 institution-scoped 写面；
+- corrective Runtime PR #1188 在 orchestration 组合根提供绑定 business pair 的 scoped repositories/capability，覆盖 Safety、Mapping、Care metadata、verified Audit 与 real-send 同类 institution-scoped 写面；PR 内新发现的 Audit 写入同类 P1 已由 `ec7cbd0a` 实际修复并解决；
 - 新增 canonical 19-row static residual guard，逐行确认 5 verified、12 not-applicable、2 valid denial attribution，legacy production `record()` residual 为 0；
 - 10 个 transaction persistence / composition 边界保持 caller-provided transaction database、rollback 与 query cardinality；未新增业务查询或 database transaction；
 - 旧的“四个 Runtime PR Review sweep 无 debt”结论已失效；PR #1188 合并、指定 thread 解决、全 S10 Review sweep 与 merged-main 独立复核完成前，closure flags 保持 false；
