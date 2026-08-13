@@ -1,5 +1,54 @@
 # 智美天工架构文档索引
 
+<!-- POST_V2_R1C_AUDIT_WRITER_ATTRIBUTION_SPLIT_START -->
+
+## POST-V2-R1C Audit Writer 机构归因 fresh audit 与拆分（2026-08-13）
+
+```text
+AUDIT_WRITER_ATTRIBUTION_FRESH_AUDIT=passed
+AUDIT_WRITER_ATTRIBUTION_RUNTIME_ELIGIBLE=false
+ADMISSION_MODE=SPLIT_REQUIRED
+
+PRODUCTION_AUDIT_WRITER_CALLER_FILE_COUNT=16
+PRODUCTION_INSTITUTION_AUDIT_WRITER_CALLER_FILE_COUNT=11
+PRODUCTION_PLATFORM_AUDIT_WRITER_CALLER_FILE_COUNT=4
+PRODUCTION_NON_INSTITUTION_AUDIT_WRITER_CALLER_FILE_COUNT=1
+TRANSACTIONAL_AUDIT_WRITER_CALLER_FILE_COUNT=7
+
+BLOCKING_PREREQUISITE_COUNT=3
+PRIMARY_BLOCKING_PREREQUISITE=formal institution Audit Writer scope port
+HISTORICAL_BACKFILL_REQUIRED_FOR_PAGE_RELEASE=true
+
+SCHEMA_CHANGE_REQUIRED=false
+MIGRATION_REQUIRED=false
+DDL_REQUIRED=false
+DML_REQUIRED=false
+ARCHITECTURE_EXCEPTION_REQUIRED=false
+
+AUDIT_WRITER_ATTRIBUTION_RUNTIME_AUTHORIZED=false
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+```
+
+架构结论：
+
+- canonical persistence Owner 继续是 Audit domain event contract 与 `AuditEventRepository` mapper；
+- Institution attribution 的 cross-owner composition 必须位于 `src/server/orchestration`，只消费复用既有正式 Identity / Membership / Scope 链得到的 one-shot opaque pair；
+- mapper 无法安全推断 institution，普通 caller 也不得自行声明 `verified`；
+- 16 个生产事件构造文件跨 Institution、Platform 与 Auth，另有 7 个 transaction-bound composition 文件，必须拆成 formal scope port、Audit Owner contract 与 caller migration 三个原子切片；
+- 当前 275 条历史记录 attribution 全为 `NULL`，没有 enforcement epoch 或 coverage metadata，因此当前页面发布契约下仍需要独立历史分类/backfill prerequisite；
+- 现有列足够，且推荐边界不需要 Architecture exception。
+
+证据：
+
+- `docs/operations/post-v2-r1c-audit-writer-institution-attribution-split-plan-20260813.md`
+
+唯一下一任务：
+
+`POST-V2-R1C Audit Writer formal institution scope port fresh audit + exact Runtime admission`
+
+<!-- POST_V2_R1C_AUDIT_WRITER_ATTRIBUTION_SPLIT_END -->
+
 <!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_RELEASE_BLOCKER_START -->
 
 ## POST-V2-R1C `page_system_audit` 只读放行重新审计阻断（2026-08-13）

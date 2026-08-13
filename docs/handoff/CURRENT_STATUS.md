@@ -11,6 +11,8 @@
 - POST-V2-R1C 错误放行尝试：精确 4 文件 Runtime 回滚、独立验证及两个指定 P1 审查线程均已完成治理收尾
 - POST-V2-R1C Audit Reader Foundation：exact 8-file Runtime、Required Check、合并后独立验证与 Handoff 均已闭环
 - POST-V2-R1C `page_system_audit`：fresh release re-audit 已通过，但 eligibility 因 Audit Writer institution attribution 未闭环而阻断
+- S4 Phase 0：PR #1172 已修正 Handoff 授权来源与页面授权状态，PR #1171 两个 post-merge Review thread 已回复并解决
+- S4 Phase 1：Audit Writer attribution fresh audit 已通过；16 个生产 caller 与 7 个 transaction composition 点证明完整 closure 必须拆分，当前不具备单一 Runtime Admission
 - 当前经审查接受的受治理只读页面切片：1 / 26
 - 剩余未放行页面：25
 - 受控创建能力放行：0 / 3
@@ -60,6 +62,23 @@ AUDIT_WRITER_ATTRIBUTION_CLOSED=false
 HISTORICAL_BACKFILL_CLOSED=false
 AUDIT_READER_DATA_READINESS=false
 
+PR1171_POST_MERGE_P1_RESOLVED=true
+PR1171_POST_MERGE_P2_RESOLVED=true
+PHASE0_FIX_PR=1172
+PHASE0_FIX_MERGE=44b2f3653fbfd5cc4dd02f33e5c2c8fc80f292cb
+
+AUDIT_WRITER_ATTRIBUTION_FRESH_AUDIT=passed
+AUDIT_WRITER_ATTRIBUTION_RUNTIME_ELIGIBLE=false
+ADMISSION_MODE=SPLIT_REQUIRED
+PRODUCTION_AUDIT_WRITER_CALLER_FILE_COUNT=16
+PRODUCTION_INSTITUTION_AUDIT_WRITER_CALLER_FILE_COUNT=11
+PRODUCTION_PLATFORM_AUDIT_WRITER_CALLER_FILE_COUNT=4
+PRODUCTION_NON_INSTITUTION_AUDIT_WRITER_CALLER_FILE_COUNT=1
+TRANSACTIONAL_AUDIT_WRITER_CALLER_FILE_COUNT=7
+BLOCKING_PREREQUISITE_COUNT=3
+PRIMARY_BLOCKING_PREREQUISITE=formal institution Audit Writer scope port
+HISTORICAL_BACKFILL_REQUIRED_FOR_PAGE_RELEASE=true
+
 POST_V2_R1C_PAGE_SYSTEM_AUDIT_RELEASE_REAUDIT=passed
 PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=false
 AUDIT_READER_SUCCESS_PATH_EXISTS=true
@@ -74,9 +93,9 @@ AUDIT_READER_API_AUTHORIZATION_SAFE=true
 PAGE_SYSTEM_AUDIT_AUTHORIZATION_VERIFIED=false
 LOW_SENSITIVE_OUTPUT_SAFE=true
 
-BLOCKING_PREREQUISITE_COUNT=1
-PRIMARY_BLOCKING_PREREQUISITE=Audit Writer institution attribution closure
-BLOCKING_OWNER=src/modules/audit
+PAGE_SYSTEM_AUDIT_BLOCKING_PREREQUISITE_COUNT=1
+PAGE_SYSTEM_AUDIT_PRIMARY_BLOCKING_PREREQUISITE=Audit Writer institution attribution closure
+PAGE_SYSTEM_AUDIT_BLOCKING_OWNER=src/modules/audit
 
 PAGE_WORKBENCH_STATE=read_only/pilot_released
 PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
@@ -95,7 +114,7 @@ POST_V2_R1C_RELEASE_COMPLETE=false
 
 ### 唯一下一任务
 
-`POST-V2-R1C Audit Writer institution attribution prerequisite fresh audit + exact Runtime admission`
+`POST-V2-R1C Audit Writer formal institution scope port fresh audit + exact Runtime admission`
 
 ```text
 AUDIT_WRITER_ATTRIBUTION_RUNTIME_AUTHORIZED=false

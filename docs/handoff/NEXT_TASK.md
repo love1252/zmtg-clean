@@ -3,7 +3,7 @@
 ## 唯一技术任务
 
 ```text
-NEXT_TASK=POST-V2-R1C Audit Writer institution attribution prerequisite fresh audit + exact Runtime admission
+NEXT_TASK=POST-V2-R1C Audit Writer formal institution scope port fresh audit + exact Runtime admission
 AUDIT_WRITER_ATTRIBUTION_RUNTIME_AUTHORIZED=false
 PAGE_SYSTEM_AUDIT_RUNTIME_AUTHORIZED=false
 ```
@@ -11,34 +11,35 @@ PAGE_SYSTEM_AUDIT_RUNTIME_AUTHORIZED=false
 ## 继承状态
 
 ```text
-POST_V2_R1C_PAGE_SYSTEM_AUDIT_RELEASE_REAUDIT=passed
-PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=false
+PR1171_POST_MERGE_P1_RESOLVED=true
+PR1171_POST_MERGE_P2_RESOLVED=true
+PHASE0_FIX_PR=1172
+PHASE0_FIX_MERGE=44b2f3653fbfd5cc4dd02f33e5c2c8fc80f292cb
 
-AUDIT_READER_SUCCESS_PATH_EXISTS=true
-AUDIT_READER_READINESS=ready
-AUDIT_DATA_READINESS=false
+AUDIT_WRITER_ATTRIBUTION_FRESH_AUDIT=passed
+AUDIT_WRITER_ATTRIBUTION_RUNTIME_ELIGIBLE=false
+ADMISSION_MODE=SPLIT_REQUIRED
 
-PAGE_SYSTEM_AUDIT_DATA_RELEASE_REQUIREMENT=canonical Writer emits verified institution attribution and Reader can prove an authoritative institution-scoped result or authoritative empty set
-PAGE_SYSTEM_AUDIT_DATA_BLOCKER=canonical Writer omits institutionId and institutionAttribution so zero visible rows cannot distinguish no events from unattributed events
+PRODUCTION_AUDIT_WRITER_CALLER_FILE_COUNT=16
+PRODUCTION_INSTITUTION_AUDIT_WRITER_CALLER_FILE_COUNT=11
+PRODUCTION_PLATFORM_AUDIT_WRITER_CALLER_FILE_COUNT=4
+PRODUCTION_NON_INSTITUTION_AUDIT_WRITER_CALLER_FILE_COUNT=1
+TRANSACTIONAL_AUDIT_WRITER_CALLER_FILE_COUNT=7
 
-AUDIT_WRITER_ATTRIBUTION_CLOSED=false
-HISTORICAL_BACKFILL_CLOSED=false
+CANONICAL_AUDIT_WRITER_BOUNDARY=Audit domain event contract and AuditEventRepository mapper; institution composition belongs in src/server/orchestration
+CANONICAL_WRITER_INSTITUTION_SCOPE_SOURCE=one-shot opaque formal server-session institution scope resolved from authoritative Identity + Membership/Binding + Institution Scope and passed through an orchestration-owned port
+TENANT_INSTITUTION_PAIR_PROVENANCE=formal current pair first; transaction-bound business object pair is corroborating evidence and must exactly match
+PAIR_REVALIDATION_REQUIRED=false
 
-WORKBENCH_MULTI_CAPABILITY_SAFE=false
+BLOCKING_PREREQUISITE_COUNT=3
+PRIMARY_BLOCKING_PREREQUISITE=formal institution Audit Writer scope port
 
-CANONICAL_ROUTE=/hospital/system/audit
-ROUTE_STRATEGY=dedicated_static_route_after_data_prerequisite
-SHELL_READONLY_SAFE=true
-AUDIT_READER_API_AUTHORIZATION_SAFE=true
-PAGE_SYSTEM_AUDIT_AUTHORIZATION_VERIFIED=false
-LOW_SENSITIVE_OUTPUT_SAFE=true
+HISTORICAL_BACKFILL_DECISION=required_under_current_page_release_contract
+HISTORICAL_BACKFILL_REQUIRED_FOR_PAGE_RELEASE=true
 
 DATABASE_ENVIRONMENT=local_development
 DATABASE_READONLY_CONNECTION=passed
-AUDIT_TOTAL_ROW_COUNT=275
-AUDIT_INSTITUTION_ID_PRESENT_ROW_COUNT=0
 VERIFIED_ATTRIBUTED_ROW_COUNT=0
-NULL_ATTRIBUTION_ROW_COUNT=275
 DATABASE_WRITE_EXECUTION=false
 
 SCHEMA_CHANGE_REQUIRED=false
@@ -47,40 +48,31 @@ DDL_REQUIRED=false
 DML_REQUIRED=false
 ARCHITECTURE_EXCEPTION_REQUIRED=false
 
-BLOCKING_PREREQUISITE_COUNT=1
-PRIMARY_BLOCKING_PREREQUISITE=Audit Writer institution attribution closure
-BLOCKING_OWNER=src/modules/audit
-
-PAGE_WORKBENCH_STATE=read_only/pilot_released
+AUDIT_READER_API_AUTHORIZATION_SAFE=true
+PAGE_SYSTEM_AUDIT_AUTHORIZATION_VERIFIED=false
+WORKBENCH_MULTI_CAPABILITY_SAFE=false
 PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
 PAGE_SYSTEM_AUDIT_RELEASE=false
-
 REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
-REVIEW_ACCEPTED_REMAINING_UNRELEASED_PAGE_COUNT=25
-
-PRODUCTION_READY_INFERRED=false
 PRODUCTION_CHANGE=false
 PRODUCTION_DEPLOYMENT=false
 ```
 
 ## Fresh audit 必须回答
 
-1. 哪个 Audit Owner boundary 是 canonical Writer attribution 的唯一修改点；
-2. formal `institutionId` 应从哪个已存在的可信服务端上下文进入 Writer；
-3. 所有直接与事务型 Audit Writer 调用方如何保持 tenant / institution 一致性；
-4. `not_applicable`、`verified`、`legacy_unattributed` 的写入规则与 fail-closed 语义；
-5. Writer attribution 是否可以在不修改 Schema / Migration 的前提下闭环；
-6. 是否需要单独的历史 backfill prerequisite，或通过明确时间边界治理历史不完整；
-7. 精确 production / test Runtime allowlist 及 owner 边界；
-8. 是否需要 Architecture exception；如需要则停止，不得修改 rules。
+1. 如何复用现有 formal server session、authoritative Membership/Binding 与 Institution Scope 链，而不创建第二套 authorization framework；
+2. one-shot opaque pair 的 Owner、消费次数、失败关闭与不可重放语义；
+3. port 是否只提供 attribution provenance，不替代具体 Route 的 section/object/action authorization；
+4. 如何让后续 transaction-bound Writer 比较 formal pair 与业务对象 pair，而不重复发起 ownership query；
+5. exact Runtime / test allowlist、AQ004～AQ008 影响与 rollback 边界；
+6. 是否能以单一小范围 Runtime 关闭该 port；若仍需跨 Owner 巨型改动则继续拆分。
 
 ## 停止边界
 
-- 本 Handoff 仅定义并建议 Writer attribution prerequisite 的 fresh audit + exact Runtime admission 范围；实际执行仍必须取得用户当前明确授权，Handoff 本身不构成任何 Runtime、数据库、GitHub 写入或后续任务授权；
-- `AUDIT_WRITER_ATTRIBUTION_RUNTIME_AUTHORIZED=false` 与 `PAGE_SYSTEM_AUDIT_RUNTIME_AUTHORIZED=false` 保持不变；
-- 不得实施 `page_system_audit` Runtime；
+- 本 Handoff 仅定义并建议下一原子任务；实际执行必须取得用户当前明确授权，Handoff 本身不构成任何 Runtime、数据库、GitHub 写入或后续任务授权；
+- 不得实施 Audit Writer attribution contract、caller migration 或 `page_system_audit` Runtime；
 - 不得执行历史 backfill、数据库写入、Schema、Migration、DDL、DML 或 Seed；
-- 不得修改 Platform Audit、第二个 capability、Architecture exception 或 AQ004；
+- 不得修改 Workbench、Capability Authority、Platform Audit semantics、Architecture exception 或 AQ004；
 - 不得连接 Staging / Production；
-- 如果 Writer 闭环需要跨 owner 大范围重构或 generic framework，必须停止并记录 blocker；
-- Writer attribution 完成后仍必须重新审计 data readiness、historical backfill 与 Workbench multi-capability，不能直接放行页面。
+- 不得把普通 `AccessContext`、body、query、header、cookie、当前账号绑定或单机构假设提升为 `verified`；
+- formal scope port 合并后仍须独立准入 Audit Owner contract 与 caller migration，不能直接宣布 Writer closure 或页面放行。

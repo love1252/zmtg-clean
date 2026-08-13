@@ -1,5 +1,58 @@
 # 项目重构历史
 
+<!-- POST_V2_R1C_AUDIT_WRITER_ATTRIBUTION_SPLIT_HISTORY -->
+
+## 2026-08-13：POST-V2-R1C Audit Writer 机构归因 fresh audit 判定必须拆分
+
+```text
+PR1171_POST_MERGE_P1_RESOLVED=true
+PR1171_POST_MERGE_P2_RESOLVED=true
+PHASE0_FIX_PR=1172
+PHASE0_FIX_MERGE=44b2f3653fbfd5cc4dd02f33e5c2c8fc80f292cb
+
+AUDIT_WRITER_ATTRIBUTION_FRESH_AUDIT=passed
+AUDIT_WRITER_ATTRIBUTION_RUNTIME_ELIGIBLE=false
+ADMISSION_MODE=SPLIT_REQUIRED
+
+PRODUCTION_AUDIT_WRITER_CALLER_FILE_COUNT=16
+PRODUCTION_INSTITUTION_AUDIT_WRITER_CALLER_FILE_COUNT=11
+PRODUCTION_PLATFORM_AUDIT_WRITER_CALLER_FILE_COUNT=4
+PRODUCTION_NON_INSTITUTION_AUDIT_WRITER_CALLER_FILE_COUNT=1
+TRANSACTIONAL_AUDIT_WRITER_CALLER_FILE_COUNT=7
+
+BLOCKING_PREREQUISITE_COUNT=3
+PRIMARY_BLOCKING_PREREQUISITE=formal institution Audit Writer scope port
+HISTORICAL_BACKFILL_REQUIRED_FOR_PAGE_RELEASE=true
+
+SCHEMA_CHANGE_REQUIRED=false
+MIGRATION_REQUIRED=false
+DDL_REQUIRED=false
+DML_REQUIRED=false
+ARCHITECTURE_EXCEPTION_REQUIRED=false
+
+AUDIT_WRITER_ATTRIBUTION_RUNTIME_AUTHORIZED=false
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+```
+
+- Phase 0 follow-up PR #1172 已修正 Handoff 授权来源与页面授权状态；合并后仅回复并解决 PR #1171 两个指定 post-merge Review thread；
+- Phase 1 重新核对 `createAuditEvent`、`createDeniedAccessAuditEvent`、`AuditEventRepository.record`、factory、直接调用与 transaction-bound composition；
+- 生产事件构造文件为 16：Institution 11、Platform 4、Auth / 非机构 1；实际 transaction database 上组合 Audit Repository 的文件为 7；
+- `TenantAuditEvent` 与 mapper 均不携带机构归因；Repository 没有足够事实推断，普通 caller 显式声明也不能证明 formal current；
+- 唯一推荐设计为 orchestration formal-scope port + Audit Owner explicit attribution contract + classified caller migration；三个切片必须独立验收，当前不生成巨型 Runtime Admission；
+- 本地 PostgreSQL 只读复核仍为 275 total、0 institutionId、0 verified、275 NULL attribution；未执行数据库写入；
+- 当前没有 persisted enforcement epoch 或 coverage metadata，Shell 会把 0 个 verified 事件显示为普通空态，因此当前页面发布契约下历史分类/backfill 仍为独立 prerequisite；
+- targeted 18 files / 310 tests、typecheck、Architecture Quality 148/148 与增量检查均通过；
+- 下一原子任务：`POST-V2-R1C Audit Writer formal institution scope port fresh audit + exact Runtime admission`。
+
+证据：
+
+- `docs/operations/post-v2-r1c-audit-writer-institution-attribution-split-plan-20260813.md`
+
+<!-- POST_V2_R1C_AUDIT_WRITER_ATTRIBUTION_SPLIT_HISTORY_END -->
+
 <!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_RELEASE_BLOCKER_HISTORY -->
 
 ## 2026-08-13：POST-V2-R1C `page_system_audit` release eligibility 因 Writer attribution 阻断
