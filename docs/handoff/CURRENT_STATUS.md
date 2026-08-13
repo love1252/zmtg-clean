@@ -10,7 +10,7 @@
 - POST-V2-R1B `page_workbench`：稳定且已完成治理闭环
 - POST-V2-R1C 错误放行尝试：精确 4 文件 Runtime 回滚、独立验证及两个指定 P1 审查线程均已完成治理收尾
 - POST-V2-R1C Audit Reader Foundation：exact 8-file Runtime、Required Check、合并后独立验证与 Handoff 均已闭环
-- POST-V2-R1C `page_system_audit`：既有 fresh release re-audit 已完成；Audit Writer attribution 现已闭环，但 historical backfill / Reader data readiness 仍未闭环，页面继续 hidden/not-released
+- POST-V2-R1C `page_system_audit`：既有 fresh release re-audit 已完成；Audit Writer attribution 因 PR #1186 post-merge P1 重新打开，historical backfill / Reader data readiness 也仍未闭环，页面继续 hidden/not-released
 - S4 Phase 0：PR #1172 已修正 Handoff 授权来源与页面授权状态，PR #1171 两个 post-merge Review thread 已回复并解决
 - S4 Phase 1 / S5 Phase 0 修正：Audit Writer attribution fresh audit 已通过；重新核算为 19 个生产 caller 与 10 个 transaction persistence / composition 点，完整 closure 仍必须拆分
 - S5 Phase 0：caller inventory docs-only follow-up PR #1174 已合并；合并后仅回复并解决 PR #1173 指定 Review thread
@@ -20,13 +20,13 @@
 - S8：Audit Owner institution attribution contract exact 4-file Runtime、Required Check、合并后独立验证与 Handoff 均已闭环
 - S9：caller migration fresh audit 已通过，目标分为 5 `VERIFIED` / 12 `NOT_APPLICABLE` / 2 `BLOCKED_UNCLASSIFIED`；选择 composition-family split，并冻结 Auth login `not_applicable` exact 2-file 首切片
 - S10：19 个 production Audit Writer caller 已全部迁移；5 个 `MIGRATED_VERIFIED`、12 个 `MIGRATED_NOT_APPLICABLE`、2 个 `MIGRATED_VALID_DENIAL_ATTRIBUTION`，legacy residual 与 blocked-unclassified 均为 0
-- S10 Runtime：PR #1183、#1184、#1185、#1186 均已通过 Required Check 并合并；merged-main 独立复核通过，caller migration 与 Audit Writer attribution 正式关闭
+- S10 Runtime：PR #1183、#1184、#1185、#1186 已合并；PR #1186 post-merge P1 证明 verified attribution 尚未绑定 transaction callback 的 business pair，corrective Runtime PR #1188 正在修复，原 closure 结论已撤回
 - 当前经审查接受的受治理只读页面切片：1 / 26
 - 剩余未放行页面：25
 - 受控创建能力放行：0 / 3
 - PR #1163 两个指定 P1：均已回复并解决，目标未解决线程数为 0
 - 审计读取器：机构范围 Reader 已实现，只消费正式 one-shot opaque context，并强制 tenant + institution + `verified`
-- Audit Writer caller migration / attribution：已闭环；历史 backfill：未闭环
+- Audit Writer caller migration / attribution：corrective Runtime 与 Review debt 尚未闭环；历史 backfill：未闭环
 - Reader readiness：ready；Reader data readiness：false
 - 本地只读验证：275 条审计记录中 `institutionId` 非空为 0、`verified` 为 0、attribution 为 `NULL` 的记录为 275
 - Workbench multi-capability：当前不安全，第二条可见摘要仍会触发 `/hospital` 的 exact-one guard
@@ -49,9 +49,9 @@ AUDIT_READER_RUNTIME_VERIFIED=true
 AUDIT_READER_RUNTIME_INDEPENDENT_VERIFICATION=passed
 AUDIT_READER_RUNTIME_HANDOFF_COMPLETE=true
 
-S10_CALLER_MIGRATION_COMPLETE=true
-AUDIT_CALLER_MIGRATION_CLOSED=true
-AUDIT_WRITER_ATTRIBUTION_CLOSED=true
+S10_CALLER_MIGRATION_COMPLETE=false
+AUDIT_CALLER_MIGRATION_CLOSED=false
+AUDIT_WRITER_ATTRIBUTION_CLOSED=false
 PRODUCTION_AUDIT_WRITER_CALLER_FILE_COUNT=19
 PRODUCTION_LEGACY_WRITER_CALLER_FILE_COUNT=0
 PRODUCTION_ATTRIBUTED_WRITER_CALLER_FILE_COUNT=19
@@ -61,14 +61,31 @@ ATTEMPTED_DENIAL_MIGRATED=2
 BLOCKED_UNCLASSIFIED_CALLER_FILE_COUNT=0
 FORMAL_SCOPE_RESOLUTION_CARDINALITY=exactly_once_per_top_level_operation
 FORMAL_SCOPE_REUSE_WITHIN_OPERATION_SAFE=true
-S10_RUNTIME_PR_COUNT=4
-S10_RUNTIME_PRS=1183,1184,1185,1186
+S10_RUNTIME_PR_COUNT=5
+S10_RUNTIME_PRS=1183,1184,1185,1186,1188
+S10_MERGED_RUNTIME_PR_COUNT=4
 S10_HANDOFF_PR=1187
-S10_PR_COUNT=5
-S10_RUNTIME_FINAL_MERGE=124c79a3b121fa9d67dc7fc86847f244acc43ef2
-S10_REQUIRED_CHECKS=passed
-S10_ACTIONABLE_P0_P1=0
-S10_POST_MERGE_REVIEW_DEBT=0
+S10_PR_COUNT=6
+S10_RUNTIME_FINAL_MERGE=pending_corrective_merge
+S10_REQUIRED_CHECKS=pending
+S10_ACTIONABLE_P0_P1=1
+S10_POST_MERGE_REVIEW_DEBT=1
+S10_POST_MERGE_P1_DETECTED=true
+S10_CORRECTIVE_RUNTIME_PR=1188
+PR1186_P1_THREAD=PRRT_kwDOSrGMn86Y6gdv
+PR1186_P1_THREAD_RESOLVED=false
+PR1188_P1_THREAD=PRRT_kwDOSrGMn86Y7fvl
+PR1188_P1_THREAD_RESOLVED=true
+S10_CORRECTIVE_TARGETED_TEST_FILES=31
+S10_CORRECTIVE_TARGETED_TESTS=484
+S10_CORRECTIVE_FULL_TEST_FILES=493
+S10_CORRECTIVE_FULL_TESTS=6709
+S10_CORRECTIVE_TYPECHECK=passed
+S10_CORRECTIVE_ARCHITECTURE_UNIT=148/148 passed
+S10_CORRECTIVE_ARCHITECTURE_INCREMENTAL=passed
+S10_CORRECTIVE_LINT=passed_with_4_existing_warnings
+S10_CORRECTIVE_BUILD=passed
+S10_CORRECTIVE_PRODUCTION_READINESS_DOCS=8/8 passed
 
 RUNTIME_EXACT_FILE_COUNT=8
 RUNTIME_PR=1169
@@ -87,7 +104,7 @@ MIGRATION=false
 DDL_EXECUTION=false
 DML_EXECUTION=false
 
-AUDIT_WRITER_ATTRIBUTION_CLOSED=true
+AUDIT_WRITER_ATTRIBUTION_CLOSED=false
 HISTORICAL_BACKFILL_CLOSED=false
 AUDIT_READER_DATA_READINESS=false
 
@@ -183,7 +200,7 @@ CALLER_MIGRATION_DATABASE_WRITE_EXECUTION=false
 ATTEMPTED_INSTITUTION_DENIAL_PREREQUISITE_REQUIRED=false
 ATTEMPTED_INSTITUTION_DENIAL_BLOCKED_CALLER_FILE_COUNT=0
 CALLER_MIGRATION_RUNTIME_AUTHORIZED=false
-AUDIT_CALLER_MIGRATION_CLOSED=true
+AUDIT_CALLER_MIGRATION_CLOSED=false
 
 PR1181_POST_MERGE_P1_DETECTED=true
 S9_RD1_CORRECTIVE_SCOPE=修改 5 个 Markdown 文档并删除 1 个非 Markdown 独立 allowlist CSV
@@ -270,7 +287,7 @@ BUILD=passed
 
 DATABASE_CONNECTION=false
 CALLER_MIGRATION_RUNTIME_AUTHORIZED=false
-AUDIT_CALLER_MIGRATION_CLOSED=true
+AUDIT_CALLER_MIGRATION_CLOSED=false
 
 POST_V2_R1C_PAGE_SYSTEM_AUDIT_RELEASE_REAUDIT=passed
 PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=false

@@ -2,13 +2,14 @@
 
 <!-- POST_V2_R1C_AUDIT_WRITER_CALLER_MIGRATION_RUNTIME_HISTORY -->
 
-## 2026-08-13：POST-V2-R1C Audit Writer production caller migration Runtime 闭环
+## 2026-08-13：POST-V2-R1C Audit Writer production caller migration closure 因 post-merge P1 重新打开
 
 ```text
 STAGE=S10
-COMPLETION_MODE=COMPLETE
+COMPLETION_MODE=CORRECTIVE_RUNTIME_IN_PROGRESS
 BASELINE=ed211a5e2f236c13cab3fecba8d0831acd5218ee
-RUNTIME_FINAL_MAIN=124c79a3b121fa9d67dc7fc86847f244acc43ef2
+PRE_CORRECTIVE_MAIN=1b723a731005e8203b1800043e2846a2c345515f
+RUNTIME_FINAL_MAIN=pending_corrective_merge
 
 PRODUCTION_AUDIT_WRITER_CALLER_FILE_COUNT=19
 PRODUCTION_LEGACY_WRITER_CALLER_FILE_COUNT=0
@@ -21,22 +22,28 @@ BLOCKED_UNCLASSIFIED_CALLER_FILE_COUNT=0
 FORMAL_SCOPE_RESOLUTION_CARDINALITY=exactly_once_per_top_level_operation
 FORMAL_SCOPE_REUSE_WITHIN_OPERATION_SAFE=true
 
-S10_RUNTIME_CHANGED_FILE_COUNT=33
-S10_TEST_CHANGED_FILE_COUNT=32
+S10_RUNTIME_CHANGED_FILE_COUNT=pending_corrective_recompute
+S10_TEST_CHANGED_FILE_COUNT=pending_corrective_recompute
 S10_DOC_CHANGED_FILE_COUNT=4
 
-S10_RUNTIME_PR_COUNT=4
-S10_RUNTIME_PRS=1183,1184,1185,1186
+S10_RUNTIME_PR_COUNT=5
+S10_RUNTIME_PRS=1183,1184,1185,1186,1188
+S10_MERGED_RUNTIME_PR_COUNT=4
 S10_HANDOFF_PR=1187
-S10_PR_COUNT=5
-S10_REQUIRED_CHECKS=passed
-S10_ACTIONABLE_P0_P1=0
-S10_RUNTIME_POST_MERGE_REVIEW_DEBT=0
+S10_PR_COUNT=6
+S10_REQUIRED_CHECKS=pending
+S10_ACTIONABLE_P0_P1=1
+S10_RUNTIME_POST_MERGE_REVIEW_DEBT=1
+S10_CORRECTIVE_RUNTIME_PR=1188
+PR1186_P1_THREAD=PRRT_kwDOSrGMn86Y6gdv
+PR1186_P1_THREAD_RESOLVED=false
+PR1188_P1_THREAD=PRRT_kwDOSrGMn86Y7fvl
+PR1188_P1_THREAD_RESOLVED=true
 
-TARGETED_TEST_FILES=21
-TARGETED_TESTS=291
+TARGETED_TEST_FILES=31
+TARGETED_TESTS=484
 FULL_TEST_FILES=493
-FULL_TESTS=6697
+FULL_TESTS=6709
 TYPECHECK=passed
 ARCHITECTURE_UNIT=148/148 passed
 ARCHITECTURE_INCREMENTAL=passed
@@ -44,9 +51,9 @@ LINT=passed_with_4_existing_warnings
 BUILD=passed
 PRODUCTION_READINESS_DOCS=8/8 passed
 
-AUDIT_CALLER_MIGRATION_CLOSED=true
-AUDIT_WRITER_ATTRIBUTION_CLOSED=true
-S10_CALLER_MIGRATION_COMPLETE=true
+AUDIT_CALLER_MIGRATION_CLOSED=false
+AUDIT_WRITER_ATTRIBUTION_CLOSED=false
+S10_CALLER_MIGRATION_COMPLETE=false
 
 HISTORICAL_BACKFILL_CLOSED=false
 WORKBENCH_MULTI_CAPABILITY_SAFE=false
@@ -67,19 +74,19 @@ PRODUCTION_DEPLOYMENT=false
 - PR #1183 迁移 Auth formal login 与 7 个 Platform caller 为 `not_applicable`，保持登录、Cookie、Platform authorization、外部操作和 best-effort failure isolation；
 - PR #1184 迁移 4 个 tenant-wide HIS caller 为 `not_applicable`，保持 provider failure、transaction rollback 与低敏响应；
 - PR #1185 为两个 mixed pre-scope caller 增加最小 attempted-institution denial contract：可信 attempted pair 被保留，但 attribution 为 `NULL`，不会冒充 verified 或 not-applicable；
-- PR #1186 迁移 5 个 verified Institution caller；Care / WeCom 每个 top-level operation 只消费一次 formal scope，并在事务内复用同一 opaque handle；
+- PR #1186 迁移 5 个 verified Institution caller，但其 post-merge P1 证明 `runAttributedWeComReachOutTransaction` 把 opaque handle 与未限定机构的 repository 同时暴露给 callback，机构 A attribution 可与机构 B 业务写发生漂移；
+- corrective Runtime PR #1188 在 orchestration 组合根提供绑定 business pair 的 scoped repositories/capability，覆盖 Safety、Mapping、Care metadata、verified Audit 与 real-send 同类 institution-scoped 写面；PR 内新发现的 Audit 写入同类 P1 已由 `ec7cbd0a` 实际修复并解决；
 - 新增 canonical 19-row static residual guard，逐行确认 5 verified、12 not-applicable、2 valid denial attribution，legacy production `record()` residual 为 0；
 - 10 个 transaction persistence / composition 边界保持 caller-provided transaction database、rollback 与 query cardinality；未新增业务查询或 database transaction；
-- 四个 Runtime PR Required Check 全部通过；同范围 Review 先修复再回复／解决，合并后 Review sweep 无 debt；
-- merged main 独立复核通过 6 files / 115 tests、typecheck 与从 S10 baseline 到 final main 的 Architecture incremental；
+- 旧的“四个 Runtime PR Review sweep 无 debt”结论已失效；PR #1188 合并、指定 thread 解决、全 S10 Review sweep 与 merged-main 独立复核完成前，closure flags 保持 false；
 - 未连接数据库，未执行 Schema、Migration、DDL/DML、Seed、historical backfill、Workbench、页面、Staging 或 Production。
 
 证据：
 
 - `docs/operations/post-v2-r1c-audit-writer-caller-migration-runtime-closure-20260813.md`
-- Runtime PR #1183 / #1184 / #1185 / #1186
+- Runtime PR #1183 / #1184 / #1185 / #1186 / corrective PR #1188
 
-下一任务：`POST-V2-R1C Audit Writer Historical Backfill explicit authorization`；本阶段只定义任务，不授权数据库连接或 backfill。
+当前任务：完成 PR #1188 corrective Runtime、解决 PR #1186 指定 P1、复扫全部 S10 PR，并通过最终 Handoff 重新证明 closure；本阶段不授权数据库连接或 backfill。
 
 <!-- POST_V2_R1C_AUDIT_WRITER_CALLER_MIGRATION_RUNTIME_HISTORY_END -->
 

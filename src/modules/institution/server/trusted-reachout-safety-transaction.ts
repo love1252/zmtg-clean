@@ -15,9 +15,9 @@ import {
 } from '@/server/orchestration/wecom-reachout-transaction';
 
 type TrustedReachOutSafetyTransactionDependencies = {
-  customerRepository: TenantBusinessRepository;
+  customerRepository: Pick<TenantBusinessRepository, 'getCustomerByTenantAndInstitution'>;
   safetyRepository: TrustedReachOutSafetyRepository;
-  auditRepository: AuditEventRepository;
+  auditRepository: Pick<AuditEventRepository, 'recordAttributed'>;
   auditAttribution: VerifiedInstitutionAuditAttributionHandleV1;
 };
 
