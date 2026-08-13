@@ -237,6 +237,43 @@ export type AttributedTenantAuditEventV1 = Readonly<
   Omit<TenantAuditEvent, 'tenantId'> & AuditInstitutionAttributionV1
 >;
 
+export type AttemptedInstitutionDenialAuditEventV1 = Readonly<
+  Omit<TenantAuditEvent, 'tenantId'> & {
+    tenantId: string;
+    institutionId: string;
+    institutionAttribution: null;
+  }
+>;
+
+export type InstitutionAuditWriterEventV1 =
+  | AttributedTenantAuditEventV1
+  | AttemptedInstitutionDenialAuditEventV1;
+
+declare const verifiedInstitutionAuditAttributionMarkerV1: unique symbol;
+
+export type VerifiedInstitutionAuditAttributionHandleV1 = Readonly<{
+  readonly [verifiedInstitutionAuditAttributionMarkerV1]:
+    'verified_institution_audit_attribution_v1';
+}>;
+
+declare const attemptedInstitutionDenialAttributionMarkerV1: unique symbol;
+
+export type AttemptedInstitutionDenialAttributionHandleV1 = Readonly<{
+  readonly [attemptedInstitutionDenialAttributionMarkerV1]:
+    'attempted_institution_denial_attribution_v1';
+}>;
+
+export type InstitutionAuditEventAttributionV1 =
+  | Readonly<{
+      kind: 'verified';
+      attribution: VerifiedInstitutionAuditAttributionHandleV1;
+    }>
+  | Readonly<{
+      kind: 'attempted_denial';
+      attribution: AttemptedInstitutionDenialAttributionHandleV1;
+      attemptedPair: Readonly<{ tenantId: string; institutionId: string }>;
+    }>;
+
 const auditScopes = ['platform', 'tenant'] as const;
 const auditSources = ['demo_session', 'server_session', 'trusted_gateway'] as const;
 const auditResults = ['allowed', 'denied', 'transitioned'] as const;
@@ -261,6 +298,14 @@ const attributedAuditEventAllowedKeys = new Set<PropertyKey>([
   'institutionId',
   'institutionAttribution',
 ]);
+const verifiedInstitutionAuditAttributionHandlesV1 = new WeakMap<
+  object,
+  Extract<AuditInstitutionAttributionV1, { institutionAttribution: 'verified' }>
+>();
+const attemptedInstitutionDenialAttributionHandlesV1 = new WeakMap<
+  object,
+  Readonly<{ tenantId: string; institutionId: string }>
+>();
 
 function isRecord(value: unknown): value is Record<PropertyKey, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -368,6 +413,176 @@ export function createAttributedTenantAuditEventV1(input: {
     });
   } catch {
     return null;
+  }
+}
+
+/**
+ * Audit-owned mint called by server orchestration after S6 formal scope has been consumed.
+ * The handle is operation-bound, opaque and reusable for multiple events in that operation.
+ */
+export function mintVerifiedInstitutionAuditAttributionForOrchestrationV1(input: {
+  formalPair: Readonly<{ tenantId: string; institutionId: string; observedAt: string }>;
+  businessPair: Readonly<{ tenantId: string; institutionId: string }>;
+}): VerifiedInstitutionAuditAttributionHandleV1 | null {
+  try {
+    if (!isRecord(input) || !isRecord(input.formalPair) || !isRecord(input.businessPair)) {
+      return null;
+    }
+    if (
+      !isCanonicalNonEmptyString(input.formalPair.tenantId) ||
+      !isCanonicalNonEmptyString(input.formalPair.institutionId) ||
+      !isCanonicalNonEmptyString(input.formalPair.observedAt) ||
+      !Number.isFinite(Date.parse(input.formalPair.observedAt)) ||
+      !isCanonicalNonEmptyString(input.businessPair.tenantId) ||
+      !isCanonicalNonEmptyString(input.businessPair.institutionId) ||
+      input.formalPair.tenantId !== input.businessPair.tenantId ||
+      input.formalPair.institutionId !== input.businessPair.institutionId
+    ) {
+      return null;
+    }
+
+    const handle = Object.freeze({}) as VerifiedInstitutionAuditAttributionHandleV1;
+    verifiedInstitutionAuditAttributionHandlesV1.set(
+      handle,
+      Object.freeze({
+        institutionAttribution: 'verified',
+        tenantId: input.formalPair.tenantId,
+        institutionId: input.formalPair.institutionId,
+      }),
+    );
+    return handle;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Audit-owned mint called only by orchestration after formal server-session claims are verified.
+ * It does not imply authorization or active membership; it identifies the denied target pair.
+ */
+export function mintAttemptedInstitutionDenialAttributionForOrchestrationV1(input: {
+  signedSessionPair: Readonly<{ tenantId: string; institutionId: string }>;
+}): AttemptedInstitutionDenialAttributionHandleV1 | null {
+  try {
+    if (!isRecord(input) || !isRecord(input.signedSessionPair)) return null;
+    if (
+      !isCanonicalNonEmptyString(input.signedSessionPair.tenantId) ||
+      !isCanonicalNonEmptyString(input.signedSessionPair.institutionId)
+    ) {
+      return null;
+    }
+
+    const handle = Object.freeze({}) as AttemptedInstitutionDenialAttributionHandleV1;
+    attemptedInstitutionDenialAttributionHandlesV1.set(
+      handle,
+      Object.freeze({
+        tenantId: input.signedSessionPair.tenantId,
+        institutionId: input.signedSessionPair.institutionId,
+      }),
+    );
+    return handle;
+  } catch {
+    return null;
+  }
+}
+
+export function createVerifiedInstitutionAttributedTenantAuditEventV1(input: {
+  event: TenantAuditEvent;
+  attribution: VerifiedInstitutionAuditAttributionHandleV1;
+}): AttributedTenantAuditEventV1 | null {
+  try {
+    if (!isRecord(input)) return null;
+    const attribution = verifiedInstitutionAuditAttributionHandlesV1.get(input.attribution);
+    if (!attribution) return null;
+    return createAttributedTenantAuditEventV1({ event: input.event, attribution });
+  } catch {
+    return null;
+  }
+}
+
+export function createAttemptedInstitutionDenialAuditEventV1(input: {
+  event: TenantAuditEvent;
+  attemptedPair: Readonly<{ tenantId: string; institutionId: string }>;
+  attribution: AttemptedInstitutionDenialAttributionHandleV1;
+}): AttemptedInstitutionDenialAuditEventV1 | null {
+  try {
+    if (!isRecord(input) || !isRecord(input.attemptedPair) || input.event.result !== 'denied') {
+      return null;
+    }
+    const attribution = attemptedInstitutionDenialAttributionHandlesV1.get(input.attribution);
+    if (
+      !attribution ||
+      input.attemptedPair.tenantId !== attribution.tenantId ||
+      input.attemptedPair.institutionId !== attribution.institutionId ||
+      (input.event.tenantId !== null && input.event.tenantId !== attribution.tenantId)
+    ) {
+      return null;
+    }
+    const event = { ...input.event, tenantId: attribution.tenantId };
+    if (!isLegacyTenantAuditEvent(event)) return null;
+    return Object.freeze({
+      eventId: event.eventId,
+      actorId: event.actorId,
+      actorRole: event.actorRole,
+      tenantId: attribution.tenantId,
+      institutionId: attribution.institutionId,
+      institutionAttribution: null,
+      scope: event.scope,
+      resource: event.resource,
+      ...(event.resourceId === undefined ? {} : { resourceId: event.resourceId }),
+      action: event.action,
+      result: event.result,
+      reason: event.reason,
+      occurredAt: event.occurredAt,
+      source: event.source,
+    });
+  } catch {
+    return null;
+  }
+}
+
+export function createInstitutionAttributedTenantAuditEventV1(input: {
+  event: TenantAuditEvent;
+  attribution: InstitutionAuditEventAttributionV1;
+}): InstitutionAuditWriterEventV1 | null {
+  try {
+    if (!isRecord(input) || !isRecord(input.attribution)) return null;
+    if (input.attribution.kind === 'verified') {
+      return createVerifiedInstitutionAttributedTenantAuditEventV1({
+        event: input.event,
+        attribution: input.attribution.attribution,
+      });
+    }
+    if (input.attribution.kind === 'attempted_denial') {
+      return createAttemptedInstitutionDenialAuditEventV1({
+        event: input.event,
+        attemptedPair: input.attribution.attemptedPair,
+        attribution: input.attribution.attribution,
+      });
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function isAttemptedInstitutionDenialAuditEventV1(
+  value: unknown,
+): value is AttemptedInstitutionDenialAuditEventV1 {
+  try {
+    if (!isRecord(value)) return false;
+    if (!hasOnlyAttributedAuditEventKeys(value) || !isLegacyTenantAuditEvent(value)) {
+      return false;
+    }
+    const candidate = value as Record<PropertyKey, unknown>;
+    return (
+      candidate.result === 'denied' &&
+      isCanonicalNonEmptyString(candidate.tenantId) &&
+      isCanonicalNonEmptyString(candidate.institutionId) &&
+      candidate.institutionAttribution === null
+    );
+  } catch {
+    return false;
   }
 }
 

@@ -2,6 +2,13 @@ import { isProxy } from 'node:util/types';
 
 import { cookies } from 'next/headers';
 
+import {
+  mintAttemptedInstitutionDenialAttributionForOrchestrationV1,
+  mintVerifiedInstitutionAuditAttributionForOrchestrationV1,
+  type AttemptedInstitutionDenialAttributionHandleV1,
+  type VerifiedInstitutionAuditAttributionHandleV1,
+} from '@/modules/audit/domain/audit-events';
+
 import { createAccessControlAuthoritativeMembershipFactReaderV1 } from '@/modules/access-control/application/authoritative-membership-reader';
 import { createIdentityAuthoritativeFormalSessionIdentityFactReaderV1 } from '@/modules/auth/application/authoritative-formal-session-identity-reader';
 import {
@@ -29,6 +36,11 @@ export type InstitutionAuditWriterFormalScopeConsumptionV1 = Readonly<{
   tenantId: string;
   institutionId: string;
   observedAt: string;
+}>;
+
+export type InstitutionAuditWriterAttemptedDenialResolutionV1 = Readonly<{
+  attribution: AttemptedInstitutionDenialAttributionHandleV1;
+  attemptedPair: Readonly<{ tenantId: string; institutionId: string }>;
 }>;
 
 const AVAILABLE_RUNTIME_CONFIG_KEYS = Object.freeze([
@@ -264,6 +276,86 @@ export async function resolveInstitutionAuditWriterFormalScopeV1(): Promise<Inst
     formalScopeHandlesV1.add(handle);
     formalScopeConsumptionsV1.set(handle, consumption);
     return handle;
+  } catch {
+    return null;
+  }
+}
+
+export async function resolveInstitutionAuditWriterVerifiedAttributionV1(
+  businessPair: Readonly<{ tenantId: string; institutionId: string }>,
+): Promise<VerifiedInstitutionAuditAttributionHandleV1 | null> {
+  try {
+    const formalScope = await resolveInstitutionAuditWriterFormalScopeV1();
+    if (!formalScope) return null;
+    const formalPair = consumeInstitutionAuditWriterFormalScopeV1(formalScope);
+    if (!formalPair) return null;
+    return mintVerifiedInstitutionAuditAttributionForOrchestrationV1({
+      formalPair,
+      businessPair,
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function resolveInstitutionAuditWriterAttemptedDenialAttributionV1(): Promise<InstitutionAuditWriterAttemptedDenialResolutionV1 | null> {
+  try {
+    const runtimeConfig = snapshotExactPlainRecord(
+      resolveInstitutionGuardRuntimeConfigV1(),
+      AVAILABLE_RUNTIME_CONFIG_KEYS,
+    );
+    if (!runtimeConfig || runtimeConfig.kind !== 'available') return null;
+
+    const verificationEpochMs = readTrustedServerEpochMs();
+    if (verificationEpochMs === null) return null;
+
+    const cookieStore = await cookies();
+    const sessionCookie = snapshotExactPlainRecord(
+      cookieStore.get(FORMAL_SERVER_SESSION_COOKIE_V1),
+      SESSION_COOKIE_KEYS,
+    );
+    if (
+      !sessionCookie ||
+      sessionCookie.name !== FORMAL_SERVER_SESSION_COOKIE_V1 ||
+      typeof sessionCookie.value !== 'string' ||
+      sessionCookie.value.length === 0
+    ) {
+      return null;
+    }
+
+    const verifiedResolution = snapshotExactPlainRecord(
+      verifyFormalServerSessionCookieClaimsV1({
+        cookieHeader: `${FORMAL_SERVER_SESSION_COOKIE_V1}=${sessionCookie.value}`,
+        sessionKeyRing:
+          runtimeConfig.formalServerSessionKeyRing as FormalServerSessionKeyRingV1,
+        now: () => new Date(verificationEpochMs),
+      }),
+      VERIFIED_CLAIMS_RESOLUTION_KEYS,
+    );
+    if (!verifiedResolution || verifiedResolution.kind !== 'verified') return null;
+
+    const verifiedClaims = snapshotExactPlainRecord(
+      consumeFormalServerSessionVerifiedClaimsV1(verifiedResolution.verifiedClaims),
+      VERIFIED_CLAIMS_KEYS,
+    );
+    if (
+      !verifiedClaims ||
+      !isInstitutionScopeIdV1(verifiedClaims.accountId) ||
+      !isInstitutionScopeIdV1(verifiedClaims.tenantId) ||
+      !isInstitutionScopeIdV1(verifiedClaims.institutionId)
+    ) {
+      return null;
+    }
+
+    const attemptedPair = Object.freeze({
+      tenantId: verifiedClaims.tenantId,
+      institutionId: verifiedClaims.institutionId,
+    });
+    const attribution = mintAttemptedInstitutionDenialAttributionForOrchestrationV1({
+      signedSessionPair: attemptedPair,
+    });
+    if (!attribution) return null;
+    return Object.freeze({ attribution, attemptedPair });
   } catch {
     return null;
   }

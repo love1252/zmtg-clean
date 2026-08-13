@@ -1,6 +1,8 @@
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or } from 'drizzle-orm';
 import {
   isAttributedTenantAuditEventV1,
+  isAttemptedInstitutionDenialAuditEventV1,
+  type AttemptedInstitutionDenialAuditEventV1,
   type AttributedTenantAuditEventV1,
   type TenantAuditEvent,
 } from '@/modules/audit/domain/audit-events';
@@ -70,6 +72,31 @@ export function mapAttributedAuditEventToInsert(
     tenantId: event.tenantId,
     institutionId: event.institutionId,
     institutionAttribution: event.institutionAttribution,
+    scope: event.scope,
+    resource: event.resource,
+    resourceId: event.resourceId ?? null,
+    action: event.action,
+    result: event.result,
+    reason: event.reason,
+    occurredAt: new Date(event.occurredAt),
+    source: event.source,
+  };
+}
+
+export function mapAttemptedInstitutionDenialAuditEventToInsert(
+  event: AttemptedInstitutionDenialAuditEventV1,
+): typeof auditEvents.$inferInsert {
+  if (!isAttemptedInstitutionDenialAuditEventV1(event)) {
+    throw createInvalidAuditInstitutionAttributionError();
+  }
+
+  return {
+    eventId: event.eventId,
+    actorId: event.actorId,
+    actorRole: event.actorRole,
+    tenantId: event.tenantId,
+    institutionId: event.institutionId,
+    institutionAttribution: null,
     scope: event.scope,
     resource: event.resource,
     resourceId: event.resourceId ?? null,
@@ -209,6 +236,15 @@ export function createAuditEventRepository(database: TenantDatabase) {
       }
 
       await database.insert(auditEvents).values(mapAttributedAuditEventToInsert(event));
+    },
+    async recordAttemptedInstitutionDenial(event: AttemptedInstitutionDenialAuditEventV1) {
+      if (!isAttemptedInstitutionDenialAuditEventV1(event)) {
+        throw createInvalidAuditInstitutionAttributionError();
+      }
+
+      await database
+        .insert(auditEvents)
+        .values(mapAttemptedInstitutionDenialAuditEventToInsert(event));
     },
     async listCustomerAuditEventsByResourceId(input: {
       tenantId: string;

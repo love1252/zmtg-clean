@@ -3,6 +3,10 @@ import { resolve } from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  mintAttemptedInstitutionDenialAttributionForOrchestrationV1,
+  mintVerifiedInstitutionAuditAttributionForOrchestrationV1,
+} from '@/modules/audit/domain/audit-events';
+import {
   GET as appointmentsGet,
   PATCH as appointmentsPatch,
   POST as appointmentsPost,
@@ -56,7 +60,7 @@ const routeMocks = vi.hoisted(() => {
   return {
     auditRecord,
     checkTenantQuotaForCreate,
-    createAuditEventRepository: vi.fn(() => ({ record: auditRecord })),
+    createAuditEventRepository: vi.fn(() => ({ recordAttributed: auditRecord })),
     createTenantBusinessRepository: vi.fn(() => repository),
     database,
     getDatabase: vi.fn(),
@@ -137,6 +141,41 @@ const platformContext: AccessContext = {
   tenantId: null,
   source: 'demo_session',
 };
+
+function createVerifiedAuditAttribution() {
+  const attribution = mintVerifiedInstitutionAuditAttributionForOrchestrationV1({
+    formalPair: {
+      tenantId: 'demo-tenant-001',
+      institutionId: 'demo-inst-001',
+      observedAt: '2026-08-13T08:00:00.000Z',
+    },
+    businessPair: {
+      tenantId: 'demo-tenant-001',
+      institutionId: 'demo-inst-001',
+    },
+  });
+  if (!attribution) throw new Error('expected verified test attribution');
+  return { kind: 'verified' as const, attribution };
+}
+
+function createAttemptedDenialAuditAttribution() {
+  const attemptedPair = Object.freeze({
+    tenantId: 'demo-tenant-001',
+    institutionId: 'demo-inst-001',
+  });
+  const attribution = mintAttemptedInstitutionDenialAttributionForOrchestrationV1({
+    signedSessionPair: attemptedPair,
+  });
+  if (!attribution) throw new Error('expected attempted-denial test attribution');
+  return { kind: 'attempted_denial' as const, attribution, attemptedPair };
+}
+
+function createHandlerAuditRepository() {
+  return {
+    recordAttributed: vi.fn(async (_event: unknown) => undefined),
+    recordAttemptedInstitutionDenial: vi.fn(async (_event: unknown) => undefined),
+  };
+}
 
 beforeEach(() => {
   routeMocks.getDatabase.mockReset();
@@ -332,13 +371,14 @@ describe('租户业务只读 API 流程', () => {
       listAppointmentsByTenant: vi.fn(),
       listFollowUpTasksByTenant: vi.fn(),
     };
-    const auditRepository = { record: vi.fn(async () => undefined) };
+    const auditRepository = createHandlerAuditRepository();
 
     const response = await handleTenantBusinessListRequest({
       context: tenantContext,
       resource: 'customer',
       list: repository.listCustomersByTenant,
       auditRepository,
+      auditAttribution: createVerifiedAuditAttribution(),
     });
 
     expect(response.status).toBe(200);
@@ -346,48 +386,55 @@ describe('租户业务只读 API 流程', () => {
       records: [{ id: 'cust_001', tenantId: 'demo-tenant-001' }],
     });
     expect(repository.listCustomersByTenant).toHaveBeenCalledWith('demo-tenant-001');
-    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+    expect(auditRepository.recordAttributed).toHaveBeenCalledWith(expect.objectContaining({
       result: 'allowed',
       tenantId: 'demo-tenant-001',
+      institutionId: 'demo-inst-001',
+      institutionAttribution: 'verified',
       resource: 'customer',
     }));
   });
 
   it('没有访问上下文时返回 401 且不写审计', async () => {
-    const auditRepository = { record: vi.fn(async () => undefined) };
+    const auditRepository = createHandlerAuditRepository();
 
     const response = await handleTenantBusinessListRequest({
       context: null,
       resource: 'customer',
       list: vi.fn(),
       auditRepository,
+      auditAttribution: createVerifiedAuditAttribution(),
     });
 
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual({ error: '请先登录' });
-    expect(auditRepository.record).not.toHaveBeenCalled();
+    expect(auditRepository.recordAttributed).not.toHaveBeenCalled();
   });
 
   it('权限拒绝时返回 403 并写入审计事件', async () => {
-    const auditRepository = { record: vi.fn(async () => undefined) };
+    const auditRepository = createHandlerAuditRepository();
 
     const response = await handleTenantBusinessListRequest({
       context: platformContext,
       resource: 'customer',
       list: vi.fn(),
       auditRepository,
+      auditAttribution: createAttemptedDenialAuditAttribution(),
     });
 
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({ error: '没有访问权限' });
-    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+    expect(auditRepository.recordAttemptedInstitutionDenial).toHaveBeenCalledWith(expect.objectContaining({
       result: 'denied',
       reason: 'role_denied',
+      tenantId: 'demo-tenant-001',
+      institutionId: 'demo-inst-001',
+      institutionAttribution: null,
     }));
   });
 
   it('租户作用域缺少 tenantId 时返回 403 并写入 missing_tenant 审计', async () => {
-    const auditRepository = { record: vi.fn(async () => undefined) };
+    const auditRepository = createHandlerAuditRepository();
     const list = vi.fn();
 
     const response = await handleTenantBusinessListRequest({
@@ -395,24 +442,28 @@ describe('租户业务只读 API 流程', () => {
       resource: 'appointment',
       list,
       auditRepository,
+      auditAttribution: createAttemptedDenialAuditAttribution(),
     });
 
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({ error: '没有访问权限' });
     expect(list).not.toHaveBeenCalled();
-    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+    expect(auditRepository.recordAttemptedInstitutionDenial).toHaveBeenCalledWith(expect.objectContaining({
       resource: 'appointment',
       result: 'denied',
       reason: 'missing_tenant',
+      tenantId: 'demo-tenant-001',
+      institutionId: 'demo-inst-001',
+      institutionAttribution: null,
     }));
   });
 });
 
 describe('租户业务写入 API 处理器', () => {
   it('写入处理器使用访问上下文租户并记录允许审计', async () => {
-    const auditRepository = { record: vi.fn(async (_event: unknown) => undefined) };
+    const auditRepository = createHandlerAuditRepository();
     const mutate = vi.fn(async ({ successAuditEvent }) => {
-      await auditRepository.record(successAuditEvent);
+      await auditRepository.recordAttributed(successAuditEvent);
       return {
         kind: 'success' as const,
         record: { id: 'cust_created', tenantId: 'demo-tenant-001' },
@@ -425,6 +476,7 @@ describe('租户业务写入 API 处理器', () => {
       action: 'create',
       mutate,
       auditRepository,
+      auditAttribution: createVerifiedAuditAttribution(),
       successStatus: 201,
     });
 
@@ -439,18 +491,22 @@ describe('租户业务写入 API 处理器', () => {
         resource: 'customer',
         result: 'allowed',
         tenantId: 'demo-tenant-001',
+        institutionId: 'demo-inst-001',
+        institutionAttribution: 'verified',
       }),
     }));
-    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+    expect(auditRepository.recordAttributed).toHaveBeenCalledWith(expect.objectContaining({
       action: 'create',
       resource: 'customer',
       result: 'allowed',
       tenantId: 'demo-tenant-001',
+      institutionId: 'demo-inst-001',
+      institutionAttribution: 'verified',
     }));
   });
 
   it('写入处理器对非法随访流转返回 409 并写拒绝审计', async () => {
-    const auditRepository = { record: vi.fn(async () => undefined) };
+    const auditRepository = createHandlerAuditRepository();
 
     const response = await handleTenantBusinessMutationRequest({
       context: tenantContext,
@@ -463,11 +519,12 @@ describe('租户业务写入 API 处理器', () => {
         to: 'in_progress',
       })),
       auditRepository,
+      auditAttribution: createVerifiedAuditAttribution(),
     });
 
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toEqual({ error: '随访状态不允许这样流转' });
-    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+    expect(auditRepository.recordAttributed).toHaveBeenCalledWith(expect.objectContaining({
       result: 'denied',
       reason: 'invalid_transition',
       resource: 'follow_up',
@@ -477,7 +534,7 @@ describe('租户业务写入 API 处理器', () => {
   });
 
   it('写入处理器对随访状态冲突返回 409 并写拒绝审计', async () => {
-    const auditRepository = { record: vi.fn(async () => undefined) };
+    const auditRepository = createHandlerAuditRepository();
 
     const response = await handleTenantBusinessMutationRequest({
       context: tenantContext,
@@ -489,11 +546,12 @@ describe('租户业务写入 API 处理器', () => {
         reason: 'stale_transition' as const,
       })),
       auditRepository,
+      auditAttribution: createVerifiedAuditAttribution(),
     });
 
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toEqual({ error: '随访状态已变化，请刷新后重试' });
-    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+    expect(auditRepository.recordAttributed).toHaveBeenCalledWith(expect.objectContaining({
       result: 'denied',
       reason: 'stale_transition',
       resource: 'follow_up',
@@ -503,7 +561,7 @@ describe('租户业务写入 API 处理器', () => {
   });
 
   it('没有访问上下文时返回 401 且不调用写入或审计', async () => {
-    const auditRepository = { record: vi.fn(async () => undefined) };
+    const auditRepository = createHandlerAuditRepository();
     const mutate = vi.fn();
 
     const response = await handleTenantBusinessMutationRequest({
@@ -512,16 +570,17 @@ describe('租户业务写入 API 处理器', () => {
       action: 'create',
       mutate,
       auditRepository,
+      auditAttribution: createVerifiedAuditAttribution(),
     });
 
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual({ error: '请先登录' });
     expect(mutate).not.toHaveBeenCalled();
-    expect(auditRepository.record).not.toHaveBeenCalled();
+    expect(auditRepository.recordAttributed).not.toHaveBeenCalled();
   });
 
   it('平台上下文创建客户时返回 403 拒绝审计且不调用写入', async () => {
-    const auditRepository = { record: vi.fn(async () => undefined) };
+    const auditRepository = createHandlerAuditRepository();
     const mutate = vi.fn();
 
     const response = await handleTenantBusinessMutationRequest({
@@ -530,12 +589,13 @@ describe('租户业务写入 API 处理器', () => {
       action: 'create',
       mutate,
       auditRepository,
+      auditAttribution: createAttemptedDenialAuditAttribution(),
     });
 
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({ error: '没有访问权限' });
     expect(mutate).not.toHaveBeenCalled();
-    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+    expect(auditRepository.recordAttemptedInstitutionDenial).toHaveBeenCalledWith(expect.objectContaining({
       result: 'denied',
       reason: 'role_denied',
       resource: 'customer',
@@ -544,7 +604,7 @@ describe('租户业务写入 API 处理器', () => {
   });
 
   it('租户上下文缺少 tenantId 时返回 403 缺少租户审计且不调用写入', async () => {
-    const auditRepository = { record: vi.fn(async () => undefined) };
+    const auditRepository = createHandlerAuditRepository();
     const mutate = vi.fn();
 
     const response = await handleTenantBusinessMutationRequest({
@@ -553,12 +613,13 @@ describe('租户业务写入 API 处理器', () => {
       action: 'update',
       mutate,
       auditRepository,
+      auditAttribution: createAttemptedDenialAuditAttribution(),
     });
 
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({ error: '没有访问权限' });
     expect(mutate).not.toHaveBeenCalled();
-    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+    expect(auditRepository.recordAttemptedInstitutionDenial).toHaveBeenCalledWith(expect.objectContaining({
       result: 'denied',
       reason: 'missing_tenant',
       resource: 'appointment',
@@ -567,7 +628,7 @@ describe('租户业务写入 API 处理器', () => {
   });
 
   it('写入目标不存在时返回 404 并记录拒绝审计', async () => {
-    const auditRepository = { record: vi.fn(async () => undefined) };
+    const auditRepository = createHandlerAuditRepository();
 
     const response = await handleTenantBusinessMutationRequest({
       context: tenantContext,
@@ -575,11 +636,12 @@ describe('租户业务写入 API 处理器', () => {
       action: 'update',
       mutate: vi.fn(async () => ({ kind: 'not_found' as const })),
       auditRepository,
+      auditAttribution: createVerifiedAuditAttribution(),
     });
 
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
-    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+    expect(auditRepository.recordAttributed).toHaveBeenCalledWith(expect.objectContaining({
       result: 'denied',
       reason: 'not_found_or_not_owned',
       resource: 'customer',
@@ -588,7 +650,7 @@ describe('租户业务写入 API 处理器', () => {
   });
 
   it('写入处理器对配额拒绝返回 409 并写入稳定拒绝审计', async () => {
-    const auditRepository = { record: vi.fn(async () => undefined) };
+    const auditRepository = createHandlerAuditRepository();
 
     const response = await handleTenantBusinessMutationRequest({
       context: tenantContext,
@@ -605,6 +667,7 @@ describe('租户业务写入 API 处理器', () => {
         },
       })),
       auditRepository,
+      auditAttribution: createVerifiedAuditAttribution(),
       successStatus: 201,
     });
 
@@ -612,7 +675,7 @@ describe('租户业务写入 API 处理器', () => {
     await expect(response.json()).resolves.toEqual({
       code: 'quota_exceeded_customers', error: '客户数量已达到当前套餐上限，请联系平台管理员调整套餐',
     });
-    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+    expect(auditRepository.recordAttributed).toHaveBeenCalledWith(expect.objectContaining({
       action: 'create',
       reason: 'quota_exceeded_customers',
       resource: 'customer',

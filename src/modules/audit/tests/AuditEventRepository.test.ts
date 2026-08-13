@@ -6,10 +6,14 @@ import type { TenantDatabase } from '@/server/db/client';
 import {
   createAuditEventRepository,
   mapAttributedAuditEventToInsert,
+  mapAttemptedInstitutionDenialAuditEventToInsert,
   mapAuditEventToInsert,
 } from '@/modules/audit/server/audit-event-repository';
 import {
   createAttributedTenantAuditEventV1,
+  createAttemptedInstitutionDenialAuditEventV1,
+  mintAttemptedInstitutionDenialAttributionForOrchestrationV1,
+  type AttemptedInstitutionDenialAuditEventV1,
   type AttributedTenantAuditEventV1,
   type TenantAuditEvent,
 } from '@/modules/audit/domain/audit-events';
@@ -152,6 +156,24 @@ function createNotApplicableAttributedEvent(
 
   if (!attributed) throw new Error('failed to create not-applicable audit test event');
   return attributed;
+}
+
+function createAttemptedDenialEvent(): AttemptedInstitutionDenialAuditEventV1 {
+  const attemptedPair = Object.freeze({
+    tenantId: 'demo-tenant-001',
+    institutionId: 'demo-institution-001',
+  });
+  const attribution = mintAttemptedInstitutionDenialAttributionForOrchestrationV1({
+    signedSessionPair: attemptedPair,
+  });
+  if (!attribution) throw new Error('failed to mint attempted denial test attribution');
+  const attempted = createAttemptedInstitutionDenialAuditEventV1({
+    event: { ...event, result: 'denied', reason: 'role_denied' },
+    attemptedPair,
+    attribution,
+  });
+  if (!attempted) throw new Error('failed to create attempted denial test event');
+  return attempted;
 }
 
 const expectedInsertRow = {
@@ -338,6 +360,17 @@ describe('审计事件仓储映射', () => {
     });
   });
 
+  it('attempted denial 保留目标 pair，但 institutionAttribution 为 null 且不会进入 verified Reader', () => {
+    expect(mapAttemptedInstitutionDenialAuditEventToInsert(createAttemptedDenialEvent()))
+      .toEqual({
+        ...expectedInsertRow,
+        institutionId: 'demo-institution-001',
+        institutionAttribution: null,
+        result: 'denied',
+        reason: 'role_denied',
+      });
+  });
+
   it('attributed mapper 对 cast、fake 与 legacy_unattributed 固定低敏失败', () => {
     const verified = createVerifiedAttributedEvent();
     const invalidEvents = [
@@ -442,13 +475,35 @@ describe('审计事件仓储映射', () => {
     expect(query.values).not.toHaveBeenCalled();
   });
 
+  it('recordAttemptedInstitutionDenial 使用 caller-provided database 且不进入 record/recordAttributed', async () => {
+    const query = createInsertDatabase();
+    const transaction = vi.fn();
+    const database = { insert: query.insert, transaction } as unknown as TenantDatabase;
+
+    await createAuditEventRepository(database).recordAttemptedInstitutionDenial(
+      createAttemptedDenialEvent(),
+    );
+
+    expect(query.values).toHaveBeenCalledWith({
+      ...expectedInsertRow,
+      institutionId: 'demo-institution-001',
+      institutionAttribution: null,
+      result: 'denied',
+      reason: 'role_denied',
+    });
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
   it('attributed 写入边界不获取全局数据库、不反向依赖 orchestration 或推断业务 Owner', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'src/modules/audit/server/audit-event-repository.ts'),
       'utf8',
     );
     const recordAttributedSource = source.match(
-      /async recordAttributed[\s\S]*?(?=\n    async listCustomerAuditEventsByResourceId)/,
+      /async recordAttributed[\s\S]*?(?=\n    async recordAttemptedInstitutionDenial)/,
+    )?.[0];
+    const recordAttemptedSource = source.match(
+      /async recordAttemptedInstitutionDenial[\s\S]*?(?=\n    async listCustomerAuditEventsByResourceId)/,
     )?.[0];
 
     expect(source).not.toMatch(/from ['"]@\/server\/orchestration\//);
@@ -458,6 +513,8 @@ describe('审计事件仓储映射', () => {
     expect(recordAttributedSource).not.toMatch(
       /\.(?:select|transaction)\s*\(|\bcustomers\b|\bappointments\b|\bmemberships\b|\bbindings\b/,
     );
+    expect(recordAttemptedSource).toContain('database');
+    expect(recordAttemptedSource).not.toMatch(/\.(?:select|transaction)\s*\(/u);
   });
 
   it('按当前租户、机构和 customer resourceId 查询安全审计摘要', async () => {

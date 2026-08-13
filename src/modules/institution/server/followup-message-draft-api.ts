@@ -1,5 +1,15 @@
 import { NextResponse } from 'next/server';
-import { createAuditEvent, createDeniedAccessAuditEvent, type AuditReason } from '@/modules/audit/domain/audit-events';
+import {
+  createAuditEvent,
+  createDeniedAccessAuditEvent,
+  createInstitutionAttributedTenantAuditEventV1,
+  createVerifiedInstitutionAttributedTenantAuditEventV1,
+  type AttributedTenantAuditEventV1,
+  type AuditReason,
+  type InstitutionAuditEventAttributionV1,
+  type InstitutionAuditWriterEventV1,
+  type VerifiedInstitutionAuditAttributionHandleV1,
+} from '@/modules/audit/domain/audit-events';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 
 export async function readFollowUpMessageJsonBody(request: Request) {
@@ -23,16 +33,22 @@ export function deniedFollowUpMessageAudit(input: {
   reason: AuditReason;
   occurredAt: string;
   resourceId?: string | null;
-}) {
-  return createDeniedAccessAuditEvent({
-    eventId: createFollowUpMessageAuditEventId(),
-    context: input.context,
-    resource: 'follow_up',
-    action: input.action,
-    reason: input.reason,
-    occurredAt: input.occurredAt,
-    resourceId: input.resourceId,
+  attribution: InstitutionAuditEventAttributionV1;
+}): InstitutionAuditWriterEventV1 {
+  const event = createInstitutionAttributedTenantAuditEventV1({
+    event: createDeniedAccessAuditEvent({
+      eventId: createFollowUpMessageAuditEventId(),
+      context: input.context,
+      resource: 'follow_up',
+      action: input.action,
+      reason: input.reason,
+      occurredAt: input.occurredAt,
+      resourceId: input.resourceId,
+    }),
+    attribution: input.attribution,
   });
+  if (!event) throw new Error('invalid_followup_message_denial_audit_attribution');
+  return event;
 }
 
 export function allowedFollowUpMessageAudit(input: {
@@ -41,17 +57,23 @@ export function allowedFollowUpMessageAudit(input: {
   reason: AuditReason;
   occurredAt: string;
   resourceId?: string | null;
-}) {
-  return createAuditEvent({
-    eventId: createFollowUpMessageAuditEventId(),
-    context: input.context,
-    resource: 'follow_up',
-    action: input.action,
-    result: 'allowed',
-    reason: input.reason,
-    occurredAt: input.occurredAt,
-    resourceId: input.resourceId,
+  attribution: VerifiedInstitutionAuditAttributionHandleV1;
+}): AttributedTenantAuditEventV1 {
+  const event = createVerifiedInstitutionAttributedTenantAuditEventV1({
+    event: createAuditEvent({
+      eventId: createFollowUpMessageAuditEventId(),
+      context: input.context,
+      resource: 'follow_up',
+      action: input.action,
+      result: 'allowed',
+      reason: input.reason,
+      occurredAt: input.occurredAt,
+      resourceId: input.resourceId,
+    }),
+    attribution: input.attribution,
   });
+  if (!event) throw new Error('invalid_followup_message_allowed_audit_attribution');
+  return event;
 }
 
 export function parseCreateMessageDraftPayload(payload: unknown) {
