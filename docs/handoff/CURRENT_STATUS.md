@@ -10,14 +10,16 @@
 - POST-V2-R1B `page_workbench`：稳定且已完成治理闭环
 - POST-V2-R1C 错误放行尝试：精确 4 文件 Runtime 回滚、独立验证及两个指定 P1 审查线程均已完成治理收尾
 - POST-V2-R1C Audit Reader Foundation：exact 8-file Runtime、Required Check、合并后独立验证与 Handoff 均已闭环
-- POST-V2-R1C `page_system_audit`：能力放行尚未完成，当前保持 `hidden/not_released`
+- POST-V2-R1C `page_system_audit`：fresh release re-audit 已通过，但 eligibility 因 Audit Writer institution attribution 未闭环而阻断
 - 当前经审查接受的受治理只读页面切片：1 / 26
 - 剩余未放行页面：25
 - 受控创建能力放行：0 / 3
 - PR #1163 两个指定 P1：均已回复并解决，目标未解决线程数为 0
 - 审计读取器：机构范围 Reader 已实现，只消费正式 one-shot opaque context，并强制 tenant + institution + `verified`
 - Audit Writer attribution / 历史 backfill：均未闭环
-- Reader data readiness：false；本地只读验证的 `verified` 归属行数为 0
+- Reader readiness：ready；Reader data readiness：false
+- 本地只读验证：275 条审计记录中 `institutionId` 非空为 0、`verified` 为 0、attribution 为 `NULL` 的记录为 275
+- Workbench multi-capability：当前不安全，第二条可见摘要仍会触发 `/hospital` 的 exact-one guard
 - 生产就绪 / 部署：未推导、未执行
 
 ```text
@@ -58,6 +60,23 @@ AUDIT_WRITER_ATTRIBUTION_CLOSED=false
 HISTORICAL_BACKFILL_CLOSED=false
 AUDIT_READER_DATA_READINESS=false
 
+POST_V2_R1C_PAGE_SYSTEM_AUDIT_RELEASE_REAUDIT=passed
+PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=false
+AUDIT_READER_SUCCESS_PATH_EXISTS=true
+AUDIT_READER_READINESS=ready
+AUDIT_DATA_READINESS=false
+WORKBENCH_MULTI_CAPABILITY_SAFE=false
+
+CANONICAL_ROUTE=/hospital/system/audit
+ROUTE_STRATEGY=dedicated_static_route_after_data_prerequisite
+SHELL_READONLY_SAFE=true
+AUTHORIZATION_SAFE=true
+LOW_SENSITIVE_OUTPUT_SAFE=true
+
+BLOCKING_PREREQUISITE_COUNT=1
+PRIMARY_BLOCKING_PREREQUISITE=Audit Writer institution attribution closure
+BLOCKING_OWNER=src/modules/audit
+
 PAGE_WORKBENCH_STATE=read_only/pilot_released
 PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
 PAGE_SYSTEM_AUDIT_RELEASE=false
@@ -75,9 +94,10 @@ POST_V2_R1C_RELEASE_COMPLETE=false
 
 ### 唯一下一任务
 
-`POST-V2-R1C page_system_audit readonly release fresh re-audit + exact Runtime admission`
+`POST-V2-R1C Audit Writer institution attribution prerequisite fresh audit + exact Runtime admission`
 
 ```text
+AUDIT_WRITER_ATTRIBUTION_RUNTIME_AUTHORIZED=false
 PAGE_SYSTEM_AUDIT_RUNTIME_AUTHORIZED=false
 ```
 
