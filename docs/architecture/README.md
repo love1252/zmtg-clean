@@ -19,7 +19,8 @@ WORKBENCH_MULTI_CAPABILITY_SAFE=false
 CANONICAL_ROUTE=/hospital/system/audit
 ROUTE_STRATEGY=dedicated_static_route_after_data_prerequisite
 SHELL_READONLY_SAFE=true
-AUTHORIZATION_SAFE=true
+AUDIT_READER_API_AUTHORIZATION_SAFE=true
+PAGE_SYSTEM_AUDIT_AUTHORIZATION_VERIFIED=false
 LOW_SENSITIVE_OUTPUT_SAFE=true
 
 BLOCKING_PREREQUISITE_COUNT=1
@@ -43,7 +44,7 @@ PRODUCTION_DEPLOYMENT=false
 - canonical Audit Writer 仍不写入 `institutionId` / `institutionAttribution`，因此 Reader 的空结果不能构成权威空集合；
 - 当前 `/hospital` 仍要求 Workbench 投影只有一条摘要，第二个可见 capability 会重现历史投影回归；
 - canonical route 仍为 `/hospital/system/audit`，未来应使用 dedicated static Route，shared catch-all 继续承接 capability-off；
-- Shell / client 为 GET-only 只读边界，授权与低敏输出安全，但不能替代 data readiness；
+- Shell / client 为 GET-only 只读边界，Reader/API 授权与低敏输出已经验证，但页面的正式 system navigation authorization 与 exact capability authority 尚未验证，且两者都不能替代 data readiness；
 - 当前不生成页面 Runtime Admission，不修改 Runtime、Schema、Migration、Architecture exception 或 Platform Audit。
 
 证据：
