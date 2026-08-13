@@ -14,11 +14,12 @@ AUDIT_WRITER_ATTRIBUTION_FRESH_AUDIT=passed
 AUDIT_WRITER_ATTRIBUTION_RUNTIME_ELIGIBLE=false
 ADMISSION_MODE=SPLIT_REQUIRED
 
-PRODUCTION_AUDIT_WRITER_CALLER_FILE_COUNT=16
+CALLER_INVENTORY_REAUDIT=passed
+PRODUCTION_AUDIT_WRITER_CALLER_FILE_COUNT=19
 PRODUCTION_INSTITUTION_AUDIT_WRITER_CALLER_FILE_COUNT=11
-PRODUCTION_PLATFORM_AUDIT_WRITER_CALLER_FILE_COUNT=4
+PRODUCTION_PLATFORM_AUDIT_WRITER_CALLER_FILE_COUNT=7
 PRODUCTION_NON_INSTITUTION_AUDIT_WRITER_CALLER_FILE_COUNT=1
-TRANSACTIONAL_AUDIT_WRITER_CALLER_FILE_COUNT=7
+TRANSACTIONAL_AUDIT_WRITER_CALLER_FILE_COUNT=10
 
 BLOCKING_PREREQUISITE_COUNT=3
 PRIMARY_BLOCKING_PREREQUISITE=formal institution Audit Writer scope port
@@ -39,7 +40,8 @@ PRODUCTION_DEPLOYMENT=false
 
 - Phase 0 follow-up PR #1172 已修正 Handoff 授权来源与页面授权状态；合并后仅回复并解决 PR #1171 两个指定 post-merge Review thread；
 - Phase 1 重新核对 `createAuditEvent`、`createDeniedAccessAuditEvent`、`AuditEventRepository.record`、factory、直接调用与 transaction-bound composition；
-- 生产事件构造文件为 16：Institution 11、Platform 4、Auth / 非机构 1；实际 transaction database 上组合 Audit Repository 的文件为 7；
+- S5 Phase 0 重新执行 helper 与直接 object construction 的 union search，生产事件构造文件修正为 19：Institution 11、Platform 7、Auth / 非机构 1；实际 transaction database 上持久化或组合 Audit 的文件修正为 10；
+- 补入 `tenant-account-management-service.ts`、`tenant-plan-binding-service.ts`、`tenant-plan-change-service.ts`，并纳入其 3 个 transaction Repository 与 9 个 service / repository / Route 测试文件；三者均为 platform tenant lifecycle control-plane，未来 attribution 目标为 `not_applicable`；
 - `TenantAuditEvent` 与 mapper 均不携带机构归因；Repository 没有足够事实推断，普通 caller 显式声明也不能证明 formal current；
 - 唯一推荐设计为 orchestration formal-scope port + Audit Owner explicit attribution contract + classified caller migration；三个切片必须独立验收，当前不生成巨型 Runtime Admission；
 - 本地 PostgreSQL 只读复核仍为 275 total、0 institutionId、0 verified、275 NULL attribution；未执行数据库写入；

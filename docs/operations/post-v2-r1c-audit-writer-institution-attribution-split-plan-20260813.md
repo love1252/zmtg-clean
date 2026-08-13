@@ -64,14 +64,19 @@ createAuditEvent / createDeniedAccessAuditEvent
 
 ## 4. 生产调用面清单
 
-本报告把“生产 Writer caller”定义为：非测试源码中直接构造 `TenantAuditEvent` 的文件；Repository 与事务组合文件单独统计，避免把 Reader factory 误计为 Writer。
+本报告把“生产 Writer caller”定义为：非测试源码中直接构造 `TenantAuditEvent` 的文件；既包括调用 `createAuditEvent` / `createDeniedAccessAuditEvent` 的文件，也包括直接构造 typed / inferred event object 的文件。Repository 与事务组合文件单独统计，type-only、Reader-only、test、demo fixture 与 mock 均不计入 caller。
+
+S5 Phase 0 重新执行仓库级 union search 后确认：helper 构造文件为 16，另有 3 个未使用 helper、直接构造 event object 的 Open Platform service；S4 原计数遗漏了后三者，现已修正为 exact count。
 
 ```text
-PRODUCTION_AUDIT_WRITER_CALLER_FILE_COUNT=16
+CALLER_INVENTORY_REAUDIT=passed
+HELPER_CONSTRUCTION_CALLER_FILE_COUNT=16
+DIRECT_OBJECT_CONSTRUCTION_CALLER_FILE_COUNT=3
+PRODUCTION_AUDIT_WRITER_CALLER_FILE_COUNT=19
 PRODUCTION_INSTITUTION_AUDIT_WRITER_CALLER_FILE_COUNT=11
-PRODUCTION_PLATFORM_AUDIT_WRITER_CALLER_FILE_COUNT=4
+PRODUCTION_PLATFORM_AUDIT_WRITER_CALLER_FILE_COUNT=7
 PRODUCTION_NON_INSTITUTION_AUDIT_WRITER_CALLER_FILE_COUNT=1
-TRANSACTIONAL_AUDIT_WRITER_CALLER_FILE_COUNT=7
+TRANSACTIONAL_AUDIT_WRITER_CALLER_FILE_COUNT=10
 ```
 
 ### 4.1 Institution 业务面：11 文件
@@ -98,7 +103,7 @@ TRANSACTIONAL_AUDIT_WRITER_CALLER_FILE_COUNT=7
 PRODUCTION_LEGACY_UNATTRIBUTED_NEW_WRITER_CALLER_FILE_COUNT=0
 ```
 
-### 4.2 Platform：4 文件
+### 4.2 Platform：7 文件
 
 以下事件属于 platform / tenant control-plane，不属于单一正式 institution，未来应显式写 `institutionId=null` 与 `institutionAttribution=not_applicable`：
 
@@ -106,6 +111,19 @@ PRODUCTION_LEGACY_UNATTRIBUTED_NEW_WRITER_CALLER_FILE_COUNT=0
 - `src/app/api/v1/open-platform/ai-model-config/sync/route.ts`
 - `src/app/api/v1/open-platform/ai-model-config/test/route.ts`
 - `src/modules/open-platform/server/platform-knowledge-management-service.ts`
+- `src/modules/open-platform/server/tenant-account-management-service.ts`
+- `src/modules/open-platform/server/tenant-plan-binding-service.ts`
+- `src/modules/open-platform/server/tenant-plan-change-service.ts`
+
+新增确认的三个 caller 逐项证据如下：
+
+| Service | Event 构造 | Canonical persistence / transaction Repository | Production Route | 目标分类 | Downstream tests |
+| --- | --- | --- | --- | --- | --- |
+| `tenant-account-management-service.ts` | `buildAuditEvent(): TenantAuditEvent` 直接返回 object | `tenant-account-management-repository.ts` 在 account mutation transaction 内调用 `mapAuditEventToInsert()` | `src/app/api/v1/open-platform/tenants/[tenantId]/account/route.ts` | `NOT_APPLICABLE` | `TenantAccountManagementService.test.ts`、`TenantAccountManagementRepository.test.ts`、`TenantAccountManagementApiRoute.test.ts` |
+| `tenant-plan-binding-service.ts` | 直接构造 `auditEvent` 与 `accountAuditEvent` 两个 object | `tenant-plan-binding-repository.ts` 在 tenant onboarding transaction 内两次调用 `mapAuditEventToInsert()` | `src/app/api/v1/open-platform/tenants/route.ts`，经 `_membership-command-composition.ts` 创建 Repository | `NOT_APPLICABLE` | `TenantPlanBindingService.test.ts`、`TenantPlanBindingRepository.test.ts`、`TenantPlanBindingApiRoute.test.ts` |
+| `tenant-plan-change-service.ts` | initial assignment 与 plan change 分支均直接构造 `auditEvent` object | `tenant-plan-change-repository.ts` 在两个 plan mutation transaction 内调用 `mapAuditEventToInsert()` | `src/app/api/v1/open-platform/tenants/[tenantId]/plan-change/route.ts`，经 `_plan-change-shared.ts` 创建 Repository | `NOT_APPLICABLE` | `TenantPlanChangeService.test.ts`、`TenantPlanChangeRepository.test.ts`、`TenantPlanChangeApiRoute.test.ts` |
+
+这些事件描述的是平台操作者对 tenant、tenant member 与 plan lifecycle 的 control-plane 管理，不属于单一正式 institution，因此未来目标必须是 `institutionId=null` 与 `institutionAttribution=not_applicable`。不得仅依据 Open Platform 目录归类；这里的依据是 Route 强制 platform scope、业务对象为 tenant lifecycle control-plane，且事件没有经过任何正式 institution authorization chain。
 
 Platform Audit 查询、跨租户 scope 与低敏输出语义不得改变。
 
@@ -115,17 +133,36 @@ Platform Audit 查询、跨租户 scope 与低敏输出语义不得改变。
 
 当前正式登录审计记录身份 / Membership 登录结果；`FormalMembershipAuditSnapshotV1` 有意只暴露 membership id、tenant 与 role，不暴露 institutionId。该事件不是已经授权的机构业务动作，当前应为 `not_applicable`，不得从当前账号绑定反推机构。
 
-### 4.4 事务组合面：7 文件
+### 4.4 事务组合面：10 文件
 
 - `src/modules/institution/server/his-connection-credential-service.ts`
 - `src/modules/institution/server/his-connection-status-service.ts`
 - `src/modules/institution/server/his-connection-write-service.ts`
 - `src/modules/institution/server/tenant-business-audit-transaction.ts`
 - `src/modules/institution/server/wecom-customer-mapping-transaction.ts`
+- `src/modules/open-platform/server/tenant-account-management-repository.ts`
+- `src/modules/open-platform/server/tenant-plan-binding-repository.ts`
+- `src/modules/open-platform/server/tenant-plan-change-repository.ts`
 - `src/server/orchestration/care-follow-up-transaction.ts`
 - `src/server/orchestration/wecom-reachout-transaction.ts`
 
-这些路径把 `AuditEventRepository` 绑定到业务 transaction database。未来 attribution 只能作为已验证的不可变输入传入；Audit Repository 不得自行开启第二个 transaction。现有“同一事务中的 Audit 失败导致业务 mutation 回滚”必须保持。Auth 与部分 Platform Audit 当前采用 best-effort / 响应隔离语义，也不得被中央改动意外改成业务回滚。
+前三个新增确认的 Open Platform Repository 均在 mutation transaction 内直接调用 `mapAuditEventToInsert()` 写 `audit_events`；其余路径把 `AuditEventRepository` 绑定到业务 transaction database。未来 attribution 只能作为已验证的不可变输入传入；Audit Repository 不得自行开启第二个 transaction。现有“同一事务中的 Audit 失败导致业务 mutation 回滚”必须保持。Auth 与部分 Platform Audit 当前采用 best-effort / 响应隔离语义，也不得被中央改动意外改成业务回滚。
+
+### 4.5 新增 Platform caller 的 downstream migration 测试面
+
+后续 classified caller migration 必须覆盖以下 9 个现有测试文件，不得只改 service object shape：
+
+- `src/modules/open-platform/tests/TenantAccountManagementService.test.ts`
+- `src/modules/open-platform/tests/TenantAccountManagementRepository.test.ts`
+- `src/modules/open-platform/tests/TenantAccountManagementApiRoute.test.ts`
+- `src/modules/open-platform/tests/TenantPlanBindingService.test.ts`
+- `src/modules/open-platform/tests/TenantPlanBindingRepository.test.ts`
+- `src/modules/open-platform/tests/TenantPlanBindingApiRoute.test.ts`
+- `src/modules/open-platform/tests/TenantPlanChangeService.test.ts`
+- `src/modules/open-platform/tests/TenantPlanChangeRepository.test.ts`
+- `src/modules/open-platform/tests/TenantPlanChangeApiRoute.test.ts`
+
+S5 Phase 0 对该集合执行了 9 files / 54 tests，全部通过。`trial-data-reset-service.ts` 仅在当前 capability-disabled input type 中引用 `TenantAuditEvent`，不构造或持久化 event；Audit Reader、type-only 文件、test fixtures 与 mock 也均已排除。
 
 ## 5. 正式 institution pair 来源
 
@@ -155,7 +192,7 @@ DECISION_EVIDENCE=no persisted attribution enforcement epoch or Reader/API cover
 
 | 方案 | Owner / trust | 事务与兼容性 | 结论 |
 | --- | --- | --- | --- |
-| A：扩展 `TenantAuditEvent` / `createAuditEvent`，由 caller 显式提供 attribution | Audit Owner 正确，但普通 caller 可以自报 `verified`；16 个 caller 跨多个 Owner | 可以保持 transaction，但 trust 不闭合 | 单独采用不合格 |
+| A：扩展 `TenantAuditEvent` / `createAuditEvent`，由 caller 显式提供 attribution | Audit Owner 正确，但普通 caller 可以自报 `verified`；19 个 caller 跨多个 Owner | 可以保持 transaction，但 trust 不闭合 | 单独采用不合格 |
 | B：Repository / mapper 推断 | mapper 没有 formal scope、业务对象或可靠 ownership 事实；容易把当前账号、tenant-only 事件误归因 | 会引入跨 Owner 查询、额外 transaction 或 N+1 | 拒绝 |
 | C：orchestration Writer boundary 接收 opaque formal scope，再调用 Audit Owner 的显式 attribution contract | 复用既有 formal authorization；Audit 继续拥有 domain/mapper/repository；caller 不能自报 current | attribution 作为数据进入既有 transaction，Platform / Auth 兼容性可显式保持 | 唯一推荐 |
 
@@ -170,7 +207,7 @@ CANONICAL_AUDIT_WRITER_BOUNDARY=Audit domain event contract and AuditEventReposi
 
 1. formal institution Audit Writer scope port：复用既有正式 Identity / Membership / Scope 链，建立 one-shot opaque pair 与 fail-closed tests；
 2. Audit Owner attribution contract：扩展事件 DTO / builders / mapper，显式区分 `verified` 与 `not_applicable`，拒绝非法 shape；
-3. caller migration：按 Institution、Platform、Auth 与 7 个 transaction composition 点逐类迁移和回归，确保新正式 institution 写入不产生 `legacy_unattributed`。
+3. caller migration：按 Institution、Platform、Auth 与 10 个 transaction composition 点逐类迁移和回归，确保新正式 institution 写入不产生 `legacy_unattributed`。
 
 把这三类跨 Owner 改动放入一个 Runtime PR 会超过项目默认审查边界，并使 formal trust、事务回滚与 caller 分类无法独立验收。S4 因此不生成虚假的“exact all-callers Runtime Admission”。
 
