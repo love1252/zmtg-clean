@@ -2,7 +2,9 @@ import type {
   AuditEventListItem,
   AuditEventQuery,
   AuditEventQueryResult,
+  InstitutionAuditCoverage,
 } from '@/modules/audit/domain/audit-event-query';
+import { createInstitutionAuditCoverage } from '@/modules/audit/domain/audit-event-query';
 import { createAuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import {
   consumeInstitutionCapabilityAuthorityRuntimeContextV1,
@@ -17,6 +19,7 @@ export type InstitutionAuditReaderResultV1 =
       kind: 'ready';
       records: readonly InstitutionAuditEventListItemV1[];
       pageInfo: Readonly<AuditEventQueryResult['pageInfo']>;
+      coverage: InstitutionAuditCoverage;
     }
   | { kind: 'unavailable' };
 
@@ -53,7 +56,15 @@ export async function readCurrentInstitutionAuditEventsV1(
       return INSTITUTION_AUDIT_READER_UNAVAILABLE;
     }
 
-    const result = await createAuditEventRepository(getDatabase()).listAuditEvents({
+    const repository = createAuditEventRepository(getDatabase());
+    const coverageFacts = await repository.readInstitutionAuditCoverage({
+      tenantId: context.tenantId,
+      institutionId: context.institutionId,
+    });
+    const coverage = createInstitutionAuditCoverage(coverageFacts);
+    if (!coverage) return INSTITUTION_AUDIT_READER_UNAVAILABLE;
+
+    const result = await repository.listAuditEvents({
       scope: {
         kind: 'institution',
         tenantId: context.tenantId,
@@ -72,6 +83,7 @@ export async function readCurrentInstitutionAuditEventsV1(
         limit: result.pageInfo.limit,
         nextCursor: result.pageInfo.nextCursor,
       }),
+      coverage,
     });
   } catch {
     return INSTITUTION_AUDIT_READER_UNAVAILABLE;

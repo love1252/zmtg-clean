@@ -15,24 +15,37 @@ const TARGET_SECTION_ID = 'workbench' as const;
 const TARGET_CAPABILITY_KEY = 'page_workbench' as const;
 const EMPTY_SECTION_IDS = Object.freeze([]) as readonly InstitutionNavigationSectionIdV1[];
 
-function isExactReadonlyWorkbenchProjection(
+function selectExactReadonlyWorkbenchProjection(
   projection: WorkbenchCapabilityProjection,
-): boolean {
+): WorkbenchCapabilityProjection | null {
   if (
     projection.status !== 'projected' ||
-    projection.quickCreateMenu !== null ||
-    projection.summaries.length !== 1
+    projection.quickCreateMenu !== null
   ) {
-    return false;
+    return null;
   }
 
-  const summary = projection.summaries[0];
-  return (
+  const workbenchSummaries = projection.summaries.filter(
+    (summary) => summary.key === TARGET_CAPABILITY_KEY,
+  );
+  if (workbenchSummaries.length !== 1) return null;
+
+  const summary = workbenchSummaries[0];
+  if (!(
     summary?.key === TARGET_CAPABILITY_KEY &&
     summary.kind === 'page' &&
     summary.decision === 'read_only' &&
     summary.safeSummary === '工作台仅供查看'
-  );
+  )) {
+    return null;
+  }
+
+  return Object.freeze({
+    status: 'projected',
+    sourceReadiness: projection.sourceReadiness,
+    summaries: Object.freeze([summary]),
+    quickCreateMenu: null,
+  });
 }
 
 export default async function HospitalPage() {
@@ -73,8 +86,10 @@ export default async function HospitalPage() {
           capabilities: capabilityStatus,
           referenceTime: capabilityStatus.freshness?.observedAt ?? '',
         });
-        if (isExactReadonlyWorkbenchProjection(projection)) {
-          capabilityProjection = projection;
+        const workbenchProjection =
+          selectExactReadonlyWorkbenchProjection(projection);
+        if (workbenchProjection) {
+          capabilityProjection = workbenchProjection;
         }
       }
     } catch {

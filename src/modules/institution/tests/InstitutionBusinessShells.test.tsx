@@ -437,8 +437,14 @@ function auditEventsResponse(
     limit: 50,
     nextCursor: null,
   },
+  coverage: unknown = {
+    state: 'partial_verified_only',
+    safeDataAvailable: true,
+    historicalCoverageComplete: false,
+    partialCoverageSafe: true,
+  },
 ) {
-  return jsonResponse({ records, pageInfo });
+  return jsonResponse({ records, pageInfo, coverage });
 }
 
 function auditStatisticValues(container: HTMLElement) {
@@ -574,6 +580,9 @@ describe('机构业务页面壳', () => {
     expect(screen.getByText('原因：allowed_by_policy')).toBeInTheDocument();
     expect(screen.getByText('操作者：demo-user-admin')).toBeInTheDocument();
     expect(screen.getByText('角色：tenant_admin')).toBeInTheDocument();
+    expect(screen.getByText('可信记录可用，历史覆盖不完整')).toBeInTheDocument();
+    expect(screen.getByText(/未归因旧记录没有被猜测纳入/u)).toBeInTheDocument();
+    expect(screen.getByText(/页内统计不是完整历史总量/u)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith('/api/institution/audit-events', { cache: 'no-store' });
     expectNoSensitiveAuditContent(container);
   });
@@ -614,8 +623,59 @@ describe('机构业务页面壳', () => {
     const { container } = render(<InstitutionAuditEventsShell />);
 
     expect(await screen.findByText('暂无审计事件')).toBeInTheDocument();
-    expect(screen.getByText('当前筛选条件下没有可展示的关键操作记录。')).toBeInTheDocument();
+    expect(screen.getByText(/历史覆盖不完整，不能据此声明从未发生相关事件/u)).toBeInTheDocument();
     expect(auditStatisticValues(container)).toEqual(['0', '0', '0']);
+  });
+
+  it('零 verified 与已知 incomplete history 不会被表达为 authoritative empty', async () => {
+    mockAuditEventsFetch([
+      auditEventsResponse([], undefined, {
+        state: 'partial_verified_only',
+        safeDataAvailable: false,
+        historicalCoverageComplete: false,
+        partialCoverageSafe: true,
+      }),
+    ]);
+
+    render(<InstitutionAuditEventsShell />);
+
+    expect(await screen.findByText('暂无可信记录，历史覆盖不完整')).toBeInTheDocument();
+    expect(screen.getByText(/不能据此判断本机构从未发生审计事件/u)).toBeInTheDocument();
+    expect(screen.queryByText('可信历史覆盖完整')).not.toBeInTheDocument();
+  });
+
+  it('只有 complete coverage 的空结果才使用完整覆盖空语义', async () => {
+    mockAuditEventsFetch([
+      auditEventsResponse([], undefined, {
+        state: 'complete',
+        safeDataAvailable: false,
+        historicalCoverageComplete: true,
+        partialCoverageSafe: false,
+      }),
+    ]);
+
+    render(<InstitutionAuditEventsShell />);
+
+    expect(await screen.findByText('可信历史覆盖完整')).toBeInTheDocument();
+    expect(screen.getByText(/完整覆盖范围内没有可展示/u)).toBeInTheDocument();
+    expect(screen.queryByText('历史覆盖不完整')).not.toBeInTheDocument();
+  });
+
+  it('非法 coverage contract fail-closed 且不展示 records', async () => {
+    mockAuditEventsFetch([
+      auditEventsResponse([auditEventRecord], undefined, {
+        state: 'complete',
+        safeDataAvailable: true,
+        historicalCoverageComplete: false,
+        partialCoverageSafe: false,
+      }),
+    ]);
+
+    const { container } = render(<InstitutionAuditEventsShell />);
+
+    expect(await screen.findByText('请求失败')).toBeInTheDocument();
+    expect(screen.queryByText('audit_evt_customer')).not.toBeInTheDocument();
+    expect(auditStatisticValues(container)).toEqual(['--', '--', '--']);
   });
 
   it.each([

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import {
   isAttributedTenantAuditEventV1,
   isAttemptedInstitutionDenialAuditEventV1,
@@ -38,6 +38,11 @@ export type CustomerAuditEventSummary = {
   resource: AuditEventRow['resource'];
   resourceId: string | null;
 };
+
+export type InstitutionAuditCoverageFacts = Readonly<{
+  verifiedRecordCount: number;
+  unclassifiableHistoricalRecordCount: number;
+}>;
 
 export function mapAuditEventToInsert(event: TenantAuditEvent): typeof auditEvents.$inferInsert {
   return {
@@ -337,6 +342,34 @@ export function createAuditEventRepository(database: TenantDatabase) {
           : rows;
 
       return mapRowsToAuditQueryResult(scopedRows, input.query.limit);
+    },
+    async readInstitutionAuditCoverage(input: {
+      tenantId: string;
+      institutionId: string;
+    }): Promise<InstitutionAuditCoverageFacts> {
+      const [facts] = await database
+        .select({
+          verifiedRecordCount: sql<number>`count(*) filter (where ${auditEvents.institutionId} = ${input.institutionId} and ${auditEvents.institutionAttribution} = 'verified')::int`,
+          unclassifiableHistoricalRecordCount: sql<number>`count(*) filter (where (${auditEvents.institutionId} is null and ${auditEvents.institutionAttribution} is null) or ${auditEvents.institutionAttribution} = 'legacy_unattributed')::int`,
+        })
+        .from(auditEvents)
+        .where(eq(auditEvents.tenantId, input.tenantId));
+
+      if (
+        !facts ||
+        !Number.isSafeInteger(facts.verifiedRecordCount) ||
+        facts.verifiedRecordCount < 0 ||
+        !Number.isSafeInteger(facts.unclassifiableHistoricalRecordCount) ||
+        facts.unclassifiableHistoricalRecordCount < 0
+      ) {
+        throw new Error('INVALID_AUDIT_COVERAGE_FACTS');
+      }
+
+      return Object.freeze({
+        verifiedRecordCount: facts.verifiedRecordCount,
+        unclassifiableHistoricalRecordCount:
+          facts.unclassifiableHistoricalRecordCount,
+      });
     },
     async listFollowUpPathAnalysisAuditEventsByTenant(
       tenantId: string,

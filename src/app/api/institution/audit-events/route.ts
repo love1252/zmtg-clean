@@ -1,4 +1,5 @@
 import { withInstitutionSectionRouteGuardV1 } from '@/app/api/institution/_shared/institution-route-guard';
+import { isInstitutionAuditCoverage } from '@/modules/audit/domain/audit-event-query';
 import { parseAuditEventQueryParams } from '@/modules/audit/server/audit-event-query-parser';
 import { readCurrentInstitutionAuditEventsV1 } from '@/server/orchestration/institution-audit-reader';
 import { NextResponse } from 'next/server';
@@ -18,7 +19,7 @@ async function GET(request: Request) {
   }
 
   const result = await readCurrentInstitutionAuditEventsV1(parsedQuery.query);
-  if (result.kind !== 'ready') {
+  if (result.kind !== 'ready' || !isInstitutionAuditCoverage(result.coverage)) {
     return NextResponse.json(institutionAuditEventsUnavailable, {
       status: 503,
       headers: { 'Cache-Control': 'no-store' },
@@ -26,7 +27,11 @@ async function GET(request: Request) {
   }
 
   return NextResponse.json(
-    { records: result.records, pageInfo: result.pageInfo },
+    {
+      records: result.records,
+      pageInfo: result.pageInfo,
+      coverage: result.coverage,
+    },
     { headers: { 'Cache-Control': 'no-store' } },
   );
 }

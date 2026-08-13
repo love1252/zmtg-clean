@@ -266,6 +266,25 @@ function createAuditQueryDatabase(rows: unknown[] = []) {
   };
 }
 
+function createAuditCoverageDatabase(rows: unknown[] = []) {
+  const where = vi.fn(async (condition: unknown) => {
+    void condition;
+    return rows;
+  });
+  const from = vi.fn(() => ({ where }));
+  const select = vi.fn((selection?: unknown) => {
+    void selection;
+    return { from };
+  });
+
+  return {
+    database: { select } as unknown as TenantDatabase,
+    from,
+    select,
+    where,
+  };
+}
+
 const auditEventRow = {
   eventId: 'audit_evt_001',
   actorId: 'demo-user-admin',
@@ -734,6 +753,74 @@ describe('审计事件仓储映射', () => {
     });
 
     expect(result.records.map((record) => record.id)).toEqual(['audit_evt_001']);
+  });
+
+  it('coverage facts 只按 formal tenant 统计目标 verified 与历史不可分类 residual', async () => {
+    const query = createAuditCoverageDatabase([
+      {
+        verifiedRecordCount: 7,
+        unclassifiableHistoricalRecordCount: 267,
+      },
+    ]);
+
+    const result = await createAuditEventRepository(
+      query.database,
+    ).readInstitutionAuditCoverage({
+      tenantId: 'demo-tenant-001',
+      institutionId: 'demo-institution-001',
+    });
+
+    expect(query.from).toHaveBeenCalledWith(auditEvents);
+    expect(query.where).toHaveBeenCalledWith({
+      column: auditEvents.tenantId,
+      operator: 'eq',
+      value: 'demo-tenant-001',
+    });
+    expect(Object.keys(query.select.mock.calls[0]?.[0] ?? {})).toEqual([
+      'verifiedRecordCount',
+      'unclassifiableHistoricalRecordCount',
+    ]);
+    expect(result).toEqual({
+      verifiedRecordCount: 7,
+      unclassifiableHistoricalRecordCount: 267,
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+
+    const source = readFileSync(
+      resolve(process.cwd(), 'src/modules/audit/server/audit-event-repository.ts'),
+      'utf8',
+    );
+    const method = source.match(
+      /async readInstitutionAuditCoverage[\s\S]*?(?=\n    async listFollowUpPathAnalysisAuditEventsByTenant)/u,
+    )?.[0] ?? '';
+    expect(method).toContain("institutionAttribution} = 'verified'");
+    expect(method).toContain('institutionId} is null');
+    expect(method).toContain('institutionAttribution} is null');
+    expect(method).toContain("institutionAttribution} = 'legacy_unattributed'");
+    expect(method).not.toContain('actorId');
+    expect(method).not.toContain('resourceId');
+  });
+
+  it.each([
+    { rows: [] },
+    {
+      rows: [{ verifiedRecordCount: -1, unclassifiableHistoricalRecordCount: 0 }],
+    },
+    {
+      rows: [{ verifiedRecordCount: 0, unclassifiableHistoricalRecordCount: -1 }],
+    },
+    {
+      rows: [{ verifiedRecordCount: '7', unclassifiableHistoricalRecordCount: 267 }],
+    },
+  ])('coverage facts 非法时 fail-closed：$rows', async ({ rows }) => {
+    const query = createAuditCoverageDatabase(rows);
+
+    await expect(
+      createAuditEventRepository(query.database).readInstitutionAuditCoverage({
+        tenantId: 'demo-tenant-001',
+        institutionId: 'demo-institution-001',
+      }),
+    ).rejects.toThrow('INVALID_AUDIT_COVERAGE_FACTS');
   });
 
   it('platform scope 不由 parser 决定租户范围，可查询平台级事件或受控跨租户事件', async () => {

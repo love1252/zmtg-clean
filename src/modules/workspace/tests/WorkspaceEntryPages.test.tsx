@@ -1754,6 +1754,12 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
             limit: 50,
             nextCursor: null,
           },
+          coverage: {
+            state: 'partial_verified_only',
+            safeDataAvailable: auditEvents.length > 0,
+            historicalCoverageComplete: false,
+            partialCoverageSafe: true,
+          },
         });
       }
 
