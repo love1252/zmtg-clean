@@ -3,106 +3,70 @@
 ## 唯一技术任务
 
 ```text
-NEXT_TASK=POST-V2-R1C Audit Writer caller migration AUTH_LOGIN_NOT_APPLICABLE_V1 exact 2-file Runtime implementation explicit authorization
-CALLER_MIGRATION_RUNTIME_AUTHORIZED=false
+NEXT_TASK=POST-V2-R1C Audit Writer Historical Backfill explicit authorization
+HISTORICAL_BACKFILL_AUTHORIZED=false
+DATABASE_CONNECTION_AUTHORIZED=false
+DATABASE_WRITE_EXECUTION_AUTHORIZED=false
 PAGE_SYSTEM_AUDIT_RUNTIME_AUTHORIZED=false
 ```
-
-## S9 Admission 结论
-
-```text
-CALLER_MIGRATION_FRESH_AUDIT=passed
-COMPLETION_MODE=ADMISSION_READY_SPLIT
-MIGRATION_STRATEGY=SPLIT
-EXACT_RUNTIME_SCOPE_FROZEN=true
-FIRST_SLICE_EXACT_RUNTIME_ADMISSION=passed
-
-PRODUCTION_AUDIT_WRITER_CALLER_FILE_COUNT=19
-PRODUCTION_LEGACY_WRITER_CALLER_FILE_COUNT=19
-PRODUCTION_ATTRIBUTED_WRITER_CALLER_FILE_COUNT=0
-HELPER_CONSTRUCTION_CALLER_FILE_COUNT=16
-DIRECT_OBJECT_CONSTRUCTION_CALLER_FILE_COUNT=3
-TRANSACTIONAL_AUDIT_WRITER_CALLER_FILE_COUNT=10
-
-TARGET_VERIFIED_CALLER_FILE_COUNT=5
-TARGET_NOT_APPLICABLE_CALLER_FILE_COUNT=12
-BLOCKED_UNCLASSIFIED_CALLER_FILE_COUNT=2
-
-ADMITTED_SLICE_ID=AUTH_LOGIN_NOT_APPLICABLE_V1
-ADMITTED_CALLER_FILE_COUNT=1
-REMAINING_LEGACY_CALLER_FILE_COUNT_AFTER_SLICE=18
-EXACT_RUNTIME_FILE_COUNT=2
-EXISTING_RUNTIME_FILE_COUNT=2
-NEW_RUNTIME_FILE_COUNT=0
-DELETE_RUNTIME_FILE_COUNT=0
-EXACT_PRODUCTION_FILE_COUNT=1
-EXACT_TEST_FILE_COUNT=1
-
-SCHEMA_CHANGE_REQUIRED=false
-MIGRATION_REQUIRED=false
-DDL_REQUIRED=false
-DML_REQUIRED=false
-ARCHITECTURE_EXCEPTION_REQUIRED=false
-DATABASE_CONNECTION=false
-DATABASE_WRITE_EXECUTION=false
-```
-
-## Exact Runtime allowlist
-
-只允许下一次在取得用户明确授权后修改：
-
-1. `src/app/api/auth/login/route.ts`
-2. `src/modules/auth/tests/FormalAuthRoutes.test.ts`
-
-目标仅是把正式登录成功／失败审计从 legacy `record()` 迁移为 `not_applicable + recordAttributed()`，同时保持登录结果、Cookie、低敏响应、Audit failure isolation、数据库 query 基数与非事务语义不变。
-
-Admission（内含 canonical exact Runtime allowlist）：
-
-- `docs/operations/post-v2-r1c-audit-writer-classified-caller-migration-admission-20260813.md`
 
 ## 已完成前置
 
 ```text
-POST_V2_R1C_AUDIT_WRITER_SCOPE_PORT_RUNTIME=passed
-AUDIT_WRITER_SCOPE_PORT_RUNTIME_IMPLEMENTED=true
-AUDIT_WRITER_SCOPE_PORT_RUNTIME_VERIFIED=true
-AUDIT_WRITER_SCOPE_PORT_INDEPENDENT_VERIFICATION=passed
-AUDIT_WRITER_SCOPE_PORT_HANDOFF_COMPLETE=true
+S10_CALLER_MIGRATION_COMPLETE=true
+AUDIT_CALLER_MIGRATION_CLOSED=true
+AUDIT_WRITER_ATTRIBUTION_CLOSED=true
 
-POST_V2_R1C_AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME=passed
-AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME_IMPLEMENTED=true
-AUDIT_OWNER_ATTRIBUTION_CONTRACT_RUNTIME_VERIFIED=true
-AUDIT_OWNER_ATTRIBUTION_CONTRACT_INDEPENDENT_VERIFICATION=passed
-AUDIT_OWNER_ATTRIBUTION_CONTRACT_HANDOFF_COMPLETE=true
-AUDIT_OWNER_ATTRIBUTION_CONTRACT_CLOSED=true
+PRODUCTION_AUDIT_WRITER_CALLER_FILE_COUNT=19
+PRODUCTION_LEGACY_WRITER_CALLER_FILE_COUNT=0
+PRODUCTION_ATTRIBUTED_WRITER_CALLER_FILE_COUNT=19
+TARGET_VERIFIED_MIGRATED=5
+TARGET_NOT_APPLICABLE_MIGRATED=12
+ATTEMPTED_DENIAL_MIGRATED=2
+BLOCKED_UNCLASSIFIED_CALLER_FILE_COUNT=0
 
-LEGACY_CALLER_CAN_WRITE_VERIFIED=false
-LEGACY_UNATTRIBUTED_NEW_WRITE_ALLOWED=false
-AUDIT_CONTRACT_PROVES_FORMAL_SCOPE=false
-AUDIT_OWNER_IMPORTS_SCOPE_PORT=false
+FORMAL_SCOPE_RESOLUTION_CARDINALITY=exactly_once_per_top_level_operation
+FORMAL_SCOPE_REUSE_WITHIN_OPERATION_SAFE=true
 ```
 
-## 独立剩余 prerequisite
+S10 已把全部 19 个 production caller 迁移到 attributed persistence：5 个 verified、12 个 not-applicable、2 个 attempted-institution denial。新写入路径不再使用 legacy `record()`，但历史记录尚未分类。
 
-`followup-message-draft-api.ts` 与 `tenant-business-api.ts` 混有明确 institution 目标、但 formal scope 尚未成立时产生的拒绝事件。现有 attributed contract 不能安全表达 attempted institution provenance；不得伪标为 `verified` 或 `not_applicable`。该 prerequisite 不属于下一 Auth slice，后续必须单独 fresh audit + Admission。
+## Historical Backfill 重新授权要求
 
-## 停止边界
+下一任务涉及独立数据治理与数据库写权限，必须由用户重新明确授权；本 Handoff 不授权连接数据库、读取当前历史分布或执行任何回填。
 
-- 本 Handoff 不授权 caller Runtime migration；
-- 不得修改第 3 个 Runtime/Test 文件、S6 formal scope port 或 S8 Audit Owner contract；
-- 不得修改 Schema、Migration、Architecture rules、Workbench、Capability Authority 或 `page_system_audit`；
-- 不得连接 Staging / Production；
-- 不得执行 database connection/write、DDL/DML、historical backfill、页面发布或生产部署；
-- 只有用户对 exact 2-file scope 再次明确授权后才能开始 Runtime。
+新阶段开始时必须 fresh 决定：
+
+1. 允许连接的环境与只读审计范围；
+2. 历史记录的可证明分类规则、不可分类处理和审计证据；
+3. exact Schema / Migration / DDL / DML 边界；
+4. backfill dry-run、批次、幂等、回滚与 postcheck；
+5. `page_system_audit` release eligibility 是否需要在 backfill 后重新审计。
+
+继承的旧快照仅用于说明缺口，不构成当前数据库事实：此前 local-development readonly 观察到 275 条旧记录均未设置 institution attribution。下一阶段如获授权，必须重新读取并核验，不能直接以 275 作为执行输入。
+
+## 当前停止边界
+
+- 不得自动执行 Historical Backfill；
+- 不得连接任何数据库，不得执行 `SELECT`、`INSERT`、`UPDATE`、`DELETE`、DDL、DML、Migration 或 Seed；
+- 不得修改 Workbench、Capability Authority、`page_system_audit` 或 Audit Reader page shell；
+- 不得进入 Staging 或 Production；
+- 不得把 caller migration closure 推导为页面 release。
 
 ```text
-AUDIT_WRITER_ATTRIBUTION_CLOSED=false
-AUDIT_CALLER_MIGRATION_CLOSED=false
 HISTORICAL_BACKFILL_CLOSED=false
 WORKBENCH_MULTI_CAPABILITY_SAFE=false
 PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
 PAGE_SYSTEM_AUDIT_RELEASE=false
 REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+
+DATABASE_CONNECTION=false
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+MIGRATION=false
+DDL_EXECUTION=false
+DML_EXECUTION=false
+
 PRODUCTION_CHANGE=false
 PRODUCTION_DEPLOYMENT=false
 ```
