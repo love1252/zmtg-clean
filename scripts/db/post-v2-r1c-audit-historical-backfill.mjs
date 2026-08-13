@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto';
-import { constants as fsConstants } from 'node:fs';
+import {
+  constants as fsConstants,
+  readFileSync,
+  realpathSync,
+} from 'node:fs';
 import {
   lstat,
   open,
@@ -9,9 +13,13 @@ import {
   stat,
 } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import postgres from 'postgres';
+
+const RUNTIME_TOOL_SOURCE_PATH = realpathSync(fileURLToPath(import.meta.url));
+const RUNTIME_TOOL_SOURCE = readFileSync(RUNTIME_TOOL_SOURCE_PATH, 'utf8');
+const RUNNER_RELATIVE_PATH = 'scripts/db/post-v2-r1c-audit-historical-backfill.mjs';
 
 export const S11_TASK = 'POST_V2_R1C_AUDIT_WRITER_HISTORICAL_BACKFILL';
 export const S11_BASELINE = '5dedc54da98ee5a028216980049e245807630150';
@@ -20,7 +28,7 @@ export const EXECUTED_TOOLING_SHA = '54c191ec06b6d3766d990d8b8a12d44d5fd22516';
 export const EXECUTED_MANIFEST_DIGEST =
   '692be7b548fcb74c7079ad91c9c40e282ffcf91aa52fdb75641febbf04e4f632';
 export const EXECUTED_MANIFEST_COMPATIBLE_TOOL_SOURCE_DIGEST =
-  'f27432593cfe9c7d21e83a19d4ada611452d7d2e8a9c6ddad195e7d75be79a00';
+  'c284e51ba60b673c8c060dbcca7797703917537437e522f84380068af32ea001';
 
 const ALLOWED_DATABASE_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const MAX_MANIFEST_BYTES = 8 * 1024 * 1024;
@@ -854,15 +862,22 @@ export function getGitState(repositoryRoot) {
   const root = execFileSync('git', ['rev-parse', '--show-toplevel'], options).trim();
   if (resolve(root) !== resolve(repositoryRoot)) fail('unexpected_repository_root');
   if (status !== '') fail('worktree_not_clean');
-  const toolSource = execFileSync(
+  const headToolSource = execFileSync(
     'git',
-    ['show', `${codeSha}:scripts/db/post-v2-r1c-audit-historical-backfill.mjs`],
+    ['show', `${codeSha}:${RUNNER_RELATIVE_PATH}`],
     options,
   );
+  const expectedRuntimePath = realpathSync(resolve(root, RUNNER_RELATIVE_PATH));
+  const toolSourceDigest = assertRuntimeToolIdentity({
+    runtimePath: RUNTIME_TOOL_SOURCE_PATH,
+    expectedRuntimePath,
+    runtimeSource: RUNTIME_TOOL_SOURCE,
+    headToolSource,
+  });
   return {
     codeSha,
     repositoryRoot: root,
-    toolSourceDigest: compatibleToolSourceDigest(toolSource),
+    toolSourceDigest,
   };
 }
 
@@ -874,6 +889,19 @@ export function compatibleToolSourceDigest(source) {
     pattern,
     "export const EXECUTED_MANIFEST_COMPATIBLE_TOOL_SOURCE_DIGEST =\n  '<frozen-tool-source-digest>';",
   ));
+}
+
+export function assertRuntimeToolIdentity({
+  runtimePath,
+  expectedRuntimePath,
+  runtimeSource,
+  headToolSource,
+}) {
+  if (runtimePath !== expectedRuntimePath) fail('unexpected_runtime_tool_path');
+  const runtimeDigest = compatibleToolSourceDigest(runtimeSource);
+  const headDigest = compatibleToolSourceDigest(headToolSource);
+  if (runtimeDigest !== headDigest) fail('runtime_tool_source_drift');
+  return runtimeDigest;
 }
 
 export function assertValidatedManifestCodeCompatibility(

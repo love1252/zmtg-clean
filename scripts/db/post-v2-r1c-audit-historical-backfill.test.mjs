@@ -23,6 +23,7 @@ import {
   S11BackfillError,
   assertEnvironment,
   assertLoopbackDatabaseUrl,
+  assertRuntimeToolIdentity,
   assertValidatedManifestCodeCompatibility,
   buildLowSensitiveAggregates,
   buildManifest,
@@ -229,6 +230,33 @@ describe('S11 CLI 与环境门禁', () => {
       'export const EXECUTED_MANIFEST_COMPATIBLE_TOOL_SOURCE_DIGEST =',
       'export const REMOVED_TOOL_SOURCE_DIGEST =',
     ))).toThrow('invalid_tool_source_identity_marker');
+  });
+
+  it('实际加载的 runner path/source 必须与仓库 exact path 和 HEAD blob 一致', async () => {
+    const runtimePath = path.join(
+      REPOSITORY_ROOT,
+      'scripts/db/post-v2-r1c-audit-historical-backfill.mjs',
+    );
+    const runtimeSource = await readFile(runtimePath, 'utf8');
+    const inputs = {
+      runtimePath,
+      expectedRuntimePath: runtimePath,
+      runtimeSource,
+      headToolSource: runtimeSource,
+    };
+    expect(assertRuntimeToolIdentity(inputs))
+      .toBe(EXECUTED_MANIFEST_COMPATIBLE_TOOL_SOURCE_DIGEST);
+    expect(() => assertRuntimeToolIdentity({
+      ...inputs,
+      expectedRuntimePath: path.join(REPOSITORY_ROOT, 'scripts/db/different-runner.mjs'),
+    })).toThrow('unexpected_runtime_tool_path');
+    expect(() => assertRuntimeToolIdentity({
+      ...inputs,
+      runtimeSource: runtimeSource.replace(
+        'const MAX_MANIFEST_BYTES = 8 * 1024 * 1024;',
+        'const MAX_MANIFEST_BYTES = 7 * 1024 * 1024;',
+      ),
+    })).toThrow('runtime_tool_source_drift');
   });
 });
 
