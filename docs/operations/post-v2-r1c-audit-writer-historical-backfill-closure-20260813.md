@@ -12,13 +12,18 @@ TOOLING_HEAD=5220cab1892b3c89ecda0283e3c16929709e317e
 TOOLING_MERGE=54c191ec06b6d3766d990d8b8a12d44d5fd22516
 TOOLING_PR=1190
 INITIAL_HANDOFF_PR=1191
+INITIAL_HANDOFF_HEAD=542293d3c85950b5e667f594d4a7e4a0bdf62a13
+INITIAL_HANDOFF_MERGE=e2c9e32d7df8bba51a48c397beefa4ff02a55869
 PRE_CORRECTIVE_MAIN=e2c9e32d7df8bba51a48c397beefa4ff02a55869
 CORRECTIVE_RUNTIME_PR=1192
 CORRECTIVE_RUNTIME_HEAD=6661daac0b93848c58b995c2232fe8cbfb971464
 CORRECTIVE_RUNTIME_MERGE=82c2c6e24dd7a8463a77e8270040d7536dd9ad1a
+SECOND_CORRECTIVE_RUNTIME_PR=1194
+SECOND_CORRECTIVE_RUNTIME_HEAD=1d34c83c1f3d4af2bb66c2fbcacf41f833925c03
+SECOND_CORRECTIVE_RUNTIME_MERGE=bdd74e8957efb8e14b46905e911ed8b32ee14298
 FINAL_HANDOFF_PR=1193
-S11_PRS=1190,1191,1192,1193
-S11_PR_COUNT=4
+S11_PRS=1190,1191,1192,1193,1194
+S11_PR_COUNT=5
 S11_REQUIRED_CHECKS=passed
 
 FRESH_DATABASE_AUDIT=passed
@@ -118,7 +123,7 @@ audit_events.institution_attribution
 
 执行路径使用 merged tooling SHA、clean main、repo 外 0600 manifest、`SERIALIZABLE` transaction、exact cohort、当前 attribution precondition 与 `RETURNING event_id` count。首次 before-state execute 会重新计算同一 classification evidence；immutable 字段、Schema fingerprint、rule result、expected/actual count 任一漂移都会抛错并 rollback。final-state execute、postcheck 与 recovery 只依赖 manifest 中已冻结的 exact identity、immutable Audit digest 和 before/final attribution state，不会因后续正常业务操作改变可变 evidence 而失去恢复能力。
 
-PR #1192 另将原 tooling SHA 与原 manifest exact digest 绑定为唯一跨 corrective SHA 兼容项；任意其他旧 SHA 或 digest 仍 `code_sha_drift`。manifest target 同时按 lexical path 与 `realpath(parent) + basename` 做仓库包含检查，父目录 symlink 指回仓库时 fail-closed。
+PR #1192 将跨 corrective SHA 兼容限制到原 tooling SHA 与原 manifest exact digest，并让 manifest target 同时按 lexical path 与 `realpath(parent) + basename` 做仓库包含检查，父目录 symlink 指回仓库时 fail-closed。PR #1194 进一步把该兼容项绑定到已审查 runner 的 normalized full-source digest；module load 时捕获的实际执行文件 realpath/source 还必须精确匹配仓库 runner 路径与 clean HEAD blob。future runner drift，以及被 `assume-unchanged` / `skip-worktree` 隐藏的 filesystem drift，都会 fail-closed。
 
 执行证据：
 
@@ -129,7 +134,8 @@ PR #1192 另将原 tooling SHA 与原 manifest exact digest 绑定为唯一跨 c
 5. final re-apply：expected `8`、actual `8`；
 6. final postcheck：总行数仍为 `275`，non-attribution fields 与 unclassifiable 行未变化；
 7. 同一 `--execute` command 再运行：actual `0`，证明实际 DML no-op 幂等；
-8. corrective merge 后在 clean main 上使用原 manifest 再次 postcheck 通过，随后 actual execute 仍为 `0`，证明窄跨-SHA兼容到达同一 final state 且没有重复写入。
+8. PR #1192 corrective merge 后在 clean main 上使用原 manifest 再次 postcheck 通过，随后 actual execute 仍为 `0`；
+9. PR #1194 tool-identity corrective merge 后再次使用原 manifest postcheck 通过，actual execute 仍为 `0`，证明 exact runner identity 门禁到达同一 final state 且没有重复写入。
 
 未执行 `INSERT`、`DELETE`、Schema、Migration、DDL、Seed 或 historical guess update。
 
@@ -166,13 +172,19 @@ CORRECTIVE_RUNTIME_PR=1192
 CORRECTIVE_RUNTIME_HEAD=6661daac0b93848c58b995c2232fe8cbfb971464
 CORRECTIVE_RUNTIME_MERGE=82c2c6e24dd7a8463a77e8270040d7536dd9ad1a
 CORRECTIVE_REQUIRED_CHECK=passed
-CORRECTIVE_TEST_FILES=1
-CORRECTIVE_TESTS=34
+RUNNER_TEST_FILES=1
+RUNNER_TESTS=36
+
+SECOND_CORRECTIVE_EXACT_FILE_COUNT=2
+SECOND_CORRECTIVE_RUNTIME_PR=1194
+SECOND_CORRECTIVE_RUNTIME_HEAD=1d34c83c1f3d4af2bb66c2fbcacf41f833925c03
+SECOND_CORRECTIVE_RUNTIME_MERGE=bdd74e8957efb8e14b46905e911ed8b32ee14298
+SECOND_CORRECTIVE_REQUIRED_CHECK=passed
 
 TARGETED_TEST_FILES=10
-TARGETED_TESTS=126
+TARGETED_TESTS=128
 FULL_TEST_FILES=494
-FULL_TESTS=6743
+FULL_TESTS=6745
 TYPECHECK=passed
 ARCHITECTURE_UNIT=148/148 passed
 ARCHITECTURE_INCREMENTAL=passed
@@ -181,7 +193,7 @@ BUILD=passed
 PRODUCTION_READINESS_DOCS=8/8 passed
 GIT_DIFF_CHECK=passed
 
-S11_POST_MERGE_P2_DETECTED=4
+S11_POST_MERGE_P2_DETECTED=5
 PR1190_RECOVERY_P2_THREAD=PRRT_kwDOSrGMn86Y9qqF
 PR1190_RECOVERY_P2_THREAD_RESOLVED=true
 PR1190_MANIFEST_PATH_P2_THREAD=PRRT_kwDOSrGMn86Y9qqL
@@ -190,6 +202,8 @@ PR1191_REASON_AGGREGATE_P2_THREAD=PRRT_kwDOSrGMn86Y998t
 PR1191_REASON_AGGREGATE_P2_THREAD_RESOLVED=true
 PR1191_BACKFILL_PREREQUISITE_P2_THREAD=PRRT_kwDOSrGMn86Y998y
 PR1191_BACKFILL_PREREQUISITE_P2_THREAD_RESOLVED=true
+PR1192_TOOL_IDENTITY_P2_THREAD=PRRT_kwDOSrGMn86Y-m7M
+PR1192_TOOL_IDENTITY_P2_THREAD_RESOLVED=true
 S11_ACTIONABLE_P0_P1=0
 POST_MERGE_REVIEW_DEBT=0
 ```
