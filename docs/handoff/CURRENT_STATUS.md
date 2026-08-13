@@ -23,13 +23,13 @@
 - S10 Runtime：PR #1183、#1184、#1185、#1186、corrective #1188 均已合并；verified attribution、业务写与 Audit 写已绑定同一 transaction business pair，两个相关 P1 均已解决
 - S11：Historical Backfill tooling PR #1190、initial Handoff #1191 与 corrective Runtime #1192 已合并；在 merged clean main 的 local-development loopback PostgreSQL 上完成 fresh 275-row exact cohort、dry-run、8-row DML、actual recovery、final re-apply、postcheck 与 second-run no-op
 - S11 历史终态：7 `VERIFIED`、1 `NOT_APPLICABLE`、0 `ATTEMPTED_DENIAL`、267 `UNCLASSIFIABLE`；Historical Backfill governance 已闭环，不等于 Reader data readiness 或页面 release
-- S11 post-merge Review：#1190 两个 P2 已由 #1192 修复并解决；#1191 两个 docs P2 已在 final Handoff scope 修复，等待对应线程闭环
+- S11 post-merge Review：#1190 两个 P2 已由 #1192 修复并解决；#1191 两个 docs P2 已由 final Handoff #1193 修复并解决
 - 当前经审查接受的受治理只读页面切片：1 / 26
 - 剩余未放行页面：25
 - 受控创建能力放行：0 / 3
 - PR #1163 两个指定 P1：均已回复并解决，目标未解决线程数为 0
 - 审计读取器：机构范围 Reader 已实现，只消费正式 one-shot opaque context，并强制 tenant + institution + `verified`
-- Audit Writer caller migration / attribution 与 Historical Backfill：均已闭环；S11 final Handoff 合并及 Review sweep 完成前不宣称最终 Review debt=0
+- Audit Writer caller migration / attribution 与 Historical Backfill：均已闭环，S11 四个 post-merge P2 已实际修复并解决
 - Reader readiness：ready；Reader data readiness：false
 - 本地 postcheck：275 条审计记录中 `verified=7`、`not_applicable=1`、`attempted_denial=0`、`unclassifiable=267`；机构 Reader 对 1 个 active pair 可安全返回 7 行，但 residual 不允许宣称完整历史
 - Workbench multi-capability：当前不安全，第二条可见摘要仍会触发 `/hospital` 的 exact-one guard
@@ -104,9 +104,10 @@ S11_PRE_CORRECTIVE_MAIN=e2c9e32d7df8bba51a48c397beefa4ff02a55869
 S11_CORRECTIVE_RUNTIME_PR=1192
 S11_CORRECTIVE_RUNTIME_HEAD=6661daac0b93848c58b995c2232fe8cbfb971464
 S11_CORRECTIVE_RUNTIME_MERGE=82c2c6e24dd7a8463a77e8270040d7536dd9ad1a
-S11_FINAL_HANDOFF_PR=pending
-S11_PRS=1190,1191,1192,pending
+S11_FINAL_HANDOFF_PR=1193
+S11_PRS=1190,1191,1192,1193
 S11_PR_COUNT=4
+S11_REQUIRED_CHECKS=passed
 S11_TOOLING_REQUIRED_CHECK=passed
 S11_TOOLING_ACTIONABLE_P0_P1=0
 S11_CORRECTIVE_REQUIRED_CHECK=passed
@@ -143,11 +144,11 @@ PR1190_RECOVERY_P2_THREAD_RESOLVED=true
 PR1190_MANIFEST_PATH_P2_THREAD=PRRT_kwDOSrGMn86Y9qqL
 PR1190_MANIFEST_PATH_P2_THREAD_RESOLVED=true
 PR1191_REASON_AGGREGATE_P2_THREAD=PRRT_kwDOSrGMn86Y998t
-PR1191_REASON_AGGREGATE_P2_THREAD_RESOLVED=false
+PR1191_REASON_AGGREGATE_P2_THREAD_RESOLVED=true
 PR1191_BACKFILL_PREREQUISITE_P2_THREAD=PRRT_kwDOSrGMn86Y998y
-PR1191_BACKFILL_PREREQUISITE_P2_THREAD_RESOLVED=false
+PR1191_BACKFILL_PREREQUISITE_P2_THREAD_RESOLVED=true
 S11_ACTIONABLE_P0_P1=0
-POST_MERGE_REVIEW_DEBT=pending_final_handoff
+POST_MERGE_REVIEW_DEBT=0
 
 RUNTIME_EXACT_FILE_COUNT=8
 RUNTIME_PR=1169
