@@ -1,11 +1,11 @@
-# POST-V2-R1C Audit Writer caller migration Runtime 闭环报告
+# POST-V2-R1C Audit Writer caller migration Runtime closure 修正报告
 
 ## 结论
 
 ```text
 STAGE=S10
 TASK=POST_V2_R1C_AUDIT_WRITER_CALLER_MIGRATION_RUNTIME
-COMPLETION_MODE=COMPLETE
+COMPLETION_MODE=CORRECTIVE_RUNTIME_IN_PROGRESS
 
 BASELINE=ed211a5e2f236c13cab3fecba8d0831acd5218ee
 RUNTIME_FINAL_MAIN=124c79a3b121fa9d67dc7fc86847f244acc43ef2
@@ -18,16 +18,20 @@ TARGET_NOT_APPLICABLE_MIGRATED=12
 ATTEMPTED_DENIAL_MIGRATED=2
 BLOCKED_UNCLASSIFIED_CALLER_FILE_COUNT=0
 
-S10_RUNTIME_CHANGED_FILE_COUNT=33
-S10_TEST_CHANGED_FILE_COUNT=32
+S10_RUNTIME_CHANGED_FILE_COUNT=pending_corrective_recompute
+S10_TEST_CHANGED_FILE_COUNT=pending_corrective_recompute
 S10_DOC_CHANGED_FILE_COUNT=4
 
-AUDIT_CALLER_MIGRATION_CLOSED=true
-AUDIT_WRITER_ATTRIBUTION_CLOSED=true
-S10_CALLER_MIGRATION_COMPLETE=true
+AUDIT_CALLER_MIGRATION_CLOSED=false
+AUDIT_WRITER_ATTRIBUTION_CLOSED=false
+S10_CALLER_MIGRATION_COMPLETE=false
+S10_CORRECTIVE_RUNTIME_PR=1188
+S10_ACTIONABLE_P0_P1=1
+POST_MERGE_REVIEW_DEBT=1
+PR1186_P1_THREAD_RESOLVED=false
 ```
 
-S10 从 S9 的 canonical 19-row inventory 出发，在一个阶段内按风险拆成四个连续 Runtime PR，最终把所有 production caller 从 legacy persistence 迁移到 attributed contract。没有删除 legacy API 本身；残余为 production caller 使用量 0，而不是移除兼容接口。
+S10 从 S9 的 canonical 19-row inventory 出发，把所有 production caller 从 legacy persistence 迁移到 attributed contract；legacy residual=0 事实保持不变。但 PR #1186 post-merge P1 证明 WeCom verified attribution 尚未绑定 transaction callback 的 business pair，因此此前的 Runtime closure 结论无效。corrective Runtime PR #1188、指定 thread resolution、全 S10 Review sweep 与 merged-main 独立复核完成前，本报告保持 closure=false。
 
 ## 19-row 最终处置
 
@@ -67,7 +71,8 @@ ARCHITECTURE_EXCEPTION_REQUIRED=false
 ```
 
 - Care 与 WeCom orchestration 在进入 caller-provided transaction 前调用 `resolveInstitutionAuditWriterVerifiedAttributionV1()`；该入口内部只 resolve / consume 一次 S6 formal scope。
-- formal `tenantId + institutionId` 与已加载 draft、customer/mapping scope、dry-run scope 或 real-send locked object pair 不一致时 fail closed。
+- PR #1188 将 callback 可见的 customer repository 收窄为必要只读方法，并把 Safety 4 个写方法、Mapping 2 个写方法、Care metadata 写方法及 real-send repository 手工绑定到 formal/business `tenantId + institutionId`；任一 candidate pair 不一致时在触达底层 repository 前 fail closed。
+- 锁定 A/B 回归：business pair 为 `tenant-a/inst-a`、callback 尝试 `tenant-a/inst-b` 时，业务 writer=0、verified Audit writer=0、transaction callback 失败并回滚。
 - 一个 top-level operation 产生多个 Audit event 时复用同一个 opaque handle，不重复查询 Membership、Binding、Tenancy、customer ownership、appointment 或 mapping。
 - 原本同事务的 business mutation 与 Audit insert 继续使用 transaction database；Repository 不自行调用 `getDatabase()`、不开第二个 transaction。
 - 原本 best-effort 的 Auth、Platform 与 HIS path 保持原结果、HTTP、Cookie、低敏错误和 Audit failure isolation。
@@ -90,17 +95,21 @@ S10 只为 S9 已知两个 mixed pre-scope caller 扩展 Audit Owner：
 | #1184 | HIS `not_applicable` | `d09ec9d609aa02d6554f9e87d1a5d823b4647c32` | `a349d3a74e29742905c63d26a7f1605f2a6ec5ed` |
 | #1185 | two mixed attempted-denial callers | `89b95c5e0e10a30fe2246cbf45517ac12dfa0d88` | `25048c19c527dfe6f1d5b4b559802268c00a0cf0` |
 | #1186 | five verified Institution callers | `70a716ffc1d1dcc302dc06549b4f26a98fd5f6c0` | `124c79a3b121fa9d67dc7fc86847f244acc43ef2` |
+| #1188 | verified attribution business-pair corrective Runtime | pending | pending |
 
 ```text
-S10_RUNTIME_PR_COUNT=4
-S10_REQUIRED_CHECKS=passed
-S10_ACTIONABLE_P0_P1=0
-S10_RUNTIME_POST_MERGE_REVIEW_DEBT=0
+S10_RUNTIME_PR_COUNT=5
+S10_REQUIRED_CHECKS=pending
+S10_ACTIONABLE_P0_P1=1
+S10_RUNTIME_POST_MERGE_REVIEW_DEBT=1
 S10_HANDOFF_PR=1187
-S10_PR_COUNT=5
+S10_PR_COUNT=6
+S10_CORRECTIVE_RUNTIME_PR=1188
+PR1186_P1_THREAD=PRRT_kwDOSrGMn86Y6gdv
+PR1186_P1_THREAD_RESOLVED=false
 ```
 
-PR #1184 的 canonical tenant/user normalization Review 与 PR #1185 的 attempted-denial classification Review 均先通过同 scope commit 实际修复，再回复并解决；PR #1183 / #1186 无 actionable Review thread。四个 Runtime PR 合并后复扫均无 P0/P1/P2 debt。
+PR #1184 的 canonical tenant/user normalization Review 与 PR #1185 的 attempted-denial classification Review 均已闭环；PR #1186 当前存在指定 post-merge P1 `PRRT_kwDOSrGMn86Y6gdv`。只有 PR #1188 实际合并后才允许回复并解决该 thread，随后必须复扫全部 S10 PR。
 
 ## 验证
 
@@ -146,4 +155,4 @@ PRODUCTION_CHANGE=false
 PRODUCTION_DEPLOYMENT=false
 ```
 
-S10 只关闭新写入 caller migration；旧记录仍未 backfill，因此不能据此放行 `page_system_audit`。下一任务只能定义为 `POST-V2-R1C Audit Writer Historical Backfill explicit authorization`，不得自动执行。
+S10 corrective 只修正新写入路径的 verified attribution/business pair 绑定；旧记录仍未 backfill，且 closure 尚未恢复，因此不能据此放行 `page_system_audit`。corrective closure 完成后才可重新定义 `POST-V2-R1C Audit Writer Historical Backfill explicit authorization`，不得自动执行。
