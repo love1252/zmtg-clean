@@ -16,10 +16,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   CLASSIFICATION_RULES,
+  EXECUTED_MANIFEST_DIGEST,
+  EXECUTED_TOOLING_SHA,
   MANIFEST_VERSION,
   S11BackfillError,
   assertEnvironment,
   assertLoopbackDatabaseUrl,
+  assertValidatedManifestCodeCompatibility,
   buildLowSensitiveAggregates,
   buildManifest,
   canonicalJson,
@@ -174,6 +177,27 @@ describe('S11 CLI 与环境门禁', () => {
       .toThrow('exactly_one_mode_required');
     expect(() => parseCli(['--execute', '--manifest', '/tmp/x', '--force']))
       .toThrow('unknown_cli_argument');
+  });
+
+  it('只允许同 SHA manifest 或已执行 S11 manifest 的 exact digest 跨 corrective SHA', () => {
+    const manifest = manifestFor([loginRow()]);
+    expect(assertValidatedManifestCodeCompatibility(manifest, CODE_SHA)).toBe('exact_code_sha');
+
+    const executedManifest = {
+      ...manifest,
+      codeSha: EXECUTED_TOOLING_SHA,
+      manifestDigest: EXECUTED_MANIFEST_DIGEST,
+    };
+    expect(assertValidatedManifestCodeCompatibility(executedManifest, 'c'.repeat(40)))
+      .toBe('executed_s11_manifest');
+    expect(() => assertValidatedManifestCodeCompatibility(
+      { ...executedManifest, manifestDigest: 'd'.repeat(64) },
+      'c'.repeat(40),
+    )).toThrow('code_sha_drift');
+    expect(() => assertValidatedManifestCodeCompatibility(
+      { ...executedManifest, codeSha: 'e'.repeat(40) },
+      'c'.repeat(40),
+    )).toThrow('code_sha_drift');
   });
 });
 
@@ -373,6 +397,35 @@ describe('S11 exact cohort、幂等与 recovery state model', () => {
       .toThrow('attribution_state_drift');
     expect(() => validateCohortAgainstManifest([], manifest)).toThrow('historical_cohort_drift');
   });
+
+  it('final state 与 recovery restored state 不重新依赖可变业务 evidence', () => {
+    const row = evidenceRow('mapping', 'R-VERIFIED-MAPPING-OPERATION', 1).row;
+    const manifest = manifestFor([row]);
+    const target = manifest.rows[0];
+    const changedEvidence = {
+      ...row,
+      mapping_match_count: 0,
+      mapping_institution_count: 0,
+      mapping_institution_id: null,
+    };
+    const finalState = {
+      ...changedEvidence,
+      institution_id: target.targetInstitutionId,
+      institution_attribution: target.targetAttribution,
+    };
+    expect(validateCohortAgainstManifest([finalState], manifest)).toMatchObject({
+      beforeTargetCount: 0,
+      finalTargetCount: 1,
+    });
+    expect(() => validateCohortAgainstManifest([changedEvidence], manifest))
+      .toThrow('classification_evidence_drift');
+    expect(validateCohortAgainstManifest([changedEvidence], manifest, {
+      revalidateBeforeEvidence: false,
+    })).toMatchObject({
+      beforeTargetCount: 1,
+      finalTargetCount: 0,
+    });
+  });
 });
 
 describe('S11 repo 外 recovery manifest 安全', () => {
@@ -419,6 +472,20 @@ describe('S11 repo 外 recovery manifest 安全', () => {
     await link(filePath, hardlinkPath);
     await expect(readSecureManifest(filePath, REPOSITORY_ROOT))
       .rejects.toThrow('unsafe_manifest_file');
+  });
+
+  it('拒绝仓库外父目录 symlink 将 manifest 实际落入仓库', async () => {
+    const outsideDirectory = await secureTempDirectory();
+    const repositoryDirectory = await mkdtemp(path.join(REPOSITORY_ROOT, '.s11-private-test-'));
+    tempPaths.push(repositoryDirectory);
+    await chmod(repositoryDirectory, 0o700);
+    const linkedParent = path.join(outsideDirectory, 'linked-parent');
+    await symlink(repositoryDirectory, linkedParent, 'dir');
+    await expect(writeSecureManifest(
+      path.join(linkedParent, 'manifest.json'),
+      manifestFor([loginRow()]),
+      REPOSITORY_ROOT,
+    )).rejects.toThrow('manifest_must_be_outside_repository');
   });
 
   it('拒绝覆盖既有 manifest，防止替换已冻结 cohort', async () => {

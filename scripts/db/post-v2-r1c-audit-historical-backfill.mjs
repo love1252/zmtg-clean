@@ -8,7 +8,7 @@ import {
   realpath,
   stat,
 } from 'node:fs/promises';
-import { dirname, isAbsolute, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import postgres from 'postgres';
@@ -16,6 +16,9 @@ import postgres from 'postgres';
 export const S11_TASK = 'POST_V2_R1C_AUDIT_WRITER_HISTORICAL_BACKFILL';
 export const S11_BASELINE = '5dedc54da98ee5a028216980049e245807630150';
 export const MANIFEST_VERSION = 'post-v2-r1c-audit-historical-backfill/v1';
+export const EXECUTED_TOOLING_SHA = '54c191ec06b6d3766d990d8b8a12d44d5fd22516';
+export const EXECUTED_MANIFEST_DIGEST =
+  '692be7b548fcb74c7079ad91c9c40e282ffcf91aa52fdb75641febbf04e4f632';
 
 const ALLOWED_DATABASE_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const MAX_MANIFEST_BYTES = 8 * 1024 * 1024;
@@ -777,14 +780,22 @@ async function assertSecureManifestParent(filePath, repositoryRoot) {
   const normalized = resolve(filePath);
   const repo = await realpath(repositoryRoot);
   const parent = await realpath(dirname(normalized));
-  const relation = relative(repo, normalized);
-  if (relation === '' || (!relation.startsWith('..') && !isAbsolute(relation))) {
+  const resolvedTarget = resolve(parent, basename(normalized));
+  const isInsideRepository = (target) => {
+    const relation = relative(repo, target);
+    return relation === '' || (
+      relation !== '..' &&
+      !relation.startsWith(`..${sep}`) &&
+      !isAbsolute(relation)
+    );
+  };
+  if (isInsideRepository(normalized) || isInsideRepository(resolvedTarget)) {
     fail('manifest_must_be_outside_repository');
   }
   const parentInfo = await stat(parent);
   if (!parentInfo.isDirectory() || parentInfo.uid !== process.getuid()) fail('unsafe_manifest_parent');
   if ((parentInfo.mode & 0o077) !== 0) fail('manifest_parent_permissions_too_open');
-  return normalized;
+  return resolvedTarget;
 }
 
 export async function writeSecureManifest(filePath, manifest, repositoryRoot) {
@@ -844,6 +855,15 @@ export function getGitState(repositoryRoot) {
   return { codeSha, repositoryRoot: root };
 }
 
+export function assertValidatedManifestCodeCompatibility(manifest, currentCodeSha) {
+  if (manifest.codeSha === currentCodeSha) return 'exact_code_sha';
+  if (
+    manifest.codeSha === EXECUTED_TOOLING_SHA &&
+    manifest.manifestDigest === EXECUTED_MANIFEST_DIGEST
+  ) return 'executed_s11_manifest';
+  fail('code_sha_drift');
+}
+
 export function assertEnvironment(environment) {
   if (environment !== 'local_development') fail('non_local_development_environment_refused');
 }
@@ -881,7 +901,11 @@ function sameAttributionState(row, institutionId, attribution) {
     (row.institution_attribution ?? null) === attribution;
 }
 
-export function validateCohortAgainstManifest(rows, manifest) {
+export function validateCohortAgainstManifest(
+  rows,
+  manifest,
+  { revalidateBeforeEvidence = true } = {},
+) {
   if (rows.length !== manifest.rows.length) fail('historical_cohort_drift');
   const rowById = new Map(rows.map((row) => [row.event_id, row]));
   let beforeTargetCount = 0;
@@ -905,18 +929,20 @@ export function validateCohortAgainstManifest(rows, manifest) {
       if (!before && !final) fail('attribution_state_drift');
       if (before) beforeTargetCount += 1;
       if (final) finalTargetCount += 1;
-      const original = {
-        ...current,
-        institution_id: planned.beforeInstitutionId,
-        institution_attribution: planned.beforeAttribution,
-      };
-      const [reclassified] = classifySnapshotRows([original]).entries;
-      if (
-        reclassified.ruleId !== planned.ruleId ||
-        reclassified.targetClass !== planned.targetClass ||
-        reclassified.targetInstitutionId !== planned.targetInstitutionId ||
-        reclassified.targetAttribution !== planned.targetAttribution
-      ) fail('classification_evidence_drift');
+      if (before && revalidateBeforeEvidence) {
+        const original = {
+          ...current,
+          institution_id: planned.beforeInstitutionId,
+          institution_attribution: planned.beforeAttribution,
+        };
+        const [reclassified] = classifySnapshotRows([original]).entries;
+        if (
+          reclassified.ruleId !== planned.ruleId ||
+          reclassified.targetClass !== planned.targetClass ||
+          reclassified.targetInstitutionId !== planned.targetInstitutionId ||
+          reclassified.targetAttribution !== planned.targetAttribution
+        ) fail('classification_evidence_drift');
+      }
     } else if (!before) {
       fail('non_target_attribution_drift');
     }
@@ -1113,7 +1139,9 @@ async function postcheck({ client, manifest }) {
   if (fingerprint !== manifest.schemaFingerprint) fail('schema_fingerprint_drift');
   const result = await client.begin('isolation level repeatable read read only', async (sql) => {
     const rows = await fetchCohortRows(sql, manifest.rows.map((row) => row.eventId));
-    const state = validateCohortAgainstManifest(rows, manifest);
+    const state = validateCohortAgainstManifest(rows, manifest, {
+      revalidateBeforeEvidence: false,
+    });
     if (state.finalTargetCount !== manifest.expectedUpdateCount) fail('postcheck_not_fully_applied');
     const [{ count: currentTotalRaw }] = await sql.unsafe(
       'SELECT count(*)::int AS count FROM audit_events',
@@ -1142,7 +1170,9 @@ async function recover({ client, manifest }) {
       await recoverNotApplicable(sql, manifest.rows);
     if (actual !== manifest.expectedUpdateCount) fail('recovery_affected_count_mismatch');
     const restored = await fetchCohortRows(sql, manifest.rows.map((row) => row.eventId));
-    const restoredState = validateCohortAgainstManifest(restored, manifest);
+    const restoredState = validateCohortAgainstManifest(restored, manifest, {
+      revalidateBeforeEvidence: false,
+    });
     if (restoredState.beforeTargetCount !== manifest.expectedUpdateCount) {
       fail('recovery_post_state_mismatch');
     }
@@ -1168,7 +1198,7 @@ export async function runCli({
   let manifest = null;
   if (command.mode !== 'dry-run') {
     manifest = await readSecureManifest(command.manifestPath, git.repositoryRoot);
-    if (manifest.codeSha !== git.codeSha) fail('code_sha_drift');
+    assertValidatedManifestCodeCompatibility(manifest, git.codeSha);
   }
   const client = createClient(databaseUrl);
   try {
