@@ -3,11 +3,18 @@
 ## 下一任务选择状态
 
 ```text
-NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_AI_USAGE_READONLY_FIRST_SLICE_FRESH_ADMISSION
+NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_AI_USAGE_READONLY_LOCAL_DEVELOPMENT_DB_READINESS_REAUDIT
 NEXT_STAGE=UNASSIGNED
 NEXT_TASK_AUTHORIZED=false
 NEXT_TASK_SELECTION_REQUIRED=false
 NEXT_STAGE_AUTO_EXECUTION=false
+S20_COMPLETION_MODE=ADMISSION_COMPLETE_BLOCKED
+S20_SYS01_FRESH_ADMISSION=passed
+SYS01_RUNTIME_ADMISSION_READY=false
+SYS01_DATA_READINESS=unavailable
+SYS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
+SYS01_EXACT_RUNTIME_FILE_COUNT=0
+PRIMARY_BLOCKING_PREREQUISITE=local_development_postgresql_127_0_0_1_55433_available_for_transaction_read_only_SYS01_cohort_audit
 S19_COMPLETE=true
 POST_V2_R1C_COMPLETE=true
 POST_V2_R1C_FORMAL_CLOSURE=true
@@ -17,21 +24,22 @@ SELECTED_FIRST_STREAM=system
 SECOND_CANDIDATE=customers
 FIRST_STREAM_FIRST_SLICE=SYS_01_AI_USAGE_READONLY_FRESH_ADMISSION
 FIRST_STREAM_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
-FIRST_STREAM_FRESH_ADMISSION_REQUIRED=true
+FIRST_STREAM_FRESH_ADMISSION_COMPLETE=true
+FIRST_STREAM_FRESH_ADMISSION_REQUIRED=false
 FIRST_STREAM_DB_READ_PREREQUISITE=true
 POST_R1C_DEFAULT_MODE=business_slice_delivery
 S18_COMPLETE=true
 SEVEN_STREAM_DEVELOPMENT_AUTHORIZED=false
-DATABASE_CONNECTION_AUTHORIZED=false
+DATABASE_CONNECTION_AUTHORIZED=requires_explicit_next_task_authorization
 DATABASE_WRITE_EXECUTION_AUTHORIZED=false
 PAGE_SYSTEM_AUDIT_RUNTIME_RELEASE_COMPLETE=true
 ```
 
-S19 已正式结束 POST-V2-R1C，并将项目默认模式切换为有限业务切片交付。七条完整业务线仍为 0/7 released；首选 system，第二候选 customers。
+S20 已完成 SYS-01 的 fresh source/ownership、Reader、API/page/capability、角色、低敏 DTO 与静态隔离审计。实际 local-development PostgreSQL `127.0.0.1:55433` 当前没有 listener，连接在 transaction 与任何 SQL 之前即 `ECONNREFUSED`，因此实际 cohort、历史覆盖、unknown service/status、metric validity 与 tenant/institution pair integrity 均不可验证。
 
-下一原子任务只允许 fresh 审计 SYS-01 AI usage read-only 的权威 source、formal composition、角色策略、低敏 DTO、canonical page、数据库 cohort/data readiness 与 exact Runtime allowlist。当前 /api/institution/ai-service-usage 仍 capability-off，S19 未连接数据库，也未冻结 Runtime allowlist；因此不得直接实现 Runtime、Schema/Migration、Staging 或 Production。
+下一原子任务只能在新的明确授权下，让当前项目 local-development PostgreSQL 可连接后重跑 transaction-read-only metadata/aggregate cohort audit；仍不得写数据库、执行 Schema/Migration/DDL/DML/Seed 或实现 Runtime。只有实际 readiness 证据通过后，才可重新决定是否冻结 exact Runtime allowlist。
 
-完整入口证据：docs/operations/post-v2-r1c-final-closure-seven-stream-entry-audit-20260814.md。
+S20 canonical evidence：`docs/operations/seven-stream-system-sys01-ai-usage-readonly-fresh-admission-20260815.md`。
 
 ## S18 exact 5-file Runtime 最终发布闭环
 

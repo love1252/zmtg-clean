@@ -1,5 +1,43 @@
 # 智美天工架构文档索引
 
+<!-- SEVEN_STREAM_SYSTEM_SYS01_AI_USAGE_READONLY_ADMISSION_START -->
+
+## System SYS-01 AI 使用只读 fresh Admission（2026-08-15）
+
+```text
+STAGE=S20
+STREAM=system
+SLICE=SYS_01_AI_USAGE_READONLY
+COMPLETION_MODE=ADMISSION_COMPLETE_BLOCKED
+BASELINE=d2ae875cb75bda0c09aaa86d0cc410bf94f0dd78
+
+SYS01_FRESH_ADMISSION=passed
+SYS01_RUNTIME_ADMISSION_READY=false
+SYS01_DATA_READINESS=unavailable
+SYS01_SCHEMA_CHANGE_REQUIRED=false
+SYS01_MIGRATION_REQUIRED=false
+SYS01_DML_BACKFILL_REQUIRED=false
+SYS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
+SYS01_EXACT_RUNTIME_FILE_COUNT=0
+
+AI_USAGE_FACT_DATA_OWNER=analytics
+AI_USAGE_READ_MODEL_OWNER=institution-system
+SYS01_FORMAL_COMPOSITION_OWNER=src/server/orchestration
+SYS01_CANONICAL_API=/api/v1/institution/ai-service-usage
+SYS01_CAPABILITY_KEY=page_system_ai_usage
+SYS01_CURRENT_CAPABILITY_STATE=hidden/not_released
+
+PRIMARY_BLOCKING_PREREQUISITE=local_development_postgresql_127_0_0_1_55433_available_for_transaction_read_only_SYS01_cohort_audit
+NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_AI_USAGE_READONLY_LOCAL_DEVELOPMENT_DB_READINESS_REAUDIT
+NEXT_TASK_AUTHORIZED=false
+```
+
+S20 已完成 SYS-01 的 current-main source、ownership、Reader、API/page/capability、角色、低敏 DTO 与静态隔离审计。local-development PostgreSQL 在任何 SQL 执行前拒绝连接，因此实际 cohort、历史覆盖与 pair integrity 均不可验证；Runtime Admission 保持 blocked，exact allowlist 不冻结。
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-ai-usage-readonly-fresh-admission-20260815.md`。
+
+<!-- SEVEN_STREAM_SYSTEM_SYS01_AI_USAGE_READONLY_ADMISSION_END -->
+
 <!-- POST_V2_R1C_FINAL_CLOSURE_SEVEN_STREAM_ENTRY_START -->
 
 ## POST-V2-R1C 最终收口与七条业务线开发入口（2026-08-14）
