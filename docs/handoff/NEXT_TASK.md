@@ -13,14 +13,18 @@ DATABASE_WRITE_EXECUTION_AUTHORIZED=false
 PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
 ```
 
-S15 fresh audit 已证明可信 current role 存在并选择 `admin_only_v1`，Audit-specific orchestration owner 与 exact 6-file Runtime allowlist 已冻结。S15 没有实施 Runtime，因此 `GET /api/institution/audit-events` blocker 与 S14 security blocker 仍开放；`page_system_audit` 继续 `hidden/not_released`。唯一下一任务是 S16 exact Runtime implementation，尚未授权。
+S15 fresh audit、exact 6-file Runtime Admission 与 docs-only Handoff 已闭环：可信 current role 存在，选择 `admin_only_v1` 与 Audit-specific orchestration owner。S15 没有实施 Runtime，因此 `GET /api/institution/audit-events` blocker 与 S14 security blocker 仍开放；`page_system_audit` 继续 `hidden/not_released`。唯一下一任务是 S16 exact Runtime implementation，尚未授权。
 
 ## S15 fresh audit 与 exact Runtime Admission
 
 ```text
 STAGE=S15
 TASK=POST_V2_R1C_TRUSTED_ROLE_AWARE_AUDIT_READ_AUTHORIZATION_FRESH_AUDIT_EXACT_RUNTIME_ADMISSION
-COMPLETION_MODE=ADMISSION_READY
+COMPLETION_MODE=COMPLETE
+S15_COMPLETE=true
+S15_FORMAL_CLOSURE=true
+EXACT_ADMISSION_MARKDOWN_FILE_COUNT=5
+S15_FINAL_HANDOFF_MARKDOWN_FILE_COUNT=5
 BASELINE=7bbec7f7eaaf870063ecd12bf971d949c7a173fc
 
 FRESH_ROLE_AUTHORIZATION_AUDIT=passed
@@ -75,11 +79,19 @@ ARCHITECTURE_INCREMENTAL=passed
 PRODUCTION_READINESS_DOCS=8/8 passed
 GIT_DIFF_CHECK=passed
 S15_ADMISSION_PR=1208
-S15_PR_COUNT=1
-S15_PRS=1208
-S15_REQUIRED_CHECKS=pending
-S15_ACTIONABLE_P0_P1=pending
-POST_MERGE_REVIEW_DEBT=pending
+S15_ADMISSION_HEAD=44d23e7ad41dbb22f315504333097b08279f2210
+S15_ADMISSION_MERGE=e55823834130cf373043cee98228156c689d3147
+S15_ADMISSION_REQUIRED_CHECK=passed
+S15_ADMISSION_ACTIONABLE_P0_P1=0
+S15_ADMISSION_POST_MERGE_REVIEW_DEBT=0
+S15_FINAL_HANDOFF_PR=1209
+S15_FINAL_HANDOFF_REQUIRED_CHECK=passed
+S15_PR_COUNT=2
+S15_PRS=1208,1209
+S15_REQUIRED_CHECKS=passed
+S15_ACTIONABLE_P0_P1=0
+S15_ACTIONABLE_P0_P1_P2_P3=0
+POST_MERGE_REVIEW_DEBT=0
 ```
 
 Exact Runtime allowlist：

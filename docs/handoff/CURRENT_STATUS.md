@@ -11,7 +11,7 @@
 - POST-V2-R1C 错误放行尝试：精确 4 文件 Runtime 回滚、独立验证及两个指定 P1 审查线程均已完成治理收尾
 - POST-V2-R1C Audit Reader Foundation：exact 8-file Runtime、Required Check、合并后独立验证与 Handoff 均已闭环
 - POST-V2-R1C `page_system_audit`：S14 initial exact-5 release 已由 #1204 按 exact-5 rollback 恢复为 `hidden/not_released`；页面 exposure expansion 已撤销，但 Audit API 仍存在可信角色感知读取授权 blocker，S14 未完成、blocker 未关闭
-- POST-V2-R1C Trusted Role-Aware Audit Read Authorization：S15 fresh audit 已证明 authoritative current role 可复用，选择 `admin_only_v1` 与 Audit-specific orchestration owner，冻结 exact 6-file Runtime Admission；Runtime 未实施，S14 blocker 仍开放
+- POST-V2-R1C Trusted Role-Aware Audit Read Authorization：S15 fresh audit、exact 6-file Runtime Admission 与两个 docs-only PR 已闭环；选择 `admin_only_v1` 与 Audit-specific orchestration owner，Runtime 未实施，S14 blocker 仍开放
 - S4 Phase 0：PR #1172 已修正 Handoff 授权来源与页面授权状态，PR #1171 两个 post-merge Review thread 已回复并解决
 - S4 Phase 1 / S5 Phase 0 修正：Audit Writer attribution fresh audit 已通过；重新核算为 19 个生产 caller 与 10 个 transaction persistence / composition 点，完整 closure 仍必须拆分
 - S5 Phase 0：caller inventory docs-only follow-up PR #1174 已合并；合并后仅回复并解决 PR #1173 指定 Review thread
@@ -398,7 +398,11 @@ DATABASE_CONNECTION_AUTHORIZED=false
 DATABASE_WRITE_EXECUTION_AUTHORIZED=false
 PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
 
-S15_COMPLETION_MODE=ADMISSION_READY
+S15_COMPLETION_MODE=COMPLETE
+S15_COMPLETE=true
+S15_FORMAL_CLOSURE=true
+S15_EXACT_ADMISSION_MARKDOWN_FILE_COUNT=5
+S15_FINAL_HANDOFF_MARKDOWN_FILE_COUNT=5
 S15_BASELINE=7bbec7f7eaaf870063ecd12bf971d949c7a173fc
 FRESH_ROLE_AUTHORIZATION_AUDIT=passed
 TRUSTED_ROLE_SOURCE_EXISTS=true
@@ -439,11 +443,19 @@ S15_ARCHITECTURE_INCREMENTAL=passed
 S15_PRODUCTION_READINESS_DOCS=8/8 passed
 S15_GIT_DIFF_CHECK=passed
 S15_ADMISSION_PR=1208
-S15_PR_COUNT=1
-S15_PRS=1208
-S15_REQUIRED_CHECKS=pending
-S15_ACTIONABLE_P0_P1=pending
-S15_POST_MERGE_REVIEW_DEBT=pending
+S15_ADMISSION_HEAD=44d23e7ad41dbb22f315504333097b08279f2210
+S15_ADMISSION_MERGE=e55823834130cf373043cee98228156c689d3147
+S15_ADMISSION_REQUIRED_CHECK=passed
+S15_ADMISSION_ACTIONABLE_P0_P1=0
+S15_ADMISSION_POST_MERGE_REVIEW_DEBT=0
+S15_FINAL_HANDOFF_PR=1209
+S15_FINAL_HANDOFF_REQUIRED_CHECK=passed
+S15_PR_COUNT=2
+S15_PRS=1208,1209
+S15_REQUIRED_CHECKS=passed
+S15_ACTIONABLE_P0_P1=0
+S15_ACTIONABLE_P0_P1_P2_P3=0
+S15_POST_MERGE_REVIEW_DEBT=0
 PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
 PAGE_SYSTEM_AUDIT_RELEASE=false
 PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=false
