@@ -3,17 +3,95 @@
 ## 下一任务选择状态
 
 ```text
-NEXT_TASK=POST-V2-R1C Trusted Role-Aware Audit Read Authorization fresh audit + exact Runtime admission
-NEXT_STAGE=S15
+NEXT_TASK=POST-V2-R1C Trusted Role-Aware Audit Read Authorization exact Runtime implementation explicit authorization
+NEXT_STAGE=S16
 NEXT_TASK_AUTHORIZED=false
 NEXT_TASK_SELECTION_REQUIRED=false
-S15_RUNTIME_AUTHORIZED=false
+S16_RUNTIME_AUTHORIZED=false
 DATABASE_CONNECTION_AUTHORIZED=false
 DATABASE_WRITE_EXECUTION_AUTHORIZED=false
 PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
 ```
 
-S14 initial release 已安全回滚；当前经审查接受的受治理只读页面仍为 1 / 26，`page_system_audit` 为 `hidden/not_released`。页面 Route 已撤销，但 `GET /api/institution/audit-events` 仍存在可信角色感知读取授权 blocker。唯一下一任务已冻结为 S15 fresh audit + exact Runtime Admission，尚未授权。
+S15 fresh audit 已证明可信 current role 存在并选择 `admin_only_v1`，Audit-specific orchestration owner 与 exact 6-file Runtime allowlist 已冻结。S15 没有实施 Runtime，因此 `GET /api/institution/audit-events` blocker 与 S14 security blocker 仍开放；`page_system_audit` 继续 `hidden/not_released`。唯一下一任务是 S16 exact Runtime implementation，尚未授权。
+
+## S15 fresh audit 与 exact Runtime Admission
+
+```text
+STAGE=S15
+TASK=POST_V2_R1C_TRUSTED_ROLE_AWARE_AUDIT_READ_AUTHORIZATION_FRESH_AUDIT_EXACT_RUNTIME_ADMISSION
+COMPLETION_MODE=ADMISSION_READY
+BASELINE=7bbec7f7eaaf870063ecd12bf971d949c7a173fc
+
+FRESH_ROLE_AUTHORIZATION_AUDIT=passed
+TRUSTED_ROLE_SOURCE_EXISTS=true
+TRUSTED_ROLE_SOURCE_OWNER=Access Control authoritative Membership/Binding owner via Auth formal institution session context
+TRUSTED_ROLE_SOURCE_PROVENANCE_VERIFIED=true
+TRUSTED_FORMAL_SESSION_ROLE_ALREADY_AVAILABLE=true
+TRUSTED_ROLE_DROPPED_BEFORE_AUDIT_READER=true
+CURRENT_AUDIT_READ_ROLE_AUTHORIZATION_SAFE=false
+
+SELECTED_AUTHORIZATION_STRATEGY=admin_only_v1
+ROLE_AWARE_AUDIT_READ_AUTHORIZATION_OWNER=src/server/orchestration/institution-audit-read-authorization.ts
+ADMIN_ONLY_CAN_CLOSE_BLOCKER=true
+OPERATOR_LIMITED_REQUIRED=false
+OPERATOR_LIMITED_OVERDEVELOPMENT=true
+
+GENERIC_SECTION_GUARD_CHANGE_REQUIRED=false
+INSTITUTION_SERVER_RUNTIME_CHANGE_REQUIRED=false
+AUDIT_READER_CHANGE_REQUIRED=true
+AUDIT_API_ROUTE_CHANGE_REQUIRED=true
+AUDIT_REPOSITORY_CHANGE_REQUIRED=false
+PUBLIC_CONTRACT_CHANGE_REQUIRED=false
+CALLER_ROLE_IS_AUTHORIZATION_SIGNAL=false
+CALLER_ACTOR_ID_IS_AUTHORIZATION_SIGNAL=false
+
+PRODUCTION_AUDIT_READER_CALLER_COUNT=1
+PRODUCTION_AUDIT_READER_CALLERS=src/app/api/institution/audit-events/route.ts
+
+EXACT_RUNTIME_ALLOWLIST_FROZEN=true
+EXACT_RUNTIME_FILE_COUNT=6
+EXACT_RUNTIME_EXISTING_FILE_COUNT=4
+EXACT_RUNTIME_NEW_FILE_COUNT=2
+EXACT_PRODUCTION_FILE_COUNT=3
+EXACT_TEST_FILE_COUNT=3
+TRUSTED_ROLE_AWARE_AUDIT_READ_AUTHORIZATION_ADMISSION_READY=true
+
+S15_RUNTIME_IMPLEMENTED=false
+S15_RUNTIME_AUTHORIZED=false
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=false
+PAGE_SYSTEM_AUDIT_RUNTIME_READMISSION_READY=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+S14_SECURITY_BLOCKER_OPEN=true
+S13_EXACT_5_RELEASE_ADMISSION_REUSABLE_WITHOUT_FRESH_READMISSION=false
+
+TARGETED_TEST_FILES=10
+TARGETED_TESTS=325/325 passed
+TYPECHECK=passed
+ARCHITECTURE_UNIT=148/148 passed
+ARCHITECTURE_INCREMENTAL=passed
+PRODUCTION_READINESS_DOCS=8/8 passed
+GIT_DIFF_CHECK=passed
+S15_ADMISSION_PR=1208
+S15_PR_COUNT=1
+S15_PRS=1208
+S15_REQUIRED_CHECKS=pending
+S15_ACTIONABLE_P0_P1=pending
+POST_MERGE_REVIEW_DEBT=pending
+```
+
+Exact Runtime allowlist：
+
+1. `src/server/orchestration/institution-audit-read-authorization.ts`（new production）；
+2. `src/server/orchestration/institution-audit-read-authorization.test.ts`（new test）；
+3. `src/server/orchestration/institution-audit-reader.ts`（existing production）；
+4. `src/server/orchestration/institution-audit-reader.test.ts`（existing test）；
+5. `src/app/api/institution/audit-events/route.ts`（existing production）；
+6. `src/modules/audit/tests/InstitutionAuditEventsApiRoute.test.ts`（existing test）。
+
+完整证据与唯一 canonical allowlist：`docs/operations/post-v2-r1c-trusted-role-aware-audit-read-authorization-admission-20260814.md`。
 
 ## S14 安全回滚与阻断交接状态
 
@@ -131,25 +209,6 @@ PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
 - S13 exact-5 Admission 不得自动重放；下一任务固定为 S15 fresh Admission，`NEXT_TASK_AUTHORIZED=false`。
 
 闭环证据：`docs/operations/post-v2-r1c-page-system-audit-exact-runtime-release-closure-20260814.md`。
-
-## S15 待授权 fresh audit 边界
-
-S15 只定义、不在 S14 执行。fresh audit 必须回答：
-
-1. 可信 current-role 信号从哪里获得，既有 formal server authorization 能否安全携带 role；
-2. `tenant_admin` / `tenant_operator` 如何可靠区分，Route、Reader、Repository 中哪个 owner 承担授权；
-3. 最小安全路线是 admin-only 还是 operator-limited；若允许 operator，是否只读本人 `actorId` 及获授权 module/resource；
-4. caller/query role 与 caller-provided `actorId` 如何明确排除为授权信号；
-5. 是否需要 public contract、Reader 或 Repository change，以及 fresh exact Runtime allowlist。
-
-```text
-NEXT_STAGE=S15
-NEXT_TASK_AUTHORIZED=false
-S15_RUNTIME_AUTHORIZED=false
-DATABASE_CONNECTION_AUTHORIZED=false
-DATABASE_WRITE_EXECUTION_AUTHORIZED=false
-PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
-```
 
 ## S13 完整闭环状态
 

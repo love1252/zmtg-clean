@@ -1,5 +1,88 @@
 # 项目重构历史
 
+<!-- POST_V2_R1C_TRUSTED_ROLE_AWARE_AUDIT_READ_AUTHORIZATION_ADMISSION_HISTORY -->
+
+## 2026-08-14：POST-V2-R1C 可信角色感知 Audit 读取授权 fresh audit 与精确 Runtime 准入
+
+```text
+STAGE=S15
+TASK=POST_V2_R1C_TRUSTED_ROLE_AWARE_AUDIT_READ_AUTHORIZATION_FRESH_AUDIT_EXACT_RUNTIME_ADMISSION
+COMPLETION_MODE=ADMISSION_READY
+BASELINE=7bbec7f7eaaf870063ecd12bf971d949c7a173fc
+
+FRESH_ROLE_AUTHORIZATION_AUDIT=passed
+TRUSTED_ROLE_SOURCE_EXISTS=true
+TRUSTED_ROLE_SOURCE_PROVENANCE_VERIFIED=true
+TRUSTED_FORMAL_SESSION_ROLE_ALREADY_AVAILABLE=true
+TRUSTED_ROLE_DROPPED_BEFORE_AUDIT_READER=true
+CURRENT_AUDIT_READ_ROLE_AUTHORIZATION_SAFE=false
+
+SELECTED_AUTHORIZATION_STRATEGY=admin_only_v1
+ROLE_AWARE_AUDIT_READ_AUTHORIZATION_OWNER=src/server/orchestration/institution-audit-read-authorization.ts
+ADMIN_ONLY_CAN_CLOSE_BLOCKER=true
+OPERATOR_LIMITED_REQUIRED=false
+OPERATOR_LIMITED_OVERDEVELOPMENT=true
+
+GENERIC_SECTION_GUARD_CHANGE_REQUIRED=false
+INSTITUTION_SERVER_RUNTIME_CHANGE_REQUIRED=false
+AUDIT_READER_CHANGE_REQUIRED=true
+AUDIT_API_ROUTE_CHANGE_REQUIRED=true
+AUDIT_REPOSITORY_CHANGE_REQUIRED=false
+PUBLIC_CONTRACT_CHANGE_REQUIRED=false
+
+PRODUCTION_AUDIT_READER_CALLER_COUNT=1
+PRODUCTION_AUDIT_READER_CALLERS=src/app/api/institution/audit-events/route.ts
+CALLER_ROLE_IS_AUTHORIZATION_SIGNAL=false
+CALLER_ACTOR_ID_IS_AUTHORIZATION_SIGNAL=false
+
+EXACT_RUNTIME_ALLOWLIST_FROZEN=true
+EXACT_RUNTIME_FILE_COUNT=6
+EXACT_RUNTIME_EXISTING_FILE_COUNT=4
+EXACT_RUNTIME_NEW_FILE_COUNT=2
+EXACT_PRODUCTION_FILE_COUNT=3
+EXACT_TEST_FILE_COUNT=3
+TRUSTED_ROLE_AWARE_AUDIT_READ_AUTHORIZATION_ADMISSION_READY=true
+
+S15_RUNTIME_IMPLEMENTED=false
+S15_RUNTIME_AUTHORIZED=false
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=false
+PAGE_SYSTEM_AUDIT_RUNTIME_READMISSION_READY=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+S14_SECURITY_BLOCKER_OPEN=true
+S13_EXACT_5_RELEASE_ADMISSION_REUSABLE_WITHOUT_FRESH_READMISSION=false
+
+TARGETED_TEST_FILES=10
+TARGETED_TESTS=325/325 passed
+TYPECHECK=passed
+ARCHITECTURE_UNIT=148/148 passed
+ARCHITECTURE_INCREMENTAL=passed
+PRODUCTION_READINESS_DOCS=8/8 passed
+GIT_DIFF_CHECK=passed
+S15_ADMISSION_PR=1208
+S15_PR_COUNT=1
+S15_PRS=1208
+S15_REQUIRED_CHECKS=pending
+S15_ACTIONABLE_P0_P1=pending
+POST_MERGE_REVIEW_DEBT=pending
+```
+
+Fresh 审计结论：
+
+- `InstitutionScopeAllowV1` 与 Formal Institution Session Context 已从签名 session、authoritative Identity、Membership/Binding 与 Institution Scope 得到可信 current role；`sessionUser.role` 来自两次一致的 Membership fact；
+- 当前角色在进入 Audit Reader 前被 generic Capability Authority context 丢弃；admin/operator 均有 system navigation，现状不能安全区分；
+- 选择 `admin_only_v1`，由 new Audit-specific orchestration owner mint tenant_admin-only one-shot handle；其他可信机构角色返回 403，invalid/stale/mismatch/unavailable 返回 503；
+- operator-limited 缺 authoritative role→Audit module/resource 与历史 row→module mapping，会要求新 framework、Repository ACL、coverage/pagination 重审，属于过度开发；
+- production Reader direct caller fresh count=1，仅 `src/app/api/institution/audit-events/route.ts`；caller role 与 actor filter 均不构成授权；
+- exact Runtime=6：new owner/测试，existing Reader/测试，existing Route/API 测试；Repository、generic Guard、Institution runtime、public contract 与 AQ rules 均不改；
+- targeted 10 files / 325 tests、typecheck 与 AQ unit 148/148 已通过；剩余 docs/PR 证据在事实成立后更新；
+- S15 未实施 Runtime、数据库、Schema/Migration、Capability Authority、Workbench 或页面 release；S14 security blocker 继续开放。
+
+证据：`docs/operations/post-v2-r1c-trusted-role-aware-audit-read-authorization-admission-20260814.md`。
+
+唯一下一任务：`POST-V2-R1C Trusted Role-Aware Audit Read Authorization exact Runtime implementation explicit authorization`；`NEXT_STAGE=S16`、`NEXT_TASK_AUTHORIZED=false`、`S16_RUNTIME_AUTHORIZED=false`。
+
 <!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_EXACT_RUNTIME_RELEASE_HISTORY -->
 
 ## 2026-08-14：POST-V2-R1C `page_system_audit` exact 5-file release 安全回滚完成、阻断仍开放
