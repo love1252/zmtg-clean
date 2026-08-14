@@ -1,5 +1,87 @@
 # 智美天工架构文档索引
 
+<!-- POST_V2_R1C_TRUSTED_ROLE_AWARE_AUDIT_READ_AUTHORIZATION_ADMISSION_START -->
+
+## POST-V2-R1C 可信角色感知 Audit 读取授权 fresh audit 与精确 Runtime 准入（2026-08-14）
+
+```text
+STAGE=S15
+COMPLETION_MODE=ADMISSION_READY
+FRESH_ROLE_AUTHORIZATION_AUDIT=passed
+
+TRUSTED_ROLE_SOURCE_EXISTS=true
+TRUSTED_ROLE_SOURCE_OWNER=Access Control authoritative Membership/Binding owner via Auth formal institution session context
+TRUSTED_ROLE_SOURCE_PROVENANCE_VERIFIED=true
+TRUSTED_FORMAL_SESSION_ROLE_ALREADY_AVAILABLE=true
+TRUSTED_ROLE_DROPPED_BEFORE_AUDIT_READER=true
+
+CURRENT_AUDIT_READ_ROLE_AUTHORIZATION_SAFE=false
+SELECTED_AUTHORIZATION_STRATEGY=admin_only_v1
+ROLE_AWARE_AUDIT_READ_AUTHORIZATION_OWNER=src/server/orchestration/institution-audit-read-authorization.ts
+ADMIN_ONLY_CAN_CLOSE_BLOCKER=true
+OPERATOR_LIMITED_REQUIRED=false
+OPERATOR_LIMITED_OVERDEVELOPMENT=true
+
+GENERIC_SECTION_GUARD_CHANGE_REQUIRED=false
+INSTITUTION_SERVER_RUNTIME_CHANGE_REQUIRED=false
+AUDIT_READER_CHANGE_REQUIRED=true
+AUDIT_API_ROUTE_CHANGE_REQUIRED=true
+AUDIT_REPOSITORY_CHANGE_REQUIRED=false
+PUBLIC_CONTRACT_CHANGE_REQUIRED=false
+ARCHITECTURE_EXCEPTION_REQUIRED=false
+
+PRODUCTION_AUDIT_READER_CALLER_COUNT=1
+PRODUCTION_AUDIT_READER_CALLERS=src/app/api/institution/audit-events/route.ts
+
+EXACT_RUNTIME_ALLOWLIST_FROZEN=true
+EXACT_RUNTIME_FILE_COUNT=6
+EXACT_RUNTIME_EXISTING_FILE_COUNT=4
+EXACT_RUNTIME_NEW_FILE_COUNT=2
+EXACT_PRODUCTION_FILE_COUNT=3
+EXACT_TEST_FILE_COUNT=3
+
+TRUSTED_ROLE_AWARE_AUDIT_READ_AUTHORIZATION_ADMISSION_READY=true
+S15_RUNTIME_IMPLEMENTED=false
+S15_RUNTIME_AUTHORIZED=false
+
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=false
+PAGE_SYSTEM_AUDIT_RUNTIME_READMISSION_READY=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+S14_SECURITY_BLOCKER_OPEN=true
+S13_EXACT_5_RELEASE_ADMISSION_REUSABLE_WITHOUT_FRESH_READMISSION=false
+
+NEXT_TASK=POST-V2-R1C Trusted Role-Aware Audit Read Authorization exact Runtime implementation explicit authorization
+NEXT_STAGE=S16
+NEXT_TASK_AUTHORIZED=false
+S16_RUNTIME_AUTHORIZED=false
+```
+
+架构结论：
+
+- `InstitutionScopeAllowV1` 与 Formal Institution Session Context 已从签名 session、authoritative Identity、Membership/Binding 与 Institution Scope 形成可信 current role；`sessionUser.role` 来自两次一致的 authoritative membership fact，不来自 query、header、普通 cookie 字段或 UI；
+- 角色在通用 `InstitutionCapabilityAuthorityRuntimeContextConsumptionV1` 之前可用，但该 context 只发布 tenant、institution、available sections 与 observedAt；admin/operator 的 system navigation shape 相同，因此当前 Reader 不能据 `system` 推断 admin；
+- 选择 `admin_only_v1`：新增 Audit-specific server orchestration owner，只有 trusted `tenant_admin` 获得 one-shot opaque handle；其他可信机构角色明确 403，invalid/stale/mismatch/unavailable 继续 503；
+- admin-only 不需要 current actor 或 module filter；caller `actorId` 继续只是查询筛选，Repository 继续强制 formal tenant + institution + `verified`，coverage/pagination/Platform scope 不变；
+- operator-limited 缺 authoritative role→Audit module/resource 与历史 row→module mapping；实现它会新增 mapping framework、Repository ACL 并重新审计 coverage/pagination，属于过度开发；
+- cross-owner composition 保持在 `src/server/orchestration/**`，不修改 generic Section Guard、Institution server runtime、Audit Repository、public contract 或 AQ rules，不需要 Architecture exception。
+
+Exact Runtime allowlist：
+
+1. `src/server/orchestration/institution-audit-read-authorization.ts`（new production）；
+2. `src/server/orchestration/institution-audit-read-authorization.test.ts`（new test）；
+3. `src/server/orchestration/institution-audit-reader.ts`（existing production）；
+4. `src/server/orchestration/institution-audit-reader.test.ts`（existing test）；
+5. `src/app/api/institution/audit-events/route.ts`（existing production）；
+6. `src/modules/audit/tests/InstitutionAuditEventsApiRoute.test.ts`（existing test）。
+
+Canonical evidence：`docs/operations/post-v2-r1c-trusted-role-aware-audit-read-authorization-admission-20260814.md`。
+
+S15 只完成 fresh audit 与 exact Admission；Runtime、数据库、Schema/Migration、Capability Authority、Workbench、`page_system_audit` release、Staging 与 Production 均未实施。
+
+<!-- POST_V2_R1C_TRUSTED_ROLE_AWARE_AUDIT_READ_AUTHORIZATION_ADMISSION_END -->
+
 <!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_EXACT_RUNTIME_RELEASE_START -->
 
 ## POST-V2-R1C `page_system_audit` exact 5-file Runtime release 安全回滚（2026-08-14）
