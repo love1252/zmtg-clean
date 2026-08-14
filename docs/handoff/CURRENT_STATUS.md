@@ -12,7 +12,7 @@
 - POST-V2-R1C Audit Reader Foundation：exact 8-file Runtime、Required Check、合并后独立验证与 Handoff 均已闭环
 - POST-V2-R1C `page_system_audit`：S14 initial exact-5 release 已由 #1204 按 exact-5 rollback 恢复为 `hidden/not_released`；S14 当时的 Audit API blocker 已由 S16 exact Runtime 关闭，但页面必须经 S17 fresh re-audit 才能重新准入，当前仍未发布
 - POST-V2-R1C Trusted Role-Aware Audit Read Authorization：S15 fresh audit、exact 6-file Runtime Admission 与两个 docs-only PR 已闭环；选择 `admin_only_v1` 与 Audit-specific orchestration owner；S15 当时 Runtime 未实施、S14 blocker 仍开放
-- POST-V2-R1C Trusted Role-Aware Audit Read Authorization Runtime：S16 exact 6-file Runtime PR #1210 已合并；只有 authoritative current `tenant_admin` 可读，可信非管理员固定 403，invalid/stale/mismatch/unavailable 固定 503；Runtime Required Check、full 496/6836 与 merged-main 3/72 均通过
+- POST-V2-R1C Trusted Role-Aware Audit Read Authorization Runtime：S16 exact 6-file Runtime PR #1210 已合并；只有 authoritative current `tenant_admin` 可读，可信非管理员固定 403，invalid/stale/mismatch/unavailable 固定 503；Runtime Required Check、full 496/6836 与 merged-main 8/314 均通过
 - S4 Phase 0：PR #1172 已修正 Handoff 授权来源与页面授权状态，PR #1171 两个 post-merge Review thread 已回复并解决
 - S4 Phase 1 / S5 Phase 0 修正：Audit Writer attribution fresh audit 已通过；重新核算为 19 个生产 caller 与 10 个 transaction persistence / composition 点，完整 closure 仍必须拆分
 - S5 Phase 0：caller inventory docs-only follow-up PR #1174 已合并；合并后仅回复并解决 PR #1173 指定 Review thread
@@ -430,8 +430,8 @@ S16_TARGETED_TEST_FILES=13
 S16_TARGETED_TESTS=457
 S16_FULL_TEST_FILES=496
 S16_FULL_TESTS=6836
-S16_POST_MERGE_INDEPENDENT_TEST_FILES=3
-S16_POST_MERGE_INDEPENDENT_TESTS=72
+S16_POST_MERGE_INDEPENDENT_TEST_FILES=8
+S16_POST_MERGE_INDEPENDENT_TESTS=314
 S16_TYPECHECK=passed
 S16_ARCHITECTURE_UNIT=148/148 passed
 S16_ARCHITECTURE_INCREMENTAL=passed

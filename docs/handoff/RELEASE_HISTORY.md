@@ -37,8 +37,8 @@ TARGETED_TEST_FILES=13
 TARGETED_TESTS=457
 FULL_TEST_FILES=496
 FULL_TESTS=6836
-POST_MERGE_INDEPENDENT_TEST_FILES=3
-POST_MERGE_INDEPENDENT_TESTS=72
+POST_MERGE_INDEPENDENT_TEST_FILES=8
+POST_MERGE_INDEPENDENT_TESTS=314
 TYPECHECK=passed
 ARCHITECTURE_UNIT=148/148 passed
 ARCHITECTURE_INCREMENTAL=passed
@@ -69,7 +69,7 @@ S17_AUTHORIZED=false
 
 S16 在 canonical exact 6 files 内新增 Audit-specific trusted role owner 并接入 Reader/API：只有 authoritative current `tenant_admin` 获得 one-shot handle；`tenant_operator`、`consultant`、`customer_service` 进入低敏 403，invalid/stale/mismatch/unavailable 进入低敏 503。Repository 的 formal tenant + institution + `verified` 查询、coverage、pagination、filters、DTO 与 Platform Audit 均未改变。
 
-Runtime PR #1210 的 Required Check、本地 13 files / 457 targeted、496 files / 6836 full、AQ unit 148/148、build 与 merged-main 3 files / 72 tests 均通过；Runtime post-merge Review sweep 为 0 debt。Final Handoff PR #1211 只在冻结 Head Required Check 成功、Review sweep 为 0 debt 且合并后宣告 `S16_COMPLETE=true`。
+Runtime PR #1210 的 Required Check、本地 13 files / 457 targeted、496 files / 6836 full、AQ unit 148/148、build 与 merged-main 8 files / 314 tests 均通过；Runtime post-merge Review sweep 为 0 debt。Final Handoff PR #1211 只在冻结 Head Required Check 成功、Review sweep 为 0 debt 且合并后宣告 `S16_COMPLETE=true`。
 
 `page_system_audit` 继续 `hidden/not_released`，S16 不复用 S13 old exact-5 Admission；下一阶段 S17 必须以 role-aware merged Runtime 为新基线 fresh re-audit，当前未授权。
 
