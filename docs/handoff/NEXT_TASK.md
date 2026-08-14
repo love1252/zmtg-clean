@@ -30,12 +30,19 @@ CORRECTIVE_RUNTIME_PR=1199
 CORRECTIVE_RUNTIME_HEAD=8fd5b138788cf6c998e850045c51c2f02f7ae4e8
 CORRECTIVE_RUNTIME_MERGE=b0165a27958ca2d8093a15fe3ea3f040bb83af2a
 HANDOFF_PR=1200
-S13_PRS=1197,1198,1199,1200
-S13_PR_COUNT=4
+FORMAL_CLOSURE_PR=1201
+S13_PRS=1197,1198,1199,1200,1201
+S13_PR_COUNT=5
 EXACT_HANDOFF_DOC_FILE_COUNT=5
+FORMAL_CORRECTIVE_MARKDOWN_FILE_COUNT=5
+FORMAL_CORRECTIVE_DELETED_FILE_COUNT=1
 S13_REQUIRED_CHECKS=passed
 S13_ACTIONABLE_P0_P1=0
 POST_MERGE_REVIEW_DEBT=0
+S13_FORMAL_CLOSURE=true
+CSV_FILE_DELETED=true
+CSV_RESIDUAL_REFERENCE_COUNT=0
+CANONICAL_ALLOWLIST_LOCATION=docs/operations/post-v2-r1c-page-system-audit-fresh-release-reaudit-exact-runtime-readmission-20260814.md
 
 FRESH_RELEASE_REAUDIT=passed
 PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=true
@@ -95,7 +102,7 @@ PAGE_SYSTEM_AUDIT_PRODUCTION_AUTHORITY_GRANT_AUTHORIZED=false
 REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
 ```
 
-S13 已证明 `partial_verified_only` 可以作为只读 pilot 的明确披露边界，并冻结 2 个 production + 3 个 tests 的 exact 5-file Runtime allowlist。前置校正 #1197 的 post-merge reason completeness P1 已由 #1199 在不扩大 query filter 的前提下实际修复并解决。
+S13 已证明 `partial_verified_only` 可以作为只读 pilot 的明确披露边界，并冻结 2 个 production + 3 个 tests 的 exact 5-file Runtime allowlist。前置校正 #1197 的 post-merge reason completeness P1 已由 #1199 在不扩大 query filter 的前提下实际修复并解决。PR #1198 docs-only scope 中的独立 CSV 已删除；Admission Markdown 第 12 节是唯一 canonical exact Runtime allowlist 来源。
 
 本 Handoff 只完成重新准入；没有修改 Capability Authority release decision、导航、canonical page Route、Reader、数据库或受治理页面计数。下一任务必须获得 explicit authorization，且只能按 frozen exact 5-file allowlist 实施。
 

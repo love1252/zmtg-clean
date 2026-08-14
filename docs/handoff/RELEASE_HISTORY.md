@@ -20,12 +20,19 @@ CORRECTIVE_RUNTIME_PR=1199
 CORRECTIVE_RUNTIME_HEAD=8fd5b138788cf6c998e850045c51c2f02f7ae4e8
 CORRECTIVE_RUNTIME_MERGE=b0165a27958ca2d8093a15fe3ea3f040bb83af2a
 HANDOFF_PR=1200
-S13_PRS=1197,1198,1199,1200
-S13_PR_COUNT=4
+FORMAL_CLOSURE_PR=1201
+S13_PRS=1197,1198,1199,1200,1201
+S13_PR_COUNT=5
 EXACT_HANDOFF_DOC_FILE_COUNT=5
+FORMAL_CORRECTIVE_MARKDOWN_FILE_COUNT=5
+FORMAL_CORRECTIVE_DELETED_FILE_COUNT=1
 S13_REQUIRED_CHECKS=passed
 S13_ACTIONABLE_P0_P1=0
 POST_MERGE_REVIEW_DEBT=0
+S13_FORMAL_CLOSURE=true
+CSV_FILE_DELETED=true
+CSV_RESIDUAL_REFERENCE_COUNT=0
+CANONICAL_ALLOWLIST_LOCATION=docs/operations/post-v2-r1c-page-system-audit-fresh-release-reaudit-exact-runtime-readmission-20260814.md
 
 FRESH_RELEASE_REAUDIT=passed
 PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=true
@@ -104,17 +111,18 @@ PRODUCTION_DEPLOYMENT=false
 - system Section Guard、formal authorization、Capability Authority release path、canonical Route、readonly Shell/client、low-sensitive DTO、WorkBench multi-capability 与 rollback 均通过 fresh re-audit；
 - 前置校正 PR #1197 严格解析成功信封、9 字段低敏 record、4 字段 coverage 与 pageInfo；其 post-merge reason completeness P1 已由 corrective PR #1199 修复并解决，query filter 没有扩大；
 - docs-only Admission PR #1198 冻结 exact 5-file Runtime allowlist：4 existing + 1 new，2 production + 3 tests；任何第 6 个 Runtime/Test 文件都必须重新准入；
+- PR #1198 docs-only scope 中的独立 CSV 已由 S13 formal corrective closure 删除；Admission Markdown 第 12 节完整保留原 exact 5-file 表格，并成为唯一 canonical allowlist 来源；
 - 目标 release shape 为 `read_only / dataReadiness=partial / productionRelease=pilot_released`；S13 未实施 Authority grant、Route、导航、页面 release、Schema、Migration、DDL、DML、Seed、Staging 或 Production；
 - 全量 495/6789、corrective targeted 5/208、fresh targeted 14/388、merged corrective 独立定向 14/303、typecheck、AQ 148/148、Architecture incremental、lint、build、ProductionReadinessDocs、Required Check 与 Review sweep 均通过。
 
 证据：
 
-- `docs/operations/post-v2-r1c-page-system-audit-fresh-release-reaudit-exact-runtime-readmission-20260814.md`
-- `docs/operations/post-v2-r1c-page-system-audit-exact-runtime-readmission-allowlist-20260814.csv`
+- `docs/operations/post-v2-r1c-page-system-audit-fresh-release-reaudit-exact-runtime-readmission-20260814.md`（唯一 canonical exact Runtime allowlist）
 - PR #1197 / Merge `638b69a2c66597d7a7ae0bd87e0c4f88dd8f8ec2`
 - PR #1198 / Merge `f0bec7503932e8ad08272f3981935d6fbaa31bfc`
 - PR #1199 / Merge `b0165a27958ca2d8093a15fe3ea3f040bb83af2a`
 - final Handoff PR #1200
+- formal corrective closure PR #1201
 
 唯一下一任务：`POST-V2-R1C page_system_audit exact 5-file Runtime release implementation explicit authorization`；当前未授权自动开始。
 

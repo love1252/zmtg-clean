@@ -12,12 +12,19 @@ PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=true
 EXACT_RUNTIME_ALLOWLIST_FROZEN=true
 PAGE_SYSTEM_AUDIT_RUNTIME_READMISSION_READY=true
 HANDOFF_PR=1200
-S13_PRS=1197,1198,1199,1200
-S13_PR_COUNT=4
+FORMAL_CLOSURE_PR=1201
+S13_PRS=1197,1198,1199,1200,1201
+S13_PR_COUNT=5
 EXACT_HANDOFF_DOC_FILE_COUNT=5
+FORMAL_CORRECTIVE_MARKDOWN_FILE_COUNT=5
+FORMAL_CORRECTIVE_DELETED_FILE_COUNT=1
 S13_REQUIRED_CHECKS=passed
 S13_ACTIONABLE_P0_P1=0
 POST_MERGE_REVIEW_DEBT=0
+S13_FORMAL_CLOSURE=true
+CSV_FILE_DELETED=true
+CSV_RESIDUAL_REFERENCE_COUNT=0
+CANONICAL_ALLOWLIST_LOCATION=docs/operations/post-v2-r1c-page-system-audit-fresh-release-reaudit-exact-runtime-readmission-20260814.md
 
 EXACT_RUNTIME_FILE_COUNT=5
 EXACT_RUNTIME_EXISTING_FILE_COUNT=4
@@ -54,6 +61,7 @@ REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
 - local-development readonly recheck、Reader verified-only chain、coverage honesty、system Section Guard、formal authorization、canonical Route path、readonly Shell/client 与 Workbench multi-capability 均通过 fresh 审计；
 - 当前数据是 275 total / 7 verified / 1 not-applicable / 267 unclassifiable，页面只能披露安全 verified subset，不能声称完整历史覆盖；
 - PR #1197 先闭合客户端 exact low-sensitive DTO boundary；其 post-merge reason completeness P1 已由 corrective PR #1199 在不扩大 query filter 的前提下修复并解决；
+- PR #1198 docs-only scope 中的独立 CSV 已由 S13 formal corrective closure 删除；Admission Markdown 第 12 节是唯一 canonical exact Runtime allowlist 来源；
 - merged corrective 基线上的独立定向复验 14 files / 303 tests 与 Handoff typecheck、ProductionReadinessDocs 均通过；
 - 下一 Runtime 只允许 2 个 production + 3 个 tests 的 exact 5-file allowlist：existing Authority policy、new dedicated Route 与 3 个精确 regression files；
 - 目标 Authority shape 为 `read_only / dataReadiness=partial / productionRelease=pilot_released`；shared catch-all、Reader、client、Repository、Schema 与历史数据均不修改；
@@ -61,8 +69,7 @@ REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
 
 证据：
 
-- `docs/operations/post-v2-r1c-page-system-audit-fresh-release-reaudit-exact-runtime-readmission-20260814.md`
-- `docs/operations/post-v2-r1c-page-system-audit-exact-runtime-readmission-allowlist-20260814.csv`
+- `docs/operations/post-v2-r1c-page-system-audit-fresh-release-reaudit-exact-runtime-readmission-20260814.md`（唯一 canonical exact Runtime allowlist）
 - 前置校正 PR #1197 / Merge `638b69a2c66597d7a7ae0bd87e0c4f88dd8f8ec2`
 - Admission PR #1198 / Merge `f0bec7503932e8ad08272f3981935d6fbaa31bfc`
 - corrective PR #1199 / Merge `b0165a27958ca2d8093a15fe3ea3f040bb83af2a`

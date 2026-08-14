@@ -28,7 +28,8 @@
 - S12 Reader：当前 7 条 `verified` 安全可读、267 条历史记录保持不可分类；正式 coverage 为 `partial_verified_only`，不再把安全可读与完整历史覆盖混成一个 boolean
 - S12 Workbench：`/hospital` 已按 `page_workbench` key 精确选择并缩小自身投影；第二 summary、顺序变化与 hidden/unrelated capability 不影响 Workbench，duplicate/missing 继续 fail-closed
 - S13：fresh release re-audit 已通过，`PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=true`，下一阶段 exact 5-file Runtime allowlist 已冻结
-- S13 PR：前置校正 #1197、Admission #1198、post-merge corrective #1199 与 final Handoff #1200；#1197 reason completeness P1 已通过 #1199 实际修复并解决
+- S13 PR：前置校正 #1197、Admission #1198、post-merge corrective #1199、final Handoff #1200 与 formal corrective closure #1201；#1197 reason completeness P1 已通过 #1199 实际修复并解决
+- S13 formal closure：已删除 PR #1198 docs-only scope 中的独立 CSV；Admission Markdown 第 12 节保留不变的 exact 5-file 表格，并成为唯一 canonical allowlist 来源
 - S13 边界：当前页面仍为 hidden/not-released，Runtime release 未授权，受治理只读页面仍为 1 / 26
 - 当前经审查接受的受治理只读页面切片：1 / 26
 - 剩余未放行页面：25
@@ -216,12 +217,19 @@ S13_CORRECTIVE_RUNTIME_PR=1199
 S13_CORRECTIVE_RUNTIME_HEAD=8fd5b138788cf6c998e850045c51c2f02f7ae4e8
 S13_CORRECTIVE_RUNTIME_MERGE=b0165a27958ca2d8093a15fe3ea3f040bb83af2a
 S13_HANDOFF_PR=1200
-S13_PRS=1197,1198,1199,1200
-S13_PR_COUNT=4
+S13_FORMAL_CLOSURE_PR=1201
+S13_PRS=1197,1198,1199,1200,1201
+S13_PR_COUNT=5
 S13_EXACT_HANDOFF_DOC_FILE_COUNT=5
+S13_FORMAL_CORRECTIVE_MARKDOWN_FILE_COUNT=5
+S13_FORMAL_CORRECTIVE_DELETED_FILE_COUNT=1
 S13_REQUIRED_CHECKS=passed
 S13_ACTIONABLE_P0_P1=0
 S13_POST_MERGE_REVIEW_DEBT=0
+S13_FORMAL_CLOSURE=true
+CSV_FILE_DELETED=true
+CSV_RESIDUAL_REFERENCE_COUNT=0
+CANONICAL_ALLOWLIST_LOCATION=docs/operations/post-v2-r1c-page-system-audit-fresh-release-reaudit-exact-runtime-readmission-20260814.md
 PR1197_REASON_EXHAUSTIVENESS_P1_THREAD=PRRT_kwDOSrGMn86ZJAxk
 PR1197_REASON_EXHAUSTIVENESS_P1_THREAD_RESOLVED=true
 
