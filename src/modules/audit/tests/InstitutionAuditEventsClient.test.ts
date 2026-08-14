@@ -135,6 +135,23 @@ describe('Institution Audit Events client strict low-sensitive DTO', () => {
   });
 
   it.each([
+    'ai_conversation_viewed',
+    'real_channel_preflight_viewed',
+    'wecom_official_dry_run_viewed',
+  ] as const)('accepts canonical AuditReason %s', async (reason) => {
+    const fetcher = vi.fn(async () =>
+      jsonResponse(successPayload({
+        records: [{ ...validRecord, reason }],
+      })),
+    );
+
+    await expect(listInstitutionAuditEvents({}, { fetcher })).resolves.toMatchObject({
+      ok: true,
+      records: [{ reason }],
+    });
+  });
+
+  it.each([
     ['unsafe limit', { hasMore: false, limit: 101, nextCursor: null }],
     ['missing next cursor', { hasMore: true, limit: 50, nextCursor: null }],
     ['unexpected terminal cursor', { hasMore: false, limit: 50, nextCursor: 'cursor' }],
