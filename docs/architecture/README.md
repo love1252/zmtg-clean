@@ -8,8 +8,11 @@
 STAGE=S14
 COMPLETION_MODE=BLOCKED_ROLLED_BACK
 S14_COMPLETE=false
-S14_BLOCKER_FORMALLY_CLOSED=true
+S14_RELEASE_ROLLBACK_COMPLETE=true
 S14_FORMAL_CLOSURE=false
+S14_BLOCKED_STATE_HANDOFF_CLOSED=true
+S14_BLOCKER_FORMALLY_CLOSED=false
+S14_SECURITY_BLOCKER_OPEN=true
 
 INITIAL_RUNTIME_PR=1202
 INITIAL_RUNTIME_HEAD=8a95401d8d2668062059f239db20a33e689173b8
@@ -19,13 +22,20 @@ SECURITY_ROLLBACK_PR=1204
 SECURITY_ROLLBACK_HEAD=fef19d3591c0849f84d0618dd45272e707d31bc9
 SECURITY_ROLLBACK_MERGE=a1a2baf13c5674e2795b65b37fad2ff89ddac104
 FINAL_CORRECTIVE_HANDOFF_PR=1205
-S14_PRS=1202,1203,1204,1205
-S14_PR_COUNT=4
+BLOCKED_HANDOFF_CORRECTIVE_PR=TBD
+S14_PRS=1202,1203,1204,1205,TBD
+S14_PR_COUNT=5
 S14_REQUIRED_CHECKS=passed
 
-S14_POST_MERGE_P1_DETECTED=1
+S14_POST_MERGE_P1_DETECTED=2
 PR1202_OPERATOR_SCOPE_P1_THREAD=PRRT_kwDOSrGMn86ZMXMW
 PR1202_OPERATOR_SCOPE_P1_THREAD_RESOLVED=true
+PR1204_DOCUMENTATION_P2_THREAD=PRRT_kwDOSrGMn86ZM8Cc
+PR1204_DOCUMENTATION_P2_THREAD_RESOLVED=true
+PR1205_API_SCOPE_P1_THREAD=PRRT_kwDOSrGMn86ZNNed
+PR1205_API_SCOPE_P1_VALID=true
+PR1205_API_SCOPE_P1_THREAD_RESOLVED=true
+S14_ACTIONABLE_P0_P1=0
 S14_ACTIONABLE_P0_P1_P2_P3=0
 POST_MERGE_REVIEW_DEBT=0
 
@@ -48,10 +58,21 @@ ROLLBACK_FULL_TESTS=6789
 ROLLBACK_POST_MERGE_INDEPENDENT_TEST_FILES=3
 ROLLBACK_POST_MERGE_INDEPENDENT_TESTS=93
 
+AUDIT_WRITER_ATTRIBUTION_CLOSED=true
+HISTORICAL_BACKFILL_CLOSED=true
+AUDIT_READER_COVERAGE_STATE=partial_verified_only
+AUDIT_READER_HISTORICAL_COVERAGE_COMPLETE=false
+AUDIT_READER_PARTIAL_COVERAGE_SAFE=true
+AUDIT_READER_ROLE_AWARE_AUTHORIZATION_SAFE=false
+WORKBENCH_MULTI_CAPABILITY_SAFE=true
+
 PRIMARY_BLOCKING_PREREQUISITE=trusted_role_aware_audit_read_authorization
+BLOCKED_READ_SURFACE=GET /api/institution/audit-events
+BLOCKER_SCOPE=tenant_operator_can_reach_system_guard_but_reader_lacks_trusted_role_aware_scope
 REQUIRED_NEW_AUTHORIZATION=fresh_admission_beyond_S14_exact_5_runtime_allowlist
 PAGE_SYSTEM_AUDIT_RUNTIME_READMISSION_READY=false
 PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=false
+S13_EXACT_5_RELEASE_ADMISSION_REUSABLE_WITHOUT_FRESH_READMISSION=false
 
 DATABASE_CONNECTION=false
 DATABASE_WRITE_EXECUTION=false
@@ -62,9 +83,14 @@ DML_EXECUTION=false
 PRODUCTION_CHANGE=false
 PRODUCTION_DEPLOYMENT=false
 
-NEXT_TASK=TO_BE_SELECTED_BY_CHATGPT_PROJECT_CONTROL
+NEXT_TASK=POST-V2-R1C Trusted Role-Aware Audit Read Authorization fresh audit + exact Runtime admission
+NEXT_STAGE=S15
 NEXT_TASK_AUTHORIZED=false
-NEXT_TASK_SELECTION_REQUIRED=true
+NEXT_TASK_SELECTION_REQUIRED=false
+S15_RUNTIME_AUTHORIZED=false
+DATABASE_CONNECTION_AUTHORIZED=false
+DATABASE_WRITE_EXECUTION_AUTHORIZED=false
+PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
 ```
 
 架构结论：
@@ -73,8 +99,9 @@ NEXT_TASK_SELECTION_REQUIRED=true
 - 当前 Capability Authority runtime context 不暴露角色，且 `tenant_admin` 与 `tenant_operator` 的 system navigation shape 相同；canonical 5 files 内无法可信地区分两者；
 - 正确修复需要角色感知 Reader/Repository、可信角色信号或 public policy/contract 变更，均超出 S14 frozen exact-5 或触发 Reader/public contract 硬停止条件；
 - PR #1204 因此按 S14 rollback 恢复仅 `page_workbench` released，`page_system_audit` 回到 `hidden/not_released`，并删除 dedicated `/hospital/system/audit` Route；
-- rollback exact 5-file scope、full 495/6789、AQ 148/148、build、Required Check 与 merged-main independent 3/93 均通过；P1 thread 在实际 merge 后回复并解决；
-- S10-S13 Reader/Writer/Data Readiness foundation 继续有效，但不构成页面 release；S14 release 未完成。
+- 页面 Route rollback 只消除了新发布页面造成的 exposure expansion；`GET /api/institution/audit-events` 仍由允许 admin/operator 的 `system` Section Guard 保护，而 Reader 缺少可信 role-aware scope，安全 blocker 继续开放；
+- rollback exact 5-file scope、full 495/6789、AQ 148/148、build、Required Check 与 merged-main independent 3/93 均通过；相关 Review thread 均在实际修正后回复并解决；
+- S10-S13 Reader/Writer/Data Readiness foundation 继续有效，但不构成页面 release；S14 release 未完成，S13 exact-5 Admission 不可无 fresh re-admission 重放。
 
 证据：
 
@@ -83,8 +110,9 @@ NEXT_TASK_SELECTION_REQUIRED=true
 - Initial Handoff PR #1203
 - Security rollback PR #1204 / Merge `a1a2baf13c5674e2795b65b37fad2ff89ddac104`
 - Final corrective Handoff PR #1205
+- Blocked Handoff corrective PR #TBD
 
-下一任务不自动选择；`NEXT_TASK_AUTHORIZED=false`、`NEXT_TASK_SELECTION_REQUIRED=true`。
+唯一下一任务冻结为 S15 `Trusted Role-Aware Audit Read Authorization fresh audit + exact Runtime admission`；`NEXT_TASK_AUTHORIZED=false`、`S15_RUNTIME_AUTHORIZED=false`。
 
 <!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_EXACT_RUNTIME_RELEASE_END -->
 

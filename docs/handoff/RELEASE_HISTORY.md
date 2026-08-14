@@ -9,8 +9,11 @@ STAGE=S14
 TASK=POST_V2_R1C_PAGE_SYSTEM_AUDIT_EXACT_5_FILE_RUNTIME_RELEASE
 COMPLETION_MODE=BLOCKED_ROLLED_BACK
 S14_COMPLETE=false
-S14_BLOCKER_FORMALLY_CLOSED=true
+S14_RELEASE_ROLLBACK_COMPLETE=true
 S14_FORMAL_CLOSURE=false
+S14_BLOCKED_STATE_HANDOFF_CLOSED=true
+S14_BLOCKER_FORMALLY_CLOSED=false
+S14_SECURITY_BLOCKER_OPEN=true
 BASELINE=c89cecaf5e3551f5497f1aac5bbfb093aefd180d
 
 INITIAL_RUNTIME_PR=1202
@@ -21,13 +24,19 @@ SECURITY_ROLLBACK_PR=1204
 SECURITY_ROLLBACK_HEAD=fef19d3591c0849f84d0618dd45272e707d31bc9
 SECURITY_ROLLBACK_MERGE=a1a2baf13c5674e2795b65b37fad2ff89ddac104
 FINAL_CORRECTIVE_HANDOFF_PR=1205
-S14_PRS=1202,1203,1204,1205
-S14_PR_COUNT=4
+BLOCKED_HANDOFF_CORRECTIVE_PR=TBD
+S14_PRS=1202,1203,1204,1205,TBD
+S14_PR_COUNT=5
 S14_REQUIRED_CHECKS=passed
 
-S14_POST_MERGE_P1_DETECTED=1
+S14_POST_MERGE_P1_DETECTED=2
 PR1202_OPERATOR_SCOPE_P1_THREAD=PRRT_kwDOSrGMn86ZMXMW
 PR1202_OPERATOR_SCOPE_P1_THREAD_RESOLVED=true
+PR1204_DOCUMENTATION_P2_THREAD=PRRT_kwDOSrGMn86ZM8Cc
+PR1204_DOCUMENTATION_P2_THREAD_RESOLVED=true
+PR1205_API_SCOPE_P1_THREAD=PRRT_kwDOSrGMn86ZNNed
+PR1205_API_SCOPE_P1_VALID=true
+PR1205_API_SCOPE_P1_THREAD_RESOLVED=true
 S14_ACTIONABLE_P0_P1=0
 S14_ACTIONABLE_P0_P1_P2_P3=0
 POST_MERGE_REVIEW_DEBT=0
@@ -52,10 +61,13 @@ CONTROLLED_CREATE_RELEASE_COUNT=0
 CANONICAL_ROUTE_PRESENT=false
 SHARED_CATCH_ALL_CHANGE=false
 
+AUDIT_WRITER_ATTRIBUTION_CLOSED=true
+HISTORICAL_BACKFILL_CLOSED=true
 AUDIT_READER_COVERAGE_STATE=partial_verified_only
 AUDIT_READER_HISTORICAL_COVERAGE_COMPLETE=false
 AUDIT_READER_PARTIAL_COVERAGE_SAFE=true
 AUDIT_READER_COVERAGE_DISCLOSURE_SAFE=true
+AUDIT_READER_ROLE_AWARE_AUTHORIZATION_SAFE=false
 WORKBENCH_MULTI_CAPABILITY_SAFE=true
 WORKBENCH_PAGE_WORKBENCH_PROJECTION_STABLE=true
 
@@ -73,9 +85,12 @@ ROLLBACK_BUILD=passed
 ROLLBACK_PRODUCTION_READINESS_DOCS=8/8 passed
 
 PRIMARY_BLOCKING_PREREQUISITE=trusted_role_aware_audit_read_authorization
+BLOCKED_READ_SURFACE=GET /api/institution/audit-events
+BLOCKER_SCOPE=tenant_operator_can_reach_system_guard_but_reader_lacks_trusted_role_aware_scope
 REQUIRED_NEW_AUTHORIZATION=fresh_admission_beyond_S14_exact_5_runtime_allowlist
 PAGE_SYSTEM_AUDIT_RUNTIME_READMISSION_READY=false
 PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=false
+S13_EXACT_5_RELEASE_ADMISSION_REUSABLE_WITHOUT_FRESH_READMISSION=false
 
 DATABASE_CONNECTION=false
 DATABASE_WRITE_EXECUTION=false
@@ -87,9 +102,14 @@ STAGING_CHANGE=false
 PRODUCTION_CHANGE=false
 PRODUCTION_DEPLOYMENT=false
 
-NEXT_TASK=TO_BE_SELECTED_BY_CHATGPT_PROJECT_CONTROL
+NEXT_TASK=POST-V2-R1C Trusted Role-Aware Audit Read Authorization fresh audit + exact Runtime admission
+NEXT_STAGE=S15
 NEXT_TASK_AUTHORIZED=false
-NEXT_TASK_SELECTION_REQUIRED=true
+NEXT_TASK_SELECTION_REQUIRED=false
+S15_RUNTIME_AUTHORIZED=false
+DATABASE_CONNECTION_AUTHORIZED=false
+DATABASE_WRITE_EXECUTION_AUTHORIZED=false
+PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
 ```
 
 - PR #1202 按 S13 canonical Admission 实施 2 production + 3 tests 的 exact 5-file release；initial full 495/6806、Required Check 与 merged-main independent 11/368 均曾通过；
@@ -97,7 +117,9 @@ NEXT_TASK_SELECTION_REQUIRED=true
 - S14 Authority context 不暴露角色，且 admin/operator 的 system navigation shape 相同；保持 admin release 同时隐藏 operator 的正确修复需要第 6 个 Runtime 文件、Reader 或 public contract 变更；
 - PR #1204 按已授权 rollback 精确恢复 canonical 5 个 Runtime/Test 文件：Authority 回到仅 Workbench released，删除 dedicated `/hospital/system/audit` Route，其他 foundation 不变；
 - rollback final 3/93、full 495/6789、AQ 148/148、build、ProductionReadinessDocs、Required Check 与 merged-main 3/93 均通过；
-- P1 thread 在 #1204 实际 merge 后回复并解决；当前 actionable P0/P1/P2/P3=0、post-merge Review debt=0；
+- #1204 的页面 rollback 已撤销新页面 exposure expansion，但没有关闭仍可直接调用的 `GET /api/institution/audit-events` 角色授权缺口；
+- PR #1205 post-merge P1 `PRRT_kwDOSrGMn86ZNNed` 确认 blocker 必须保持 open；同阶段 blocked-handoff corrective PR #TBD 已撤回错误 closure claim，合并后回复并解决该 thread；
+- `S14_BLOCKED_STATE_HANDOFF_CLOSED=true` 只表示安全回滚、阻断记录、Review 与下一任务交接闭合，不表示安全 blocker 已解决；当前 actionable P0/P1/P2/P3=0、post-merge Review debt=0；
 - S14 release 目标未完成，不能保留旧的完成状态或页面计数口径；当前仍为 1 / 26；
 - 未连接数据库，未执行 Schema、Migration、DDL、DML、Seed、Staging 或 Production deployment。
 
@@ -108,8 +130,9 @@ NEXT_TASK_SELECTION_REQUIRED=true
 - Initial Handoff PR #1203
 - Security rollback PR #1204 / Merge `a1a2baf13c5674e2795b65b37fad2ff89ddac104`
 - Final corrective Handoff PR #1205
+- Blocked Handoff corrective PR #TBD
 
-下一任务不自动选择；`NEXT_TASK_AUTHORIZED=false`、`NEXT_TASK_SELECTION_REQUIRED=true`。
+唯一下一任务冻结为 S15 `Trusted Role-Aware Audit Read Authorization fresh audit + exact Runtime admission`；`NEXT_TASK_AUTHORIZED=false`、`S15_RUNTIME_AUTHORIZED=false`，不得自动重放 S13 exact-5 Admission。
 
 <!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_EXACT_RUNTIME_RELEASE_HISTORY_END -->
 

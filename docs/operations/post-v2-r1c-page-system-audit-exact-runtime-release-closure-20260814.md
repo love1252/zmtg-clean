@@ -13,6 +13,8 @@
 > Security Rollback PR：#1204 / Head `fef19d3591c0849f84d0618dd45272e707d31bc9` / Merge `a1a2baf13c5674e2795b65b37fad2ff89ddac104`
 >
 > Final Corrective Handoff PR：#1205
+>
+> Blocked Handoff Corrective PR：#TBD
 
 ## 1. 终态结论
 
@@ -21,8 +23,13 @@ STAGE=S14
 TASK=POST_V2_R1C_PAGE_SYSTEM_AUDIT_EXACT_5_FILE_RUNTIME_RELEASE
 COMPLETION_MODE=BLOCKED_ROLLED_BACK
 S14_COMPLETE=false
-S14_BLOCKER_FORMALLY_CLOSED=true
+S14_RELEASE_ROLLBACK_COMPLETE=true
 S14_FORMAL_CLOSURE=false
+S14_BLOCKED_STATE_HANDOFF_CLOSED=true
+S14_BLOCKER_FORMALLY_CLOSED=false
+S14_SECURITY_BLOCKER_OPEN=true
+PAGE_RELEASE_ROLLBACK_COMPLETE=true
+AUDIT_READ_SECURITY_BLOCKER_CLOSED=false
 
 PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
 PAGE_SYSTEM_AUDIT_RELEASE=false
@@ -34,19 +41,26 @@ REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
 RELEASED_GOVERNED_PAGES=page_workbench
 CONTROLLED_CREATE_RELEASE_COUNT=0
 
-S14_POST_MERGE_P1_DETECTED=1
+S14_POST_MERGE_P1_DETECTED=2
 PR1202_OPERATOR_SCOPE_P1_THREAD=PRRT_kwDOSrGMn86ZMXMW
 PR1202_OPERATOR_SCOPE_P1_THREAD_RESOLVED=true
+PR1204_DOCUMENTATION_P2_THREAD=PRRT_kwDOSrGMn86ZM8Cc
+PR1204_DOCUMENTATION_P2_THREAD_RESOLVED=true
+PR1205_API_SCOPE_P1_THREAD=PRRT_kwDOSrGMn86ZNNed
+PR1205_API_SCOPE_P1_VALID=true
+PR1205_API_SCOPE_P1_THREAD_RESOLVED=true
+S14_ACTIONABLE_P0_P1=0
 S14_ACTIONABLE_P0_P1_P2_P3=0
 POST_MERGE_REVIEW_DEBT=0
 
+BLOCKED_HANDOFF_CORRECTIVE_PR=TBD
 NEXT_TASK_AUTHORIZED=false
-NEXT_TASK_SELECTION_REQUIRED=true
+NEXT_TASK_SELECTION_REQUIRED=false
 ```
 
 PR #1202 曾按 S13 canonical Admission 实施 exact 5-file release，但 post-merge Review 证明 `tenant_operator` 会在 Reader 缺少角色/本人/授权模块过滤时读取本机构全部可信审计记录。S14 frozen Authority context 只提供 tenant、institution 与 navigation sections；`tenant_admin` 和 `tenant_operator` 的 system navigation shape 相同，因此 canonical 5 files 内无法安全区分两个角色。
 
-任何保持 admin 放行同时隐藏 operator 的正确修复，都需要角色感知 Reader/Repository、可信角色信号或 public policy/contract 变更，触发 S14 的第 6 个 Runtime 文件、Reader 或 public contract 硬停止条件。为消除已确认 P1，PR #1204 按已授权 rollback 恢复安全终态；S14 release 目标未完成，不得继续使用旧的完成口径。
+任何保持 admin 放行同时隐藏 operator 的正确修复，都需要角色感知 Reader/Repository、可信角色信号或 public policy/contract 变更，触发 S14 的第 6 个 Runtime 文件、Reader 或 public contract 硬停止条件。PR #1204 按已授权 rollback 撤销了新页面及其 exposure expansion，但没有关闭既有 Audit API 的角色授权缺口；S14 release 目标未完成，安全 blocker 继续开放。
 
 ## 2. Initial release 与 exact rollback scope
 
@@ -87,9 +101,13 @@ PR #1204 合并后：
 - `page_system_audit` 恢复 `hidden/not_released`；
 - `/hospital/system/audit` dedicated Route 被删除；
 - build route table 不再包含该路径；
-- `tenant_operator` 与其他角色均不能进入该审计页面读取面；
+- `page_system_audit` 页面读取面已撤销，S14 exact-5 rollback 消除了新发布页面造成的 exposure expansion；
+- `GET /api/institution/audit-events` 仍然存在，且 `system` Section Guard 仍允许 `tenant_admin` 与 `tenant_operator`；
+- 当前 Reader runtime context 没有可信 role，Repository 仍只按 tenant、institution 与 `verified` 过滤，因此 Audit API 读取面仍存在 trusted role-aware authorization blocker；
 - `page_workbench` 既有 release 不变；
-- thread 在实际 merge 与 merged-main 独立验证之后才回复并解决。
+- `PRRT_kwDOSrGMn86ZMXMW` 在实际 rollback merge 与 merged-main 独立验证之后回复并解决。
+
+PR #1205 post-merge P1 `PRRT_kwDOSrGMn86ZNNed` 进一步确认：页面 rollback 不等于 Audit API 安全 blocker 已关闭。该 P1 有效；本次 docs corrective 撤回错误的 `S14_BLOCKER_FORMALLY_CLOSED=true`，不在 S14 内实施 Reader/API Runtime 修复。
 
 ## 4. 当前 Reader 与 Workbench 基础状态
 
@@ -103,6 +121,7 @@ AUDIT_READER_COVERAGE_STATE=partial_verified_only
 AUDIT_READER_HISTORICAL_COVERAGE_COMPLETE=false
 AUDIT_READER_PARTIAL_COVERAGE_SAFE=true
 AUDIT_READER_COVERAGE_DISCLOSURE_SAFE=true
+AUDIT_READER_ROLE_AWARE_AUTHORIZATION_SAFE=false
 WORKBENCH_MULTI_CAPABILITY_SAFE=true
 WORKBENCH_PAGE_WORKBENCH_PROJECTION_STABLE=true
 ```
@@ -153,9 +172,12 @@ SECRET_ACCESS=false
 
 ```text
 PRIMARY_BLOCKING_PREREQUISITE=trusted_role_aware_audit_read_authorization
+BLOCKED_READ_SURFACE=GET /api/institution/audit-events
+BLOCKER_SCOPE=tenant_operator_can_reach_system_guard_but_reader_lacks_trusted_role_aware_scope
 REQUIRED_NEW_AUTHORIZATION=fresh_admission_beyond_S14_exact_5_runtime_allowlist
 PAGE_SYSTEM_AUDIT_RUNTIME_READMISSION_READY=false
 PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=false
+S13_EXACT_5_RELEASE_ADMISSION_REUSABLE_WITHOUT_FRESH_READMISSION=false
 ```
 
 下一次 release re-admission 必须 fresh 决定以下任一结构正确的方案，并冻结新的 exact allowlist：
@@ -168,9 +190,16 @@ PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=false
 ## 8. 下一任务边界
 
 ```text
-NEXT_TASK=TO_BE_SELECTED_BY_CHATGPT_PROJECT_CONTROL
+NEXT_TASK=POST-V2-R1C Trusted Role-Aware Audit Read Authorization fresh audit + exact Runtime admission
+NEXT_STAGE=S15
 NEXT_TASK_AUTHORIZED=false
-NEXT_TASK_SELECTION_REQUIRED=true
+NEXT_TASK_SELECTION_REQUIRED=false
+S15_RUNTIME_AUTHORIZED=false
+DATABASE_CONNECTION_AUTHORIZED=false
+DATABASE_WRITE_EXECUTION_AUTHORIZED=false
+PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
 ```
 
-S14 不自动扩展 Runtime allowlist，也不自动选择或开发下一任务。由 ChatGPT 项目总控审查本 blocked rollback 终态后另行授权。
+S14 不自动扩展 Runtime allowlist，也不实现下一任务。S15 仅被定义为 fresh audit + exact Runtime Admission，必须重新回答：可信 current-role 信号来源、既有 formal server authorization 能否携带 role、admin/operator 的可靠区分、Route/Reader/Repository 的授权 owner、admin-only 与 operator-limited 的最小安全路线、operator 是否只可读取本人 actorId 及获授权模块、public contract 或 Reader/Repository 是否需要变化，以及 fresh exact Runtime allowlist。caller/query role 与 caller-provided actorId 均不得作为授权信号。
+
+`S14_BLOCKED_STATE_HANDOFF_CLOSED=true` 只表示 release 已安全回滚、阻断事实和唯一下一任务已准确交接、Review debt 已处理；它不表示 `S14_FORMAL_CLOSURE` 或安全 blocker 已关闭。
