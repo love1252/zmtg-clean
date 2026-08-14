@@ -10,7 +10,7 @@ COMPLETION_MODE=BLOCKED_ROLLED_BACK
 S14_COMPLETE=false
 S14_RELEASE_ROLLBACK_COMPLETE=true
 S14_FORMAL_CLOSURE=false
-S14_BLOCKED_STATE_HANDOFF_CLOSED=false
+S14_BLOCKED_STATE_HANDOFF_CLOSED=true
 S14_BLOCKER_FORMALLY_CLOSED=false
 S14_SECURITY_BLOCKER_OPEN=true
 
@@ -23,8 +23,11 @@ SECURITY_ROLLBACK_HEAD=fef19d3591c0849f84d0618dd45272e707d31bc9
 SECURITY_ROLLBACK_MERGE=a1a2baf13c5674e2795b65b37fad2ff89ddac104
 FINAL_CORRECTIVE_HANDOFF_PR=1205
 BLOCKED_HANDOFF_CORRECTIVE_PR=1206
-S14_PRS=1202,1203,1204,1205,1206
-S14_PR_COUNT=5
+BLOCKED_HANDOFF_CORRECTIVE_HEAD=36b547be022bdfd09785d73a14c3c9bd1b2f3b46
+BLOCKED_HANDOFF_CORRECTIVE_MERGE=953bc6c1d4b6431c02690d51a8dade52119fbf42
+FINAL_BLOCKED_STATE_RECORDING_PR=TBD
+S14_PRS=1202,1203,1204,1205,1206,TBD
+S14_PR_COUNT=6
 S14_REQUIRED_CHECKS=passed
 
 S14_POST_MERGE_P1_DETECTED=2
@@ -34,14 +37,14 @@ PR1204_DOCUMENTATION_P2_THREAD=PRRT_kwDOSrGMn86ZM8Cc
 PR1204_DOCUMENTATION_P2_THREAD_RESOLVED=true
 PR1205_API_SCOPE_P1_THREAD=PRRT_kwDOSrGMn86ZNNed
 PR1205_API_SCOPE_P1_VALID=true
-PR1205_API_SCOPE_P1_THREAD_RESOLVED=false
+PR1205_API_SCOPE_P1_THREAD_RESOLVED=true
 PR1206_PREMERGE_DOCUMENTATION_P2_THREAD=PRRT_kwDOSrGMn86ZOp0H
 PR1206_PREMERGE_DOCUMENTATION_P2_THREAD_RESOLVED=true
 PR1206_OPEN_BLOCKER_TITLE_P2_THREAD=PRRT_kwDOSrGMn86ZO45-
 PR1206_OPEN_BLOCKER_TITLE_P2_THREAD_RESOLVED=true
-S14_ACTIONABLE_P0_P1=1
-S14_ACTIONABLE_P0_P1_P2_P3=1
-POST_MERGE_REVIEW_DEBT=1
+S14_ACTIONABLE_P0_P1=0
+S14_ACTIONABLE_P0_P1_P2_P3=0
+POST_MERGE_REVIEW_DEBT=0
 
 PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
 PAGE_SYSTEM_AUDIT_RELEASE=false
@@ -104,7 +107,7 @@ PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
 - 正确修复需要角色感知 Reader/Repository、可信角色信号或 public policy/contract 变更，均超出 S14 frozen exact-5 或触发 Reader/public contract 硬停止条件；
 - PR #1204 因此按 S14 rollback 恢复仅 `page_workbench` released，`page_system_audit` 回到 `hidden/not_released`，并删除 dedicated `/hospital/system/audit` Route；
 - 页面 Route rollback 只消除了新发布页面造成的 exposure expansion；`GET /api/institution/audit-events` 仍由允许 admin/operator 的 `system` Section Guard 保护，而 Reader 缺少可信 role-aware scope，安全 blocker 继续开放；
-- rollback exact 5-file scope、full 495/6789、AQ 148/148、build、Required Check 与 merged-main independent 3/93 均通过；#1206 合并前，PR #1205 API scope P1 仍待 merge 后回复并解决；
+- rollback exact 5-file scope、full 495/6789、AQ 148/148、build、Required Check 与 merged-main independent 3/93 均通过；#1206 合并后，PR #1205 API scope P1 已回复并解决；
 - S10-S13 Reader/Writer/Data Readiness foundation 继续有效，但不构成页面 release；S14 release 未完成，S13 exact-5 Admission 不可无 fresh re-admission 重放。
 
 证据：
@@ -114,7 +117,8 @@ PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
 - Initial Handoff PR #1203
 - Security rollback PR #1204 / Merge `a1a2baf13c5674e2795b65b37fad2ff89ddac104`
 - Final corrective Handoff PR #1205
-- Blocked Handoff corrective PR #1206
+- Blocked Handoff corrective PR #1206 / Merge `953bc6c1d4b6431c02690d51a8dade52119fbf42`
+- Final blocked-state recording PR #TBD
 
 唯一下一任务冻结为 S15 `Trusted Role-Aware Audit Read Authorization fresh audit + exact Runtime admission`；`NEXT_TASK_AUTHORIZED=false`、`S15_RUNTIME_AUTHORIZED=false`。
 

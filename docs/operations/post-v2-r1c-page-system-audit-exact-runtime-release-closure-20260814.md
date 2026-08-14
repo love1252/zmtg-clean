@@ -14,7 +14,9 @@
 >
 > Final Corrective Handoff PR：#1205
 >
-> Blocked Handoff Corrective PR：#1206
+> Blocked Handoff Corrective PR：#1206 / Head `36b547be022bdfd09785d73a14c3c9bd1b2f3b46` / Merge `953bc6c1d4b6431c02690d51a8dade52119fbf42`
+>
+> Final Blocked-State Recording PR：#TBD
 
 ## 1. 终态结论
 
@@ -25,7 +27,7 @@ COMPLETION_MODE=BLOCKED_ROLLED_BACK
 S14_COMPLETE=false
 S14_RELEASE_ROLLBACK_COMPLETE=true
 S14_FORMAL_CLOSURE=false
-S14_BLOCKED_STATE_HANDOFF_CLOSED=false
+S14_BLOCKED_STATE_HANDOFF_CLOSED=true
 S14_BLOCKER_FORMALLY_CLOSED=false
 S14_SECURITY_BLOCKER_OPEN=true
 PAGE_RELEASE_ROLLBACK_COMPLETE=true
@@ -48,16 +50,19 @@ PR1204_DOCUMENTATION_P2_THREAD=PRRT_kwDOSrGMn86ZM8Cc
 PR1204_DOCUMENTATION_P2_THREAD_RESOLVED=true
 PR1205_API_SCOPE_P1_THREAD=PRRT_kwDOSrGMn86ZNNed
 PR1205_API_SCOPE_P1_VALID=true
-PR1205_API_SCOPE_P1_THREAD_RESOLVED=false
+PR1205_API_SCOPE_P1_THREAD_RESOLVED=true
 PR1206_PREMERGE_DOCUMENTATION_P2_THREAD=PRRT_kwDOSrGMn86ZOp0H
 PR1206_PREMERGE_DOCUMENTATION_P2_THREAD_RESOLVED=true
 PR1206_OPEN_BLOCKER_TITLE_P2_THREAD=PRRT_kwDOSrGMn86ZO45-
 PR1206_OPEN_BLOCKER_TITLE_P2_THREAD_RESOLVED=true
-S14_ACTIONABLE_P0_P1=1
-S14_ACTIONABLE_P0_P1_P2_P3=1
-POST_MERGE_REVIEW_DEBT=1
+S14_ACTIONABLE_P0_P1=0
+S14_ACTIONABLE_P0_P1_P2_P3=0
+POST_MERGE_REVIEW_DEBT=0
 
 BLOCKED_HANDOFF_CORRECTIVE_PR=1206
+BLOCKED_HANDOFF_CORRECTIVE_HEAD=36b547be022bdfd09785d73a14c3c9bd1b2f3b46
+BLOCKED_HANDOFF_CORRECTIVE_MERGE=953bc6c1d4b6431c02690d51a8dade52119fbf42
+FINAL_BLOCKED_STATE_RECORDING_PR=TBD
 NEXT_TASK_AUTHORIZED=false
 NEXT_TASK_SELECTION_REQUIRED=false
 ```
@@ -206,4 +211,4 @@ PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
 
 S14 不自动扩展 Runtime allowlist，也不实现下一任务。S15 仅被定义为 fresh audit + exact Runtime Admission，必须重新回答：可信 current-role 信号来源、既有 formal server authorization 能否携带 role、admin/operator 的可靠区分、Route/Reader/Repository 的授权 owner、admin-only 与 operator-limited 的最小安全路线、operator 是否只可读取本人 actorId 及获授权模块、public contract 或 Reader/Repository 是否需要变化，以及 fresh exact Runtime allowlist。caller/query role 与 caller-provided actorId 均不得作为授权信号。
 
-当前 #1206 frozen Head 只记录 pre-merge pending 状态：`S14_BLOCKED_STATE_HANDOFF_CLOSED=false`、PR #1205 P1 unresolved、Review debt=1。只有 #1206 实际合并且 PR #1205 thread 已回复并解决后，才允许同属 S14 的 final docs follow-up 写入 `S14_BLOCKED_STATE_HANDOFF_CLOSED=true` 与 Review debt=0；该字段仍不表示 `S14_FORMAL_CLOSURE` 或安全 blocker 已关闭。
+#1206 已实际合并为 `953bc6c1d4b6431c02690d51a8dade52119fbf42`；merged main 复核后，PR #1205 P1 已回复并解决，#1206 两个 docs P2 也均已通过同 scope commit 修复并解决。因此本 final docs follow-up 记录 `S14_BLOCKED_STATE_HANDOFF_CLOSED=true` 与 Review debt=0。该字段只表示安全回滚、阻断记录、Review 和唯一下一任务交接闭合，仍不表示 `S14_FORMAL_CLOSURE` 或安全 blocker 已关闭。

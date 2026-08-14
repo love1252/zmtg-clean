@@ -11,7 +11,7 @@ COMPLETION_MODE=BLOCKED_ROLLED_BACK
 S14_COMPLETE=false
 S14_RELEASE_ROLLBACK_COMPLETE=true
 S14_FORMAL_CLOSURE=false
-S14_BLOCKED_STATE_HANDOFF_CLOSED=false
+S14_BLOCKED_STATE_HANDOFF_CLOSED=true
 S14_BLOCKER_FORMALLY_CLOSED=false
 S14_SECURITY_BLOCKER_OPEN=true
 BASELINE=c89cecaf5e3551f5497f1aac5bbfb093aefd180d
@@ -25,8 +25,11 @@ SECURITY_ROLLBACK_HEAD=fef19d3591c0849f84d0618dd45272e707d31bc9
 SECURITY_ROLLBACK_MERGE=a1a2baf13c5674e2795b65b37fad2ff89ddac104
 FINAL_CORRECTIVE_HANDOFF_PR=1205
 BLOCKED_HANDOFF_CORRECTIVE_PR=1206
-S14_PRS=1202,1203,1204,1205,1206
-S14_PR_COUNT=5
+BLOCKED_HANDOFF_CORRECTIVE_HEAD=36b547be022bdfd09785d73a14c3c9bd1b2f3b46
+BLOCKED_HANDOFF_CORRECTIVE_MERGE=953bc6c1d4b6431c02690d51a8dade52119fbf42
+FINAL_BLOCKED_STATE_RECORDING_PR=TBD
+S14_PRS=1202,1203,1204,1205,1206,TBD
+S14_PR_COUNT=6
 S14_REQUIRED_CHECKS=passed
 
 S14_POST_MERGE_P1_DETECTED=2
@@ -36,14 +39,14 @@ PR1204_DOCUMENTATION_P2_THREAD=PRRT_kwDOSrGMn86ZM8Cc
 PR1204_DOCUMENTATION_P2_THREAD_RESOLVED=true
 PR1205_API_SCOPE_P1_THREAD=PRRT_kwDOSrGMn86ZNNed
 PR1205_API_SCOPE_P1_VALID=true
-PR1205_API_SCOPE_P1_THREAD_RESOLVED=false
+PR1205_API_SCOPE_P1_THREAD_RESOLVED=true
 PR1206_PREMERGE_DOCUMENTATION_P2_THREAD=PRRT_kwDOSrGMn86ZOp0H
 PR1206_PREMERGE_DOCUMENTATION_P2_THREAD_RESOLVED=true
 PR1206_OPEN_BLOCKER_TITLE_P2_THREAD=PRRT_kwDOSrGMn86ZO45-
 PR1206_OPEN_BLOCKER_TITLE_P2_THREAD_RESOLVED=true
-S14_ACTIONABLE_P0_P1=1
-S14_ACTIONABLE_P0_P1_P2_P3=1
-POST_MERGE_REVIEW_DEBT=1
+S14_ACTIONABLE_P0_P1=0
+S14_ACTIONABLE_P0_P1_P2_P3=0
+POST_MERGE_REVIEW_DEBT=0
 
 INITIAL_EXACT_RUNTIME_FILE_COUNT=5
 INITIAL_ACTUAL_RUNTIME_TEST_CHANGED_FILE_COUNT=5
@@ -122,8 +125,8 @@ PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
 - PR #1204 按已授权 rollback 精确恢复 canonical 5 个 Runtime/Test 文件：Authority 回到仅 Workbench released，删除 dedicated `/hospital/system/audit` Route，其他 foundation 不变；
 - rollback final 3/93、full 495/6789、AQ 148/148、build、ProductionReadinessDocs、Required Check 与 merged-main 3/93 均通过；
 - #1204 的页面 rollback 已撤销新页面 exposure expansion，但没有关闭仍可直接调用的 `GET /api/institution/audit-events` 角色授权缺口；
-- PR #1205 post-merge P1 `PRRT_kwDOSrGMn86ZNNed` 确认 blocker 必须保持 open；同阶段 blocked-handoff corrective PR #1206 frozen Head 已撤回错误 closure claim，但合并前不得声称该 thread 已回复或解决；
-- 当前 `S14_BLOCKED_STATE_HANDOFF_CLOSED=false`、actionable P0/P1/P2/P3=1、post-merge Review debt=1；仅在 #1206 实际合并并解决 #1205 thread 后，由同属 S14 的 final docs follow-up 写入真实闭环证据；
+- PR #1205 post-merge P1 `PRRT_kwDOSrGMn86ZNNed` 确认 blocker 必须保持 open；同阶段 blocked-handoff corrective PR #1206 已合并为 `953bc6c1d4b6431c02690d51a8dade52119fbf42`，该 thread 已在 merged-main 复核后回复并解决；
+- 当前 `S14_BLOCKED_STATE_HANDOFF_CLOSED=true`、actionable P0/P1/P2/P3=0、post-merge Review debt=0；这只表示安全回滚、阻断记录、Review 与下一任务交接闭合，不表示安全 blocker 已解决；
 - S14 release 目标未完成，不能保留旧的完成状态或页面计数口径；当前仍为 1 / 26；
 - 未连接数据库，未执行 Schema、Migration、DDL、DML、Seed、Staging 或 Production deployment。
 
@@ -134,7 +137,8 @@ PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
 - Initial Handoff PR #1203
 - Security rollback PR #1204 / Merge `a1a2baf13c5674e2795b65b37fad2ff89ddac104`
 - Final corrective Handoff PR #1205
-- Blocked Handoff corrective PR #1206
+- Blocked Handoff corrective PR #1206 / Merge `953bc6c1d4b6431c02690d51a8dade52119fbf42`
+- Final blocked-state recording PR #TBD
 
 唯一下一任务冻结为 S15 `Trusted Role-Aware Audit Read Authorization fresh audit + exact Runtime admission`；`NEXT_TASK_AUTHORIZED=false`、`S15_RUNTIME_AUTHORIZED=false`，不得自动重放 S13 exact-5 Admission。
 
