@@ -7,11 +7,23 @@
 ```text
 STAGE=S17
 TASK=POST_V2_R1C_PAGE_SYSTEM_AUDIT_POST_ROLE_AWARE_FRESH_RELEASE_READMISSION
-COMPLETION_MODE=ADMISSION_READY
+COMPLETION_MODE=COMPLETE
 BASELINE=709ab04b4af0f469d6bd5631bc1596acb9c42d16
 ADMISSION_PR=1212
-ADMISSION_REQUIRED_CHECK=pending
-S17_COMPLETE=false
+ADMISSION_HEAD=284653d98834c83f510a2c982a913c8f07288ac8
+ADMISSION_MERGE=1a856d55bd6578eeccffa0d86ed18c2b1c37862a
+ADMISSION_REQUIRED_CHECK=passed
+ADMISSION_ACTIONABLE_P0_P1_P2_P3=0
+ADMISSION_POST_MERGE_REVIEW_DEBT=0
+FINAL_HANDOFF_PR=1213
+FINAL_HANDOFF_REQUIRED_CHECK=passed
+S17_PR_COUNT=2
+S17_PRS=1212,1213
+S17_REQUIRED_CHECKS=passed
+S17_ACTIONABLE_P0_P1=0
+S17_ACTIONABLE_P0_P1_P2_P3=0
+POST_MERGE_REVIEW_DEBT=0
+S17_COMPLETE=true
 FRESH_RELEASE_REAUDIT=passed
 ADMIN_ONLY_PAGE_AUDIENCE_VERIFIED=true
 
@@ -50,6 +62,8 @@ EXACT_TEST_FILE_COUNT=3
 
 TARGETED_TEST_FILES=14
 TARGETED_TESTS=531/531 passed
+POST_MERGE_INDEPENDENT_TEST_FILES=14
+POST_MERGE_INDEPENDENT_TESTS=531/531 passed
 TYPECHECK=passed
 ARCHITECTURE_UNIT=148/148 passed
 ARCHITECTURE_INCREMENTAL=passed
@@ -80,7 +94,7 @@ S17 从 S16 merged main fresh 证明 admin-only 页面闭包：shared system nav
 
 新的 exact 5-file allowlist 包含 existing Capability Authority 与 test、new dedicated Route、existing Route integration test 与 Workbench regression test。Reader、API、Repository、S16 owner、generic Guard、shared catch-all、public registry、Schema 与数据库均不修改；Workbench 继续只呈现 `page_workbench`。
 
-Canonical evidence：`docs/operations/post-v2-r1c-page-system-audit-post-role-aware-fresh-release-readmission-20260814.md`。S17 只完成 docs-only Admission，页面仍 hidden；S18 Runtime 当前未授权。
+Canonical evidence：`docs/operations/post-v2-r1c-page-system-audit-post-role-aware-fresh-release-readmission-20260814.md`。Admission #1212 与 Final Handoff #1213 的 Required Check、Review 与 post-merge sweep 均为 0 debt；页面仍 hidden，S18 Runtime 当前未授权。
 
 <!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_POST_ROLE_AWARE_READMISSION_HISTORY_END -->
 

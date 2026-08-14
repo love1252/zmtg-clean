@@ -13,7 +13,7 @@
 - POST-V2-R1C `page_system_audit`：S14 initial exact-5 release 已由 #1204 按 exact-5 rollback 恢复为 `hidden/not_released`；S16 已关闭角色感知 API blocker，S17 已 fresh 冻结 post-role-aware exact 5-file re-admission；当前仍未发布
 - POST-V2-R1C Trusted Role-Aware Audit Read Authorization：S15 fresh audit、exact 6-file Runtime Admission 与两个 docs-only PR 已闭环；选择 `admin_only_v1` 与 Audit-specific orchestration owner；S15 当时 Runtime 未实施、S14 blocker 仍开放
 - POST-V2-R1C Trusted Role-Aware Audit Read Authorization Runtime：S16 exact 6-file Runtime PR #1210 已合并；只有 authoritative current `tenant_admin` 可读，可信非管理员固定 403，invalid/stale/mismatch/unavailable 固定 503；Runtime Required Check、full 496/6836 与 merged-main 8/314 均通过
-- POST-V2-R1C `page_system_audit` post-role-aware re-admission：S17 已基于 S16 merged main 完成 fresh audit；页面 audience 固定为 `tenant_admin_only`，冻结新的 exact 5-file Runtime allowlist，当前只完成 docs-only Admission、页面仍未发布
+- POST-V2-R1C `page_system_audit` post-role-aware re-admission：S17 Admission #1212 与 Final Handoff #1213 已闭环；页面 audience 固定为 `tenant_admin_only`，新的 exact 5-file Runtime allowlist 已冻结，页面仍未发布
 - S4 Phase 0：PR #1172 已修正 Handoff 授权来源与页面授权状态，PR #1171 两个 post-merge Review thread 已回复并解决
 - S4 Phase 1 / S5 Phase 0 修正：Audit Writer attribution fresh audit 已通过；重新核算为 19 个生产 caller 与 10 个 transaction persistence / composition 点，完整 closure 仍必须拆分
 - S5 Phase 0：caller inventory docs-only follow-up PR #1174 已合并；合并后仅回复并解决 PR #1173 指定 Review thread
@@ -51,11 +51,23 @@
 ```text
 STAGE=S17
 TASK=POST_V2_R1C_PAGE_SYSTEM_AUDIT_POST_ROLE_AWARE_FRESH_RELEASE_READMISSION
-COMPLETION_MODE=ADMISSION_READY
+COMPLETION_MODE=COMPLETE
 BASELINE=709ab04b4af0f469d6bd5631bc1596acb9c42d16
 ADMISSION_PR=1212
-ADMISSION_REQUIRED_CHECK=pending
-S17_COMPLETE=false
+ADMISSION_HEAD=284653d98834c83f510a2c982a913c8f07288ac8
+ADMISSION_MERGE=1a856d55bd6578eeccffa0d86ed18c2b1c37862a
+ADMISSION_REQUIRED_CHECK=passed
+ADMISSION_ACTIONABLE_P0_P1_P2_P3=0
+ADMISSION_POST_MERGE_REVIEW_DEBT=0
+FINAL_HANDOFF_PR=1213
+FINAL_HANDOFF_REQUIRED_CHECK=passed
+S17_PR_COUNT=2
+S17_PRS=1212,1213
+S17_REQUIRED_CHECKS=passed
+S17_ACTIONABLE_P0_P1=0
+S17_ACTIONABLE_P0_P1_P2_P3=0
+POST_MERGE_REVIEW_DEBT=0
+S17_COMPLETE=true
 FRESH_RELEASE_REAUDIT=passed
 ADMIN_ONLY_PAGE_AUDIENCE_VERIFIED=true
 
@@ -92,6 +104,8 @@ EXACT_TEST_FILE_COUNT=3
 
 TARGETED_TEST_FILES=14
 TARGETED_TESTS=531/531 passed
+POST_MERGE_INDEPENDENT_TEST_FILES=14
+POST_MERGE_INDEPENDENT_TESTS=531/531 passed
 TYPECHECK=passed
 ARCHITECTURE_UNIT=148/148 passed
 ARCHITECTURE_INCREMENTAL=passed
