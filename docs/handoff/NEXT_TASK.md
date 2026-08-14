@@ -3,17 +3,85 @@
 ## 下一任务选择状态
 
 ```text
-NEXT_TASK=POST-V2-R1C page_system_audit exact 5-file Runtime release implementation explicit authorization
-NEXT_STAGE=S18
+NEXT_TASK=POST-V2-R1C final closure + seven-line development entry audit
+NEXT_STAGE=UNASSIGNED
 NEXT_TASK_AUTHORIZED=false
-NEXT_TASK_SELECTION_REQUIRED=false
-S18_RUNTIME_AUTHORIZED=false
+NEXT_TASK_SELECTION_REQUIRED=true
+S18_COMPLETE=true
+SEVEN_STREAM_DEVELOPMENT_AUTHORIZED=false
 DATABASE_CONNECTION_AUTHORIZED=false
 DATABASE_WRITE_EXECUTION_AUTHORIZED=false
-PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
+PAGE_SYSTEM_AUDIT_RUNTIME_RELEASE_COMPLETE=true
 ```
 
-S17 已基于 S16 merged main fresh 重建页面 release eligibility：页面 audience 固定为 `tenant_admin_only`，dedicated Route 将复用 S16 Audit-specific owner 的三态结论，不消费或跨请求复用 one-shot handle；Reader/API/Repository、generic Guard 与 public contract 均无需修改。新的 exact 5-file Runtime allowlist 已冻结，但 `page_system_audit` 仍为 `hidden/not_released`。唯一下一任务是 S18 exact 5-file Runtime release implementation，尚未授权。
+S18 已按 S17 canonical exact 5-file allowlist 完成 admin-only `page_system_audit` Runtime release。页面当前为 `read_only/pilot_released`，review-accepted governed pages 为 `page_workbench,page_system_audit`；本阶段没有 Staging 或 Production deployment。下一任务只允许独立审计 POST-V2-R1C 最终收口与七条线开发入口，不自动授权任何七条线 Runtime。
+
+## S18 exact 5-file Runtime 最终发布闭环
+
+```text
+STAGE=S18
+TASK=POST_V2_R1C_PAGE_SYSTEM_AUDIT_EXACT_5_FILE_RUNTIME_RELEASE
+COMPLETION_MODE=COMPLETE
+BASELINE=854fb8658de9e7f84807be88db71e9b6275a7743
+RUNTIME_PR=1214
+RUNTIME_HEAD=47540a93365a0f3629dcc354806934b83fa4956c
+RUNTIME_MERGE=f3f6a149e3c470a542463e269ab986ebc41b582f
+RUNTIME_REQUIRED_CHECK=passed
+FINAL_HANDOFF_PR=PENDING
+
+S18_RUNTIME_IMPLEMENTED=true
+EXACT_RUNTIME_FILE_COUNT=5
+ACTUAL_RUNTIME_TEST_CHANGED_FILE_COUNT=5
+EXACT_SCOPE_MATCH=true
+
+PAGE_SYSTEM_AUDIT_STATE=read_only/pilot_released
+PAGE_SYSTEM_AUDIT_RELEASE=true
+PAGE_SYSTEM_AUDIT_TARGET_AUDIENCE=tenant_admin_only
+TENANT_ADMIN_PAGE_SYSTEM_AUDIT_ALLOWED=true
+TENANT_OPERATOR_PAGE_SYSTEM_AUDIT_ALLOWED=false
+CONSULTANT_PAGE_SYSTEM_AUDIT_ALLOWED=false
+CUSTOMER_SERVICE_PAGE_SYSTEM_AUDIT_ALLOWED=false
+
+AUDIT_API_ROLE_AWARE_AUTHORIZATION_SAFE=true
+PAGE_ROUTE_REUSES_AUDIT_READ_AUTHORIZATION_OWNER=true
+PAGE_ROUTE_CONSUMES_ONE_SHOT_HANDLE=false
+AUDIT_AUTHORIZATION_HANDLE_CROSS_REQUEST_REUSE=false
+
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=2
+RELEASED_GOVERNED_PAGES=page_workbench,page_system_audit
+PAGE_WORKBENCH_RELEASE_UNCHANGED=true
+OTHER_CAPABILITY_RELEASE_DRIFT_COUNT=0
+CONTROLLED_CREATE_RELEASE_COUNT=0
+
+AUDIT_READER_COVERAGE_STATE=partial_verified_only
+AUDIT_READER_HISTORICAL_COVERAGE_COMPLETE=false
+AUDIT_READER_PARTIAL_COVERAGE_SAFE=true
+
+TARGETED_TEST_FILES=14
+TARGETED_TESTS=462/462 passed
+FULL_TEST_FILES=496
+FULL_TESTS=6856/6856 passed
+POST_MERGE_INDEPENDENT_TEST_FILES=14
+POST_MERGE_INDEPENDENT_TESTS=462/462 passed
+TYPECHECK=passed
+ARCHITECTURE_UNIT=148/148 passed
+ARCHITECTURE_INCREMENTAL=passed
+LINT=passed_with_4_existing_warnings
+BUILD=passed
+PRODUCTION_READINESS_DOCS=8/8 passed
+GIT_DIFF_CHECK=passed
+
+S18_ACTIONABLE_P0_P1=0
+S18_ACTIONABLE_P0_P1_P2_P3=0
+POST_MERGE_REVIEW_DEBT=0
+S18_COMPLETE=true
+
+NEXT_TASK=POST-V2-R1C final closure + seven-line development entry audit
+NEXT_TASK_AUTHORIZED=false
+SEVEN_STREAM_DEVELOPMENT_AUTHORIZED=false
+```
+
+完整证据：`docs/operations/post-v2-r1c-page-system-audit-final-runtime-release-closure-20260814.md`。
 
 ## S17 post-role-aware fresh re-admission
 
