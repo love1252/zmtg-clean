@@ -3,17 +3,82 @@
 ## 下一任务选择状态
 
 ```text
-NEXT_TASK=POST-V2-R1C page_system_audit fresh release re-audit + exact Runtime re-admission
-NEXT_STAGE=S17
+NEXT_TASK=POST-V2-R1C page_system_audit exact 5-file Runtime release implementation explicit authorization
+NEXT_STAGE=S18
 NEXT_TASK_AUTHORIZED=false
 NEXT_TASK_SELECTION_REQUIRED=false
-S17_AUTHORIZED=false
+S18_RUNTIME_AUTHORIZED=false
 DATABASE_CONNECTION_AUTHORIZED=false
 DATABASE_WRITE_EXECUTION_AUTHORIZED=false
 PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
 ```
 
-S16 exact 6-file Runtime 已合并：Audit-specific owner 只允许 authoritative current `tenant_admin`，可信非管理员固定拒绝，invalid/stale/mismatch/unavailable fail-closed；`GET /api/institution/audit-events` 与继承自 S14 的角色感知 security blocker 已关闭。`page_system_audit` 继续 `hidden/not_released`，旧 S13 exact-5 Admission 不可直接重放；唯一下一任务是 S17 fresh release re-audit + exact Runtime re-admission，尚未授权。
+S17 已基于 S16 merged main fresh 重建页面 release eligibility：页面 audience 固定为 `tenant_admin_only`，dedicated Route 将复用 S16 Audit-specific owner 的三态结论，不消费或跨请求复用 one-shot handle；Reader/API/Repository、generic Guard 与 public contract 均无需修改。新的 exact 5-file Runtime allowlist 已冻结，但 `page_system_audit` 仍为 `hidden/not_released`。唯一下一任务是 S18 exact 5-file Runtime release implementation，尚未授权。
+
+## S17 post-role-aware fresh re-admission
+
+```text
+STAGE=S17
+TASK=POST_V2_R1C_PAGE_SYSTEM_AUDIT_POST_ROLE_AWARE_FRESH_RELEASE_READMISSION
+COMPLETION_MODE=ADMISSION_READY
+BASELINE=709ab04b4af0f469d6bd5631bc1596acb9c42d16
+FRESH_RELEASE_REAUDIT=passed
+ADMIN_ONLY_PAGE_AUDIENCE_VERIFIED=true
+
+PAGE_SYSTEM_AUDIT_TARGET_AUDIENCE=tenant_admin_only
+PAGE_SYSTEM_AUDIT_TENANT_ADMIN_ALLOWED=true
+PAGE_SYSTEM_AUDIT_TENANT_OPERATOR_ALLOWED=false
+PAGE_SYSTEM_AUDIT_CONSULTANT_ALLOWED=false
+PAGE_SYSTEM_AUDIT_CUSTOMER_SERVICE_ALLOWED=false
+
+AUDIT_API_ROLE_AWARE_AUTHORIZATION_SAFE=true
+PAGE_ROUTE_CAN_REUSE_AUDIT_READ_AUTHORIZATION_OWNER=true
+PAGE_ROUTE_SHOULD_CONSUME_ONE_SHOT_HANDLE=false
+PAGE_ROUTE_AUTHORIZATION_CHAIN_SAFE=true
+SYSTEM_NAVIGATION_ALONE_AUTHORIZES_AUDIT_PAGE=false
+CAPABILITY_AUTHORITY_IS_ROLE_SOURCE=false
+AUDIT_AUTHORIZATION_HANDLE_CROSS_REQUEST_REUSE=false
+
+CANONICAL_ROUTE=/hospital/system/audit
+DEDICATED_STATIC_ROUTE_CURRENTLY_EXISTS=false
+SHARED_CATCH_ALL_CHANGE_REQUIRED=false
+
+AUDIT_READER_COVERAGE_STATE=partial_verified_only
+AUDIT_READER_HISTORICAL_COVERAGE_COMPLETE=false
+AUDIT_READER_PARTIAL_COVERAGE_SAFE=true
+AUDIT_READER_COVERAGE_DISCLOSURE_SAFE=true
+WORKBENCH_MULTI_CAPABILITY_SAFE=true
+SHELL_READONLY_SAFE=true
+LOW_SENSITIVE_OUTPUT_SAFE=true
+
+EXACT_RUNTIME_ALLOWLIST_FROZEN=true
+EXACT_RUNTIME_FILE_COUNT=5
+EXACT_RUNTIME_EXISTING_FILE_COUNT=4
+EXACT_RUNTIME_NEW_FILE_COUNT=1
+EXACT_PRODUCTION_FILE_COUNT=2
+EXACT_TEST_FILE_COUNT=3
+
+PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=true
+PAGE_SYSTEM_AUDIT_RUNTIME_READMISSION_READY=true
+S17_RUNTIME_IMPLEMENTED=false
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+
+DATABASE_CONNECTION=false
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+MIGRATION=false
+DDL_EXECUTION=false
+DML_EXECUTION=false
+
+NEXT_STAGE=S18
+NEXT_TASK=POST-V2-R1C page_system_audit exact 5-file Runtime release implementation explicit authorization
+NEXT_TASK_AUTHORIZED=false
+S18_RUNTIME_AUTHORIZED=false
+```
+
+Exact allowlist 与 24 项 test plan 的唯一 canonical 来源：`docs/operations/post-v2-r1c-page-system-audit-post-role-aware-fresh-release-readmission-20260814.md`。
 
 ## S16 exact Runtime 闭环
 
