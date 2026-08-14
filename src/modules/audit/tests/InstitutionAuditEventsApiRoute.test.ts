@@ -103,6 +103,33 @@ describe('机构端审计日志只读 Route', () => {
     expect(routeMocks.readCurrentInstitutionAuditEventsV1).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'tenant_operator',
+    'consultant',
+    'customer_service',
+  ] as const)('可信非管理员角色 %s 返回低敏 403 与 no-store', async (_role) => {
+    routeMocks.readCurrentInstitutionAuditEventsV1.mockResolvedValue({
+      kind: 'forbidden',
+    });
+
+    const response = await institutionAuditEventsGet(
+      new Request('http://localhost/api/institution/audit-events'),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(payload).toEqual({
+      code: 'institution_audit_events_forbidden',
+      error: '无权读取机构审计日志',
+    });
+    expect(JSON.stringify(payload)).not.toContain('tenant_operator');
+    expect(JSON.stringify(payload)).not.toContain('consultant');
+    expect(JSON.stringify(payload)).not.toContain('customer_service');
+    expect(JSON.stringify(payload)).not.toContain('membership');
+    expect(JSON.stringify(payload)).not.toContain('scope');
+  });
+
   it('Reader unavailable 返回低敏 503 与 no-store', async () => {
     routeMocks.readCurrentInstitutionAuditEventsV1.mockResolvedValue({
       kind: 'unavailable',

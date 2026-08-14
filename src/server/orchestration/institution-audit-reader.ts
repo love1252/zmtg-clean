@@ -7,9 +7,9 @@ import type {
 import { createInstitutionAuditCoverage } from '@/modules/audit/domain/audit-event-query';
 import { createAuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import {
-  consumeInstitutionCapabilityAuthorityRuntimeContextV1,
-  resolveInstitutionCapabilityAuthorityRuntimeContextV1,
-} from '@/modules/institution/server/institution-server-runtime';
+  consumeInstitutionAuditReadAuthorizationV1,
+  resolveInstitutionAuditReadAuthorizationV1,
+} from '@/server/orchestration/institution-audit-read-authorization';
 import { getDatabase } from '@/server/db/client';
 
 export type InstitutionAuditEventListItemV1 = Omit<AuditEventListItem, 'tenantId'>;
@@ -21,8 +21,12 @@ export type InstitutionAuditReaderResultV1 =
       pageInfo: Readonly<AuditEventQueryResult['pageInfo']>;
       coverage: InstitutionAuditCoverage;
     }
+  | { kind: 'forbidden' }
   | { kind: 'unavailable' };
 
+const INSTITUTION_AUDIT_READER_FORBIDDEN = Object.freeze({
+  kind: 'forbidden',
+} as const);
 const INSTITUTION_AUDIT_READER_UNAVAILABLE = Object.freeze({
   kind: 'unavailable',
 } as const);
@@ -47,12 +51,18 @@ export async function readCurrentInstitutionAuditEventsV1(
   query: AuditEventQuery,
 ): Promise<InstitutionAuditReaderResultV1> {
   try {
-    const handle = await resolveInstitutionCapabilityAuthorityRuntimeContextV1();
-    if (!handle) return INSTITUTION_AUDIT_READER_UNAVAILABLE;
+    const resolution = await resolveInstitutionAuditReadAuthorizationV1();
+    if (resolution.kind === 'forbidden') {
+      return INSTITUTION_AUDIT_READER_FORBIDDEN;
+    }
+    if (resolution.kind !== 'allowed') {
+      return INSTITUTION_AUDIT_READER_UNAVAILABLE;
+    }
 
-    const context =
-      consumeInstitutionCapabilityAuthorityRuntimeContextV1(handle);
-    if (!context || !context.availableSectionIds.includes('system')) {
+    const context = consumeInstitutionAuditReadAuthorizationV1(
+      resolution.authorization,
+    );
+    if (!context) {
       return INSTITUTION_AUDIT_READER_UNAVAILABLE;
     }
 
