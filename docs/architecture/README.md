@@ -11,7 +11,7 @@ S14_COMPLETE=true
 RUNTIME_PR=1202
 RUNTIME_HEAD=8a95401d8d2668062059f239db20a33e689173b8
 RUNTIME_MERGE=c1eabd4051f7fafb75abd44bd6636503c89f43a4
-HANDOFF_PR=TBD
+HANDOFF_PR=1203
 S14_PR_COUNT=2
 S14_REQUIRED_CHECKS=passed
 S14_ACTIONABLE_P0_P1_P2_P3=0
@@ -61,7 +61,7 @@ NEXT_TASK_SELECTION_REQUIRED=true
 
 - `docs/operations/post-v2-r1c-page-system-audit-exact-runtime-release-closure-20260814.md`
 - Runtime PR #1202 / Merge `c1eabd4051f7fafb75abd44bd6636503c89f43a4`
-- final Handoff PR TBD
+- final Handoff PR #1203
 
 下一任务尚未选择；`NEXT_TASK_AUTHORIZED=false`，由 ChatGPT 项目总控审查 2 / 26 页面状态后另行确定。
 
