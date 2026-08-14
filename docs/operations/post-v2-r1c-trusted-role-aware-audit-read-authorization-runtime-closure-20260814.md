@@ -8,19 +8,19 @@
 >
 > Runtime PR：#1210 / Head `7bbb72d527245c9ca26b2d29cc5ccda19228d670` / Merge `dc73994246f300b38a823fcb8f5f330eac05f7e5`
 >
-> Final Handoff PR：pending
+> Final Handoff PR：#1211
 
 ## 1. 终态结论
 
 ```text
 STAGE=S16
 TASK=POST_V2_R1C_TRUSTED_ROLE_AWARE_AUDIT_READ_AUTHORIZATION_EXACT_RUNTIME_IMPLEMENTATION
-COMPLETION_MODE=FINAL_HANDOFF_PENDING
+COMPLETION_MODE=COMPLETE
 BASELINE=d0a886d4be5d391ad044acf990fdd1d44a7e0a74
 RUNTIME_PR=1210
 RUNTIME_HEAD=7bbb72d527245c9ca26b2d29cc5ccda19228d670
 RUNTIME_MERGE=dc73994246f300b38a823fcb8f5f330eac05f7e5
-FINAL_HANDOFF_PR=pending
+FINAL_HANDOFF_PR=1211
 
 S16_RUNTIME_IMPLEMENTED=true
 EXACT_RUNTIME_FILE_COUNT=6
@@ -64,15 +64,15 @@ S16_RUNTIME_REQUIRED_CHECK=passed
 S16_RUNTIME_ACTIONABLE_P0_P1=0
 S16_RUNTIME_ACTIONABLE_P0_P1_P2_P3=0
 S16_RUNTIME_POST_MERGE_REVIEW_DEBT=0
-S16_HANDOFF_REQUIRED_CHECK=pending
+S16_HANDOFF_REQUIRED_CHECK=passed
 S16_PR_COUNT=2
-S16_PRS=1210,pending
-S16_REQUIRED_CHECKS=pending
+S16_PRS=1210,1211
+S16_REQUIRED_CHECKS=passed
 S16_ACTIONABLE_P0_P1=0
 S16_ACTIONABLE_P0_P1_P2_P3=0
 POST_MERGE_REVIEW_DEBT=0
 
-S16_COMPLETE=false
+S16_COMPLETE=true
 NEXT_STAGE=S17
 NEXT_TASK=POST-V2-R1C page_system_audit fresh release re-audit + exact Runtime re-admission
 NEXT_TASK_AUTHORIZED=false
@@ -81,7 +81,7 @@ S17_AUTHORIZED=false
 
 S16 已在 exact 6-file Runtime 范围内实现角色感知机构 Audit 读取授权。只有来自签名 formal session、并经 authoritative Identity、Membership/Binding 与 Institution Scope 交叉确认的 current `tenant_admin` 才能获得 genuine、frozen、opaque、one-shot 读取 handle；其他可信机构角色固定拒绝，invalid、stale、mismatch、missing 与 owner unavailable 继续 fail-closed。
 
-本报告当前随 final Handoff Draft 创建；`FINAL_HANDOFF_PR`、Handoff Required Check 与 `S16_COMPLETE` 只在对应事实成立后收口，不提前伪造。
+Final Handoff PR #1211 只在冻结 Head 的 Required Check 成功、Review sweep 为 0 debt 且完成合并后，使本文的 `S16_COMPLETE=true` 成为仓库终态事实。
 
 ## 2. Runtime exact scope
 

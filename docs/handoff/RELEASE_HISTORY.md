@@ -7,12 +7,12 @@
 ```text
 STAGE=S16
 TASK=POST_V2_R1C_TRUSTED_ROLE_AWARE_AUDIT_READ_AUTHORIZATION_EXACT_RUNTIME_IMPLEMENTATION
-COMPLETION_MODE=FINAL_HANDOFF_PENDING
+COMPLETION_MODE=COMPLETE
 BASELINE=d0a886d4be5d391ad044acf990fdd1d44a7e0a74
 RUNTIME_PR=1210
 RUNTIME_HEAD=7bbb72d527245c9ca26b2d29cc5ccda19228d670
 RUNTIME_MERGE=dc73994246f300b38a823fcb8f5f330eac05f7e5
-FINAL_HANDOFF_PR=pending
+FINAL_HANDOFF_PR=1211
 
 S16_RUNTIME_IMPLEMENTED=true
 EXACT_RUNTIME_FILE_COUNT=6
@@ -48,14 +48,14 @@ PRODUCTION_READINESS_DOCS=8/8 passed
 GIT_DIFF_CHECK=passed
 S16_RUNTIME_REQUIRED_CHECK=passed
 S16_RUNTIME_POST_MERGE_REVIEW_DEBT=0
-S16_HANDOFF_REQUIRED_CHECK=pending
+S16_HANDOFF_REQUIRED_CHECK=passed
 S16_PR_COUNT=2
-S16_PRS=1210,pending
-S16_REQUIRED_CHECKS=pending
+S16_PRS=1210,1211
+S16_REQUIRED_CHECKS=passed
 S16_ACTIONABLE_P0_P1=0
 S16_ACTIONABLE_P0_P1_P2_P3=0
 POST_MERGE_REVIEW_DEBT=0
-S16_COMPLETE=false
+S16_COMPLETE=true
 
 PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
 PAGE_SYSTEM_AUDIT_RELEASE=false
@@ -69,7 +69,7 @@ S17_AUTHORIZED=false
 
 S16 在 canonical exact 6 files 内新增 Audit-specific trusted role owner 并接入 Reader/API：只有 authoritative current `tenant_admin` 获得 one-shot handle；`tenant_operator`、`consultant`、`customer_service` 进入低敏 403，invalid/stale/mismatch/unavailable 进入低敏 503。Repository 的 formal tenant + institution + `verified` 查询、coverage、pagination、filters、DTO 与 Platform Audit 均未改变。
 
-Runtime PR #1210 的 Required Check、本地 13 files / 457 targeted、496 files / 6836 full、AQ unit 148/148、build 与 merged-main 3 files / 72 tests 均通过；Runtime post-merge Review sweep 为 0 debt。Final Handoff Draft 只在自身 PR、Required Check 与 merge 事实成立后宣告 `S16_COMPLETE=true`。
+Runtime PR #1210 的 Required Check、本地 13 files / 457 targeted、496 files / 6836 full、AQ unit 148/148、build 与 merged-main 3 files / 72 tests 均通过；Runtime post-merge Review sweep 为 0 debt。Final Handoff PR #1211 只在冻结 Head Required Check 成功、Review sweep 为 0 debt 且合并后宣告 `S16_COMPLETE=true`。
 
 `page_system_audit` 继续 `hidden/not_released`，S16 不复用 S13 old exact-5 Admission；下一阶段 S17 必须以 role-aware merged Runtime 为新基线 fresh re-audit，当前未授权。
 
