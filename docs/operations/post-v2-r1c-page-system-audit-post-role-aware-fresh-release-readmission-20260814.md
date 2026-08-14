@@ -269,6 +269,18 @@ EXACT_TEST_FILE_COUNT=3
 
 同时运行 unchanged S16 owner/Reader/API、Scope Guard、Section Guard、Formal Institution Session Context、client/Shell/coverage、Capability Authority、RouteShell、Workbench、typecheck、AQ unit 148/148、Architecture incremental、ProductionReadinessDocs、`git diff --check` 与 Required Check。
 
+S17 Admission 当前本地证据：
+
+```text
+TARGETED_TEST_FILES=14
+TARGETED_TESTS=531/531 passed
+TYPECHECK=passed
+ARCHITECTURE_UNIT=148/148 passed
+ARCHITECTURE_INCREMENTAL=passed
+PRODUCTION_READINESS_DOCS=8/8 passed
+GIT_DIFF_CHECK=passed
+```
+
 ## 10. Rollback 与边界
 
 未来 Runtime 必须保持单一 exact-5 PR。若发布后出现页面角色、Authority、coverage、Route 或 Workbench 回归，revert 该单一 Runtime merge：删除 dedicated Route，恢复 Authority policy/revision 与 3 个 test files。回滚不连接数据库，不触碰 Reader、Repository、Schema 或历史记录，并恢复页面 hidden/count=1。
