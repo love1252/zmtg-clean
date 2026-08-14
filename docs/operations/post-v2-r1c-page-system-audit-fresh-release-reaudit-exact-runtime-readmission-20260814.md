@@ -23,6 +23,11 @@ FRESH_RELEASE_REAUDIT=passed
 PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=true
 EXACT_RUNTIME_ALLOWLIST_FROZEN=true
 PAGE_SYSTEM_AUDIT_RUNTIME_READMISSION_READY=true
+S13_FORMAL_CLOSURE=true
+
+CSV_FILE_DELETED=true
+CSV_RESIDUAL_REFERENCE_COUNT=0
+CANONICAL_ALLOWLIST_LOCATION=docs/operations/post-v2-r1c-page-system-audit-fresh-release-reaudit-exact-runtime-readmission-20260814.md
 
 PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
 PAGE_SYSTEM_AUDIT_RELEASE=false
@@ -67,6 +72,8 @@ PR1197_REASON_EXHAUSTIVENESS_P1_THREAD_RESOLVED=true
 ```
 
 PR #1197 合并后，Review 指出客户端严格 record parser 复用了不完整的 query filter reason 列表，会拒绝部分合法 `AuditReason`。PR #1199 在客户端 record validator 内补齐 canonical reasons，并用类型级 exhaustiveness guard 锁定完整性；全局 query filter 没有扩大，包含内部敏感词的 reason 不会进入筛选 UI。该 corrective 及前置校正均没有实施 `page_system_audit` release Runtime。
+
+PR #1198 的 docs-only Admission 曾同时新增独立 CSV，违反 `AGENTS.md` 对 docs-only Markdown 的分类边界。S13 formal corrective closure 删除该 CSV；本报告第 12 节的完整表格保持原 exact 5-file 内容不变，并成为唯一 canonical exact Runtime allowlist 来源。
 
 ## 3. Release eligibility matrix
 
@@ -309,9 +316,11 @@ ARCHITECTURE_EXCEPTION_REQUIRED=false
 | `src/modules/institution/tests/InstitutionRouteShell.test.tsx` | direct URL / Route integration | existing | test | 锁定 allowed/blocked/unavailable/authority mismatch、GET-only Shell 与 shared catch-all 不回归 |
 | `src/modules/institution-workbench/tests/HospitalWorkbenchEntry.test.tsx` | Workbench multi-capability regression | existing | test | 用真实 audit partial pilot fixture 证明 `/hospital` 只呈现 Workbench 且异常输入 fail closed |
 
-Machine-readable allowlist：
+上表是唯一 canonical exact Runtime allowlist。Canonical location 固定为：
 
-`docs/operations/post-v2-r1c-page-system-audit-exact-runtime-readmission-allowlist-20260814.csv`
+`docs/operations/post-v2-r1c-page-system-audit-fresh-release-reaudit-exact-runtime-readmission-20260814.md`
+
+不再维护独立 CSV、JSON、YAML、script 或其他 machine-readable 镜像；任何消费方必须以本节完整表格为准。
 
 任何第 6 个 Runtime/Test 文件均不在本次准入内，必须停止并重新判断授权。Docs 不计入 Runtime allowlist。
 
@@ -428,12 +437,19 @@ PRODUCTION_READINESS_DOCS=8/8 passed
 GIT_DIFF_CHECK=passed
 
 HANDOFF_PR=1200
-S13_PRS=1197,1198,1199,1200
-S13_PR_COUNT=4
+FORMAL_CLOSURE_PR=1201
+S13_PRS=1197,1198,1199,1200,1201
+S13_PR_COUNT=5
 EXACT_HANDOFF_DOC_FILE_COUNT=5
+FORMAL_CORRECTIVE_MARKDOWN_FILE_COUNT=5
+FORMAL_CORRECTIVE_DELETED_FILE_COUNT=1
 S13_REQUIRED_CHECKS=passed
 S13_ACTIONABLE_P0_P1=0
 POST_MERGE_REVIEW_DEBT=0
+S13_FORMAL_CLOSURE=true
+CSV_FILE_DELETED=true
+CSV_RESIDUAL_REFERENCE_COUNT=0
+CANONICAL_ALLOWLIST_LOCATION=docs/operations/post-v2-r1c-page-system-audit-fresh-release-reaudit-exact-runtime-readmission-20260814.md
 ```
 
 定向集合覆盖 Reader、Repository、parser、institution/API/client/Shell、Section Guard、Capability Authority、registry、direct URL/catch-all、Workbench composition 与 Platform Audit regression。Corrective frozen Head 又通过 5 files / 208 tests 与全量 495 files / 6789 tests；typecheck、Lint、build、AQ unit 148/148、incremental、ProductionReadinessDocs、Required Check 与最终 Review sweep 均通过。
