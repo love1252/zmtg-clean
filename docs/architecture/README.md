@@ -1,5 +1,72 @@
 # 智美天工架构文档索引
 
+<!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_EXACT_RUNTIME_RELEASE_START -->
+
+## POST-V2-R1C `page_system_audit` exact 5-file Runtime release 闭环（2026-08-14）
+
+```text
+STAGE=S14
+COMPLETION_MODE=COMPLETE
+S14_COMPLETE=true
+RUNTIME_PR=1202
+RUNTIME_HEAD=8a95401d8d2668062059f239db20a33e689173b8
+RUNTIME_MERGE=c1eabd4051f7fafb75abd44bd6636503c89f43a4
+HANDOFF_PR=TBD
+S14_PR_COUNT=2
+S14_REQUIRED_CHECKS=passed
+S14_ACTIONABLE_P0_P1_P2_P3=0
+POST_MERGE_REVIEW_DEBT=0
+
+EXACT_RUNTIME_FILE_COUNT=5
+ACTUAL_RUNTIME_TEST_CHANGED_FILE_COUNT=5
+EXACT_SCOPE_MATCH=true
+
+PAGE_SYSTEM_AUDIT_STATE=read_only/pilot_released
+PAGE_SYSTEM_AUDIT_RELEASE=true
+PAGE_SYSTEM_AUDIT_ACCESS_MODE=read_only
+PAGE_SYSTEM_AUDIT_DATA_READINESS=partial
+PAGE_SYSTEM_AUDIT_PRODUCTION_RELEASE=pilot_released
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=2
+RELEASED_GOVERNED_PAGES=page_workbench,page_system_audit
+CONTROLLED_CREATE_RELEASE_COUNT=0
+
+AUDIT_READER_COVERAGE_STATE=partial_verified_only
+AUDIT_READER_HISTORICAL_COVERAGE_COMPLETE=false
+WORKBENCH_MULTI_CAPABILITY_SAFE=true
+WORKBENCH_PAGE_WORKBENCH_PROJECTION_STABLE=true
+
+DATABASE_CONNECTION=false
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+MIGRATION=false
+DDL_EXECUTION=false
+DML_EXECUTION=false
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+
+NEXT_TASK_AUTHORIZED=false
+NEXT_TASK_SELECTION_REQUIRED=true
+```
+
+架构结论：
+
+- code-owned Capability Authority 只新增 `page_system_audit` exact `read_only / partial / pilot_released` release，`page_workbench` 保持不变，其余 34 capabilities 继续 `hidden/not_released`；
+- dedicated `/hospital/system/audit` Route 使用 request-scoped `force-dynamic`，仅在 formal Request Authorization、genuine system navigation 与 exact Authority 同时成立时渲染既有 Audit Shell；
+- consultant/customer_service、Authority hidden/duplicate/mismatch/unavailable 及非 genuine navigation 全部 fail closed，shared catch-all 与 public contract 未修改；
+- Reader 继续只展示 formal tenant + institution 的 `verified` subset，历史覆盖不完整，267 条 unclassifiable 历史记录不猜测归属；
+- Workbench 继续只选择 `page_workbench`，audit summary 顺序变化不进入 Workbench DOM；
+- Runtime PR #1202 的 exact 5-file scope、Required Check、full 495/6806 与 merged-main independent 11/368 均已通过，Review debt=0。
+
+证据：
+
+- `docs/operations/post-v2-r1c-page-system-audit-exact-runtime-release-closure-20260814.md`
+- Runtime PR #1202 / Merge `c1eabd4051f7fafb75abd44bd6636503c89f43a4`
+- final Handoff PR TBD
+
+下一任务尚未选择；`NEXT_TASK_AUTHORIZED=false`，由 ChatGPT 项目总控审查 2 / 26 页面状态后另行确定。
+
+<!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_EXACT_RUNTIME_RELEASE_END -->
+
 <!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_FRESH_RELEASE_READMISSION_START -->
 
 ## POST-V2-R1C `page_system_audit` fresh release re-audit 与精确 Runtime 重新准入（2026-08-14）
