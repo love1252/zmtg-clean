@@ -1,5 +1,105 @@
 # 项目重构历史
 
+<!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_EXACT_RUNTIME_RELEASE_HISTORY -->
+
+## 2026-08-14：POST-V2-R1C `page_system_audit` exact 5-file Runtime release 完整闭环
+
+```text
+STAGE=S14
+TASK=POST_V2_R1C_PAGE_SYSTEM_AUDIT_EXACT_5_FILE_RUNTIME_RELEASE
+COMPLETION_MODE=COMPLETE
+S14_COMPLETE=true
+BASELINE=c89cecaf5e3551f5497f1aac5bbfb093aefd180d
+
+RUNTIME_PR=1202
+RUNTIME_HEAD=8a95401d8d2668062059f239db20a33e689173b8
+RUNTIME_MERGE=c1eabd4051f7fafb75abd44bd6636503c89f43a4
+HANDOFF_PR=1203
+S14_PRS=1202,1203
+S14_PR_COUNT=2
+S14_REQUIRED_CHECKS=passed
+S14_ACTIONABLE_P0_P1=0
+S14_ACTIONABLE_P0_P1_P2_P3=0
+POST_MERGE_REVIEW_DEBT=0
+
+EXACT_RUNTIME_FILE_COUNT=5
+ACTUAL_RUNTIME_TEST_CHANGED_FILE_COUNT=5
+EXACT_RUNTIME_EXISTING_FILE_COUNT=4
+EXACT_RUNTIME_NEW_FILE_COUNT=1
+EXACT_PRODUCTION_FILE_COUNT=2
+EXACT_TEST_FILE_COUNT=3
+EXACT_SCOPE_MATCH=true
+
+PAGE_SYSTEM_AUDIT_STATE=read_only/pilot_released
+PAGE_SYSTEM_AUDIT_RELEASE=true
+PAGE_SYSTEM_AUDIT_ACCESS_MODE=read_only
+PAGE_SYSTEM_AUDIT_DATA_READINESS=partial
+PAGE_SYSTEM_AUDIT_PRODUCTION_RELEASE=pilot_released
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=2
+RELEASED_GOVERNED_PAGES=page_workbench,page_system_audit
+PAGE_WORKBENCH_RELEASE_UNCHANGED=true
+OTHER_CAPABILITY_RELEASE_DRIFT_COUNT=0
+CONTROLLED_CREATE_RELEASE_COUNT=0
+
+CANONICAL_ROUTE=/hospital/system/audit
+DEDICATED_STATIC_ROUTE=true
+REQUEST_SCOPED_DYNAMIC_ROUTE=true
+SHARED_CATCH_ALL_CHANGE=false
+MUTATION_METHOD_COUNT=0
+
+AUDIT_READER_COVERAGE_STATE=partial_verified_only
+AUDIT_READER_HISTORICAL_COVERAGE_COMPLETE=false
+AUDIT_READER_PARTIAL_COVERAGE_SAFE=true
+AUDIT_READER_COVERAGE_DISCLOSURE_SAFE=true
+WORKBENCH_MULTI_CAPABILITY_SAFE=true
+WORKBENCH_PAGE_WORKBENCH_PROJECTION_STABLE=true
+
+FINAL_DIRECT_TARGETED_TEST_FILES=3
+FINAL_DIRECT_TARGETED_TESTS=110
+FULL_TEST_FILES=495
+FULL_TESTS=6806
+POST_MERGE_INDEPENDENT_TEST_FILES=11
+POST_MERGE_INDEPENDENT_TESTS=368
+TYPECHECK=passed
+ARCHITECTURE_UNIT=148/148 passed
+ARCHITECTURE_INCREMENTAL=passed
+LINT=passed_with_4_existing_warnings
+BUILD=passed
+PRODUCTION_READINESS_DOCS=8/8 passed
+
+DATABASE_CONNECTION=false
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+MIGRATION=false
+DDL_EXECUTION=false
+DML_EXECUTION=false
+STAGING_CHANGE=false
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+
+NEXT_TASK_AUTHORIZED=false
+NEXT_TASK_SELECTION_REQUIRED=true
+```
+
+- Runtime PR #1202 严格按 S13 canonical Admission 实施 2 production + 3 tests 的 exact 5-file scope，没有修改 Reader、client、Repository、Writer、public contract 或 shared catch-all；
+- Authority revision 已更新，`page_system_audit` 放行为 `read_only / partial / pilot_released`，`page_workbench` 保持不变，其余 34 capabilities 与 3 个 controlled-create actions 未放行；
+- 新增 `/hospital/system/audit` dedicated Route，显式 `force-dynamic` 以按请求重新校验 formal authorization、genuine system navigation 与 exact Authority；
+- tenant_admin/tenant_operator 的 exact 放行链路与 consultant/customer_service 阻断、Authority hidden/duplicate/mismatch/unavailable 全部由 regression 锁定；
+- Audit Shell 仍为 GET-only，保留 `partial_verified_only` 覆盖披露，partial zero rows 不冒充 authoritative empty；
+- final direct 3/110、full 495/6806、AQ 148/148、build、ProductionReadinessDocs 与 Required Check 通过；merged main 独立复验 11/368、typecheck 与 Architecture incremental 通过；
+- PR #1202 合并前与合并后 sweep 均为 0 Review thread，无 P0/P1/P2/P3 债务；
+- `pilot_released` 仅表示 repository code-owned Authority 状态，本阶段没有连接数据库，也没有 Staging 或 Production deployment。
+
+证据：
+
+- `docs/operations/post-v2-r1c-page-system-audit-exact-runtime-release-closure-20260814.md`
+- Runtime PR #1202 / Merge `c1eabd4051f7fafb75abd44bd6636503c89f43a4`
+- final Handoff PR #1203
+
+下一任务尚未选择；`NEXT_TASK_AUTHORIZED=false`、`NEXT_TASK_SELECTION_REQUIRED=true`，由 ChatGPT 项目总控另行决定。
+
+<!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_EXACT_RUNTIME_RELEASE_HISTORY_END -->
+
 <!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_FRESH_RELEASE_READMISSION_HISTORY -->
 
 ## 2026-08-14：POST-V2-R1C `page_system_audit` fresh release re-audit 与精确 Runtime 重新准入闭环
