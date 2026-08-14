@@ -1,19 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const runtimeMocks = vi.hoisted(() => ({
-  consumeInstitutionCapabilityAuthorityRuntimeContextV1: vi.fn(),
+  consumeInstitutionAuditReadAuthorizationV1: vi.fn(),
   createAuditEventRepository: vi.fn(),
   getDatabase: vi.fn(),
   listAuditEvents: vi.fn(),
   readInstitutionAuditCoverage: vi.fn(),
-  resolveInstitutionCapabilityAuthorityRuntimeContextV1: vi.fn(),
+  resolveInstitutionAuditReadAuthorizationV1: vi.fn(),
 }));
 
-vi.mock('@/modules/institution/server/institution-server-runtime', () => ({
-  consumeInstitutionCapabilityAuthorityRuntimeContextV1:
-    runtimeMocks.consumeInstitutionCapabilityAuthorityRuntimeContextV1,
-  resolveInstitutionCapabilityAuthorityRuntimeContextV1:
-    runtimeMocks.resolveInstitutionCapabilityAuthorityRuntimeContextV1,
+vi.mock('@/server/orchestration/institution-audit-read-authorization', () => ({
+  consumeInstitutionAuditReadAuthorizationV1:
+    runtimeMocks.consumeInstitutionAuditReadAuthorizationV1,
+  resolveInstitutionAuditReadAuthorizationV1:
+    runtimeMocks.resolveInstitutionAuditReadAuthorizationV1,
 }));
 vi.mock('@/modules/audit/server/audit-event-repository', () => ({
   createAuditEventRepository: runtimeMocks.createAuditEventRepository,
@@ -27,7 +27,6 @@ const formalHandle = Object.freeze({ opaque: true });
 const formalContext = Object.freeze({
   tenantId: 'tenant-formal-001',
   institutionId: 'institution-formal-001',
-  availableSectionIds: Object.freeze(['workbench', 'system']),
   observedAt: '2026-08-13T08:00:00.000Z',
 });
 const query: AuditEventQuery = Object.freeze({
@@ -38,10 +37,11 @@ const query: AuditEventQuery = Object.freeze({
 beforeEach(() => {
   for (const mock of Object.values(runtimeMocks)) mock.mockReset();
 
-  runtimeMocks.resolveInstitutionCapabilityAuthorityRuntimeContextV1.mockResolvedValue(
-    formalHandle,
-  );
-  runtimeMocks.consumeInstitutionCapabilityAuthorityRuntimeContextV1.mockReturnValue(
+  runtimeMocks.resolveInstitutionAuditReadAuthorizationV1.mockResolvedValue({
+    kind: 'allowed',
+    authorization: formalHandle,
+  });
+  runtimeMocks.consumeInstitutionAuditReadAuthorizationV1.mockReturnValue(
     formalContext,
   );
   runtimeMocks.getDatabase.mockReturnValue({ database: 'local' });
@@ -80,7 +80,7 @@ describe('机构范围审计只读编排', () => {
     const result = await readCurrentInstitutionAuditEventsV1(query);
 
     expect(
-      runtimeMocks.consumeInstitutionCapabilityAuthorityRuntimeContextV1,
+      runtimeMocks.consumeInstitutionAuditReadAuthorizationV1,
     ).toHaveBeenCalledWith(formalHandle);
     expect(runtimeMocks.getDatabase).toHaveBeenCalledOnce();
     expect(runtimeMocks.listAuditEvents).toHaveBeenCalledWith({
@@ -98,9 +98,17 @@ describe('机构范围审计只读编排', () => {
     expect(result.kind).toBe('ready');
   });
 
-  it('不接受 caller scope、role 或 release claim 覆盖正式上下文', async () => {
+  it('caller filters 只能缩小查询且不能用 actorId、scope、role 或 release claim 扩权', async () => {
     const callerControlledQuery = {
       ...query,
+      filters: {
+        actorId: 'admin-id-from-caller',
+        resource: 'customer',
+        action: 'read_own_tenant',
+        reason: 'allowed_by_policy',
+        from: '2026-08-01T00:00:00.000Z',
+        to: '2026-08-14T00:00:00.000Z',
+      },
       tenantId: 'tenant-attacker',
       institutionId: 'institution-attacker',
       role: 'platform_admin',
@@ -119,21 +127,26 @@ describe('机构范围审计只读编排', () => {
     });
   });
 
-  it('要求正式上下文包含 system section', async () => {
-    runtimeMocks.consumeInstitutionCapabilityAuthorityRuntimeContextV1.mockReturnValue({
-      ...formalContext,
-      availableSectionIds: ['workbench'],
-    });
+  it.each(['tenant_operator', 'consultant', 'customer_service'] as const)(
+    '可信非管理员角色 %s 被 owner 拒绝时返回 forbidden 且不访问数据库',
+    async (_role) => {
+      runtimeMocks.resolveInstitutionAuditReadAuthorizationV1.mockResolvedValue({
+        kind: 'forbidden',
+      });
 
-    const result = await readCurrentInstitutionAuditEventsV1(query);
+      const result = await readCurrentInstitutionAuditEventsV1(query);
 
-    expect(result).toEqual({ kind: 'unavailable' });
-    expect(runtimeMocks.getDatabase).not.toHaveBeenCalled();
-    expect(runtimeMocks.listAuditEvents).not.toHaveBeenCalled();
-  });
+      expect(result).toEqual({ kind: 'forbidden' });
+      expect(
+        runtimeMocks.consumeInstitutionAuditReadAuthorizationV1,
+      ).not.toHaveBeenCalled();
+      expect(runtimeMocks.getDatabase).not.toHaveBeenCalled();
+      expect(runtimeMocks.listAuditEvents).not.toHaveBeenCalled();
+    },
+  );
 
   it('遵守正式 context 的 one-shot consumption', async () => {
-    runtimeMocks.consumeInstitutionCapabilityAuthorityRuntimeContextV1
+    runtimeMocks.consumeInstitutionAuditReadAuthorizationV1
       .mockReturnValueOnce(formalContext)
       .mockReturnValueOnce(null);
 
@@ -243,15 +256,15 @@ describe('机构范围审计只读编排', () => {
   });
 
   it('正式上下文不可用时 fail-closed 且不访问数据库', async () => {
-    runtimeMocks.resolveInstitutionCapabilityAuthorityRuntimeContextV1.mockResolvedValue(
-      null,
-    );
+    runtimeMocks.resolveInstitutionAuditReadAuthorizationV1.mockResolvedValue({
+      kind: 'unavailable',
+    });
 
     const result = await readCurrentInstitutionAuditEventsV1(query);
 
     expect(result).toEqual({ kind: 'unavailable' });
     expect(
-      runtimeMocks.consumeInstitutionCapabilityAuthorityRuntimeContextV1,
+      runtimeMocks.consumeInstitutionAuditReadAuthorizationV1,
     ).not.toHaveBeenCalled();
     expect(runtimeMocks.getDatabase).not.toHaveBeenCalled();
   });
