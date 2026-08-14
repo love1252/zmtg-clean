@@ -3,17 +3,92 @@
 ## 下一任务选择状态
 
 ```text
-NEXT_TASK=POST-V2-R1C Trusted Role-Aware Audit Read Authorization exact Runtime implementation explicit authorization
-NEXT_STAGE=S16
+NEXT_TASK=POST-V2-R1C page_system_audit fresh release re-audit + exact Runtime re-admission
+NEXT_STAGE=S17
 NEXT_TASK_AUTHORIZED=false
 NEXT_TASK_SELECTION_REQUIRED=false
-S16_RUNTIME_AUTHORIZED=false
+S17_AUTHORIZED=false
 DATABASE_CONNECTION_AUTHORIZED=false
 DATABASE_WRITE_EXECUTION_AUTHORIZED=false
 PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
 ```
 
-S15 fresh audit、exact 6-file Runtime Admission 与 docs-only Handoff 已闭环：可信 current role 存在，选择 `admin_only_v1` 与 Audit-specific orchestration owner。S15 没有实施 Runtime，因此 `GET /api/institution/audit-events` blocker 与 S14 security blocker 仍开放；`page_system_audit` 继续 `hidden/not_released`。唯一下一任务是 S16 exact Runtime implementation，尚未授权。
+S16 exact 6-file Runtime 已合并：Audit-specific owner 只允许 authoritative current `tenant_admin`，可信非管理员固定拒绝，invalid/stale/mismatch/unavailable fail-closed；`GET /api/institution/audit-events` 与继承自 S14 的角色感知 security blocker 已关闭。`page_system_audit` 继续 `hidden/not_released`，旧 S13 exact-5 Admission 不可直接重放；唯一下一任务是 S17 fresh release re-audit + exact Runtime re-admission，尚未授权。
+
+## S16 exact Runtime 闭环
+
+```text
+STAGE=S16
+TASK=POST_V2_R1C_TRUSTED_ROLE_AWARE_AUDIT_READ_AUTHORIZATION_EXACT_RUNTIME_IMPLEMENTATION
+COMPLETION_MODE=COMPLETE
+BASELINE=d0a886d4be5d391ad044acf990fdd1d44a7e0a74
+RUNTIME_PR=1210
+RUNTIME_HEAD=7bbb72d527245c9ca26b2d29cc5ccda19228d670
+RUNTIME_MERGE=dc73994246f300b38a823fcb8f5f330eac05f7e5
+FINAL_HANDOFF_PR=1211
+
+S16_RUNTIME_IMPLEMENTED=true
+EXACT_RUNTIME_FILE_COUNT=6
+ACTUAL_RUNTIME_TEST_CHANGED_FILE_COUNT=6
+EXACT_SCOPE_MATCH=true
+SELECTED_AUTHORIZATION_STRATEGY=admin_only_v1
+TRUSTED_ROLE_AWARE_AUDIT_READ_AUTHORIZATION_SAFE=true
+CURRENT_AUDIT_READ_ROLE_AUTHORIZATION_SAFE=true
+TENANT_ADMIN_AUDIT_READ_ALLOWED=true
+TENANT_OPERATOR_AUDIT_READ_ALLOWED=false
+CONSULTANT_AUDIT_READ_ALLOWED=false
+CUSTOMER_SERVICE_AUDIT_READ_ALLOWED=false
+ROLE_DENIED_HTTP_STATUS=403
+READER_UNAVAILABLE_HTTP_STATUS=503
+AUDIT_API_SECURITY_BLOCKER_CLOSED=true
+S14_SECURITY_BLOCKER_RESOLVED_BY_S16=true
+
+AUDIT_REPOSITORY_CHANGE=false
+GENERIC_SECTION_GUARD_CHANGE=false
+INSTITUTION_SERVER_RUNTIME_CHANGE=false
+PUBLIC_CONTRACT_CHANGE=false
+
+AUDIT_READER_COVERAGE_STATE=partial_verified_only
+AUDIT_READER_HISTORICAL_COVERAGE_COMPLETE=false
+AUDIT_READER_PARTIAL_COVERAGE_SAFE=true
+TARGETED_TEST_FILES=13
+TARGETED_TESTS=457
+FULL_TEST_FILES=496
+FULL_TESTS=6836
+POST_MERGE_INDEPENDENT_TEST_FILES=8
+POST_MERGE_INDEPENDENT_TESTS=314
+TYPECHECK=passed
+ARCHITECTURE_UNIT=148/148 passed
+ARCHITECTURE_INCREMENTAL=passed
+LINT=passed_with_4_existing_warnings
+BUILD=passed
+PRODUCTION_READINESS_DOCS=8/8 passed
+GIT_DIFF_CHECK=passed
+S16_RUNTIME_REQUIRED_CHECK=passed
+S16_RUNTIME_POST_MERGE_REVIEW_DEBT=0
+S16_HANDOFF_REQUIRED_CHECK=passed
+S16_PR_COUNT=2
+S16_PRS=1210,1211
+S16_REQUIRED_CHECKS=passed
+S16_ACTIONABLE_P0_P1=0
+S16_ACTIONABLE_P0_P1_P2_P3=0
+POST_MERGE_REVIEW_DEBT=0
+S16_COMPLETE=true
+
+DATABASE_CONNECTION=false
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+MIGRATION=false
+DDL_EXECUTION=false
+DML_EXECUTION=false
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=false
+PAGE_SYSTEM_AUDIT_RUNTIME_READMISSION_READY=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+```
+
+完整证据：`docs/operations/post-v2-r1c-trusted-role-aware-audit-read-authorization-runtime-closure-20260814.md`。
 
 ## S15 fresh audit 与 exact Runtime Admission
 

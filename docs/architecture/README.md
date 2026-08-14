@@ -1,5 +1,77 @@
 # 智美天工架构文档索引
 
+<!-- POST_V2_R1C_TRUSTED_ROLE_AWARE_AUDIT_READ_AUTHORIZATION_RUNTIME_START -->
+
+## POST-V2-R1C 可信角色感知 Audit 读取授权 exact Runtime 闭环（2026-08-14）
+
+```text
+STAGE=S16
+COMPLETION_MODE=COMPLETE
+BASELINE=d0a886d4be5d391ad044acf990fdd1d44a7e0a74
+RUNTIME_PR=1210
+RUNTIME_HEAD=7bbb72d527245c9ca26b2d29cc5ccda19228d670
+RUNTIME_MERGE=dc73994246f300b38a823fcb8f5f330eac05f7e5
+FINAL_HANDOFF_PR=1211
+
+S16_RUNTIME_IMPLEMENTED=true
+EXACT_RUNTIME_FILE_COUNT=6
+ACTUAL_RUNTIME_TEST_CHANGED_FILE_COUNT=6
+EXACT_SCOPE_MATCH=true
+SELECTED_AUTHORIZATION_STRATEGY=admin_only_v1
+
+TRUSTED_ROLE_AWARE_AUDIT_READ_AUTHORIZATION_SAFE=true
+CURRENT_AUDIT_READ_ROLE_AUTHORIZATION_SAFE=true
+TENANT_ADMIN_AUDIT_READ_ALLOWED=true
+TENANT_OPERATOR_AUDIT_READ_ALLOWED=false
+ROLE_DENIED_HTTP_STATUS=403
+READER_UNAVAILABLE_HTTP_STATUS=503
+AUDIT_API_SECURITY_BLOCKER_CLOSED=true
+S14_SECURITY_BLOCKER_RESOLVED_BY_S16=true
+
+AUDIT_REPOSITORY_CHANGE=false
+GENERIC_SECTION_GUARD_CHANGE=false
+INSTITUTION_SERVER_RUNTIME_CHANGE=false
+PUBLIC_CONTRACT_CHANGE=false
+ARCHITECTURE_EXCEPTION_REQUIRED=false
+
+TARGETED_TEST_FILES=13
+TARGETED_TESTS=457/457 passed
+FULL_TEST_FILES=496
+FULL_TESTS=6836/6836 passed
+POST_MERGE_INDEPENDENT_TEST_FILES=8
+POST_MERGE_INDEPENDENT_TESTS=314/314 passed
+S16_RUNTIME_REQUIRED_CHECK=passed
+S16_RUNTIME_POST_MERGE_REVIEW_DEBT=0
+S16_HANDOFF_REQUIRED_CHECK=passed
+S16_REQUIRED_CHECKS=passed
+POST_MERGE_REVIEW_DEBT=0
+S16_COMPLETE=true
+
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=false
+PAGE_SYSTEM_AUDIT_RUNTIME_READMISSION_READY=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+
+NEXT_STAGE=S17
+NEXT_TASK=POST-V2-R1C page_system_audit fresh release re-audit + exact Runtime re-admission
+NEXT_TASK_AUTHORIZED=false
+S17_AUTHORIZED=false
+```
+
+架构结论：
+
+- S16 新增 Audit-specific server orchestration owner，复用签名 formal session 与 authoritative Identity、Membership/Binding、Institution Scope；`sessionUser.role` 只来自可信 current facts；
+- 只有 `tenant_admin` 获得 frozen、opaque、one-shot handle；`tenant_operator`、`consultant`、`customer_service` 明确拒绝，invalid/stale/mismatch/unavailable 继续 fail-closed；
+- Reader 发布 `ready` / `forbidden` / `unavailable`，Route 将可信角色拒绝映射为固定低敏 403，将授权不可用保持为低敏 503；
+- Repository 继续强制 formal tenant + institution + `verified`；coverage、pagination、query filters、DTO 与 Platform Audit 不变；
+- generic Guard、Institution Server Runtime、Capability Authority、Workbench、public contract、AQ rules 与页面 Route 均未修改；
+- `page_system_audit` 仍 hidden，只有 S17 fresh release re-audit 才能形成新的 Runtime re-admission，当前未授权。
+
+Canonical evidence：`docs/operations/post-v2-r1c-trusted-role-aware-audit-read-authorization-runtime-closure-20260814.md`。
+
+<!-- POST_V2_R1C_TRUSTED_ROLE_AWARE_AUDIT_READ_AUTHORIZATION_RUNTIME_END -->
+
 <!-- POST_V2_R1C_TRUSTED_ROLE_AWARE_AUDIT_READ_AUTHORIZATION_ADMISSION_START -->
 
 ## POST-V2-R1C 可信角色感知 Audit 读取授权 fresh audit 与精确 Runtime 准入（2026-08-14）
