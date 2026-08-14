@@ -1,5 +1,98 @@
 # 项目重构历史
 
+<!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_FINAL_RUNTIME_RELEASE_HISTORY -->
+
+## 2026-08-14：POST-V2-R1C `page_system_audit` exact 5-file Runtime 最终发布闭环
+
+```text
+STAGE=S18
+TASK=POST_V2_R1C_PAGE_SYSTEM_AUDIT_EXACT_5_FILE_RUNTIME_RELEASE
+COMPLETION_MODE=COMPLETE
+BASELINE=854fb8658de9e7f84807be88db71e9b6275a7743
+RUNTIME_PR=1214
+RUNTIME_HEAD=47540a93365a0f3629dcc354806934b83fa4956c
+RUNTIME_MERGE=f3f6a149e3c470a542463e269ab986ebc41b582f
+RUNTIME_REQUIRED_CHECK=passed
+FINAL_HANDOFF_PR=1215
+FINAL_HANDOFF_REQUIRED_CHECK=passed
+S18_PR_COUNT=2
+S18_PRS=1214,1215
+S18_REQUIRED_CHECKS=passed
+
+S18_RUNTIME_IMPLEMENTED=true
+EXACT_RUNTIME_FILE_COUNT=5
+ACTUAL_RUNTIME_TEST_CHANGED_FILE_COUNT=5
+EXACT_SCOPE_MATCH=true
+
+PAGE_SYSTEM_AUDIT_STATE=read_only/pilot_released
+PAGE_SYSTEM_AUDIT_RELEASE=true
+PAGE_SYSTEM_AUDIT_TARGET_AUDIENCE=tenant_admin_only
+TENANT_ADMIN_PAGE_SYSTEM_AUDIT_ALLOWED=true
+TENANT_OPERATOR_PAGE_SYSTEM_AUDIT_ALLOWED=false
+CONSULTANT_PAGE_SYSTEM_AUDIT_ALLOWED=false
+CUSTOMER_SERVICE_PAGE_SYSTEM_AUDIT_ALLOWED=false
+
+PAGE_ROUTE_REUSES_AUDIT_READ_AUTHORIZATION_OWNER=true
+PAGE_ROUTE_CONSUMES_ONE_SHOT_HANDLE=false
+AUDIT_AUTHORIZATION_HANDLE_CROSS_REQUEST_REUSE=false
+CANONICAL_ROUTE=/hospital/system/audit
+DEDICATED_STATIC_ROUTE=true
+SHARED_CATCH_ALL_CHANGE=false
+
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=2
+RELEASED_GOVERNED_PAGES=page_workbench,page_system_audit
+PAGE_WORKBENCH_RELEASE_UNCHANGED=true
+OTHER_CAPABILITY_RELEASE_DRIFT_COUNT=0
+CONTROLLED_CREATE_RELEASE_COUNT=0
+
+AUDIT_READER_COVERAGE_STATE=partial_verified_only
+AUDIT_READER_HISTORICAL_COVERAGE_COMPLETE=false
+AUDIT_READER_PARTIAL_COVERAGE_SAFE=true
+
+TARGETED_TEST_FILES=14
+TARGETED_TESTS=462/462 passed
+FULL_TEST_FILES=496
+FULL_TESTS=6856/6856 passed
+POST_MERGE_INDEPENDENT_TEST_FILES=14
+POST_MERGE_INDEPENDENT_TESTS=462/462 passed
+TYPECHECK=passed
+ARCHITECTURE_UNIT=148/148 passed
+ARCHITECTURE_INCREMENTAL=passed
+LINT=passed_with_4_existing_warnings
+BUILD=passed
+PRODUCTION_READINESS_DOCS=8/8 passed
+GIT_DIFF_CHECK=passed
+
+S18_ACTIONABLE_P0_P1=0
+S18_ACTIONABLE_P0_P1_P2_P3=0
+POST_MERGE_REVIEW_DEBT=0
+S18_COMPLETE=true
+
+DATABASE_CONNECTION=false
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+MIGRATION=false
+DDL_EXECUTION=false
+DML_EXECUTION=false
+STAGING_CHANGE=false
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+
+NEXT_TASK=POST-V2-R1C final closure + seven-line development entry audit
+NEXT_TASK_AUTHORIZED=false
+SEVEN_STREAM_DEVELOPMENT_AUTHORIZED=false
+```
+
+S18 在 S17 frozen allowlist 内以 Runtime PR #1214 完成 exact 5-file release：Capability Authority 发布 `page_system_audit` read-only partial pilot，新 dedicated `/hospital/system/audit` 依次执行 formal request、genuine system navigation、S16 Audit-specific owner 与 exact Authority；只有 `tenant_admin` 渲染正常 Shell，`tenant_operator` 明确 forbidden，consultant/customer_service 继续由 navigation fail closed。
+
+页面 Route 不消费、序列化或跨请求复用 one-shot owner handle；Reader、API、Repository、S16 owner、generic Guard、shared catch-all、navigation/registry 与 public contract 均 unchanged。`page_workbench` exact release 与 Workbench-only projection 稳定，其余 34 pages 继续 hidden/not_released，controlled-create release count 为 0。
+
+Runtime Required Check、本地 14 files / 462 targeted、496 files / 6856 full、AQ 148/148、build 与 merged-main 14 files / 462 independent tests 均通过；Ready 前后及 merge 后 reviews/comments/threads 均为空。Final Handoff 合并后 S18 正式闭环。Canonical evidence：`docs/operations/post-v2-r1c-page-system-audit-final-runtime-release-closure-20260814.md`。
+
+`productionRelease=pilot_released` 是 code-owned Authority 状态，本阶段没有数据库、Schema/Migration、Staging 或 Production deployment。下一项只记录 `POST-V2-R1C final closure + seven-line development entry audit`，未授权七条线开发。
+
+<!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_FINAL_RUNTIME_RELEASE_HISTORY_END -->
+
 <!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_POST_ROLE_AWARE_READMISSION_HISTORY -->
 
 ## 2026-08-14：POST-V2-R1C `page_system_audit` post-role-aware fresh release re-audit 与精确 Runtime 重新准入

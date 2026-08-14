@@ -10,10 +10,11 @@
 - POST-V2-R1B `page_workbench`：稳定且已完成治理闭环
 - POST-V2-R1C 错误放行尝试：精确 4 文件 Runtime 回滚、独立验证及两个指定 P1 审查线程均已完成治理收尾
 - POST-V2-R1C Audit Reader Foundation：exact 8-file Runtime、Required Check、合并后独立验证与 Handoff 均已闭环
-- POST-V2-R1C `page_system_audit`：S14 initial exact-5 release 已由 #1204 按 exact-5 rollback 恢复为 `hidden/not_released`；S16 已关闭角色感知 API blocker，S17 已 fresh 冻结 post-role-aware exact 5-file re-admission；当前仍未发布
+- POST-V2-R1C `page_system_audit`：S18 Runtime PR #1214 已按 S17 post-role-aware canonical exact 5-file allowlist 合并；dedicated `/hospital/system/audit` 只允许 authoritative current `tenant_admin`，状态为 `read_only/pilot_released`
 - POST-V2-R1C Trusted Role-Aware Audit Read Authorization：S15 fresh audit、exact 6-file Runtime Admission 与两个 docs-only PR 已闭环；选择 `admin_only_v1` 与 Audit-specific orchestration owner；S15 当时 Runtime 未实施、S14 blocker 仍开放
 - POST-V2-R1C Trusted Role-Aware Audit Read Authorization Runtime：S16 exact 6-file Runtime PR #1210 已合并；只有 authoritative current `tenant_admin` 可读，可信非管理员固定 403，invalid/stale/mismatch/unavailable 固定 503；Runtime Required Check、full 496/6836 与 merged-main 8/314 均通过
 - POST-V2-R1C `page_system_audit` post-role-aware re-admission：S17 Admission #1212 与 Final Handoff #1213 已闭环；页面 audience 固定为 `tenant_admin_only`，新的 exact 5-file Runtime allowlist 已冻结，页面仍未发布
+- POST-V2-R1C `page_system_audit` final Runtime release：S18 Runtime #1214、Required Check、full 496/6856、merged-main 14/462 与 post-merge Review sweep 已通过；S16 owner/Reader/API、shared catch-all 与 Workbench 保持不变
 - S4 Phase 0：PR #1172 已修正 Handoff 授权来源与页面授权状态，PR #1171 两个 post-merge Review thread 已回复并解决
 - S4 Phase 1 / S5 Phase 0 修正：Audit Writer attribution fresh audit 已通过；重新核算为 19 个生产 caller 与 10 个 transaction persistence / composition 点，完整 closure 仍必须拆分
 - S5 Phase 0：caller inventory docs-only follow-up PR #1174 已合并；合并后仅回复并解决 PR #1173 指定 Review thread
@@ -37,16 +38,100 @@
 - S14 Runtime：PR #1202 曾按 canonical 5 files 放行 Authority 与 dedicated Route；post-merge P1 证明当前 Reader 无角色/本人/授权模块过滤，不能安全放行 `tenant_operator`
 - S14 rollback：PR #1204 精确恢复 5 个 Runtime/Test 文件并删除 dedicated Route；full 495 files / 6789 tests、AQ 148/148、build、Required Check 与 merged-main 3 files / 93 tests 均通过
 - S14 Review：#1202 operator scope P1 已由 #1204 rollback 处置，#1204 documentation P2 已由 #1205 修正；#1206 已合并并准确保持 Audit API blocker open，#1205 API scope P1 与 #1206 两个 docs P2 均已解决，当前 actionable debt=0
-- 当前经审查接受的受治理只读页面切片：1 / 26
-- 剩余未放行页面：25
+- 当前经审查接受的受治理只读页面切片：2 / 26
+- 剩余未放行页面：24
 - 受控创建能力放行：0 / 3
 - PR #1163 两个指定 P1：均已回复并解决，目标未解决线程数为 0
 - 审计读取器：机构范围 Reader 已实现，只消费正式 one-shot opaque context，并强制 tenant + institution + `verified`
 - Audit Writer caller migration / attribution 与 Historical Backfill：均已闭环，S11 五个 post-merge P2 已实际修复并解决
 - Reader readiness：ready；Reader data readiness：`partial_safe`；完整历史覆盖：false
 - 本地 postcheck：275 条审计记录中 `verified=7`、`not_applicable=1`、`attempted_denial=0`、`unclassifiable=267`；机构 Reader 对 1 个 active pair 可安全返回 7 行，但 residual 不允许宣称完整历史
-- Workbench multi-capability：安全；`page_workbench` 当前 read_only/pilot_released 行为保持稳定
+- Workbench multi-capability：安全；`page_workbench` 与 `page_system_audit` 为两个 released governed pages，Workbench 继续只投影自身 exact summary
 - 生产就绪 / 部署：未推导、未执行
+
+```text
+STAGE=S18
+TASK=POST_V2_R1C_PAGE_SYSTEM_AUDIT_EXACT_5_FILE_RUNTIME_RELEASE
+COMPLETION_MODE=COMPLETE
+BASELINE=854fb8658de9e7f84807be88db71e9b6275a7743
+RUNTIME_PR=1214
+RUNTIME_HEAD=47540a93365a0f3629dcc354806934b83fa4956c
+RUNTIME_MERGE=f3f6a149e3c470a542463e269ab986ebc41b582f
+RUNTIME_REQUIRED_CHECK=passed
+FINAL_HANDOFF_PR=1215
+FINAL_HANDOFF_REQUIRED_CHECK=passed
+S18_PR_COUNT=2
+S18_PRS=1214,1215
+S18_REQUIRED_CHECKS=passed
+
+S18_RUNTIME_IMPLEMENTED=true
+EXACT_RUNTIME_FILE_COUNT=5
+ACTUAL_RUNTIME_TEST_CHANGED_FILE_COUNT=5
+EXACT_SCOPE_MATCH=true
+
+PAGE_SYSTEM_AUDIT_STATE=read_only/pilot_released
+PAGE_SYSTEM_AUDIT_RELEASE=true
+PAGE_SYSTEM_AUDIT_ACCESS_MODE=read_only
+PAGE_SYSTEM_AUDIT_DATA_READINESS=partial
+PAGE_SYSTEM_AUDIT_PRODUCTION_RELEASE=pilot_released
+PAGE_SYSTEM_AUDIT_TARGET_AUDIENCE=tenant_admin_only
+
+TENANT_ADMIN_PAGE_SYSTEM_AUDIT_ALLOWED=true
+TENANT_OPERATOR_PAGE_SYSTEM_AUDIT_ALLOWED=false
+CONSULTANT_PAGE_SYSTEM_AUDIT_ALLOWED=false
+CUSTOMER_SERVICE_PAGE_SYSTEM_AUDIT_ALLOWED=false
+AUDIT_API_ROLE_AWARE_AUTHORIZATION_SAFE=true
+
+PAGE_ROUTE_REUSES_AUDIT_READ_AUTHORIZATION_OWNER=true
+PAGE_ROUTE_CONSUMES_ONE_SHOT_HANDLE=false
+AUDIT_AUTHORIZATION_HANDLE_CROSS_REQUEST_REUSE=false
+CANONICAL_ROUTE=/hospital/system/audit
+DEDICATED_STATIC_ROUTE=true
+SHARED_CATCH_ALL_CHANGE=false
+
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=2
+RELEASED_GOVERNED_PAGES=page_workbench,page_system_audit
+PAGE_WORKBENCH_RELEASE_UNCHANGED=true
+OTHER_CAPABILITY_RELEASE_DRIFT_COUNT=0
+CONTROLLED_CREATE_RELEASE_COUNT=0
+
+AUDIT_READER_COVERAGE_STATE=partial_verified_only
+AUDIT_READER_HISTORICAL_COVERAGE_COMPLETE=false
+AUDIT_READER_PARTIAL_COVERAGE_SAFE=true
+
+TARGETED_TEST_FILES=14
+TARGETED_TESTS=462/462 passed
+FULL_TEST_FILES=496
+FULL_TESTS=6856/6856 passed
+POST_MERGE_INDEPENDENT_TEST_FILES=14
+POST_MERGE_INDEPENDENT_TESTS=462/462 passed
+TYPECHECK=passed
+ARCHITECTURE_UNIT=148/148 passed
+ARCHITECTURE_INCREMENTAL=passed
+LINT=passed_with_4_existing_warnings
+BUILD=passed
+PRODUCTION_READINESS_DOCS=8/8 passed
+GIT_DIFF_CHECK=passed
+
+S18_ACTIONABLE_P0_P1=0
+S18_ACTIONABLE_P0_P1_P2_P3=0
+POST_MERGE_REVIEW_DEBT=0
+
+DATABASE_CONNECTION=false
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+MIGRATION=false
+DDL_EXECUTION=false
+DML_EXECUTION=false
+STAGING_CHANGE=false
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+
+S18_COMPLETE=true
+NEXT_TASK=POST-V2-R1C final closure + seven-line development entry audit
+NEXT_TASK_AUTHORIZED=false
+SEVEN_STREAM_DEVELOPMENT_AUTHORIZED=false
+```
 
 ```text
 STAGE=S17
