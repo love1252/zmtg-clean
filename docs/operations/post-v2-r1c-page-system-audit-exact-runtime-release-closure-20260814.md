@@ -1,4 +1,4 @@
-# POST-V2-R1C `page_system_audit` exact 5-file Runtime release 闭环
+# POST-V2-R1C `page_system_audit` exact 5-file Runtime release 安全回滚闭环
 
 > 日期：2026-08-14（Asia/Shanghai）
 >
@@ -6,165 +6,132 @@
 >
 > 基线：`c89cecaf5e3551f5497f1aac5bbfb093aefd180d`
 >
-> Runtime PR：#1202
+> Initial Runtime PR：#1202 / Head `8a95401d8d2668062059f239db20a33e689173b8` / Merge `c1eabd4051f7fafb75abd44bd6636503c89f43a4`
 >
-> Runtime Head：`8a95401d8d2668062059f239db20a33e689173b8`
+> Initial Handoff PR：#1203 / Merge `dfa60c54dedc4d325cad35c393a0f831c74441e6`
 >
-> Runtime Merge：`c1eabd4051f7fafb75abd44bd6636503c89f43a4`
+> Security Rollback PR：#1204 / Head `fef19d3591c0849f84d0618dd45272e707d31bc9` / Merge `a1a2baf13c5674e2795b65b37fad2ff89ddac104`
 >
-> Final Handoff PR：#1203
+> Final Corrective Handoff PR：#1205
 
-## 1. 唯一结论
+## 1. 终态结论
 
 ```text
 STAGE=S14
 TASK=POST_V2_R1C_PAGE_SYSTEM_AUDIT_EXACT_5_FILE_RUNTIME_RELEASE
-COMPLETION_MODE=COMPLETE
-S14_COMPLETE=true
+COMPLETION_MODE=BLOCKED_ROLLED_BACK
+S14_COMPLETE=false
+S14_BLOCKER_FORMALLY_CLOSED=true
+S14_FORMAL_CLOSURE=false
 
-PAGE_SYSTEM_AUDIT_STATE=read_only/pilot_released
-PAGE_SYSTEM_AUDIT_RELEASE=true
-PAGE_SYSTEM_AUDIT_ACCESS_MODE=read_only
-PAGE_SYSTEM_AUDIT_DATA_READINESS=partial
-PAGE_SYSTEM_AUDIT_PRODUCTION_RELEASE=pilot_released
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+PAGE_SYSTEM_AUDIT_ACCESS_MODE=hidden
+PAGE_SYSTEM_AUDIT_DATA_READINESS=not_required
+PAGE_SYSTEM_AUDIT_PRODUCTION_RELEASE=not_released
 
-REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=2
-RELEASED_GOVERNED_PAGES=page_workbench,page_system_audit
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+RELEASED_GOVERNED_PAGES=page_workbench
 CONTROLLED_CREATE_RELEASE_COUNT=0
 
+S14_POST_MERGE_P1_DETECTED=1
+PR1202_OPERATOR_SCOPE_P1_THREAD=PRRT_kwDOSrGMn86ZMXMW
+PR1202_OPERATOR_SCOPE_P1_THREAD_RESOLVED=true
+S14_ACTIONABLE_P0_P1_P2_P3=0
 POST_MERGE_REVIEW_DEBT=0
+
 NEXT_TASK_AUTHORIZED=false
 NEXT_TASK_SELECTION_REQUIRED=true
 ```
 
-S14 严格按 S13 唯一 canonical Admission 的 exact 5-file allowlist 实施。Repository 内 code-owned Capability Authority 现已将 `page_system_audit` 标记为只读 pilot，并新增请求级动态的 canonical Route `/hospital/system/audit`。这不代表 Staging 或 Production deployment。
+PR #1202 曾按 S13 canonical Admission 实施 exact 5-file release，但 post-merge Review 证明 `tenant_operator` 会在 Reader 缺少角色/本人/授权模块过滤时读取本机构全部可信审计记录。S14 frozen Authority context 只提供 tenant、institution 与 navigation sections；`tenant_admin` 和 `tenant_operator` 的 system navigation shape 相同，因此 canonical 5 files 内无法安全区分两个角色。
 
-## 2. Exact Runtime scope
+任何保持 admin 放行同时隐藏 operator 的正确修复，都需要角色感知 Reader/Repository、可信角色信号或 public policy/contract 变更，触发 S14 的第 6 个 Runtime 文件、Reader 或 public contract 硬停止条件。为消除已确认 P1，PR #1204 按已授权 rollback 恢复安全终态；S14 release 目标未完成，不得继续使用旧的完成口径。
 
-| 路径 | 文件类型 | 变更 | 职责 |
+## 2. Initial release 与 exact rollback scope
+
+| 路径 | 文件类型 | Initial #1202 | Security rollback #1204 |
 | --- | --- | --- | --- |
-| `src/server/orchestration/institution-capability-authority.ts` | production | existing update | 更新 Authority revision，放行 exact audit readonly partial pilot shape |
-| `src/server/orchestration/institution-capability-authority.test.ts` | test | existing update | 锁定 2 个 released governed pages、34 个 hidden capability 与 0 个 controlled create |
-| `src/app/hospital/system/audit/page.tsx` | production | new | 组合 formal request authorization、genuine system navigation、exact Authority 与既有 Audit Shell |
-| `src/modules/institution/tests/InstitutionRouteShell.test.tsx` | test | existing update | 锁定 direct Route、角色边界、fail-closed、GET-only 与 coverage disclosure |
-| `src/modules/institution-workbench/tests/HospitalWorkbenchEntry.test.tsx` | test | existing update | 用真实 future audit release fixture 复验 Workbench multi-capability 隔离 |
+| `src/server/orchestration/institution-capability-authority.ts` | production | 放行 audit readonly pilot | 恢复仅 Workbench release |
+| `src/server/orchestration/institution-capability-authority.test.ts` | test | 锁定 2 个 released pages | 恢复 1 个 released page |
+| `src/app/hospital/system/audit/page.tsx` | production | 新增 dedicated Route | 删除 dedicated Route |
+| `src/modules/institution/tests/InstitutionRouteShell.test.tsx` | test | 新增 audit Route regression | 恢复 release 前 Route regression |
+| `src/modules/institution-workbench/tests/HospitalWorkbenchEntry.test.tsx` | test | 新增 future release fixture | 恢复 release 前 fixture |
 
 ```text
-EXACT_RUNTIME_FILE_COUNT=5
-ACTUAL_RUNTIME_TEST_CHANGED_FILE_COUNT=5
-EXACT_RUNTIME_EXISTING_FILE_COUNT=4
-EXACT_RUNTIME_NEW_FILE_COUNT=1
-EXACT_PRODUCTION_FILE_COUNT=2
-EXACT_TEST_FILE_COUNT=3
-EXACT_SCOPE_MATCH=true
-SHARED_CATCH_ALL_CHANGE=false
+INITIAL_EXACT_RUNTIME_FILE_COUNT=5
+INITIAL_ACTUAL_RUNTIME_TEST_CHANGED_FILE_COUNT=5
+INITIAL_EXACT_SCOPE_MATCH=true
+
+ROLLBACK_RUNTIME_TEST_CHANGED_FILE_COUNT=5
+ROLLBACK_EXACT_SCOPE_MATCH=true
+ROLLBACK_PRODUCTION_FILE_COUNT=2
+ROLLBACK_TEST_FILE_COUNT=3
+SIXTH_RUNTIME_FILE_TOUCHED=false
 ```
 
-Runtime PR #1202 恰好修改上述 5 个文件；没有第 6 个 Runtime/Test 文件，没有修改 `src/app/hospital/[...slug]/**`。
+#1204 的 5 个 Runtime/Test 文件最终内容与 S14 baseline `c89cecaf5e3551f5497f1aac5bbfb093aefd180d` 对应文件完全一致；没有修改 Reader、API、client、Repository、Writer、public registry/navigation contract 或 shared catch-all。
 
-## 3. Authority release 结果
+## 3. P1 事实与 fail-closed 决策
 
-`page_system_audit` 在真实 institution authorization 成立时的 exact authoritative output：
+Review thread `PRRT_kwDOSrGMn86ZMXMW` 指出：
 
-```text
-capabilityKey=page_system_audit
-decision=read_only
-codeMaturity=verified
-institutionAuthorization=authorized
-connectionAvailability=not_required
-dataReadiness=partial
-productionRelease=pilot_released
-safeSummary=审计与安全仅供查看
-```
+1. `tenant_operator` 与 `tenant_admin` 均获得 `system` navigation；
+2. S14 Authority 仅据 `availableSectionIds` 放行 audit；
+3. 当前 Audit Reader/Repository 只按 tenant、institution 与 `verified` 过滤；
+4. 没有当前操作者角色、本人或获授权模块过滤；
+5. 因而 operator 可读取本机构其他人员及无权模块的可信审计记录。
 
-- Authority revision 更新为 `r1c-page-system-audit-readonly-pilot-v1`；
-- `page_workbench` 既有 `read_only / not_required / pilot_released` shape 完全保持；
-- 其余 34 个 capabilities 保持 `hidden/not_released`；
-- 3 个 controlled-create actions 保持 `hidden/not_released`；
-- 没有新增 capability、角色、system section 权限或 public registry 变更。
+PR #1204 合并后：
 
-## 4. Canonical Route 与 fail-closed
+- `page_system_audit` 恢复 `hidden/not_released`；
+- `/hospital/system/audit` dedicated Route 被删除；
+- build route table 不再包含该路径；
+- `tenant_operator` 与其他角色均不能进入该审计页面读取面；
+- `page_workbench` 既有 release 不变；
+- thread 在实际 merge 与 merged-main 独立验证之后才回复并解决。
 
-`/hospital/system/audit` 是 dedicated static path，但 Server Component 显式使用 `force-dynamic`，确保每个请求重新消费当前授权，不会把 build-time 结果预渲染为共享页面。
+## 4. 当前 Reader 与 Workbench 基础状态
 
-成功链路：
-
-1. formal Institution Request Authorization；
-2. `authorizeCurrentInstitutionNavigationV1({ targetSectionId: 'system' })`；
-3. genuine exact navigation decision；
-4. current Capability Authority；
-5. exact `page_system_audit` release shape；
-6. 渲染既有 `InstitutionAuditEventsShell`。
-
-以下情况全部 fail closed：formal request 失败、navigation rejected/mismatch/non-genuine、consultant/customer_service 被 system Section Guard 阻断、Authority null/reject/hidden/duplicate/key mismatch/dimension mismatch。已区分使用既有 forbidden、capability-off 与 unavailable 语义，不读取 Audit data，不存在 fallback 绕过 Authority。
-
-## 5. Reader 与只读边界
-
-S14 没有修改 Audit Reader、API、client、Repository、Writer、attribution contract、coverage DTO 或 `InstitutionAuditEventsShell`。页面继承既有：
+S14 rollback 没有撤销 S10-S13 已闭合的 Reader/Writer/Data Readiness foundation：
 
 ```text
+AUDIT_WRITER_ATTRIBUTION_CLOSED=true
+HISTORICAL_BACKFILL_CLOSED=true
 AUDIT_READER_SAFE_DATA_AVAILABLE=true
 AUDIT_READER_COVERAGE_STATE=partial_verified_only
 AUDIT_READER_HISTORICAL_COVERAGE_COMPLETE=false
 AUDIT_READER_PARTIAL_COVERAGE_SAFE=true
 AUDIT_READER_COVERAGE_DISCLOSURE_SAFE=true
-```
-
-页面只展示当前 formal tenant + institution 的 `verified` subset，明确披露历史覆盖不完整、不可分类旧记录未被猜测归属，页内数量不是完整历史总量。`partial_verified_only + zero rows` 不会被表达为 authoritative empty。
-
-```text
-MUTATION_METHOD_COUNT=0
-EXPORT_ACTION_COUNT=0
-DOWNLOAD_ACTION_COUNT=0
-REPLAY_ACTION_COUNT=0
-BULK_OPERATION_COUNT=0
-```
-
-Audit Shell 只继续使用 GET 请求提供 filter、refresh/reset 与 pagination；S14 没有新增任何写入交互。
-
-## 6. Workbench multi-capability
-
-回归 fixture 已使用真实 future shape：
-
-```text
-page_system_audit
-decision=read_only
-dataReadiness=partial
-productionRelease=pilot_released
-```
-
-`page_workbench + page_system_audit` 时，`/hospital` 仍只按 `page_workbench` key 选择并缩小自身投影；Audit summary 在 Workbench 前或后均不进入 Workbench DOM，duplicate/missing Workbench 继续 fail closed。
-
-```text
 WORKBENCH_MULTI_CAPABILITY_SAFE=true
 WORKBENCH_PAGE_WORKBENCH_PROJECTION_STABLE=true
 ```
 
-## 7. 验证证据
+这些 foundation 不构成页面 release。当前 Authority 只接受 `page_workbench` 为受治理 readonly pilot，其他 35 capabilities 均保持 hidden/not_released。
+
+## 5. Security rollback 验证
 
 ```text
-FINAL_DIRECT_TARGETED_TEST_FILES=3
-FINAL_DIRECT_TARGETED_TESTS=110
-FULL_TEST_FILES=495
-FULL_TESTS=6806
-POST_MERGE_INDEPENDENT_TEST_FILES=11
-POST_MERGE_INDEPENDENT_TESTS=368
+ROLLBACK_TARGETED_TEST_FILES=3
+ROLLBACK_TARGETED_TESTS=93
+ROLLBACK_FULL_TEST_FILES=495
+ROLLBACK_FULL_TESTS=6789
+ROLLBACK_POST_MERGE_INDEPENDENT_TEST_FILES=3
+ROLLBACK_POST_MERGE_INDEPENDENT_TESTS=93
 
-TYPECHECK=passed
-ARCHITECTURE_UNIT=148/148 passed
-ARCHITECTURE_INCREMENTAL=passed
-LINT=passed_with_4_existing_warnings
-BUILD=passed
-PRODUCTION_READINESS_DOCS=8/8 passed
-GIT_DIFF_CHECK=passed
-RUNTIME_REQUIRED_CHECK=passed
-RUNTIME_ACTIONABLE_P0_P1_P2_P3=0
-POST_MERGE_REVIEW_DEBT=0
+ROLLBACK_TYPECHECK=passed
+ROLLBACK_ARCHITECTURE_UNIT=148/148 passed
+ROLLBACK_ARCHITECTURE_INCREMENTAL=passed
+ROLLBACK_LINT=passed_with_4_existing_warnings
+ROLLBACK_BUILD=passed
+ROLLBACK_PRODUCTION_READINESS_DOCS=8/8 passed
+ROLLBACK_GIT_DIFF_CHECK=passed
+ROLLBACK_REQUIRED_CHECK=passed
 ```
 
-最终 build 路由表确认 `/hospital/system/audit` 为动态服务端路由。PR #1202 在 frozen Head 上通过 Required Check，合并前与两次 post-merge sweep 均为 0 Review thread / 0 actionable review。
+首次 typecheck 只命中旧 `.next` 中已删除 Route 的生成类型；正式 build 重建生成产物后，typecheck 通过。正式 build route table 明确不含 `/hospital/system/audit`。
 
-## 8. 数据库、环境与发布边界
+## 6. 边界
 
 ```text
 DATABASE_CONNECTION=false
@@ -182,24 +149,28 @@ EXTERNAL_SYSTEM_CONNECTION=false
 SECRET_ACCESS=false
 ```
 
-`productionRelease=pilot_released` 是 repository code-owned Capability Authority 决策字段，不是对真实线上环境的 deployment 证据。
-
-## 9. Rollback
-
-若需回滚，revert Runtime merge `c1eabd4051f7fafb75abd44bd6636503c89f43a4`：
-
-- 恢复 `page_system_audit` 为 `hidden/not_released`；
-- 删除 dedicated `/hospital/system/audit` Route；
-- 恢复 3 个 regression files；
-- 受治理只读页面数恢复为 1。
-
-回滚不需要数据库连接、DML、Schema 或 Migration。
-
-## 10. 下一任务边界
+## 7. 阻断前置条件
 
 ```text
+PRIMARY_BLOCKING_PREREQUISITE=trusted_role_aware_audit_read_authorization
+REQUIRED_NEW_AUTHORIZATION=fresh_admission_beyond_S14_exact_5_runtime_allowlist
+PAGE_SYSTEM_AUDIT_RUNTIME_READMISSION_READY=false
+PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=false
+```
+
+下一次 release re-admission 必须 fresh 决定以下任一结构正确的方案，并冻结新的 exact allowlist：
+
+- Reader/Repository 对当前角色、本人及获授权模块进行可信、fail-closed 过滤；或
+- Capability Authority 消费不可伪造的当前角色信号，并在 Reader 过滤闭合前仅允许满足完整读取权限的角色。
+
+不得在 S14 exact 5 files 中伪造 role、从 client/query 取得 role、增加 ownership query，或用当前 navigation shape 冒充 admin-only 授权。
+
+## 8. 下一任务边界
+
+```text
+NEXT_TASK=TO_BE_SELECTED_BY_CHATGPT_PROJECT_CONTROL
 NEXT_TASK_AUTHORIZED=false
 NEXT_TASK_SELECTION_REQUIRED=true
 ```
 
-S14 不从 backlog 自动选择下一页面或后续工作。由 ChatGPT 项目总控在审查当前 2 / 26 受治理只读页面状态后，另行确定唯一下一任务并显式授权。
+S14 不自动扩展 Runtime allowlist，也不自动选择或开发下一任务。由 ChatGPT 项目总控审查本 blocked rollback 终态后另行授权。

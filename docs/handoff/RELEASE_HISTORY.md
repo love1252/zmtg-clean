@@ -2,50 +2,55 @@
 
 <!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_EXACT_RUNTIME_RELEASE_HISTORY -->
 
-## 2026-08-14：POST-V2-R1C `page_system_audit` exact 5-file Runtime release 完整闭环
+## 2026-08-14：POST-V2-R1C `page_system_audit` exact 5-file release 安全回滚与阻断闭环
 
 ```text
 STAGE=S14
 TASK=POST_V2_R1C_PAGE_SYSTEM_AUDIT_EXACT_5_FILE_RUNTIME_RELEASE
-COMPLETION_MODE=COMPLETE
-S14_COMPLETE=true
+COMPLETION_MODE=BLOCKED_ROLLED_BACK
+S14_COMPLETE=false
+S14_BLOCKER_FORMALLY_CLOSED=true
+S14_FORMAL_CLOSURE=false
 BASELINE=c89cecaf5e3551f5497f1aac5bbfb093aefd180d
 
-RUNTIME_PR=1202
-RUNTIME_HEAD=8a95401d8d2668062059f239db20a33e689173b8
-RUNTIME_MERGE=c1eabd4051f7fafb75abd44bd6636503c89f43a4
-HANDOFF_PR=1203
-S14_PRS=1202,1203
-S14_PR_COUNT=2
+INITIAL_RUNTIME_PR=1202
+INITIAL_RUNTIME_HEAD=8a95401d8d2668062059f239db20a33e689173b8
+INITIAL_RUNTIME_MERGE=c1eabd4051f7fafb75abd44bd6636503c89f43a4
+INITIAL_HANDOFF_PR=1203
+SECURITY_ROLLBACK_PR=1204
+SECURITY_ROLLBACK_HEAD=fef19d3591c0849f84d0618dd45272e707d31bc9
+SECURITY_ROLLBACK_MERGE=a1a2baf13c5674e2795b65b37fad2ff89ddac104
+FINAL_CORRECTIVE_HANDOFF_PR=1205
+S14_PRS=1202,1203,1204,1205
+S14_PR_COUNT=4
 S14_REQUIRED_CHECKS=passed
+
+S14_POST_MERGE_P1_DETECTED=1
+PR1202_OPERATOR_SCOPE_P1_THREAD=PRRT_kwDOSrGMn86ZMXMW
+PR1202_OPERATOR_SCOPE_P1_THREAD_RESOLVED=true
 S14_ACTIONABLE_P0_P1=0
 S14_ACTIONABLE_P0_P1_P2_P3=0
 POST_MERGE_REVIEW_DEBT=0
 
-EXACT_RUNTIME_FILE_COUNT=5
-ACTUAL_RUNTIME_TEST_CHANGED_FILE_COUNT=5
-EXACT_RUNTIME_EXISTING_FILE_COUNT=4
-EXACT_RUNTIME_NEW_FILE_COUNT=1
-EXACT_PRODUCTION_FILE_COUNT=2
-EXACT_TEST_FILE_COUNT=3
-EXACT_SCOPE_MATCH=true
+INITIAL_EXACT_RUNTIME_FILE_COUNT=5
+INITIAL_ACTUAL_RUNTIME_TEST_CHANGED_FILE_COUNT=5
+INITIAL_EXACT_SCOPE_MATCH=true
+ROLLBACK_RUNTIME_TEST_CHANGED_FILE_COUNT=5
+ROLLBACK_EXACT_SCOPE_MATCH=true
+SIXTH_RUNTIME_FILE_TOUCHED=false
 
-PAGE_SYSTEM_AUDIT_STATE=read_only/pilot_released
-PAGE_SYSTEM_AUDIT_RELEASE=true
-PAGE_SYSTEM_AUDIT_ACCESS_MODE=read_only
-PAGE_SYSTEM_AUDIT_DATA_READINESS=partial
-PAGE_SYSTEM_AUDIT_PRODUCTION_RELEASE=pilot_released
-REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=2
-RELEASED_GOVERNED_PAGES=page_workbench,page_system_audit
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+PAGE_SYSTEM_AUDIT_ACCESS_MODE=hidden
+PAGE_SYSTEM_AUDIT_DATA_READINESS=not_required
+PAGE_SYSTEM_AUDIT_PRODUCTION_RELEASE=not_released
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+RELEASED_GOVERNED_PAGES=page_workbench
 PAGE_WORKBENCH_RELEASE_UNCHANGED=true
 OTHER_CAPABILITY_RELEASE_DRIFT_COUNT=0
 CONTROLLED_CREATE_RELEASE_COUNT=0
-
-CANONICAL_ROUTE=/hospital/system/audit
-DEDICATED_STATIC_ROUTE=true
-REQUEST_SCOPED_DYNAMIC_ROUTE=true
+CANONICAL_ROUTE_PRESENT=false
 SHARED_CATCH_ALL_CHANGE=false
-MUTATION_METHOD_COUNT=0
 
 AUDIT_READER_COVERAGE_STATE=partial_verified_only
 AUDIT_READER_HISTORICAL_COVERAGE_COMPLETE=false
@@ -54,18 +59,23 @@ AUDIT_READER_COVERAGE_DISCLOSURE_SAFE=true
 WORKBENCH_MULTI_CAPABILITY_SAFE=true
 WORKBENCH_PAGE_WORKBENCH_PROJECTION_STABLE=true
 
-FINAL_DIRECT_TARGETED_TEST_FILES=3
-FINAL_DIRECT_TARGETED_TESTS=110
-FULL_TEST_FILES=495
-FULL_TESTS=6806
-POST_MERGE_INDEPENDENT_TEST_FILES=11
-POST_MERGE_INDEPENDENT_TESTS=368
-TYPECHECK=passed
-ARCHITECTURE_UNIT=148/148 passed
-ARCHITECTURE_INCREMENTAL=passed
-LINT=passed_with_4_existing_warnings
-BUILD=passed
-PRODUCTION_READINESS_DOCS=8/8 passed
+ROLLBACK_TARGETED_TEST_FILES=3
+ROLLBACK_TARGETED_TESTS=93
+ROLLBACK_FULL_TEST_FILES=495
+ROLLBACK_FULL_TESTS=6789
+ROLLBACK_POST_MERGE_INDEPENDENT_TEST_FILES=3
+ROLLBACK_POST_MERGE_INDEPENDENT_TESTS=93
+ROLLBACK_TYPECHECK=passed
+ROLLBACK_ARCHITECTURE_UNIT=148/148 passed
+ROLLBACK_ARCHITECTURE_INCREMENTAL=passed
+ROLLBACK_LINT=passed_with_4_existing_warnings
+ROLLBACK_BUILD=passed
+ROLLBACK_PRODUCTION_READINESS_DOCS=8/8 passed
+
+PRIMARY_BLOCKING_PREREQUISITE=trusted_role_aware_audit_read_authorization
+REQUIRED_NEW_AUTHORIZATION=fresh_admission_beyond_S14_exact_5_runtime_allowlist
+PAGE_SYSTEM_AUDIT_RUNTIME_READMISSION_READY=false
+PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=false
 
 DATABASE_CONNECTION=false
 DATABASE_WRITE_EXECUTION=false
@@ -77,26 +87,29 @@ STAGING_CHANGE=false
 PRODUCTION_CHANGE=false
 PRODUCTION_DEPLOYMENT=false
 
+NEXT_TASK=TO_BE_SELECTED_BY_CHATGPT_PROJECT_CONTROL
 NEXT_TASK_AUTHORIZED=false
 NEXT_TASK_SELECTION_REQUIRED=true
 ```
 
-- Runtime PR #1202 严格按 S13 canonical Admission 实施 2 production + 3 tests 的 exact 5-file scope，没有修改 Reader、client、Repository、Writer、public contract 或 shared catch-all；
-- Authority revision 已更新，`page_system_audit` 放行为 `read_only / partial / pilot_released`，`page_workbench` 保持不变，其余 34 capabilities 与 3 个 controlled-create actions 未放行；
-- 新增 `/hospital/system/audit` dedicated Route，显式 `force-dynamic` 以按请求重新校验 formal authorization、genuine system navigation 与 exact Authority；
-- tenant_admin/tenant_operator 的 exact 放行链路与 consultant/customer_service 阻断、Authority hidden/duplicate/mismatch/unavailable 全部由 regression 锁定；
-- Audit Shell 仍为 GET-only，保留 `partial_verified_only` 覆盖披露，partial zero rows 不冒充 authoritative empty；
-- final direct 3/110、full 495/6806、AQ 148/148、build、ProductionReadinessDocs 与 Required Check 通过；merged main 独立复验 11/368、typecheck 与 Architecture incremental 通过；
-- PR #1202 合并前与合并后 sweep 均为 0 Review thread，无 P0/P1/P2/P3 债务；
-- `pilot_released` 仅表示 repository code-owned Authority 状态，本阶段没有连接数据库，也没有 Staging 或 Production deployment。
+- PR #1202 按 S13 canonical Admission 实施 2 production + 3 tests 的 exact 5-file release；initial full 495/6806、Required Check 与 merged-main independent 11/368 均曾通过；
+- PR #1202 post-merge P1 `PRRT_kwDOSrGMn86ZMXMW` 证明 `tenant_operator` 会在 Reader/Repository 缺少当前角色、本人及授权模块过滤时读取本机构过宽的可信审计记录；
+- S14 Authority context 不暴露角色，且 admin/operator 的 system navigation shape 相同；保持 admin release 同时隐藏 operator 的正确修复需要第 6 个 Runtime 文件、Reader 或 public contract 变更；
+- PR #1204 按已授权 rollback 精确恢复 canonical 5 个 Runtime/Test 文件：Authority 回到仅 Workbench released，删除 dedicated `/hospital/system/audit` Route，其他 foundation 不变；
+- rollback final 3/93、full 495/6789、AQ 148/148、build、ProductionReadinessDocs、Required Check 与 merged-main 3/93 均通过；
+- P1 thread 在 #1204 实际 merge 后回复并解决；当前 actionable P0/P1/P2/P3=0、post-merge Review debt=0；
+- S14 release 目标未完成，不能保留旧的完成状态或页面计数口径；当前仍为 1 / 26；
+- 未连接数据库，未执行 Schema、Migration、DDL、DML、Seed、Staging 或 Production deployment。
 
 证据：
 
 - `docs/operations/post-v2-r1c-page-system-audit-exact-runtime-release-closure-20260814.md`
-- Runtime PR #1202 / Merge `c1eabd4051f7fafb75abd44bd6636503c89f43a4`
-- final Handoff PR #1203
+- Initial Runtime PR #1202 / Merge `c1eabd4051f7fafb75abd44bd6636503c89f43a4`
+- Initial Handoff PR #1203
+- Security rollback PR #1204 / Merge `a1a2baf13c5674e2795b65b37fad2ff89ddac104`
+- Final corrective Handoff PR #1205
 
-下一任务尚未选择；`NEXT_TASK_AUTHORIZED=false`、`NEXT_TASK_SELECTION_REQUIRED=true`，由 ChatGPT 项目总控另行决定。
+下一任务不自动选择；`NEXT_TASK_AUTHORIZED=false`、`NEXT_TASK_SELECTION_REQUIRED=true`。
 
 <!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_EXACT_RUNTIME_RELEASE_HISTORY_END -->
 
