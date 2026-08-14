@@ -37,8 +37,8 @@ SECURITY_ROLLBACK_PR=1204
 SECURITY_ROLLBACK_HEAD=fef19d3591c0849f84d0618dd45272e707d31bc9
 SECURITY_ROLLBACK_MERGE=a1a2baf13c5674e2795b65b37fad2ff89ddac104
 FINAL_CORRECTIVE_HANDOFF_PR=1205
-BLOCKED_HANDOFF_CORRECTIVE_PR=TBD
-S14_PRS=1202,1203,1204,1205,TBD
+BLOCKED_HANDOFF_CORRECTIVE_PR=1206
+S14_PRS=1202,1203,1204,1205,1206
 S14_PR_COUNT=5
 S14_REQUIRED_CHECKS=passed
 
@@ -119,7 +119,7 @@ PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
 - post-merge P1 证明 `tenant_operator` 在当前 Reader/Repository 缺少角色、本人及授权模块过滤时可读取过宽的可信审计记录；
 - canonical 5 files 不含可信角色信号，正确修复触发第 6 个 Runtime 文件、Reader 或 public contract 硬停止条件；
 - PR #1204 已按 exact-5 rollback 恢复 `hidden/not_released` 并删除 dedicated Route；这只撤销页面 exposure expansion，没有关闭既有 Audit API 的角色授权缺口；
-- PR #1205 post-merge P1 `PRRT_kwDOSrGMn86ZNNed` 已确认有效，并由同阶段 blocked-handoff corrective PR #TBD 撤回错误 closure claim 后回复并解决；
+- PR #1205 post-merge P1 `PRRT_kwDOSrGMn86ZNNed` 已确认有效，并由同阶段 blocked-handoff corrective PR #1206 撤回错误 closure claim 后回复并解决；
 - Reader/Writer/Data Readiness foundation 保持有效，但不构成页面 release；
 - S13 exact-5 Admission 不得自动重放；下一任务固定为 S15 fresh Admission，`NEXT_TASK_AUTHORIZED=false`。
 

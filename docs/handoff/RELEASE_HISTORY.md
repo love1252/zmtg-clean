@@ -24,8 +24,8 @@ SECURITY_ROLLBACK_PR=1204
 SECURITY_ROLLBACK_HEAD=fef19d3591c0849f84d0618dd45272e707d31bc9
 SECURITY_ROLLBACK_MERGE=a1a2baf13c5674e2795b65b37fad2ff89ddac104
 FINAL_CORRECTIVE_HANDOFF_PR=1205
-BLOCKED_HANDOFF_CORRECTIVE_PR=TBD
-S14_PRS=1202,1203,1204,1205,TBD
+BLOCKED_HANDOFF_CORRECTIVE_PR=1206
+S14_PRS=1202,1203,1204,1205,1206
 S14_PR_COUNT=5
 S14_REQUIRED_CHECKS=passed
 
@@ -118,7 +118,7 @@ PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
 - PR #1204 按已授权 rollback 精确恢复 canonical 5 个 Runtime/Test 文件：Authority 回到仅 Workbench released，删除 dedicated `/hospital/system/audit` Route，其他 foundation 不变；
 - rollback final 3/93、full 495/6789、AQ 148/148、build、ProductionReadinessDocs、Required Check 与 merged-main 3/93 均通过；
 - #1204 的页面 rollback 已撤销新页面 exposure expansion，但没有关闭仍可直接调用的 `GET /api/institution/audit-events` 角色授权缺口；
-- PR #1205 post-merge P1 `PRRT_kwDOSrGMn86ZNNed` 确认 blocker 必须保持 open；同阶段 blocked-handoff corrective PR #TBD 已撤回错误 closure claim，合并后回复并解决该 thread；
+- PR #1205 post-merge P1 `PRRT_kwDOSrGMn86ZNNed` 确认 blocker 必须保持 open；同阶段 blocked-handoff corrective PR #1206 已撤回错误 closure claim，合并后回复并解决该 thread；
 - `S14_BLOCKED_STATE_HANDOFF_CLOSED=true` 只表示安全回滚、阻断记录、Review 与下一任务交接闭合，不表示安全 blocker 已解决；当前 actionable P0/P1/P2/P3=0、post-merge Review debt=0；
 - S14 release 目标未完成，不能保留旧的完成状态或页面计数口径；当前仍为 1 / 26；
 - 未连接数据库，未执行 Schema、Migration、DDL、DML、Seed、Staging 或 Production deployment。
@@ -130,7 +130,7 @@ PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
 - Initial Handoff PR #1203
 - Security rollback PR #1204 / Merge `a1a2baf13c5674e2795b65b37fad2ff89ddac104`
 - Final corrective Handoff PR #1205
-- Blocked Handoff corrective PR #TBD
+- Blocked Handoff corrective PR #1206
 
 唯一下一任务冻结为 S15 `Trusted Role-Aware Audit Read Authorization fresh audit + exact Runtime admission`；`NEXT_TASK_AUTHORIZED=false`、`S15_RUNTIME_AUTHORIZED=false`，不得自动重放 S13 exact-5 Admission。
 

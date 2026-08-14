@@ -33,7 +33,7 @@
 - S13 边界：在 S13 当时仅完成重新准入，未实施 Runtime release；该历史结论已由 S14 后续执行更新
 - S14 Runtime：PR #1202 曾按 canonical 5 files 放行 Authority 与 dedicated Route；post-merge P1 证明当前 Reader 无角色/本人/授权模块过滤，不能安全放行 `tenant_operator`
 - S14 rollback：PR #1204 精确恢复 5 个 Runtime/Test 文件并删除 dedicated Route；full 495 files / 6789 tests、AQ 148/148、build、Required Check 与 merged-main 3 files / 93 tests 均通过
-- S14 Review：#1202 operator scope P1 已由 #1204 rollback 处置，#1204 documentation P2 已由 #1205 修正；#1205 API scope P1 `PRRT_kwDOSrGMn86ZNNed` 已由同阶段 blocked-handoff corrective PR #TBD 修正文档终态后回复并解决，当前 actionable debt=0
+- S14 Review：#1202 operator scope P1 已由 #1204 rollback 处置，#1204 documentation P2 已由 #1205 修正；#1205 API scope P1 `PRRT_kwDOSrGMn86ZNNed` 已由同阶段 blocked-handoff corrective PR #1206 修正文档终态后回复并解决，当前 actionable debt=0
 - 当前经审查接受的受治理只读页面切片：1 / 26
 - 剩余未放行页面：25
 - 受控创建能力放行：0 / 3
@@ -298,8 +298,8 @@ S14_SECURITY_ROLLBACK_PR=1204
 S14_SECURITY_ROLLBACK_HEAD=fef19d3591c0849f84d0618dd45272e707d31bc9
 S14_SECURITY_ROLLBACK_MERGE=a1a2baf13c5674e2795b65b37fad2ff89ddac104
 S14_FINAL_CORRECTIVE_HANDOFF_PR=1205
-S14_BLOCKED_HANDOFF_CORRECTIVE_PR=TBD
-S14_PRS=1202,1203,1204,1205,TBD
+S14_BLOCKED_HANDOFF_CORRECTIVE_PR=1206
+S14_PRS=1202,1203,1204,1205,1206
 S14_PR_COUNT=5
 S14_REQUIRED_CHECKS=passed
 S14_POST_MERGE_P1_DETECTED=2
