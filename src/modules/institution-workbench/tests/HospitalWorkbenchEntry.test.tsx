@@ -312,12 +312,9 @@ function readonlyWorkbenchCapabilityStatus(
             codeMaturity: 'verified',
             institutionAuthorization: 'authorized',
             connectionAvailability: 'not_required',
-            dataReadiness:
-              key === 'page_system_audit' ? 'partial' : 'not_required',
+            dataReadiness: 'not_required',
             productionRelease:
-              key === 'page_workbench' || key === 'page_system_audit'
-                ? 'pilot_released'
-                : 'not_released',
+              key === 'page_workbench' ? 'pilot_released' : 'not_released',
           },
           safeSummary:
             decision === 'hidden' ? null : `${capabilityLabel(key)}仅供查看`,
