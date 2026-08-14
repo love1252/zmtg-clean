@@ -80,7 +80,6 @@ const treatmentSummaryFollowUpRecord = {
 
 const auditEventRecord = {
   id: 'audit_evt_customer',
-  tenantId: 'demo-tenant-001',
   resource: 'customer',
   resourceId: 'cust_wang_repurchase',
   action: 'update',
@@ -89,11 +88,6 @@ const auditEventRecord = {
   actorId: 'demo-user-admin',
   actorRole: 'tenant_admin',
   occurredAt: '2026-05-31T09:00:00.000Z',
-  requestBody: { phoneNumber: '13800000000' },
-  metadata: { sql: 'select * from audit_events' },
-  stack: 'Error: DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
-  token: 'sk_test_should_not_render',
-  secret: 'raw-secret',
 };
 
 const customerTimelineResponse = {

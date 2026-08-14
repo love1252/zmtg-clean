@@ -1,8 +1,16 @@
 import {
+  AUDIT_REASON_VALUES,
+  AUDIT_RESULT_VALUES,
   isInstitutionAuditCoverage,
+  MAX_AUDIT_EVENT_QUERY_LIMIT,
   type AuditEventListItem,
   type InstitutionAuditCoverage,
 } from '@/modules/audit/domain/audit-event-query';
+import {
+  ACCESS_ACTIONS,
+  ACCESS_RESOURCES,
+  ACCESS_ROLES,
+} from '@/modules/security/domain/access-control';
 
 export type InstitutionAuditEventRecord = Omit<AuditEventListItem, 'tenantId'>;
 
@@ -64,12 +72,101 @@ const auditQueryKeys = [
   'cursor',
 ] as const satisfies readonly (keyof InstitutionAuditEventsQuery)[];
 
+const institutionAuditEventRecordKeys = Object.freeze([
+  'id',
+  'resource',
+  'resourceId',
+  'action',
+  'result',
+  'reason',
+  'actorId',
+  'actorRole',
+  'occurredAt',
+] as const);
+
+const institutionAuditEventsPageInfoKeys = Object.freeze([
+  'hasMore',
+  'limit',
+  'nextCursor',
+] as const);
+
+const institutionAuditEventsPayloadKeys = Object.freeze([
+  'records',
+  'pageInfo',
+  'coverage',
+] as const);
+
 function getFetcher(options?: InstitutionAuditEventsClientOptions) {
   return options?.fetcher ?? globalThis.fetch;
 }
 
 function isJsonObject(input: unknown): input is Record<string, unknown> {
   return Object.prototype.toString.call(input) === '[object Object]';
+}
+
+function hasExactOwnKeys(
+  input: Record<string, unknown>,
+  expectedKeys: readonly string[],
+): boolean {
+  const ownKeys = Reflect.ownKeys(input);
+  return (
+    ownKeys.length === expectedKeys.length &&
+    ownKeys.every((key) =>
+      typeof key === 'string' && expectedKeys.includes(key),
+    )
+  );
+}
+
+function isOneOf<const T extends readonly string[]>(
+  values: T,
+  input: unknown,
+): input is T[number] {
+  return typeof input === 'string' && values.some((value) => value === input);
+}
+
+function isBoundedIdentifier(input: unknown, maxLength: number): input is string {
+  return typeof input === 'string' && input.length > 0 && input.length <= maxLength;
+}
+
+function isCanonicalInstant(input: unknown): input is string {
+  if (typeof input !== 'string' || input.length !== 24) return false;
+  const timestamp = Date.parse(input);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === input;
+}
+
+function parseInstitutionAuditEventRecord(
+  input: unknown,
+): InstitutionAuditEventRecord | null {
+  if (
+    !isJsonObject(input) ||
+    !hasExactOwnKeys(input, institutionAuditEventRecordKeys) ||
+    !isBoundedIdentifier(input.id, 96) ||
+    !isOneOf(ACCESS_RESOURCES, input.resource) ||
+    !(
+      input.resourceId === null ||
+      isBoundedIdentifier(input.resourceId, 96)
+    ) ||
+    !isOneOf(ACCESS_ACTIONS, input.action) ||
+    !isOneOf(AUDIT_RESULT_VALUES, input.result) ||
+    !isOneOf(AUDIT_REASON_VALUES, input.reason) ||
+    !isBoundedIdentifier(input.actorId, 96) ||
+    !isOneOf(ACCESS_ROLES, input.actorRole) ||
+    !isCanonicalInstant(input.occurredAt)
+  ) {
+    return null;
+  }
+
+  return {
+    id: input.id,
+    resource: input.resource,
+    resourceId: input.resourceId,
+    action: input.action,
+    result: input.result,
+    reason: input.reason,
+    actorId: input.actorId,
+    actorRole: input.actorRole,
+    occurredAt: input.occurredAt,
+  };
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -122,13 +219,34 @@ function buildAuditEventsPath(query: InstitutionAuditEventsQuery) {
     : '/api/institution/audit-events';
 }
 
-function isValidPageInfo(input: unknown): input is InstitutionAuditEventsPageInfo {
-  return (
-    isJsonObject(input) &&
-    typeof input.hasMore === 'boolean' &&
-    typeof input.limit === 'number' &&
-    (input.nextCursor === null || typeof input.nextCursor === 'string')
-  );
+function parsePageInfo(input: unknown): InstitutionAuditEventsPageInfo | null {
+  if (
+    !isJsonObject(input) ||
+    !hasExactOwnKeys(input, institutionAuditEventsPageInfoKeys) ||
+    typeof input.hasMore !== 'boolean' ||
+    typeof input.limit !== 'number' ||
+    !Number.isSafeInteger(input.limit) ||
+    input.limit < 1 ||
+    input.limit > MAX_AUDIT_EVENT_QUERY_LIMIT
+  ) {
+    return null;
+  }
+
+  const nextCursor = input.nextCursor;
+  let parsedNextCursor: string | null;
+  if (input.hasMore) {
+    if (!isBoundedIdentifier(nextCursor, 512)) return null;
+    parsedNextCursor = nextCursor;
+  } else {
+    if (nextCursor !== null) return null;
+    parsedNextCursor = null;
+  }
+
+  return {
+    hasMore: input.hasMore,
+    limit: input.limit,
+    nextCursor: parsedNextCursor,
+  };
 }
 
 export async function listInstitutionAuditEvents(
@@ -153,12 +271,34 @@ export async function listInstitutionAuditEvents(
       };
     }
 
-    if (
-      !isJsonObject(payload) ||
-      !Array.isArray(payload.records) ||
-      !isValidPageInfo(payload.pageInfo) ||
-      !isInstitutionAuditCoverage(payload.coverage)
-    ) {
+    if (!isJsonObject(payload) || !hasExactOwnKeys(payload, institutionAuditEventsPayloadKeys)) {
+      return {
+        ok: false,
+        error: { kind: 'unknown', message: '请求失败', status: response.status },
+      };
+    }
+
+    if (!Array.isArray(payload.records) || !isInstitutionAuditCoverage(payload.coverage)) {
+      return {
+        ok: false,
+        error: { kind: 'unknown', message: '请求失败', status: response.status },
+      };
+    }
+
+    const records: InstitutionAuditEventRecord[] = [];
+    for (const candidate of payload.records) {
+      const record = parseInstitutionAuditEventRecord(candidate);
+      if (!record) {
+        return {
+          ok: false,
+          error: { kind: 'unknown', message: '请求失败', status: response.status },
+        };
+      }
+      records.push(record);
+    }
+
+    const pageInfo = parsePageInfo(payload.pageInfo);
+    if (!pageInfo) {
       return {
         ok: false,
         error: { kind: 'unknown', message: '请求失败', status: response.status },
@@ -167,8 +307,8 @@ export async function listInstitutionAuditEvents(
 
     return {
       ok: true,
-      records: payload.records as InstitutionAuditEventRecord[],
-      pageInfo: payload.pageInfo,
+      records,
+      pageInfo,
       coverage: payload.coverage,
     };
   } catch {

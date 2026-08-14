@@ -116,7 +116,6 @@ const urgentFollowUpRecord = {
 
 const auditEventRecord = {
   id: 'audit_phase8_institution',
-  tenantId: 'demo-tenant-001',
   resource: 'customer',
   resourceId: 'cust_phase5_closeout',
   action: 'update',
@@ -125,9 +124,6 @@ const auditEventRecord = {
   actorId: 'demo-user-admin',
   actorRole: 'tenant_admin',
   occurredAt: '2026-05-31T09:00:00.000Z',
-  sql: 'select * from audit_events',
-  stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
-  token: 'sk_test_phase8_should_not_render',
 };
 
 const followUpPathAnalysisRecord = {
@@ -2155,7 +2151,16 @@ function mapDemoAuditEventSeed(record: DemoAuditEventSeed): AuditEventListItem {
   };
 }
 
-function mapDemoTimelineAuditEvent(record: AuditEventListItem): CustomerTimelineAuditSummary {
+function mapDemoInstitutionAuditEventSeed(
+  record: DemoAuditEventSeed,
+): Omit<AuditEventListItem, 'tenantId'> {
+  const { tenantId: _tenantId, ...institutionRecord } = mapDemoAuditEventSeed(record);
+  return institutionRecord;
+}
+
+function mapDemoTimelineAuditEvent(
+  record: Omit<AuditEventListItem, 'tenantId'>,
+): CustomerTimelineAuditSummary {
   return {
     id: record.id,
     action: record.action,
@@ -2252,7 +2257,7 @@ function buildDemoSeedWorkspaceSmokeFixtures() {
   const treatmentSummaries = treatmentSummaryRecords.map(mapTreatmentSummaryRecordToListItem);
   const auditEvents = getDemoAuditEventSeedRecords()
     .filter((record) => record.scope === 'tenant' && record.tenantId === primarySmokeTenantId)
-    .map(mapDemoAuditEventSeed);
+    .map(mapDemoInstitutionAuditEventSeed);
   const platformAuditEvents = getDemoAuditEventSeedRecords()
     .filter((record) => record.scope === 'platform' || record.result === 'denied')
     .map(mapDemoAuditEventSeed);
