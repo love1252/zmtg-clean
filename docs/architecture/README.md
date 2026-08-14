@@ -10,7 +10,7 @@ COMPLETION_MODE=BLOCKED_ROLLED_BACK
 S14_COMPLETE=false
 S14_RELEASE_ROLLBACK_COMPLETE=true
 S14_FORMAL_CLOSURE=false
-S14_BLOCKED_STATE_HANDOFF_CLOSED=true
+S14_BLOCKED_STATE_HANDOFF_CLOSED=false
 S14_BLOCKER_FORMALLY_CLOSED=false
 S14_SECURITY_BLOCKER_OPEN=true
 
@@ -34,10 +34,12 @@ PR1204_DOCUMENTATION_P2_THREAD=PRRT_kwDOSrGMn86ZM8Cc
 PR1204_DOCUMENTATION_P2_THREAD_RESOLVED=true
 PR1205_API_SCOPE_P1_THREAD=PRRT_kwDOSrGMn86ZNNed
 PR1205_API_SCOPE_P1_VALID=true
-PR1205_API_SCOPE_P1_THREAD_RESOLVED=true
-S14_ACTIONABLE_P0_P1=0
-S14_ACTIONABLE_P0_P1_P2_P3=0
-POST_MERGE_REVIEW_DEBT=0
+PR1205_API_SCOPE_P1_THREAD_RESOLVED=false
+PR1206_PREMERGE_DOCUMENTATION_P2_THREAD=PRRT_kwDOSrGMn86ZOp0H
+PR1206_PREMERGE_DOCUMENTATION_P2_THREAD_RESOLVED=true
+S14_ACTIONABLE_P0_P1=1
+S14_ACTIONABLE_P0_P1_P2_P3=1
+POST_MERGE_REVIEW_DEBT=1
 
 PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
 PAGE_SYSTEM_AUDIT_RELEASE=false
@@ -100,7 +102,7 @@ PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
 - 正确修复需要角色感知 Reader/Repository、可信角色信号或 public policy/contract 变更，均超出 S14 frozen exact-5 或触发 Reader/public contract 硬停止条件；
 - PR #1204 因此按 S14 rollback 恢复仅 `page_workbench` released，`page_system_audit` 回到 `hidden/not_released`，并删除 dedicated `/hospital/system/audit` Route；
 - 页面 Route rollback 只消除了新发布页面造成的 exposure expansion；`GET /api/institution/audit-events` 仍由允许 admin/operator 的 `system` Section Guard 保护，而 Reader 缺少可信 role-aware scope，安全 blocker 继续开放；
-- rollback exact 5-file scope、full 495/6789、AQ 148/148、build、Required Check 与 merged-main independent 3/93 均通过；相关 Review thread 均在实际修正后回复并解决；
+- rollback exact 5-file scope、full 495/6789、AQ 148/148、build、Required Check 与 merged-main independent 3/93 均通过；#1206 合并前，PR #1205 API scope P1 仍待 merge 后回复并解决；
 - S10-S13 Reader/Writer/Data Readiness foundation 继续有效，但不构成页面 release；S14 release 未完成，S13 exact-5 Admission 不可无 fresh re-admission 重放。
 
 证据：

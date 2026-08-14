@@ -33,7 +33,7 @@
 - S13 边界：在 S13 当时仅完成重新准入，未实施 Runtime release；该历史结论已由 S14 后续执行更新
 - S14 Runtime：PR #1202 曾按 canonical 5 files 放行 Authority 与 dedicated Route；post-merge P1 证明当前 Reader 无角色/本人/授权模块过滤，不能安全放行 `tenant_operator`
 - S14 rollback：PR #1204 精确恢复 5 个 Runtime/Test 文件并删除 dedicated Route；full 495 files / 6789 tests、AQ 148/148、build、Required Check 与 merged-main 3 files / 93 tests 均通过
-- S14 Review：#1202 operator scope P1 已由 #1204 rollback 处置，#1204 documentation P2 已由 #1205 修正；#1205 API scope P1 `PRRT_kwDOSrGMn86ZNNed` 已由同阶段 blocked-handoff corrective PR #1206 修正文档终态后回复并解决，当前 actionable debt=0
+- S14 Review：#1202 operator scope P1 已由 #1204 rollback 处置，#1204 documentation P2 已由 #1205 修正；#1206 frozen Head 已修正 #1205 API scope P1 的错误终态，但在 #1206 实际合并前该 P1 仍 unresolved，当前 actionable debt=1
 - 当前经审查接受的受治理只读页面切片：1 / 26
 - 剩余未放行页面：25
 - 受控创建能力放行：0 / 3
@@ -286,7 +286,7 @@ S14_COMPLETE=false
 S14_COMPLETION_MODE=BLOCKED_ROLLED_BACK
 S14_RELEASE_ROLLBACK_COMPLETE=true
 S14_FORMAL_CLOSURE=false
-S14_BLOCKED_STATE_HANDOFF_CLOSED=true
+S14_BLOCKED_STATE_HANDOFF_CLOSED=false
 S14_BLOCKER_FORMALLY_CLOSED=false
 S14_SECURITY_BLOCKER_OPEN=true
 S14_BASELINE=c89cecaf5e3551f5497f1aac5bbfb093aefd180d
@@ -309,10 +309,12 @@ PR1204_DOCUMENTATION_P2_THREAD=PRRT_kwDOSrGMn86ZM8Cc
 PR1204_DOCUMENTATION_P2_THREAD_RESOLVED=true
 PR1205_API_SCOPE_P1_THREAD=PRRT_kwDOSrGMn86ZNNed
 PR1205_API_SCOPE_P1_VALID=true
-PR1205_API_SCOPE_P1_THREAD_RESOLVED=true
-S14_ACTIONABLE_P0_P1=0
-S14_ACTIONABLE_P0_P1_P2_P3=0
-S14_POST_MERGE_REVIEW_DEBT=0
+PR1205_API_SCOPE_P1_THREAD_RESOLVED=false
+PR1206_PREMERGE_DOCUMENTATION_P2_THREAD=PRRT_kwDOSrGMn86ZOp0H
+PR1206_PREMERGE_DOCUMENTATION_P2_THREAD_RESOLVED=true
+S14_ACTIONABLE_P0_P1=1
+S14_ACTIONABLE_P0_P1_P2_P3=1
+S14_POST_MERGE_REVIEW_DEBT=1
 
 S14_INITIAL_EXACT_RUNTIME_FILE_COUNT=5
 S14_INITIAL_ACTUAL_RUNTIME_TEST_CHANGED_FILE_COUNT=5

@@ -24,7 +24,7 @@ COMPLETION_MODE=BLOCKED_ROLLED_BACK
 S14_COMPLETE=false
 S14_RELEASE_ROLLBACK_COMPLETE=true
 S14_FORMAL_CLOSURE=false
-S14_BLOCKED_STATE_HANDOFF_CLOSED=true
+S14_BLOCKED_STATE_HANDOFF_CLOSED=false
 S14_BLOCKER_FORMALLY_CLOSED=false
 S14_SECURITY_BLOCKER_OPEN=true
 BASELINE=c89cecaf5e3551f5497f1aac5bbfb093aefd180d
@@ -49,10 +49,12 @@ PR1204_DOCUMENTATION_P2_THREAD=PRRT_kwDOSrGMn86ZM8Cc
 PR1204_DOCUMENTATION_P2_THREAD_RESOLVED=true
 PR1205_API_SCOPE_P1_THREAD=PRRT_kwDOSrGMn86ZNNed
 PR1205_API_SCOPE_P1_VALID=true
-PR1205_API_SCOPE_P1_THREAD_RESOLVED=true
-S14_ACTIONABLE_P0_P1=0
-S14_ACTIONABLE_P0_P1_P2_P3=0
-POST_MERGE_REVIEW_DEBT=0
+PR1205_API_SCOPE_P1_THREAD_RESOLVED=false
+PR1206_PREMERGE_DOCUMENTATION_P2_THREAD=PRRT_kwDOSrGMn86ZOp0H
+PR1206_PREMERGE_DOCUMENTATION_P2_THREAD_RESOLVED=true
+S14_ACTIONABLE_P0_P1=1
+S14_ACTIONABLE_P0_P1_P2_P3=1
+POST_MERGE_REVIEW_DEBT=1
 
 PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
 PAGE_SYSTEM_AUDIT_RELEASE=false
@@ -119,7 +121,7 @@ PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
 - post-merge P1 证明 `tenant_operator` 在当前 Reader/Repository 缺少角色、本人及授权模块过滤时可读取过宽的可信审计记录；
 - canonical 5 files 不含可信角色信号，正确修复触发第 6 个 Runtime 文件、Reader 或 public contract 硬停止条件；
 - PR #1204 已按 exact-5 rollback 恢复 `hidden/not_released` 并删除 dedicated Route；这只撤销页面 exposure expansion，没有关闭既有 Audit API 的角色授权缺口；
-- PR #1205 post-merge P1 `PRRT_kwDOSrGMn86ZNNed` 已确认有效，并由同阶段 blocked-handoff corrective PR #1206 撤回错误 closure claim 后回复并解决；
+- PR #1205 post-merge P1 `PRRT_kwDOSrGMn86ZNNed` 已确认有效；#1206 frozen Head 已撤回错误 closure claim，但必须等 #1206 实际合并后才回复并解决；
 - Reader/Writer/Data Readiness foundation 保持有效，但不构成页面 release；
 - S13 exact-5 Admission 不得自动重放；下一任务固定为 S15 fresh Admission，`NEXT_TASK_AUTHORIZED=false`。
 
