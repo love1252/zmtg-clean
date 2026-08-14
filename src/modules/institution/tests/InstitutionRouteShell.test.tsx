@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const wireMocks = vi.hoisted(() => {
   const authorizeCurrentInstitutionNavigationV1 = vi.fn();
@@ -9,6 +9,7 @@ const wireMocks = vi.hoisted(() => {
   return {
     authorization,
     authorizeCurrentInstitutionNavigationV1,
+    resolveInstitutionCapabilityAuthorityStatusV1: vi.fn(),
     genuineDecisions: new WeakSet<object>(),
     resolveInstitutionServerAuthorizationV1: vi.fn(),
   };
@@ -34,7 +35,16 @@ vi.mock('@/modules/security/server/institution-section-guard', () => ({
   ),
 }));
 
+vi.mock('@/server/orchestration/institution-capability-authority', () => ({
+  resolveInstitutionCapabilityAuthorityStatusV1:
+    wireMocks.resolveInstitutionCapabilityAuthorityStatusV1,
+}));
+
 import HospitalCapabilityOffRoute from '@/app/hospital/[...slug]/page';
+import HospitalSystemAuditPage, {
+  dynamic as hospitalSystemAuditDynamicMode,
+} from '@/app/hospital/system/audit/page';
+import type { CapabilityStatusV1 } from '@/modules/institution-contracts/v1/institution-capability';
 import {
   INSTITUTION_NAVIGATION_SECTION_IDS_V1,
   INSTITUTION_NAVIGATION_SECTIONS_V1,
@@ -47,6 +57,87 @@ import {
 import { InstitutionNavigationShell } from '@/modules/institution/components/InstitutionNavigationShell';
 
 const allSectionIds = INSTITUTION_NAVIGATION_SECTION_IDS_V1;
+
+type AuditAuthorityFixtureOptions = Readonly<{
+  codeMaturity?: 'unverified' | 'verified';
+  connectionAvailability?: 'not_required' | 'unavailable' | 'available';
+  dataReadiness?: 'not_required' | 'ready' | 'empty' | 'partial' | 'stale' | 'unavailable';
+  decision?: 'hidden' | 'read_only' | 'operational';
+  duplicate?: boolean;
+  institutionAuthorization?: 'not_authorized' | 'authorized';
+  key?: 'page_system_audit' | 'page_system_overview';
+  productionRelease?: 'not_released' | 'pilot_released' | 'released' | 'suspended';
+  safeSummary?: string | null;
+}>;
+
+function auditAuthorityStatus(
+  options: AuditAuthorityFixtureOptions = {},
+): CapabilityStatusV1 {
+  const key = options.key ?? 'page_system_audit';
+  const freshness = {
+    observedAt: '2026-08-14T03:00:00.000Z',
+    freshUntil: '2026-08-14T03:00:05.000Z',
+  };
+  const capability = {
+    key,
+    decision: options.decision ?? 'read_only',
+    dimensions: {
+      codeMaturity: options.codeMaturity ?? 'verified',
+      institutionAuthorization:
+        options.institutionAuthorization ?? 'authorized',
+      connectionAvailability:
+        options.connectionAvailability ?? 'not_required',
+      dataReadiness: options.dataReadiness ?? 'partial',
+      productionRelease: options.productionRelease ?? 'pilot_released',
+    },
+    safeSummary:
+      options.safeSummary === undefined
+        ? '审计与安全仅供查看'
+        : options.safeSummary,
+    diagnosticTargetKey: key,
+  } as const;
+  const capabilities = options.duplicate
+    ? [capability, { ...capability }]
+    : [capability];
+  const partitions = capabilities.map((item) => ({
+    key: item.key,
+    readiness: 'ready' as const,
+    freshness,
+    failureCode: null,
+  }));
+
+  return {
+    contractVersion: 'v1',
+    scope: {
+      tenantId: 'tenant-s14-route-001',
+      institutionId: 'institution-s14-route-001',
+    },
+    readiness: 'ready',
+    freshness,
+    partitions,
+    data: { capabilities },
+    failureCode: null,
+  };
+}
+
+function partialVerifiedEmptyAuditResponse() {
+  return new Response(
+    JSON.stringify({
+      records: [],
+      pageInfo: { hasMore: false, limit: 50, nextCursor: null },
+      coverage: {
+        state: 'partial_verified_only',
+        safeDataAvailable: false,
+        historicalCoverageComplete: false,
+        partialCoverageSafe: true,
+      },
+    }),
+    {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    },
+  );
+}
 
 const capabilityOffRouteCases = [
   [['customers'], 'customer_list', '客户列表'],
@@ -662,4 +753,221 @@ describe('BASE-WIRE-01 canonical route authorization wiring', () => {
     expect(getterReads).toBe(0);
     expect(proxyTraps).toBe(0);
   });
+});
+
+describe('POST-V2-R1C /hospital/system/audit dedicated readonly release route', () => {
+  beforeEach(() => {
+    wireMocks.resolveInstitutionServerAuthorizationV1.mockReset();
+    wireMocks.authorizeCurrentInstitutionNavigationV1.mockReset();
+    wireMocks.resolveInstitutionCapabilityAuthorityStatusV1.mockReset();
+    wireMocks.resolveInstitutionServerAuthorizationV1.mockResolvedValue(
+      wireMocks.authorization,
+    );
+    wireMocks.resolveInstitutionCapabilityAuthorityStatusV1.mockResolvedValue(
+      auditAuthorityStatus(),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps the canonical direct URL request-scoped instead of static authorization output', () => {
+    expect(hospitalSystemAuditDynamicMode).toBe('force-dynamic');
+    expect(resolveInstitutionCapabilityOffRouteV1(['system', 'audit'])).toMatchObject({
+      routeId: 'system_audit',
+      section: { id: 'system' },
+    });
+  });
+
+  it.each(['tenant_admin', 'tenant_operator'] as const)(
+    '%s genuine system authorization and exact Authority render the canonical GET-only Audit Shell',
+    async () => {
+      wireMocks.authorizeCurrentInstitutionNavigationV1.mockResolvedValueOnce(
+        mintNavigationDecision('system', 'allowed', allSectionIds),
+      );
+      const fetchMock = vi.fn<typeof fetch>(
+        async () => partialVerifiedEmptyAuditResponse(),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+
+      render(await HospitalSystemAuditPage());
+
+      expect(
+        wireMocks.authorizeCurrentInstitutionNavigationV1,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        wireMocks.authorizeCurrentInstitutionNavigationV1,
+      ).toHaveBeenCalledWith({ targetSectionId: 'system' });
+      expect(
+        wireMocks.resolveInstitutionCapabilityAuthorityStatusV1,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        screen.getByRole('heading', { name: '审计日志' }),
+      ).toBeInTheDocument();
+      expect(screen.getByText('当前机构只读')).toBeInTheDocument();
+      expect(
+        await screen.findByText('暂无可信记录，历史覆盖不完整'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/不能据此判断本机构从未发生审计事件/u),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/页内统计不是完整历史总量/u),
+      ).toBeInTheDocument();
+      expect(screen.queryByText('可信历史覆盖完整')).not.toBeInTheDocument();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/institution/audit-events',
+        { cache: 'no-store' },
+      );
+      expect(fetchMock.mock.calls[0]?.[1]).not.toHaveProperty('method');
+      expect(fetchMock.mock.calls[0]?.[1]).not.toHaveProperty('body');
+      expect(screen.queryByRole('button', { name: /export|download|导出|下载/iu })).not.toBeInTheDocument();
+    },
+  );
+
+  it.each(['consultant', 'customer_service'] as const)(
+    '%s blocked system navigation fails closed before Authority and Audit Reader',
+    async () => {
+      wireMocks.authorizeCurrentInstitutionNavigationV1.mockResolvedValueOnce(
+        mintNavigationDecision('system', 'blocked', [
+          'workbench',
+          'customers',
+          'conversations',
+          'care',
+        ]),
+      );
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      render(await HospitalSystemAuditPage());
+
+      expect(screen.getByText('当前账号不可访问该栏目')).toBeInTheDocument();
+      expect(
+        wireMocks.resolveInstitutionCapabilityAuthorityStatusV1,
+      ).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(screen.queryByRole('heading', { name: '审计日志' })).not.toBeInTheDocument();
+    },
+  );
+
+  it('formal request authorization failure renders unavailable with empty navigation', async () => {
+    wireMocks.resolveInstitutionServerAuthorizationV1.mockResolvedValueOnce(null);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(await HospitalSystemAuditPage());
+
+    expect(screen.getByText('机构审计能力暂时不可用')).toBeInTheDocument();
+    expect(
+      wireMocks.authorizeCurrentInstitutionNavigationV1,
+    ).not.toHaveBeenCalled();
+    expect(
+      wireMocks.resolveInstitutionCapabilityAuthorityStatusV1,
+    ).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(
+      within(screen.getByRole('navigation', { name: '机构端桌面导航' }))
+        .queryAllByRole('link'),
+    ).toHaveLength(0);
+  });
+
+  it.each(['reject', 'target_mismatch', 'non_genuine'] as const)(
+    'navigation authorization %s fails closed before Authority',
+    async (failure) => {
+      if (failure === 'reject') {
+        wireMocks.authorizeCurrentInstitutionNavigationV1.mockRejectedValueOnce(
+          new Error('navigation unavailable'),
+        );
+      } else if (failure === 'target_mismatch') {
+        wireMocks.authorizeCurrentInstitutionNavigationV1.mockResolvedValueOnce(
+          mintNavigationDecision('analytics', 'allowed', allSectionIds),
+        );
+      } else {
+        wireMocks.authorizeCurrentInstitutionNavigationV1.mockResolvedValueOnce({
+          kind: 'institution_navigation_authorization',
+          targetSectionId: 'system',
+          targetAccess: 'allowed',
+          availableSectionIds: allSectionIds,
+        });
+      }
+
+      render(await HospitalSystemAuditPage());
+
+      expect(screen.getByText('机构审计能力暂时不可用')).toBeInTheDocument();
+      expect(
+        wireMocks.resolveInstitutionCapabilityAuthorityStatusV1,
+      ).not.toHaveBeenCalled();
+      expect(screen.queryByRole('heading', { name: '审计日志' })).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    {
+      name: 'hidden',
+      status: auditAuthorityStatus({
+        decision: 'hidden',
+        productionRelease: 'not_released',
+        safeSummary: null,
+      }),
+    },
+    {
+      name: 'duplicate',
+      status: auditAuthorityStatus({ duplicate: true }),
+    },
+    {
+      name: 'capability key mismatch',
+      status: auditAuthorityStatus({ key: 'page_system_overview' }),
+    },
+    {
+      name: 'data readiness mismatch',
+      status: auditAuthorityStatus({ dataReadiness: 'ready' }),
+    },
+    {
+      name: 'production release mismatch',
+      status: auditAuthorityStatus({ productionRelease: 'released' }),
+    },
+  ])('Authority $name renders capability-off without reading Audit data', async ({ status }) => {
+    wireMocks.authorizeCurrentInstitutionNavigationV1.mockResolvedValueOnce(
+      mintNavigationDecision('system', 'allowed', allSectionIds),
+    );
+    wireMocks.resolveInstitutionCapabilityAuthorityStatusV1.mockResolvedValueOnce(
+      status,
+    );
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(await HospitalSystemAuditPage());
+
+    expect(screen.getByText('审计与安全尚未开放')).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole('heading', { name: '审计日志' })).not.toBeInTheDocument();
+  });
+
+  it.each(['null', 'reject'] as const)(
+    'Authority unavailable via %s renders unavailable without Audit data',
+    async (failure) => {
+      wireMocks.authorizeCurrentInstitutionNavigationV1.mockResolvedValueOnce(
+        mintNavigationDecision('system', 'allowed', allSectionIds),
+      );
+      if (failure === 'null') {
+        wireMocks.resolveInstitutionCapabilityAuthorityStatusV1.mockResolvedValueOnce(
+          null,
+        );
+      } else {
+        wireMocks.resolveInstitutionCapabilityAuthorityStatusV1.mockRejectedValueOnce(
+          new Error('authority unavailable'),
+        );
+      }
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      render(await HospitalSystemAuditPage());
+
+      expect(screen.getByText('机构审计能力暂时不可用')).toBeInTheDocument();
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(screen.queryByRole('heading', { name: '审计日志' })).not.toBeInTheDocument();
+    },
+  );
 });

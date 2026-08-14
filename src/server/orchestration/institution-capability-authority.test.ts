@@ -248,7 +248,7 @@ function availableRuntimeConfig() {
   });
 }
 
-describe('POST-V2-R1B page_workbench readonly release authority', () => {
+describe('POST-V2-R1C page_system_audit readonly release authority', () => {
   beforeEach(() => {
     for (const mock of Object.values(runtimeMocks)) mock.mockClear();
 
@@ -377,7 +377,7 @@ describe('POST-V2-R1B page_workbench readonly release authority', () => {
     vi.restoreAllMocks();
   });
 
-  it('exposes no-input page_workbench readonly-pilot authority resolver and frozen revision', () => {
+  it('exposes no-input readonly-pilot authority resolver and frozen S14 revision', () => {
     expectTypeOf<
       Parameters<typeof resolveInstitutionCapabilityAuthorityStatusV1>
     >().toEqualTypeOf<[]>();
@@ -385,11 +385,11 @@ describe('POST-V2-R1B page_workbench readonly release authority', () => {
       ReturnType<typeof resolveInstitutionCapabilityAuthorityStatusV1>
     >().toEqualTypeOf<Promise<CapabilityStatusV1 | null>>();
     expect(INSTITUTION_CAPABILITY_AUTHORITY_REVISION_V1).toBe(
-      'r1b-page-workbench-readonly-pilot-v1',
+      'r1c-page-system-audit-readonly-pilot-v1',
     );
   });
 
-  it('tenant_admin returns exactly one page_workbench read_only pilot and keeps the other 35 hidden', async () => {
+  it('tenant_admin returns exactly two governed read_only pilots and keeps the other 34 hidden', async () => {
     const status = await resolveInstitutionCapabilityAuthorityStatusV1();
 
     expect(status).toMatchObject({
@@ -410,6 +410,7 @@ describe('POST-V2-R1B page_workbench readonly release authority', () => {
 
     const capabilities = status?.data?.capabilities ?? [];
     const workbench = capabilities.find((item) => item.key === 'page_workbench');
+    const audit = capabilities.find((item) => item.key === 'page_system_audit');
 
     expect(workbench).toEqual({
       key: 'page_workbench',
@@ -425,8 +426,37 @@ describe('POST-V2-R1B page_workbench readonly release authority', () => {
       diagnosticTargetKey: null,
     });
 
-    const remaining = capabilities.filter((item) => item.key !== 'page_workbench');
-    expect(remaining).toHaveLength(35);
+    expect(audit).toEqual({
+      key: 'page_system_audit',
+      decision: 'read_only',
+      dimensions: {
+        codeMaturity: 'verified',
+        institutionAuthorization: 'authorized',
+        connectionAvailability: 'not_required',
+        dataReadiness: 'partial',
+        productionRelease: 'pilot_released',
+      },
+      safeSummary: '审计与安全仅供查看',
+      diagnosticTargetKey: 'page_system_audit',
+    });
+
+    const releasedGovernedPageKeys = capabilities
+      .filter(
+        (item) =>
+          item.key.startsWith('page_') &&
+          item.dimensions.productionRelease === 'pilot_released',
+      )
+      .map((item) => item.key);
+    expect(releasedGovernedPageKeys).toEqual([
+      'page_workbench',
+      'page_system_audit',
+    ]);
+
+    const remaining = capabilities.filter(
+      (item) =>
+        item.key !== 'page_workbench' && item.key !== 'page_system_audit',
+    );
+    expect(remaining).toHaveLength(34);
     for (const item of remaining) {
       expect(item.decision).toBe('hidden');
       expect(item.dimensions.productionRelease).toBe('not_released');
@@ -494,8 +524,52 @@ describe('POST-V2-R1B page_workbench readonly release authority', () => {
     });
 
     expect(
+      capabilities.find((item) => item.key === 'page_system_audit'),
+    ).toMatchObject({
+      decision: 'hidden',
+      dimensions: {
+        codeMaturity: 'verified',
+        institutionAuthorization: 'not_authorized',
+        connectionAvailability: 'not_required',
+        dataReadiness: 'partial',
+        productionRelease: 'pilot_released',
+      },
+      safeSummary: null,
+      diagnosticTargetKey: null,
+    });
+
+    expect(
       capabilities.every((item) => item.diagnosticTargetKey === null),
     ).toBe(true);
+  });
+
+  it('tenant_operator receives the exact page_system_audit readonly partial pilot shape', async () => {
+    runtimeMocks.membershipRead.mockResolvedValue([
+      {
+        ...membershipRow,
+        membershipRole: 'tenant_operator',
+      },
+    ]);
+
+    const status = await resolveInstitutionCapabilityAuthorityStatusV1();
+
+    expect(
+      status?.data?.capabilities.find(
+        (item) => item.key === 'page_system_audit',
+      ),
+    ).toEqual({
+      key: 'page_system_audit',
+      decision: 'read_only',
+      dimensions: {
+        codeMaturity: 'verified',
+        institutionAuthorization: 'authorized',
+        connectionAvailability: 'not_required',
+        dataReadiness: 'partial',
+        productionRelease: 'pilot_released',
+      },
+      safeSummary: '审计与安全仅供查看',
+      diagnosticTargetKey: 'page_system_audit',
+    });
   });
 
   it('keeps all three controlled-create actions hidden and not released', async () => {
