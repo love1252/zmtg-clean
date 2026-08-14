@@ -10,8 +10,9 @@
 - POST-V2-R1B `page_workbench`：稳定且已完成治理闭环
 - POST-V2-R1C 错误放行尝试：精确 4 文件 Runtime 回滚、独立验证及两个指定 P1 审查线程均已完成治理收尾
 - POST-V2-R1C Audit Reader Foundation：exact 8-file Runtime、Required Check、合并后独立验证与 Handoff 均已闭环
-- POST-V2-R1C `page_system_audit`：S14 initial exact-5 release 已由 #1204 按 exact-5 rollback 恢复为 `hidden/not_released`；页面 exposure expansion 已撤销，但 Audit API 仍存在可信角色感知读取授权 blocker，S14 未完成、blocker 未关闭
-- POST-V2-R1C Trusted Role-Aware Audit Read Authorization：S15 fresh audit、exact 6-file Runtime Admission 与两个 docs-only PR 已闭环；选择 `admin_only_v1` 与 Audit-specific orchestration owner，Runtime 未实施，S14 blocker 仍开放
+- POST-V2-R1C `page_system_audit`：S14 initial exact-5 release 已由 #1204 按 exact-5 rollback 恢复为 `hidden/not_released`；S14 当时的 Audit API blocker 已由 S16 exact Runtime 关闭，但页面必须经 S17 fresh re-audit 才能重新准入，当前仍未发布
+- POST-V2-R1C Trusted Role-Aware Audit Read Authorization：S15 fresh audit、exact 6-file Runtime Admission 与两个 docs-only PR 已闭环；选择 `admin_only_v1` 与 Audit-specific orchestration owner；S15 当时 Runtime 未实施、S14 blocker 仍开放
+- POST-V2-R1C Trusted Role-Aware Audit Read Authorization Runtime：S16 exact 6-file Runtime PR #1210 已合并；只有 authoritative current `tenant_admin` 可读，可信非管理员固定 403，invalid/stale/mismatch/unavailable 固定 503；Runtime Required Check、full 496/6836 与 merged-main 3/72 均通过
 - S4 Phase 0：PR #1172 已修正 Handoff 授权来源与页面授权状态，PR #1171 两个 post-merge Review thread 已回复并解决
 - S4 Phase 1 / S5 Phase 0 修正：Audit Writer attribution fresh audit 已通过；重新核算为 19 个生产 caller 与 10 个 transaction persistence / composition 点，完整 closure 仍必须拆分
 - S5 Phase 0：caller inventory docs-only follow-up PR #1174 已合并；合并后仅回复并解决 PR #1173 指定 Review thread
@@ -388,15 +389,70 @@ STAGING_CHANGE=false
 PRODUCTION_CHANGE=false
 PRODUCTION_DEPLOYMENT=false
 
-NEXT_TASK=POST-V2-R1C Trusted Role-Aware Audit Read Authorization exact Runtime implementation explicit authorization
-NEXT_STAGE=S16
+NEXT_TASK=POST-V2-R1C page_system_audit fresh release re-audit + exact Runtime re-admission
+NEXT_STAGE=S17
 NEXT_TASK_AUTHORIZED=false
 NEXT_TASK_SELECTION_REQUIRED=false
 S15_RUNTIME_AUTHORIZED=false
-S16_RUNTIME_AUTHORIZED=false
+S17_AUTHORIZED=false
 DATABASE_CONNECTION_AUTHORIZED=false
 DATABASE_WRITE_EXECUTION_AUTHORIZED=false
 PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
+
+S16_COMPLETION_MODE=FINAL_HANDOFF_PENDING
+S16_COMPLETE=false
+S16_BASELINE=d0a886d4be5d391ad044acf990fdd1d44a7e0a74
+S16_RUNTIME_PR=1210
+S16_RUNTIME_HEAD=7bbb72d527245c9ca26b2d29cc5ccda19228d670
+S16_RUNTIME_MERGE=dc73994246f300b38a823fcb8f5f330eac05f7e5
+S16_FINAL_HANDOFF_PR=pending
+S16_RUNTIME_IMPLEMENTED=true
+S16_EXACT_RUNTIME_FILE_COUNT=6
+S16_ACTUAL_RUNTIME_TEST_CHANGED_FILE_COUNT=6
+S16_EXACT_SCOPE_MATCH=true
+S16_SELECTED_AUTHORIZATION_STRATEGY=admin_only_v1
+TRUSTED_ROLE_AWARE_AUDIT_READ_AUTHORIZATION_SAFE=true
+CURRENT_AUDIT_READ_ROLE_AUTHORIZATION_SAFE=true
+AUDIT_API_ROLE_AWARE_AUTHORIZATION_SAFE=true
+TENANT_ADMIN_AUDIT_READ_ALLOWED=true
+TENANT_OPERATOR_AUDIT_READ_ALLOWED=false
+CONSULTANT_AUDIT_READ_ALLOWED=false
+CUSTOMER_SERVICE_AUDIT_READ_ALLOWED=false
+ROLE_DENIED_HTTP_STATUS=403
+READER_UNAVAILABLE_HTTP_STATUS=503
+AUDIT_API_SECURITY_BLOCKER_CLOSED=true
+S14_SECURITY_BLOCKER_RESOLVED_BY_S16=true
+S16_AUDIT_REPOSITORY_CHANGE=false
+S16_GENERIC_SECTION_GUARD_CHANGE=false
+S16_INSTITUTION_SERVER_RUNTIME_CHANGE=false
+S16_PUBLIC_CONTRACT_CHANGE=false
+S16_TARGETED_TEST_FILES=13
+S16_TARGETED_TESTS=457
+S16_FULL_TEST_FILES=496
+S16_FULL_TESTS=6836
+S16_POST_MERGE_INDEPENDENT_TEST_FILES=3
+S16_POST_MERGE_INDEPENDENT_TESTS=72
+S16_TYPECHECK=passed
+S16_ARCHITECTURE_UNIT=148/148 passed
+S16_ARCHITECTURE_INCREMENTAL=passed
+S16_LINT=passed_with_4_existing_warnings
+S16_BUILD=passed
+S16_PRODUCTION_READINESS_DOCS=8/8 passed
+S16_GIT_DIFF_CHECK=passed
+S16_RUNTIME_REQUIRED_CHECK=passed
+S16_RUNTIME_POST_MERGE_REVIEW_DEBT=0
+S16_HANDOFF_REQUIRED_CHECK=pending
+S16_PR_COUNT=2
+S16_PRS=1210,pending
+S16_REQUIRED_CHECKS=pending
+S16_ACTIONABLE_P0_P1=0
+S16_ACTIONABLE_P0_P1_P2_P3=0
+S16_POST_MERGE_REVIEW_DEBT=0
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=false
+PAGE_SYSTEM_AUDIT_RUNTIME_READMISSION_READY=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
 
 S15_COMPLETION_MODE=COMPLETE
 S15_COMPLETE=true
