@@ -1,5 +1,78 @@
 # 智美天工架构文档索引
 
+<!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_POST_ROLE_AWARE_READMISSION_START -->
+
+## POST-V2-R1C `page_system_audit` post-role-aware fresh release re-audit 与精确 Runtime 重新准入（2026-08-14）
+
+```text
+STAGE=S17
+COMPLETION_MODE=ADMISSION_READY
+BASELINE=709ab04b4af0f469d6bd5631bc1596acb9c42d16
+ADMISSION_PR=1212
+ADMISSION_REQUIRED_CHECK=pending
+S17_COMPLETE=false
+FRESH_RELEASE_REAUDIT=passed
+ADMIN_ONLY_PAGE_AUDIENCE_VERIFIED=true
+
+PAGE_SYSTEM_AUDIT_TARGET_AUDIENCE=tenant_admin_only
+PAGE_SYSTEM_AUDIT_TENANT_ADMIN_ALLOWED=true
+PAGE_SYSTEM_AUDIT_TENANT_OPERATOR_ALLOWED=false
+PAGE_SYSTEM_AUDIT_CONSULTANT_ALLOWED=false
+PAGE_SYSTEM_AUDIT_CUSTOMER_SERVICE_ALLOWED=false
+
+PAGE_ROUTE_CAN_REUSE_AUDIT_READ_AUTHORIZATION_OWNER=true
+PAGE_ROUTE_SHOULD_CONSUME_ONE_SHOT_HANDLE=false
+AUDIT_AUTHORIZATION_HANDLE_CROSS_REQUEST_REUSE=false
+SYSTEM_NAVIGATION_ALONE_AUTHORIZES_AUDIT_PAGE=false
+CAPABILITY_AUTHORITY_IS_ROLE_SOURCE=false
+
+EXACT_RUNTIME_ALLOWLIST_FROZEN=true
+EXACT_RUNTIME_FILE_COUNT=5
+EXACT_RUNTIME_EXISTING_FILE_COUNT=4
+EXACT_RUNTIME_NEW_FILE_COUNT=1
+EXACT_PRODUCTION_FILE_COUNT=2
+EXACT_TEST_FILE_COUNT=3
+ARCHITECTURE_EXCEPTION_REQUIRED=false
+
+TARGETED_TEST_FILES=14
+TARGETED_TESTS=531/531 passed
+TYPECHECK=passed
+ARCHITECTURE_UNIT=148/148 passed
+ARCHITECTURE_INCREMENTAL=passed
+PRODUCTION_READINESS_DOCS=8/8 passed
+GIT_DIFF_CHECK=passed
+
+PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=true
+PAGE_SYSTEM_AUDIT_RUNTIME_READMISSION_READY=true
+S17_RUNTIME_IMPLEMENTED=false
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+```
+
+架构结论：
+
+- S16 Audit-specific owner 保持 unchanged；未来 dedicated Route 只读取其 `allowed/forbidden/unavailable` 结论，不消费、序列化或跨请求复用 one-shot handle；API 在独立 GET request 内重新认证并消费自己的 handle；
+- formal request、genuine system navigation、Audit-specific admin-only authorization 与 exact Capability Authority 必须同时成立；system navigation 与 Authority 都不能推导当前用户角色；
+- 只有 `tenant_admin` 可见正常 Audit Shell；trusted non-admin 显示低敏 forbidden，invalid/stale/mismatch/unavailable 显示低敏 unavailable，Authority hidden/mismatch 显示 capability-off；
+- 当前 dedicated `/hospital/system/audit` 不存在；下一阶段新增 static Route，不修改 shared catch-all；Reader、API、Repository、generic Guard、public registry 与 S16 owner 均无需修改；
+- existing registry 已把 `page_system_audit` 绑定 `/hospital/system/audit`，无需新增 navigation config；Workbench 继续 exact-select `page_workbench` 并排除 audit summary；
+- coverage 保持 `partial_verified_only`，Shell 继续披露 verified subset、历史覆盖不完整与页内数量非完整历史总量；eligibility 不依赖 S17 重新连接数据库。
+
+Exact Runtime allowlist：
+
+1. `src/server/orchestration/institution-capability-authority.ts`（existing production）；
+2. `src/server/orchestration/institution-capability-authority.test.ts`（existing test）；
+3. `src/app/hospital/system/audit/page.tsx`（new production）；
+4. `src/modules/institution/tests/InstitutionRouteShell.test.tsx`（existing test）；
+5. `src/modules/institution-workbench/tests/HospitalWorkbenchEntry.test.tsx`（existing test）。
+
+Canonical evidence：`docs/operations/post-v2-r1c-page-system-audit-post-role-aware-fresh-release-readmission-20260814.md`。
+
+S17 只完成 docs-only Admission；页面仍 hidden，S18 Runtime 当前未授权。
+
+<!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_POST_ROLE_AWARE_READMISSION_END -->
+
 <!-- POST_V2_R1C_TRUSTED_ROLE_AWARE_AUDIT_READ_AUTHORIZATION_RUNTIME_START -->
 
 ## POST-V2-R1C 可信角色感知 Audit 读取授权 exact Runtime 闭环（2026-08-14）

@@ -10,9 +10,10 @@
 - POST-V2-R1B `page_workbench`：稳定且已完成治理闭环
 - POST-V2-R1C 错误放行尝试：精确 4 文件 Runtime 回滚、独立验证及两个指定 P1 审查线程均已完成治理收尾
 - POST-V2-R1C Audit Reader Foundation：exact 8-file Runtime、Required Check、合并后独立验证与 Handoff 均已闭环
-- POST-V2-R1C `page_system_audit`：S14 initial exact-5 release 已由 #1204 按 exact-5 rollback 恢复为 `hidden/not_released`；S14 当时的 Audit API blocker 已由 S16 exact Runtime 关闭，但页面必须经 S17 fresh re-audit 才能重新准入，当前仍未发布
+- POST-V2-R1C `page_system_audit`：S14 initial exact-5 release 已由 #1204 按 exact-5 rollback 恢复为 `hidden/not_released`；S16 已关闭角色感知 API blocker，S17 已 fresh 冻结 post-role-aware exact 5-file re-admission；当前仍未发布
 - POST-V2-R1C Trusted Role-Aware Audit Read Authorization：S15 fresh audit、exact 6-file Runtime Admission 与两个 docs-only PR 已闭环；选择 `admin_only_v1` 与 Audit-specific orchestration owner；S15 当时 Runtime 未实施、S14 blocker 仍开放
 - POST-V2-R1C Trusted Role-Aware Audit Read Authorization Runtime：S16 exact 6-file Runtime PR #1210 已合并；只有 authoritative current `tenant_admin` 可读，可信非管理员固定 403，invalid/stale/mismatch/unavailable 固定 503；Runtime Required Check、full 496/6836 与 merged-main 8/314 均通过
+- POST-V2-R1C `page_system_audit` post-role-aware re-admission：S17 已基于 S16 merged main 完成 fresh audit；页面 audience 固定为 `tenant_admin_only`，冻结新的 exact 5-file Runtime allowlist，当前只完成 docs-only Admission、页面仍未发布
 - S4 Phase 0：PR #1172 已修正 Handoff 授权来源与页面授权状态，PR #1171 两个 post-merge Review thread 已回复并解决
 - S4 Phase 1 / S5 Phase 0 修正：Audit Writer attribution fresh audit 已通过；重新核算为 19 个生产 caller 与 10 个 transaction persistence / composition 点，完整 closure 仍必须拆分
 - S5 Phase 0：caller inventory docs-only follow-up PR #1174 已合并；合并后仅回复并解决 PR #1173 指定 Review thread
@@ -46,6 +47,76 @@
 - 本地 postcheck：275 条审计记录中 `verified=7`、`not_applicable=1`、`attempted_denial=0`、`unclassifiable=267`；机构 Reader 对 1 个 active pair 可安全返回 7 行，但 residual 不允许宣称完整历史
 - Workbench multi-capability：安全；`page_workbench` 当前 read_only/pilot_released 行为保持稳定
 - 生产就绪 / 部署：未推导、未执行
+
+```text
+STAGE=S17
+TASK=POST_V2_R1C_PAGE_SYSTEM_AUDIT_POST_ROLE_AWARE_FRESH_RELEASE_READMISSION
+COMPLETION_MODE=ADMISSION_READY
+BASELINE=709ab04b4af0f469d6bd5631bc1596acb9c42d16
+ADMISSION_PR=1212
+ADMISSION_REQUIRED_CHECK=pending
+S17_COMPLETE=false
+FRESH_RELEASE_REAUDIT=passed
+ADMIN_ONLY_PAGE_AUDIENCE_VERIFIED=true
+
+PAGE_SYSTEM_AUDIT_TARGET_AUDIENCE=tenant_admin_only
+PAGE_SYSTEM_AUDIT_TENANT_ADMIN_ALLOWED=true
+PAGE_SYSTEM_AUDIT_TENANT_OPERATOR_ALLOWED=false
+PAGE_SYSTEM_AUDIT_CONSULTANT_ALLOWED=false
+PAGE_SYSTEM_AUDIT_CUSTOMER_SERVICE_ALLOWED=false
+
+AUDIT_API_ROLE_AWARE_AUTHORIZATION_SAFE=true
+PAGE_ROUTE_CAN_REUSE_AUDIT_READ_AUTHORIZATION_OWNER=true
+PAGE_ROUTE_SHOULD_CONSUME_ONE_SHOT_HANDLE=false
+PAGE_ROUTE_AUTHORIZATION_CHAIN_SAFE=true
+SYSTEM_NAVIGATION_ALONE_AUTHORIZES_AUDIT_PAGE=false
+CAPABILITY_AUTHORITY_IS_ROLE_SOURCE=false
+AUDIT_AUTHORIZATION_HANDLE_CROSS_REQUEST_REUSE=false
+
+CANONICAL_ROUTE=/hospital/system/audit
+DEDICATED_STATIC_ROUTE_CURRENTLY_EXISTS=false
+SHARED_CATCH_ALL_CHANGE_REQUIRED=false
+
+AUDIT_READER_COVERAGE_STATE=partial_verified_only
+AUDIT_READER_HISTORICAL_COVERAGE_COMPLETE=false
+AUDIT_READER_PARTIAL_COVERAGE_SAFE=true
+AUDIT_READER_COVERAGE_DISCLOSURE_SAFE=true
+WORKBENCH_MULTI_CAPABILITY_SAFE=true
+
+EXACT_RUNTIME_ALLOWLIST_FROZEN=true
+EXACT_RUNTIME_FILE_COUNT=5
+EXACT_RUNTIME_EXISTING_FILE_COUNT=4
+EXACT_RUNTIME_NEW_FILE_COUNT=1
+EXACT_PRODUCTION_FILE_COUNT=2
+EXACT_TEST_FILE_COUNT=3
+
+TARGETED_TEST_FILES=14
+TARGETED_TESTS=531/531 passed
+TYPECHECK=passed
+ARCHITECTURE_UNIT=148/148 passed
+ARCHITECTURE_INCREMENTAL=passed
+PRODUCTION_READINESS_DOCS=8/8 passed
+GIT_DIFF_CHECK=passed
+
+PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=true
+PAGE_SYSTEM_AUDIT_RUNTIME_READMISSION_READY=true
+S17_RUNTIME_IMPLEMENTED=false
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+
+DATABASE_CONNECTION=false
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+MIGRATION=false
+DDL_EXECUTION=false
+DML_EXECUTION=false
+
+NEXT_STAGE=S18
+NEXT_TASK=POST-V2-R1C page_system_audit exact 5-file Runtime release implementation explicit authorization
+NEXT_TASK_AUTHORIZED=false
+S18_RUNTIME_AUTHORIZED=false
+```
 
 ```text
 POST_V2_R1C_EXACT4_RUNTIME_ROLLBACK=passed
