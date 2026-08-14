@@ -3,24 +3,30 @@
 ## 下一任务选择状态
 
 ```text
-NEXT_TASK=TO_BE_SELECTED_BY_CHATGPT_PROJECT_CONTROL
+NEXT_TASK=POST-V2-R1C Trusted Role-Aware Audit Read Authorization fresh audit + exact Runtime admission
+NEXT_STAGE=S15
 NEXT_TASK_AUTHORIZED=false
-NEXT_TASK_SELECTION_REQUIRED=true
+NEXT_TASK_SELECTION_REQUIRED=false
+S15_RUNTIME_AUTHORIZED=false
 DATABASE_CONNECTION_AUTHORIZED=false
 DATABASE_WRITE_EXECUTION_AUTHORIZED=false
+PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
 ```
 
-S14 initial release 已因 post-merge operator scope P1 安全回滚；当前经审查接受的受治理只读页面仍为 1 / 26，`page_system_audit` 为 `hidden/not_released`。本 Handoff 不自动扩大 Runtime allowlist，也不从 backlog 选择下一页面；由 ChatGPT 项目总控审查角色感知读取授权 blocker 后另行确定并显式授权。
+S14 initial release 已安全回滚；当前经审查接受的受治理只读页面仍为 1 / 26，`page_system_audit` 为 `hidden/not_released`。页面 Route 已撤销，但 `GET /api/institution/audit-events` 仍存在可信角色感知读取授权 blocker。唯一下一任务已冻结为 S15 fresh audit + exact Runtime Admission，尚未授权。
 
-## S14 安全回滚与阻断闭环状态
+## S14 安全回滚与阻断交接状态
 
 ```text
 STAGE=S14
 TASK=POST_V2_R1C_PAGE_SYSTEM_AUDIT_EXACT_5_FILE_RUNTIME_RELEASE
 COMPLETION_MODE=BLOCKED_ROLLED_BACK
 S14_COMPLETE=false
-S14_BLOCKER_FORMALLY_CLOSED=true
+S14_RELEASE_ROLLBACK_COMPLETE=true
 S14_FORMAL_CLOSURE=false
+S14_BLOCKED_STATE_HANDOFF_CLOSED=false
+S14_BLOCKER_FORMALLY_CLOSED=false
+S14_SECURITY_BLOCKER_OPEN=true
 BASELINE=c89cecaf5e3551f5497f1aac5bbfb093aefd180d
 
 INITIAL_RUNTIME_PR=1202
@@ -31,16 +37,26 @@ SECURITY_ROLLBACK_PR=1204
 SECURITY_ROLLBACK_HEAD=fef19d3591c0849f84d0618dd45272e707d31bc9
 SECURITY_ROLLBACK_MERGE=a1a2baf13c5674e2795b65b37fad2ff89ddac104
 FINAL_CORRECTIVE_HANDOFF_PR=1205
-S14_PRS=1202,1203,1204,1205
-S14_PR_COUNT=4
+BLOCKED_HANDOFF_CORRECTIVE_PR=1206
+S14_PRS=1202,1203,1204,1205,1206
+S14_PR_COUNT=5
 S14_REQUIRED_CHECKS=passed
 
-S14_POST_MERGE_P1_DETECTED=1
+S14_POST_MERGE_P1_DETECTED=2
 PR1202_OPERATOR_SCOPE_P1_THREAD=PRRT_kwDOSrGMn86ZMXMW
 PR1202_OPERATOR_SCOPE_P1_THREAD_RESOLVED=true
-S14_ACTIONABLE_P0_P1=0
-S14_ACTIONABLE_P0_P1_P2_P3=0
-POST_MERGE_REVIEW_DEBT=0
+PR1204_DOCUMENTATION_P2_THREAD=PRRT_kwDOSrGMn86ZM8Cc
+PR1204_DOCUMENTATION_P2_THREAD_RESOLVED=true
+PR1205_API_SCOPE_P1_THREAD=PRRT_kwDOSrGMn86ZNNed
+PR1205_API_SCOPE_P1_VALID=true
+PR1205_API_SCOPE_P1_THREAD_RESOLVED=false
+PR1206_PREMERGE_DOCUMENTATION_P2_THREAD=PRRT_kwDOSrGMn86ZOp0H
+PR1206_PREMERGE_DOCUMENTATION_P2_THREAD_RESOLVED=true
+PR1206_OPEN_BLOCKER_TITLE_P2_THREAD=PRRT_kwDOSrGMn86ZO45-
+PR1206_OPEN_BLOCKER_TITLE_P2_THREAD_RESOLVED=true
+S14_ACTIONABLE_P0_P1=1
+S14_ACTIONABLE_P0_P1_P2_P3=1
+POST_MERGE_REVIEW_DEBT=1
 
 PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
 PAGE_SYSTEM_AUDIT_RELEASE=false
@@ -56,6 +72,7 @@ SHARED_CATCH_ALL_CHANGE=false
 AUDIT_READER_COVERAGE_STATE=partial_verified_only
 AUDIT_READER_HISTORICAL_COVERAGE_COMPLETE=false
 AUDIT_READER_PARTIAL_COVERAGE_SAFE=true
+AUDIT_READER_ROLE_AWARE_AUTHORIZATION_SAFE=false
 WORKBENCH_MULTI_CAPABILITY_SAFE=true
 WORKBENCH_PAGE_WORKBENCH_PROJECTION_STABLE=true
 
@@ -75,9 +92,12 @@ ROLLBACK_BUILD=passed
 ROLLBACK_PRODUCTION_READINESS_DOCS=8/8 passed
 
 PRIMARY_BLOCKING_PREREQUISITE=trusted_role_aware_audit_read_authorization
+BLOCKED_READ_SURFACE=GET /api/institution/audit-events
+BLOCKER_SCOPE=tenant_operator_can_reach_system_guard_but_reader_lacks_trusted_role_aware_scope
 REQUIRED_NEW_AUTHORIZATION=fresh_admission_beyond_S14_exact_5_runtime_allowlist
 PAGE_SYSTEM_AUDIT_RUNTIME_READMISSION_READY=false
 PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=false
+S13_EXACT_5_RELEASE_ADMISSION_REUSABLE_WITHOUT_FRESH_READMISSION=false
 
 DATABASE_CONNECTION=false
 DATABASE_WRITE_EXECUTION=false
@@ -89,19 +109,44 @@ STAGING_CHANGE=false
 PRODUCTION_CHANGE=false
 PRODUCTION_DEPLOYMENT=false
 
-NEXT_TASK=TO_BE_SELECTED_BY_CHATGPT_PROJECT_CONTROL
+NEXT_TASK=POST-V2-R1C Trusted Role-Aware Audit Read Authorization fresh audit + exact Runtime admission
+NEXT_STAGE=S15
 NEXT_TASK_AUTHORIZED=false
-NEXT_TASK_SELECTION_REQUIRED=true
+NEXT_TASK_SELECTION_REQUIRED=false
+S15_RUNTIME_AUTHORIZED=false
+DATABASE_CONNECTION_AUTHORIZED=false
+DATABASE_WRITE_EXECUTION_AUTHORIZED=false
+PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
 ```
 
 - PR #1202 曾按 exact 5 files 放行 `page_system_audit`；
 - post-merge P1 证明 `tenant_operator` 在当前 Reader/Repository 缺少角色、本人及授权模块过滤时可读取过宽的可信审计记录；
 - canonical 5 files 不含可信角色信号，正确修复触发第 6 个 Runtime 文件、Reader 或 public contract 硬停止条件；
-- PR #1204 已按 exact-5 rollback 恢复 `hidden/not_released` 并删除 dedicated Route；P1 thread 在 merge 后回复并解决；
+- PR #1204 已按 exact-5 rollback 恢复 `hidden/not_released` 并删除 dedicated Route；这只撤销页面 exposure expansion，没有关闭既有 Audit API 的角色授权缺口；
+- PR #1205 post-merge P1 `PRRT_kwDOSrGMn86ZNNed` 已确认有效；#1206 frozen Head 已撤回错误 closure claim，但必须等 #1206 实际合并后才回复并解决；
 - Reader/Writer/Data Readiness foundation 保持有效，但不构成页面 release；
-- 下一任务必须由项目总控重新选择并授权，不得沿用旧的 S13 exact-5 Admission 自动重放。
+- S13 exact-5 Admission 不得自动重放；下一任务固定为 S15 fresh Admission，`NEXT_TASK_AUTHORIZED=false`。
 
 闭环证据：`docs/operations/post-v2-r1c-page-system-audit-exact-runtime-release-closure-20260814.md`。
+
+## S15 待授权 fresh audit 边界
+
+S15 只定义、不在 S14 执行。fresh audit 必须回答：
+
+1. 可信 current-role 信号从哪里获得，既有 formal server authorization 能否安全携带 role；
+2. `tenant_admin` / `tenant_operator` 如何可靠区分，Route、Reader、Repository 中哪个 owner 承担授权；
+3. 最小安全路线是 admin-only 还是 operator-limited；若允许 operator，是否只读本人 `actorId` 及获授权 module/resource；
+4. caller/query role 与 caller-provided `actorId` 如何明确排除为授权信号；
+5. 是否需要 public contract、Reader 或 Repository change，以及 fresh exact Runtime allowlist。
+
+```text
+NEXT_STAGE=S15
+NEXT_TASK_AUTHORIZED=false
+S15_RUNTIME_AUTHORIZED=false
+DATABASE_CONNECTION_AUTHORIZED=false
+DATABASE_WRITE_EXECUTION_AUTHORIZED=false
+PAGE_SYSTEM_AUDIT_RELEASE_AUTHORIZED=false
+```
 
 ## S13 完整闭环状态
 
