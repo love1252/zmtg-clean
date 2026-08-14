@@ -96,6 +96,55 @@ const institutionAuditEventsPayloadKeys = Object.freeze([
   'coverage',
 ] as const);
 
+function defineAllInstitutionAuditEventReasonValues<
+  const T extends readonly AuditEventListItem['reason'][],
+>(
+  values: Exclude<AuditEventListItem['reason'], T[number]> extends never
+    ? T
+    : never,
+): T {
+  return values;
+}
+
+const institutionAuditEventReasonValues = defineAllInstitutionAuditEventReasonValues([
+  ...AUDIT_REASON_VALUES,
+  'ai_conversation_viewed',
+  'ai_conversation_takeover',
+  'ai_conversation_recommendation_used',
+  'ai_conversation_message_mock_sent',
+  'ai_conversation_risk_blocked',
+  'ai_conversation_closed',
+  'ai_auto_strategy_evaluated',
+  'ai_auto_reply_mock_allowed',
+  'ai_auto_followup_mock_allowed',
+  'ai_auto_reply_human_confirmation_required',
+  'ai_auto_followup_human_confirmation_required',
+  'ai_auto_reply_blocked',
+  'ai_auto_followup_blocked',
+  'ai_marketing_automation_blocked',
+  'ai_add_friend_blocked',
+  'real_channel_preflight_viewed',
+  'real_channel_preflight_evaluated',
+  'real_channel_preflight_blocked',
+  'real_channel_proof_mock_eligible',
+  'real_channel_sensitive_config_blocked',
+  'account_custody_route_blocked',
+  'wecom_dry_run_config_viewed',
+  'wecom_dry_run_config_evaluated',
+  'wecom_dry_run_ready',
+  'wecom_dry_run_blocked',
+  'wecom_dry_run_sensitive_value_blocked',
+  'wecom_dry_run_secret_read_blocked',
+  'wecom_official_dry_run_viewed',
+  'wecom_official_dry_run_evaluated',
+  'wecom_official_dry_run_plan_ready',
+  'wecom_official_dry_run_mock_completed',
+  'wecom_official_dry_run_blocked',
+  'wecom_official_dry_run_sensitive_payload_blocked',
+  'wecom_official_dry_run_real_network_blocked',
+  'wecom_official_dry_run_real_send_blocked',
+] as const);
+
 function getFetcher(options?: InstitutionAuditEventsClientOptions) {
   return options?.fetcher ?? globalThis.fetch;
 }
@@ -148,7 +197,7 @@ function parseInstitutionAuditEventRecord(
     ) ||
     !isOneOf(ACCESS_ACTIONS, input.action) ||
     !isOneOf(AUDIT_RESULT_VALUES, input.result) ||
-    !isOneOf(AUDIT_REASON_VALUES, input.reason) ||
+    !isOneOf(institutionAuditEventReasonValues, input.reason) ||
     !isBoundedIdentifier(input.actorId, 96) ||
     !isOneOf(ACCESS_ROLES, input.actorRole) ||
     !isCanonicalInstant(input.occurredAt)
