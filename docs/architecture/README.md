@@ -1,5 +1,78 @@
 # 智美天工架构文档索引
 
+<!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_FRESH_RELEASE_READMISSION_START -->
+
+## POST-V2-R1C `page_system_audit` fresh release re-audit 与精确 Runtime 重新准入（2026-08-14）
+
+```text
+STAGE=S13
+COMPLETION_MODE=COMPLETE
+FRESH_RELEASE_REAUDIT=passed
+PAGE_SYSTEM_AUDIT_RELEASE_ELIGIBLE=true
+EXACT_RUNTIME_ALLOWLIST_FROZEN=true
+PAGE_SYSTEM_AUDIT_RUNTIME_READMISSION_READY=true
+HANDOFF_PR=1200
+S13_PRS=1197,1198,1199,1200
+S13_PR_COUNT=4
+EXACT_HANDOFF_DOC_FILE_COUNT=5
+S13_REQUIRED_CHECKS=passed
+S13_ACTIONABLE_P0_P1=0
+POST_MERGE_REVIEW_DEBT=0
+
+EXACT_RUNTIME_FILE_COUNT=5
+EXACT_RUNTIME_EXISTING_FILE_COUNT=4
+EXACT_RUNTIME_NEW_FILE_COUNT=1
+EXACT_PRODUCTION_FILE_COUNT=2
+EXACT_TEST_FILE_COUNT=3
+
+AUDIT_READER_SAFE_DATA_AVAILABLE=true
+AUDIT_READER_COVERAGE_STATE=partial_verified_only
+AUDIT_READER_PARTIAL_COVERAGE_SAFE=true
+AUDIT_READER_COVERAGE_DISCLOSURE_SAFE=true
+WORKBENCH_MULTI_CAPABILITY_REVALIDATED=true
+PAGE_SYSTEM_AUDIT_AUTHORIZATION_VERIFIED=true
+PAGE_SYSTEM_AUDIT_CANONICAL_ROUTE_SAFE=true
+SHELL_READONLY_SAFE=true
+LOW_SENSITIVE_OUTPUT_SAFE=true
+CAPABILITY_AUTHORITY_RELEASE_PATH_SAFE=true
+NAVIGATION_RELEASE_PATH_SAFE=true
+SCHEMA_CHANGE_REQUIRED=false
+MIGRATION_REQUIRED=false
+DDL_REQUIRED=false
+DML_REQUIRED=false
+
+PAGE_SYSTEM_AUDIT_STATE=hidden/not_released
+PAGE_SYSTEM_AUDIT_RELEASE=false
+PAGE_SYSTEM_AUDIT_RELEASE_RUNTIME_AUTHORIZED=false
+PAGE_SYSTEM_AUDIT_RUNTIME_RELEASE_AUTHORIZED=false
+PAGE_SYSTEM_AUDIT_PRODUCTION_AUTHORITY_GRANT_AUTHORIZED=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=1
+```
+
+架构结论：
+
+- local-development readonly recheck、Reader verified-only chain、coverage honesty、system Section Guard、formal authorization、canonical Route path、readonly Shell/client 与 Workbench multi-capability 均通过 fresh 审计；
+- 当前数据是 275 total / 7 verified / 1 not-applicable / 267 unclassifiable，页面只能披露安全 verified subset，不能声称完整历史覆盖；
+- PR #1197 先闭合客户端 exact low-sensitive DTO boundary；其 post-merge reason completeness P1 已由 corrective PR #1199 在不扩大 query filter 的前提下修复并解决；
+- merged corrective 基线上的独立定向复验 14 files / 303 tests 与 Handoff typecheck、ProductionReadinessDocs 均通过；
+- 下一 Runtime 只允许 2 个 production + 3 个 tests 的 exact 5-file allowlist：existing Authority policy、new dedicated Route 与 3 个精确 regression files；
+- 目标 Authority shape 为 `read_only / dataReadiness=partial / productionRelease=pilot_released`；shared catch-all、Reader、client、Repository、Schema 与历史数据均不修改；
+- S13 只重新准入，不实施页面发布，不改变 governed page count。
+
+证据：
+
+- `docs/operations/post-v2-r1c-page-system-audit-fresh-release-reaudit-exact-runtime-readmission-20260814.md`
+- `docs/operations/post-v2-r1c-page-system-audit-exact-runtime-readmission-allowlist-20260814.csv`
+- 前置校正 PR #1197 / Merge `638b69a2c66597d7a7ae0bd87e0c4f88dd8f8ec2`
+- Admission PR #1198 / Merge `f0bec7503932e8ad08272f3981935d6fbaa31bfc`
+- corrective PR #1199 / Merge `b0165a27958ca2d8093a15fe3ea3f040bb83af2a`
+
+唯一下一任务：
+
+`POST-V2-R1C page_system_audit exact 5-file Runtime release implementation explicit authorization`
+
+<!-- POST_V2_R1C_PAGE_SYSTEM_AUDIT_FRESH_RELEASE_READMISSION_END -->
+
 <!-- POST_V2_R1C_AUDIT_READER_DATA_READINESS_WORKBENCH_MULTI_CAPABILITY_START -->
 
 ## POST-V2-R1C Reader coverage / Workbench multi-capability 前置条件闭环（2026-08-14）
