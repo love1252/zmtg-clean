@@ -1,5 +1,33 @@
 # 下一任务
 
+## S30 后续已授权条件链
+
+```text
+S30_COMPLETION_MODE=PREREQUISITE_IMPLEMENTATION_ADMISSION_READY
+S30_BASELINE=707c378afffb3e3b96790a26a0de8a17a8364f3c
+SYSTEM_PREREQUISITE_IMPLEMENTATION_ADMISSION_READY=true
+SYSTEM_PREREQUISITE_EXACT_ALLOWLIST_FROZEN=true
+SYSTEM_PREREQUISITE_EXACT_FILE_COUNT=2
+SYSTEM_PREREQUISITE_EXACT_ALLOWLIST=scripts/db/sys01-controlled-local-dev-rebuild.mjs,scripts/db/sys01-controlled-local-dev-rebuild.test.mjs
+
+NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEMENTATION
+NEXT_STAGE=S31
+NEXT_SYSTEM_TASK_AUTHORIZED=true_conditionally_by_current_ultra_goal
+
+BACKUP_KEY_SOURCE_AVAILABLE=true
+BACKUP_KEY_VALUE_READ_OR_LOGGED=false
+LOW_LEVEL_ADAPTER_TEST_GAP_COUNT=6
+
+DATABASE_REBUILD_EXECUTION=false
+DATABASE_WRITE_ON_ORIGINAL_55433=false
+MIGRATION_EXECUTION=false
+NEXT_STAGE_AUTO_EXECUTION=false
+```
+
+S31 只允许修改冻结的 runner/test 两文件：由受审查代码 fresh 生成四类 readiness/application smoke evidence，补 key metadata preflight 与六类 concrete adapter fake-executor behavior tests。不得加入第 3 个 Runtime/Test file；不得执行 backup、restore、candidate create、baseline bootstrap、transfer、cutover、Schema 或 Migration。S31 合并后才进入 S32 docs-only/read-only re-admission；若 S31 停止，则直接转 S33 Care Admission 并记录 System blocker。
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-rebuild-execution-prerequisite-implementation-admission-20260815.md`。
+
 ## 当前并行候选任务选择状态
 
 ```text
