@@ -3,11 +3,38 @@
 ## 下一任务选择状态
 
 ```text
-NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_LOCAL_DEVELOPMENT_PHASED_SCHEMA_RECOVERY_ENTRYPOINT_AND_DATA_PRECONDITION_ADMISSION
+NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CONTROLLED_LOCAL_DEVELOPMENT_DATABASE_REBUILD_ADMISSION
 NEXT_STAGE=UNASSIGNED
 NEXT_TASK_AUTHORIZED=false
 NEXT_TASK_SELECTION_REQUIRED=false
 NEXT_STAGE_AUTO_EXECUTION=false
+S23_COMPLETION_MODE=PHASED_RECOVERY_ADMISSION_COMPLETE_BLOCKED_IN_PLACE
+S23_PHASED_RECOVERY_ADMISSION=passed
+SELECTED_SCHEMA_RECOVERY_STRATEGY=controlled_local_dev_rebuild
+IN_PLACE_PHASED_RECOVERY_FEASIBLE=false
+CONTROLLED_LOCAL_DEV_REBUILD_FEASIBLE=true_as_separately_admitted_data_preserving_direction
+FORWARD_RECOVERY_MECHANISM_EXISTS=false
+CURRENT_LOCAL_MIGRATOR_TARGET_SUPPORT=false
+CURRENT_LOCAL_MIGRATOR_ALL_PENDING_ONLY=true
+DRIZZLE_NATIVE_TARGET_SUPPORTED=false
+DRIZZLE_PREFIX_FOLDER_SUPPORTED=true
+FORMAL_PROVISIONING_RUNNER_EXISTS=true
+FORMAL_PROVISIONING_RUNNER_REUSABLE=true_as_three_table_component_only
+FORMAL_PROVISIONING_CAN_TARGET_LOCAL_DEV=false
+CURRENT_APPROVED_MANIFEST_AVAILABLE=false
+TENANT_COUNT=6
+AUTH_USER_COUNT=11
+TENANT_MEMBER_COUNT=11
+BINDING_COUNT=0
+M0041_EXPECTED_MEMBERSHIP_COUNT=1
+M0041_CAN_RUN_WITH_11_MEMBERSHIPS=false
+LEGACY_CALIBRATION_CHAIN_CURRENT_LOCAL_DEV_COMPATIBLE=false
+PHASED_RECOVERY_ENTRYPOINT_IMPLEMENTATION_REQUIRED=false
+PHASED_ENTRYPOINT_EXACT_ALLOWLIST_FROZEN=false
+PHASED_ENTRYPOINT_EXACT_FILE_COUNT=0
+SCHEMA_RECOVERY_EXECUTION_READY=false
+BACKUP_REQUIRED_BEFORE_ANY_SCHEMA_WRITE=true
+RESTORE_DRILL_REQUIRED_BEFORE_ANY_SCHEMA_WRITE=true
 S22_COMPLETION_MODE=MIGRATION_ADMISSION_COMPLETE_BLOCKED
 S22_MIGRATION_ADMISSION_AUDIT=passed
 LOCAL_DB_APPLIED_MIGRATION_HEAD_TAG=0037_v08_05b_b3a_real_task_readiness_foundation
@@ -40,7 +67,7 @@ SYS01_RUNTIME_ADMISSION_READY=false
 SYS01_DATA_READINESS=blocked
 SYS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
 SYS01_EXACT_RUNTIME_FILE_COUNT=0
-PRIMARY_BLOCKING_PREREQUISITE=formal_migrator_all_pending_only_cannot_pause_after_0038_for_required_provisioning_and_current_0039_0045_data_preconditions_mismatch
+PRIMARY_BLOCKING_PREREQUISITE=current_11_membership_local_dev_cannot_replay_consumed_single_membership_0041_0043_chain_and_no_repository_supported_data_preserving_rebuild_mechanism_exists
 S19_COMPLETE=true
 POST_V2_R1C_COMPLETE=true
 POST_V2_R1C_FORMAL_CLOSURE=true
@@ -58,15 +85,16 @@ POST_R1C_DEFAULT_MODE=business_slice_delivery
 S18_COMPLETE=true
 SEVEN_STREAM_DEVELOPMENT_AUTHORIZED=false
 MIGRATION_EXECUTION_AUTHORIZED=false
+PROVISIONING_WRITE_AUTHORIZED=false
 DATABASE_WRITE_EXECUTION_AUTHORIZED=false
 PAGE_SYSTEM_AUDIT_RUNTIME_RELEASE_COMPLETE=true
 ```
 
-S22 已确认 actual journal 是 repository `0000..0037` 的逐项 timestamp/hash 严格前缀，`0038` objects 全部缺失并属于正常 schema lag。Repository continuous pending list 是 `0038..0045`，但它不是当前 executable chain。
+S23 已确认 local-development DB 的 actual 6 Tenant、11 Auth User、11 Membership 与 0 Binding 是需要保留的事实。现有正式 migrator 没有 target/stop-after；现有 A2 Provisioning runner 只产生 Scope、Context Version 与 Context Head，不会创建 0039 要求的 Binding。
 
-正式 migrator 只能执行全部 pending，不能在 `0038` 后暂停完成 `0039` 明确要求的 Provisioning；current DB 的 11 Membership / 0 Binding 也不符合 `0039–0045` acceptance data guards。下一原子任务只能准入 phased recovery entrypoint 与各 checkpoint 的数据前置，不得执行 Migration、Provisioning write、Schema、DDL/DML、Seed 或 Runtime。
+更关键的是 consumed `0041/0043` 冻结为历史单 Membership acceptance shape，无法合法消费 current 11 Membership；targeted runner 即使能单独执行 0038，也不能形成可达 0045 的原地链。因此唯一推荐方向是受控、数据保留的 side-by-side local-development rebuild。下一原子任务只允许 fresh Admission，冻结 backup/restore proof、candidate schema build、data-preservation mapping、unknown-outcome handling 与 exact boundaries；不得自动执行 Migration、Provisioning write、create/drop/reset/restore、Schema、DDL/DML、Seed 或 Runtime。
 
-S22 canonical evidence：`docs/operations/seven-stream-system-sys01-local-dev-schema-parity-migration-admission-20260815.md`。
+S23 canonical evidence：`docs/operations/seven-stream-system-sys01-local-dev-phased-schema-recovery-admission-20260815.md`。
 
 ## S18 exact 5-file Runtime 最终发布闭环
 
