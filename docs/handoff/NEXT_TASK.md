@@ -3,16 +3,50 @@
 ## 下一任务选择状态
 
 ```text
-NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CANDIDATE_MIGRATION_BASELINE_GOVERNANCE_ADMISSION
-NEXT_STAGE=UNASSIGNED
+NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CANDIDATE_BASELINE_AND_CONTROLLED_REBUILD_TOOL_EXACT_IMPLEMENTATION
+NEXT_STAGE=S26
 NEXT_TASK_AUTHORIZED=false
 NEXT_TASK_SELECTION_REQUIRED=false
 NEXT_STAGE_AUTO_EXECUTION=false
+S25_COMPLETION_MODE=CANDIDATE_BASELINE_GOVERNANCE_ADMISSION_COMPLETE
+S25_BASELINE_GOVERNANCE_ADMISSION=passed
+S25_ADMISSION_WORK_COMPLETE=true
+S25_COMPLETE=false_pending_explicit_ready_merge_authorization
+S25_FORMAL_CLOSURE=false
+CURRENT_REPOSITORY_JOURNAL_HEAD=0045_base02_binding_legacy_calibration
+CURRENT_REPOSITORY_SNAPSHOT_HEAD=0026_snapshot
+CURRENT_SCHEMA_TABLE_COUNT=60
+SELECTED_CANDIDATE_BASELINE_STRATEGY=DRIZZLE_JOURNAL_BASELINE_MARKER
+BASELINE_CLAIMS_MIGRATIONS_EXECUTED=false
+BASELINE_SCHEMA_FIDELITY_CONTRACT_FROZEN=true
+BASELINE_VALIDATION_MATRIX_FROZEN=true
+LEGACY_CHAIN_DATABASES_REMAIN_VALID=true
+LEGACY_CHAIN_DATABASE_REBASE_REQUIRED=false
+LEGACY_CHAIN_JOURNAL_REWRITE_REQUIRED=false
+FUTURE_MIGRATION_SINGLE_LINEAGE_POSSIBLE=true
+FUTURE_MIGRATION_DUAL_ORIGIN_SUPPORT_REQUIRED=true
+NEXT_MIGRATION_NUMBER_RESERVED=false
+NEW_DRIZZLE_SNAPSHOT_REQUIRED=false_for_selected_candidate_baseline
+SNAPSHOT_BASELINE_GOVERNANCE_REQUIRED=true_before_any_future_db_generate
+BASELINE_GOVERNANCE_ADMISSION_READY=true
+BASELINE_TOOL_IMPLEMENTATION_REQUIRED=true
+BASELINE_EXACT_ALLOWLIST_FROZEN=true
+BASELINE_EXACT_FILE_COUNT=6
+CONTROLLED_REBUILD_EXACT_ALLOWLIST_CAN_NOW_BE_FROZEN=true
+CONTROLLED_REBUILD_EXACT_ALLOWLIST_FROZEN=true
+CONTROLLED_REBUILD_EXACT_FILE_COUNT=6
+REBUILD_EXECUTION_ADMISSION_READY=false
+PRIMARY_BLOCKING_PREREQUISITE=baseline_and_controlled_rebuild_tooling_not_implemented
 S24_COMPLETION_MODE=CONTROLLED_REBUILD_ADMISSION_COMPLETE_BLOCKED
 S24_CONTROLLED_REBUILD_ADMISSION=passed
 S24_ADMISSION_WORK_COMPLETE=true
-S24_COMPLETE=false_pending_explicit_ready_merge_authorization
-S24_FORMAL_MERGE_CLOSURE=false
+S24_COMPLETE=true
+S24_FORMAL_CLOSURE=true
+S24_FORMAL_MERGE_CLOSURE=true
+S24_PR=1221
+S24_FINAL_HEAD=c0f5ea8d8de3cf1689f64404cbc450389336f24f
+S24_MERGE=369ed0724566b2ed83ac3dd95caff9cadcae7a20
+S24_POST_MERGE_REVIEW_DEBT=0
 ORIGINAL_PUBLIC_TABLE_COUNT=55
 ORIGINAL_INVENTORY_TABLE_COUNT=56
 TABLE_CLASSIFICATION_COMPLETE=true
@@ -24,12 +58,12 @@ EPHEMERAL_TABLE_COUNT=4
 SECRET_SENSITIVE_TABLE_COUNT=3
 DO_NOT_COPY_TABLE_COUNT=1
 SPECIAL_MAPPING_TABLE_COUNT=6
-SELECTED_CANDIDATE_SCHEMA_STRATEGY=blocked_no_safe_candidate_schema_strategy
-CANDIDATE_MIGRATION_BASELINE_STRATEGY=not_frozen_blocked_pending_formal_baseline_governance
+SELECTED_CANDIDATE_SCHEMA_STRATEGY=current_schema_reviewed_baseline_artifact
+CANDIDATE_MIGRATION_BASELINE_STRATEGY=DRIZZLE_JOURNAL_BASELINE_MARKER
 SELECTED_DATA_TRANSFER_MECHANISM=controlled_application_level_table_by_table_copy
 CONTROLLED_REBUILD_TOOL_IMPLEMENTATION_REQUIRED=true
-CONTROLLED_REBUILD_EXACT_ALLOWLIST_FROZEN=false
-CONTROLLED_REBUILD_EXACT_FILE_COUNT=0
+CONTROLLED_REBUILD_EXACT_ALLOWLIST_FROZEN=true
+CONTROLLED_REBUILD_EXACT_FILE_COUNT=6
 REBUILD_VALIDATION_MATRIX_FROZEN=true
 REBUILD_EXECUTION_ADMISSION_READY=false
 S23_COMPLETION_MODE=PHASED_RECOVERY_ADMISSION_COMPLETE_BLOCKED_IN_PLACE
@@ -91,7 +125,6 @@ SYS01_RUNTIME_ADMISSION_READY=false
 SYS01_DATA_READINESS=blocked
 SYS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
 SYS01_EXACT_RUNTIME_FILE_COUNT=0
-PRIMARY_BLOCKING_PREREQUISITE=no_repository_supported_candidate_baseline_can_represent_current_schema_and_remain_future_migration_safe_without_falsifying_0038_0045_history
 S19_COMPLETE=true
 POST_V2_R1C_COMPLETE=true
 POST_V2_R1C_FORMAL_CLOSURE=true
@@ -114,11 +147,11 @@ DATABASE_WRITE_EXECUTION_AUTHORIZED=false
 PAGE_SYSTEM_AUDIT_RUNTIME_RELEASE_COMPLETE=true
 ```
 
-S24 已在 strict read-only session 中 fresh 枚举 local-development DB 的 55 张 public 表与 Drizzle journal，完成 56-row 唯一 classification、42 张保留/特殊表 mapping、secret/files boundary、backup/restore drill、side-by-side candidate、validation、cutover、rollback 与 unknown-outcome contract。actual 6 Tenant、11 Auth User、11 Membership、0 Binding、252 Audit 与 0 AI usage 均已进入 preservation boundary；本阶段没有执行任何 rebuild/write。
+S24 已通过 PR #1221 正式收口：final Head `c0f5ea8d8de3cf1689f64404cbc450389336f24f`，Merge `369ed0724566b2ed83ac3dd95caff9cadcae7a20`，post-merge review debt 为 0。其 56-row inventory、preservation、backup/restore、side-by-side candidate、validation、cutover、rollback 与 unknown-outcome contract 保持有效。
 
-当前唯一先决条件不再是调查原库数据，而是建立正式 candidate migration baseline governance：repository 既没有 current-schema baseline，又不能借 `drizzle push`、手填 journal 或跳过历史 guards 来假装 `0038..0045` 已执行。下一原子任务只允许冻结 baseline artifact、canonical marker/journal semantics、future migration lineage 与由此决定的 exact tooling allowlist；不得自动生成 artifact、实现 rebuild tool、执行 create/backup/restore/Migration/DDL/DML 或进入 SYS-01 Runtime。
+S25 已唯一冻结 `DRIZZLE_JOURNAL_BASELINE_MARKER`：reviewed current-schema SQL artifact、immutable manifest 与 marker-only journal provenance；不写 46 条伪历史、不复用 `0045` SQL hash，legacy-chain DB 不改写，两种 origin 消费同一 future common tail。baseline/rebuild exact 6-file allowlist 已冻结。下一原子任务只可在显式授权下实现这 6 个文件；不得自动生成 artifact、实现 tooling、执行 create/backup/restore/Migration/DDL/DML 或进入 SYS-01 Runtime。
 
-S24 canonical evidence：`docs/operations/seven-stream-system-sys01-controlled-local-dev-rebuild-admission-20260815.md`。
+S25 canonical evidence：`docs/operations/seven-stream-system-sys01-candidate-migration-baseline-governance-admission-20260815.md`。
 
 ## S18 exact 5-file Runtime 最终发布闭环
 

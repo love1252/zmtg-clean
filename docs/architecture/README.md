@@ -1,5 +1,45 @@
 # 智美天工架构文档索引
 
+<!-- SEVEN_STREAM_SYSTEM_SYS01_CANDIDATE_BASELINE_GOVERNANCE_ADMISSION_START -->
+
+## System SYS-01 candidate migration baseline 治理准入（2026-08-15）
+
+```text
+STAGE=S25
+STREAM=system
+SLICE=SYS_01_AI_USAGE_READONLY
+COMPLETION_MODE=CANDIDATE_BASELINE_GOVERNANCE_ADMISSION_COMPLETE
+BASELINE=369ed0724566b2ed83ac3dd95caff9cadcae7a20
+
+CURRENT_REPOSITORY_JOURNAL_HEAD=0045_base02_binding_legacy_calibration
+CURRENT_REPOSITORY_SNAPSHOT_HEAD=0026_snapshot
+CURRENT_SCHEMA_TABLE_COUNT=60
+SELECTED_CANDIDATE_BASELINE_STRATEGY=DRIZZLE_JOURNAL_BASELINE_MARKER
+BASELINE_CLAIMS_MIGRATIONS_EXECUTED=false
+LEGACY_CHAIN_DATABASES_REMAIN_VALID=true
+FUTURE_MIGRATION_SINGLE_LINEAGE_POSSIBLE=true
+FUTURE_MIGRATION_DUAL_ORIGIN_SUPPORT_REQUIRED=true
+
+BASELINE_GOVERNANCE_ADMISSION_READY=true
+BASELINE_TOOL_IMPLEMENTATION_REQUIRED=true
+BASELINE_EXACT_ALLOWLIST_FROZEN=true
+BASELINE_EXACT_FILE_COUNT=6
+CONTROLLED_REBUILD_EXACT_ALLOWLIST_FROZEN=true
+CONTROLLED_REBUILD_EXACT_FILE_COUNT=6
+REBUILD_EXECUTION_ADMISSION_READY=false
+SYS01_RUNTIME_ADMISSION_READY=false
+
+NEXT_STAGE=S26
+NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CANDIDATE_BASELINE_AND_CONTROLLED_REBUILD_TOOL_EXACT_IMPLEMENTATION
+NEXT_TASK_AUTHORIZED=false
+```
+
+Drizzle 原生只用数据库 journal 的最大 `created_at` 与 repository entry `when` 判断 pending，不验证完整历史、hash 或 baseline metadata。因此 selected strategy 以 reviewed schema-only SQL + immutable manifest + 一条 marker-only journal row 组成受治理 provenance；marker 锚定 `0045` 的 `when`，但不复用 `0045` SQL hash、不写 46 条伪历史、不声称 `0038..0045` 已执行。legacy-chain DB 保持原 journal，future Migration 使用同一 repository common tail；guard 负责区分 exact legacy prefix 与 exact marker origin，并对 production marker fail closed。
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-candidate-migration-baseline-governance-admission-20260815.md`。本阶段未生成 artifact/snapshot，未实现 tooling，未连接或写入数据库，也未执行 rebuild/Migration/DDL/DML。
+
+<!-- SEVEN_STREAM_SYSTEM_SYS01_CANDIDATE_BASELINE_GOVERNANCE_ADMISSION_END -->
+
 <!-- SEVEN_STREAM_SYSTEM_SYS01_CONTROLLED_REBUILD_ADMISSION_START -->
 
 ## System SYS-01 controlled local-development database rebuild 准入（2026-08-15）
@@ -40,11 +80,14 @@ PRIMARY_BLOCKING_PREREQUISITE=no_repository_supported_candidate_baseline_can_rep
 NEXT_STAGE=UNASSIGNED
 NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CANDIDATE_MIGRATION_BASELINE_GOVERNANCE_ADMISSION
 NEXT_TASK_AUTHORIZED=false
+S24_COMPLETE=true
+S24_FORMAL_CLOSURE=true
+S24_FORMAL_MERGE_CLOSURE=true
 ```
 
 S24 在 `127.0.0.1:55433` 的 startup/transaction read-only session 内枚举全部 55 张 public 表与 Drizzle journal，完成 56-row 唯一 classification、42 张保留/特殊表 exact mapping、secret/file boundary、加密 backup、隔离 restore drill、side-by-side candidate、validation、cutover、rollback 与 unknown-outcome contract。original 仍是唯一 canonical DB，未执行 backup/restore/create/rebuild/Migration/DDL/DML。
 
-`FULL_CURRENT_MIGRATION_REPLAY` 会撞上 `0039` checkpoint 与 `0041/0043` historical guards；repository 也没有 journal-safe、future-migration-safe 的 current-schema baseline。derived baseline 仅是需要独立治理的方向，不得先伪冻 tooling allowlist。因此 S24 Admission 工作已完成但尚未经过 Ready/Merge 正式收口，execution 仍 blocked；下一原子任务只决定 candidate baseline artifact、canonical marker/journal semantics 与 future migration lineage。
+`FULL_CURRENT_MIGRATION_REPLAY` 会撞上 `0039` checkpoint 与 `0041/0043` historical guards；repository 也没有 journal-safe、future-migration-safe 的 current-schema baseline。derived baseline 仅是需要独立治理的方向，不得先伪冻 tooling allowlist。PR #1221 已以 Head `c0f5ea8d8de3cf1689f64404cbc450389336f24f`、Merge `369ed0724566b2ed83ac3dd95caff9cadcae7a20` 正式收口，post-merge review debt 为 0；其 execution blocker 由 S25 baseline governance Admission 接续处理。
 
 Canonical evidence：`docs/operations/seven-stream-system-sys01-controlled-local-dev-rebuild-admission-20260815.md`。
 
