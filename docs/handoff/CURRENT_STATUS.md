@@ -161,8 +161,8 @@ Canonical evidence：`docs/operations/seven-stream-system-sys01-controlled-local
 ## S30 System SYS-01 rebuild prerequisite exact implementation Admission
 
 - 更新日期：2026-08-15
-- S29：PR #1227 exact 11-file Runtime 已合并；CUS-01 Reader/API 已实现，page 未发布
-- S30：现有 runner/test exact 2-file prerequisite implementation scope ready
+- S29：PR #1227 exact 11-file Runtime 已合并；两条 post-merge P2 已由 corrective PR #1232 修复并解决；CUS-01 Reader/API 已实现，page 未发布
+- S30：原始 runner/test exact-2 Admission 已由用户后续 exact-3 corrective re-admission 校准；PR #1233 已合并
 - key：repo-external owner-only raw 32-byte source 已创建；value/hash 未读取或记录
 - 边界：docs-only；未连接数据库或执行任何 rebuild phase
 
@@ -188,8 +188,16 @@ CUS01_LEGACY_API_UNCHANGED=true
 
 SYSTEM_PREREQUISITE_IMPLEMENTATION_ADMISSION_READY=true
 SYSTEM_PREREQUISITE_EXACT_ALLOWLIST_FROZEN=true
-SYSTEM_PREREQUISITE_EXACT_FILE_COUNT=2
-SYSTEM_PREREQUISITE_EXACT_ALLOWLIST=scripts/db/sys01-controlled-local-dev-rebuild.mjs,scripts/db/sys01-controlled-local-dev-rebuild.test.mjs
+SYSTEM_PREREQUISITE_ORIGINAL_EXACT_FILE_COUNT=2
+SYSTEM_PREREQUISITE_CORRECTIVE_EXACT_FILE_COUNT=3
+SYSTEM_PREREQUISITE_CORRECTIVE_EXACT_ALLOWLIST=scripts/db/sys01-controlled-local-dev-rebuild.mjs,scripts/db/sys01-controlled-local-dev-rebuild.test.mjs,drizzle/baselines/sys01-local-dev-current-schema-0045-v1.json
+S31_CORRECTIVE_RUNTIME_PR=1233
+S31_CORRECTIVE_RUNTIME_HEAD=dc1524cc4b3d7656bf60b3aaf10be5ab7cf85ca5
+S31_CORRECTIVE_RUNTIME_MERGE=f7eefd101d05b8c07468de677d5013658816972a
+APPLICATION_SMOKE_EXPECTED_COMMIT_ENV_INJECTED=false
+APPLICATION_SMOKE_VERSION_SOURCE_REQUIRED=build
+APPLICATION_SMOKE_DIRECT_NEXT_CHILD=true
+APPLICATION_SMOKE_CHILD_EXIT_AWAITED=true
 
 PRE_CUTOVER_READINESS_EVIDENCE_ISSUER=issueSys01DeterministicReadinessEvidenceV1_candidate
 PRE_CUTOVER_APPLICATION_SMOKE_EVIDENCE_ISSUER=issueSys01DeterministicApplicationSmokeEvidenceV1_candidate
@@ -223,7 +231,7 @@ PRODUCTION_CHANGE=false
 PRODUCTION_DEPLOYMENT=false
 
 NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEMENTATION
-NEXT_SYSTEM_TASK_AUTHORIZED=true_conditionally_by_current_ultra_goal
+NEXT_SYSTEM_TASK_AUTHORIZED=false
 NEXT_CARE_TASK=SEVEN_STREAM_CARE_FORMAL_FRESH_ADMISSION
 NEXT_CARE_TASK_AUTHORIZED=true_by_current_ultra_goal_after_system_chain
 NEXT_STAGE_AUTO_EXECUTION=false

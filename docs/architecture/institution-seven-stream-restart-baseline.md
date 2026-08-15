@@ -96,7 +96,7 @@ CONTROLLED_CREATE_RELEASE_COUNT=0
 
 - S30 基线：`707c378afffb3e3b96790a26a0de8a17a8364f3c`
 - S29 Customers：PR #1227 已以 exact 11-file scope 合并，CUS-01 formal Reader 与 versioned API 已实现，page 继续隐藏
-- S30 System：四类 deterministic issuer、key preflight 与六 adapter behavior closure 可由现有 runner/test exact 2 files 完成
+- S30 System：原始 Admission 冻结 runner/test exact 2 files；用户后续对 review corrective 明确 re-admit runner/test/baseline manifest exact 3 files
 - S30 key：repo-external raw 32-byte owner-only source 已创建并通过 metadata 校验；未读取、输出或记录 value/hash
 - S30 性质：docs-only Admission；未执行 rebuild、backup、restore、candidate、baseline、transfer 或 cutover
 
@@ -112,10 +112,16 @@ S29_REQUIRED_CHECKS=passed
 S29_ACTIONABLE_P0_P1_P2_P3=0
 S29_POST_MERGE_REVIEW_DEBT=0
 S29_FORMAL_CLOSURE=true
+S29_CORRECTIVE_PR=1232
+S29_CORRECTIVE_MERGE=00e9b91382538f29764853d9fdd67ae42a9872af
 
 SYSTEM_PREREQUISITE_IMPLEMENTATION_ADMISSION_READY=true
 SYSTEM_PREREQUISITE_EXACT_ALLOWLIST_FROZEN=true
-SYSTEM_PREREQUISITE_EXACT_FILE_COUNT=2
+SYSTEM_PREREQUISITE_ORIGINAL_EXACT_FILE_COUNT=2
+SYSTEM_PREREQUISITE_CORRECTIVE_EXACT_FILE_COUNT=3
+SYSTEM_PREREQUISITE_CORRECTIVE_EXACT_ALLOWLIST=scripts/db/sys01-controlled-local-dev-rebuild.mjs,scripts/db/sys01-controlled-local-dev-rebuild.test.mjs,drizzle/baselines/sys01-local-dev-current-schema-0045-v1.json
+S31_CORRECTIVE_RUNTIME_PR=1233
+S31_CORRECTIVE_RUNTIME_MERGE=f7eefd101d05b8c07468de677d5013658816972a
 BACKUP_KEY_CONTRACT_FROZEN=true
 BACKUP_KEY_SOURCE_CREATED=true
 BACKUP_KEY_SOURCE_AVAILABLE=true
@@ -123,7 +129,7 @@ BACKUP_KEY_VALUE_READ_OR_LOGGED=false
 LOW_LEVEL_ADAPTER_TEST_GAP_COUNT=6
 
 NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEMENTATION
-NEXT_SYSTEM_TASK_AUTHORIZED=true_conditionally_by_current_ultra_goal
+NEXT_SYSTEM_TASK_AUTHORIZED=false
 NEXT_CUSTOMERS_TASK=UNASSIGNED_AFTER_CUS01_READER_API_RUNTIME
 NEXT_CARE_TASK=SEVEN_STREAM_CARE_FORMAL_FRESH_ADMISSION
 NEXT_CARE_TASK_AUTHORIZED=true_by_current_ultra_goal_after_system_chain

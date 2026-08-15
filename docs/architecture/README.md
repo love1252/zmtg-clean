@@ -92,8 +92,11 @@ S29_FORMAL_CLOSURE=true
 
 SYSTEM_PREREQUISITE_IMPLEMENTATION_ADMISSION_READY=true
 SYSTEM_PREREQUISITE_EXACT_ALLOWLIST_FROZEN=true
-SYSTEM_PREREQUISITE_EXACT_FILE_COUNT=2
-SYSTEM_PREREQUISITE_EXACT_ALLOWLIST=scripts/db/sys01-controlled-local-dev-rebuild.mjs,scripts/db/sys01-controlled-local-dev-rebuild.test.mjs
+SYSTEM_PREREQUISITE_ORIGINAL_EXACT_FILE_COUNT=2
+SYSTEM_PREREQUISITE_CORRECTIVE_EXACT_FILE_COUNT=3
+SYSTEM_PREREQUISITE_CORRECTIVE_EXACT_ALLOWLIST=scripts/db/sys01-controlled-local-dev-rebuild.mjs,scripts/db/sys01-controlled-local-dev-rebuild.test.mjs,drizzle/baselines/sys01-local-dev-current-schema-0045-v1.json
+S31_CORRECTIVE_RUNTIME_PR=1233
+S31_CORRECTIVE_RUNTIME_MERGE=f7eefd101d05b8c07468de677d5013658816972a
 
 BACKUP_KEY_CONTRACT_FROZEN=true
 BACKUP_KEY_SOURCE_CREATED=true
@@ -104,10 +107,10 @@ LOW_LEVEL_ADAPTER_TEST_GAP_COUNT=6
 DATABASE_REBUILD_EXECUTION=false
 DATABASE_WRITE_ON_ORIGINAL_55433=false
 NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEMENTATION
-NEXT_SYSTEM_TASK_AUTHORIZED=true_conditionally_by_current_ultra_goal
+NEXT_SYSTEM_TASK_AUTHORIZED=false
 ```
 
-四类 issuer 复用现有 runner 的 candidate catalog/inventory validation、receipt chain 与 loopback `/api/version`；不新建 smoke framework。S31 只允许修改 runner 与同名 test，补 deterministic probe/receipt、key metadata preflight 与 backup/restore/candidate/bootstrap/transfer/validate 六类 concrete fake-executor tests。S30 未连接数据库或执行任何 rebuild phase。
+四类 issuer 复用现有 runner 的 candidate catalog/inventory validation、receipt chain 与 loopback `/api/version`；不新建 smoke framework。后续 corrective exact-3 re-admission 已将 baseline manifest 的 runner tooling blob 纳入允许范围；应用探针不注入期望 Head，只接受 Next build-time `source=build` 身份，并直接管理实际 Next 进程直至退出。S30 未连接数据库或执行任何 rebuild phase。
 
 Canonical evidence：`docs/operations/seven-stream-system-sys01-rebuild-execution-prerequisite-implementation-admission-20260815.md`。
 

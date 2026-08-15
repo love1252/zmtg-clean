@@ -6,7 +6,7 @@
 - 切片：`SYS_01_AI_USAGE_READONLY`
 - 基线：`707c378afffb3e3b96790a26a0de8a17a8364f3c`
 - 性质：docs-only Admission + repository static audit + repo-external secret/path preflight
-- 结论：prerequisite exact 2-file Runtime scope ready；未执行 rebuild
+- 结论：原始 prerequisite exact 2-file Runtime scope ready；review 后按用户明确授权完成 exact 3-file corrective re-admission；未执行 rebuild
 
 ## 一、结论
 
@@ -27,9 +27,18 @@ S29_FORMAL_CLOSURE=true
 
 SYSTEM_PREREQUISITE_IMPLEMENTATION_ADMISSION_READY=true
 SYSTEM_PREREQUISITE_EXACT_ALLOWLIST_FROZEN=true
-SYSTEM_PREREQUISITE_EXACT_FILE_COUNT=2
-SYSTEM_PREREQUISITE_EXACT_PRODUCTION_FILE_COUNT=1
-SYSTEM_PREREQUISITE_EXACT_TEST_FILE_COUNT=1
+SYSTEM_PREREQUISITE_ORIGINAL_EXACT_FILE_COUNT=2
+SYSTEM_PREREQUISITE_CORRECTIVE_EXACT_FILE_COUNT=3
+SYSTEM_PREREQUISITE_CORRECTIVE_EXACT_PRODUCTION_FILE_COUNT=2
+SYSTEM_PREREQUISITE_CORRECTIVE_EXACT_TEST_FILE_COUNT=1
+
+S31_CORRECTIVE_RUNTIME_PR=1233
+S31_CORRECTIVE_RUNTIME_HEAD=dc1524cc4b3d7656bf60b3aaf10be5ab7cf85ca5
+S31_CORRECTIVE_RUNTIME_MERGE=f7eefd101d05b8c07468de677d5013658816972a
+S31_CORRECTIVE_REQUIRED_CHECK=passed
+S31_CORRECTIVE_RUNNER_TESTS=31_tests_passed
+S31_CORRECTIVE_MIGRATION_GUARD_TESTS=54_tests_passed
+S31_CORRECTIVE_FULL_TESTS=502_files_6976_tests_passed
 
 BACKUP_KEY_CONTRACT_FROZEN=true
 BACKUP_KEY_SOURCE_CREATED=true
@@ -42,11 +51,11 @@ LOW_LEVEL_ADAPTER_TEST_GAP_COUNT=6
 LOW_LEVEL_ADAPTER_TEST_COVERAGE_SUFFICIENT=false
 ```
 
-S30 只重新审计 S27 冻结的三个 blocker 类别：deterministic readiness/application smoke issuer、private backup key source 与 low-level concrete adapter behavior tests。baseline design、`0038..0045`、S24 mapping、S26 catalog fingerprint 均未发现影响本准入的 fresh drift，因此没有重新打开或修改。
+S30 只重新审计 S27 冻结的三个 blocker 类别：deterministic readiness/application smoke issuer、private backup key source 与 low-level concrete adapter behavior tests。原始 Admission 未改变 baseline design、`0038..0045`、S24 mapping 或 S26 catalog fingerprint。PR #1229 review 指出 runner tooling blob 与 exact-2 scope 不一致后，用户另行明确 re-admit exact 3 files；PR #1233 只更新 runner、同名 test 与 baseline manifest 的 runner blob，baseline SQL、artifact SHA、schema fingerprint 与 catalog contract 均保持不变。
 
 ## 二、S29 formal closure
 
-S29 以 exact 11-file scope 实现 Customers CUS-01 formal Reader 与 `GET /api/v1/institution/customers`。PR #1227 Required Check 通过后 squash merge；merged main 独立回归为 9 files / 160 tests passed，post-merge Review thread 为 0。legacy `/api/institution/customers` 与 `page_customer_list` release 状态未改变，七线正式发布计数仍为 0。
+S29 以 exact 11-file scope 实现 Customers CUS-01 formal Reader 与 `GET /api/v1/institution/customers`。PR #1227 合并后的两条 P2 已由同 scope corrective PR #1232 修复并解决：完整 Cookie header 交由 formal provenance owner，且 displayName 字符长度与 PostgreSQL 对齐。legacy `/api/institution/customers` 与 `page_customer_list` release 状态未改变，七线正式发布计数仍为 0。
 
 ```text
 CUS01_EXACT_SCOPE_MATCH=true
@@ -56,7 +65,11 @@ CUS01_VERSIONED_API_IMPLEMENTED=true
 CUS01_PAGE_RELEASE=false
 CUS01_LEGACY_API_UNCHANGED=true
 CUS01_TARGETED_TESTS=24_files_431_tests_passed
-CUS01_FULL_TESTS=502_files_6966_tests_passed
+CUS01_CORRECTIVE_PR=1232
+CUS01_CORRECTIVE_HEAD=1d1719f82afb9959c22e5ba6d5f8df0d65fae3c4
+CUS01_CORRECTIVE_MERGE=00e9b91382538f29764853d9fdd67ae42a9872af
+CUS01_CORRECTIVE_TARGETED_TESTS=5_files_58_tests_passed
+CUS01_CORRECTIVE_FULL_TESTS=502_files_6976_tests_passed
 ```
 
 ## 三、现有 tooling 与复用决策
@@ -66,8 +79,8 @@ Fresh inventory 覆盖 `readiness`、health、smoke、local acceptance、5010、
 | Surface | 当前事实 | S31 决策 |
 |---|---|---|
 | `scripts/db/sys01-controlled-local-dev-rebuild.mjs` | 已拥有 exact identity、candidate inventory/catalog validation、state machine、receipt chain 与四类 evidence binding | 在原 runner 内实现 deterministic issuer，不新建第二个控制框架 |
-| `/api/version` | 仅返回 deployment commit/build metadata，低敏且已有 route/test | 作为 application smoke 的 HTTP surface；不能单独替代 DB readiness |
-| `scripts/run-next.mjs` + package `start` | 已有 Next 5010 loopback 启动入口 | application smoke issuer 通过受控 low-level adapter 启动或探测明确 candidate-bound/active-target-bound app |
+| `/api/version` | 返回 runtime env 或 build-time metadata；runtime env 可覆盖 commit | application smoke 只接受未注入期望 commit 时返回的 `source=build` exact Head；不能单独替代 DB readiness |
+| `node_modules/next/dist/bin/next` | 可由 runner 直接启动实际 Next 进程 | 不再经过 `scripts/run-next.mjs` 同步包装；probe 在 `SIGTERM` 后等待实际 child close，超时 `SIGKILL` 并 fail-closed |
 | `scripts/dev/local-acceptance-db.sh` | 55432 legacy acceptance helper，会 create/migrate，identity 不等于 SYS-01 candidate | 不复用为 S31 execution issuer，不调用 |
 | `scripts/deploy/test-server.mjs` | 面向远端测试服务器并包含外网/SSH deployment 行为 | 不复用；S31 禁止外网、Staging 与 Production |
 
@@ -85,11 +98,18 @@ S31 在现有 runner 内实现两个 repository-owned issuer，由 phase kind �
 | Evidence kind | 冻结 issuer | Probe 与绑定 |
 |---|---|---|
 | `pre_cutover_readiness` | `issueSys01DeterministicReadinessEvidenceV1` | candidate exact endpoint；实际 identity、schema fingerprint、marker/origin、required tables/catalog、phase state；绑定 implementation Head、baseline manifest 与 previous receipt |
-| `pre_cutover_application_smoke` | `issueSys01DeterministicApplicationSmokeEvidenceV1` | candidate-bound loopback app；复用 `/api/version` 验证 exact Head，并绑定 candidate endpoint、manifest 与 receipt chain |
+| `pre_cutover_application_smoke` | `issueSys01DeterministicApplicationSmokeEvidenceV1` | candidate-bound loopback app；不注入 expected commit，只接受 `/api/version` build-time exact Head，并绑定 candidate endpoint、manifest 与 receipt chain |
 | `post_cutover_readiness` | `issueSys01DeterministicReadinessEvidenceV1` | active endpoint 必须为 candidate；重新执行同一低敏 readiness probe并绑定 post-cutover phase chain |
-| `post_cutover_application_smoke` | `issueSys01DeterministicApplicationSmokeEvidenceV1` | active candidate loopback app；fresh `/api/version` probe与 exact Head/endpoint/manifest/receipt chain 绑定 |
+| `post_cutover_application_smoke` | `issueSys01DeterministicApplicationSmokeEvidenceV1` | active candidate loopback app；fresh build-time `/api/version` probe 与 exact Head/endpoint/manifest/receipt chain 绑定，随后等待实际 Next 进程退出 |
 
-Readiness evidence 至少包含 expected database identity、actual schema fingerprint、marker/origin state、required catalog/table readiness 与 current rebuild state prerequisite；不得包含业务正文、ID、PII、credential 或 secret。Application smoke 只接受 loopback，HTTP body 只解析 version contract；failure、timeout、wrong Head、wrong endpoint 与 non-loopback 均 fail closed。
+Readiness evidence 至少包含 expected database identity、actual schema fingerprint、marker/origin state、required catalog/table readiness 与 current rebuild state prerequisite；不得包含业务正文、ID、PII、credential 或 secret。Application smoke 只接受 loopback，HTTP body 只解析 build-time version contract；failure、timeout、wrong Head、runtime-env source、wrong endpoint 与 non-loopback 均 fail closed。
+
+```text
+APPLICATION_SMOKE_EXPECTED_COMMIT_ENV_INJECTED=false
+APPLICATION_SMOKE_VERSION_SOURCE_REQUIRED=build
+APPLICATION_SMOKE_DIRECT_NEXT_CHILD=true
+APPLICATION_SMOKE_CHILD_EXIT_AWAITED=true
+```
 
 ```text
 PRE_CUTOVER_READINESS_EVIDENCE_ISSUER=issueSys01DeterministicReadinessEvidenceV1_candidate
@@ -149,23 +169,29 @@ FORMAL_RECEIPT_CREATED=false
 |---|---|---|---|---|
 | `scripts/db/sys01-controlled-local-dev-rebuild.mjs` | 四类 deterministic evidence issuer、key metadata preflight、concrete adapter low-level dependency seam | existing | production tooling | runner 已拥有 exact identities、state machine、catalog validation、receipt chain 与所有 concrete adapters；在同 owner 内补闭包最小且不形成第二框架 |
 | `scripts/db/sys01-controlled-local-dev-rebuild.test.mjs` | issuer、key preflight 与六 adapter fake-executor behavior closure | existing | test | 直接调用 concrete logic，证明 success/failure/timeout/unknown/argv/redaction/no-original-write/no-auto-retry |
+| `drizzle/baselines/sys01-local-dev-current-schema-0045-v1.json` | runner tooling Git blob binding | existing | production baseline manifest | 用户后续明确 re-admit；只更新 runner blob，baseline SQL/artifact/schema/catalog contract 不变 |
 
 ```text
-SYSTEM_PREREQUISITE_EXACT_ALLOWLIST=
+SYSTEM_PREREQUISITE_ORIGINAL_EXACT_ALLOWLIST=
 scripts/db/sys01-controlled-local-dev-rebuild.mjs,
 scripts/db/sys01-controlled-local-dev-rebuild.test.mjs
+
+SYSTEM_PREREQUISITE_CORRECTIVE_EXACT_ALLOWLIST=
+scripts/db/sys01-controlled-local-dev-rebuild.mjs,
+scripts/db/sys01-controlled-local-dev-rebuild.test.mjs,
+drizzle/baselines/sys01-local-dev-current-schema-0045-v1.json
 
 EXTRA_RUNTIME_FILE_ALLOWED=false
 GUARDED_MIGRATE_CHANGE_ALLOWED=false
 BASELINE_ARTIFACT_CHANGE_ALLOWED=false
-BASELINE_MANIFEST_CHANGE_ALLOWED=false
+BASELINE_MANIFEST_CHANGE_ALLOWED=runner_tooling_blob_only_by_explicit_corrective_re_admission
 PACKAGE_OR_LOCKFILE_CHANGE_ALLOWED=false
 SCHEMA_OR_MIGRATION_CHANGE_ALLOWED=false
 ```
 
 ## 八、验证与停止线
 
-S31 必须运行 exact prerequisite/runner tests、MigrationGuard regression、full test、typecheck、AQ、Architecture incremental、lint、build、ProductionReadinessDocs 与 diff-check。任何第 3 个 Runtime/Test file、真实 Docker/DB adapter execution、original write、backup/restore/candidate/bootstrap/transfer/cutover、Schema/Migration 或外部网络需求均立即停止。
+S31 必须运行 exact prerequisite/runner tests、MigrationGuard regression、full test、typecheck、AQ、Architecture incremental、lint、build、ProductionReadinessDocs 与 diff-check。原始 exact-2 scope 之外的 baseline manifest 变更只有用户后续明确 exact-3 re-admission 才允许，且仅限 runner tooling blob；任何其他第 4 个文件、真实 Docker/DB adapter execution、original write、backup/restore/candidate/bootstrap/transfer/cutover、Schema/Migration 或外部网络需求均立即停止。
 
 ```text
 DATABASE_CONNECTION=false
@@ -189,7 +215,7 @@ PRODUCTION_CHANGE=false
 PRODUCTION_DEPLOYMENT=false
 
 NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEMENTATION
-NEXT_SYSTEM_TASK_AUTHORIZED=true_conditionally_by_current_ultra_goal
+NEXT_SYSTEM_TASK_AUTHORIZED=false
 REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=2
 SEVEN_STREAM_FORMAL_RELEASE_COUNT=0
 CONTROLLED_CREATE_RELEASE_COUNT=0

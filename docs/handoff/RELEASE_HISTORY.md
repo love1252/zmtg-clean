@@ -116,13 +116,19 @@ CUS01_VERSIONED_API_IMPLEMENTED=true
 CUS01_PAGE_RELEASE=false
 CUS01_LEGACY_API_UNCHANGED=true
 CUS01_TARGETED_TESTS=24_files_431_tests_passed
-CUS01_FULL_TESTS=502_files_6966_tests_passed
-CUS01_POST_MERGE_TESTS=9_files_160_tests_passed
+CUS01_INITIAL_FULL_TESTS=502_files_6966_tests_passed
+CUS01_CORRECTIVE_PR=1232
+CUS01_CORRECTIVE_MERGE=00e9b91382538f29764853d9fdd67ae42a9872af
+CUS01_CORRECTIVE_FULL_TESTS=502_files_6976_tests_passed
 
 SYSTEM_PREREQUISITE_IMPLEMENTATION_ADMISSION_READY=true
 SYSTEM_PREREQUISITE_EXACT_ALLOWLIST_FROZEN=true
-SYSTEM_PREREQUISITE_EXACT_FILE_COUNT=2
-SYSTEM_PREREQUISITE_EXACT_ALLOWLIST=scripts/db/sys01-controlled-local-dev-rebuild.mjs,scripts/db/sys01-controlled-local-dev-rebuild.test.mjs
+SYSTEM_PREREQUISITE_ORIGINAL_EXACT_FILE_COUNT=2
+SYSTEM_PREREQUISITE_CORRECTIVE_EXACT_FILE_COUNT=3
+SYSTEM_PREREQUISITE_CORRECTIVE_EXACT_ALLOWLIST=scripts/db/sys01-controlled-local-dev-rebuild.mjs,scripts/db/sys01-controlled-local-dev-rebuild.test.mjs,drizzle/baselines/sys01-local-dev-current-schema-0045-v1.json
+S31_CORRECTIVE_RUNTIME_PR=1233
+S31_CORRECTIVE_RUNTIME_HEAD=dc1524cc4b3d7656bf60b3aaf10be5ab7cf85ca5
+S31_CORRECTIVE_RUNTIME_MERGE=f7eefd101d05b8c07468de677d5013658816972a
 
 BACKUP_KEY_CONTRACT_FROZEN=true
 BACKUP_KEY_SOURCE_CREATED=true
@@ -149,16 +155,16 @@ PRODUCTION_CHANGE=false
 PRODUCTION_DEPLOYMENT=false
 
 NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEMENTATION
-NEXT_SYSTEM_TASK_AUTHORIZED=true_conditionally_by_current_ultra_goal
+NEXT_SYSTEM_TASK_AUTHORIZED=false
 REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=2
 SEVEN_STREAM_FORMAL_RELEASE_COUNT=0
 CONTROLLED_CREATE_RELEASE_COUNT=0
 ```
 
-- S29 exact 11-file Runtime PR #1227 Required Check 通过、review debt=0，并 squash merge 为 `707c378a`；merged main 独立回归 9/160 通过。
-- S30 fresh audit 证明两个 prerequisite issuer 可复用现有 candidate validation、receipt chain、loopback `/api/version` 与 Next 启动入口，不需要第二套 smoke framework或 package change。
+- S29 exact 11-file Runtime PR #1227 合并后的两条 P2 已由 corrective PR #1232 修复并解决；corrective full regression 为 502/6976。
+- S30 fresh audit 证明两个 prerequisite issuer 可复用现有 candidate validation、receipt chain 与 loopback `/api/version`，不需要第二套 smoke framework或 package change；后续 corrective 只接受 build-time exact Head，且直接管理实际 Next 进程直至退出。
 - runner key contract 已冻结；新的 repo-external raw 32-byte owner-only key source 只做 metadata/byte-count preflight，未输出、记录或提交 key/value/hash。
-- concrete backup、restore、candidate-create、baseline-bootstrap、transfer、validate 共 6 个行为测试 gap，全部可在现有 runner/test exact 2 files 中用 fake low-level adapters 闭合。
+- concrete backup、restore、candidate-create、baseline-bootstrap、transfer、validate 共 6 个行为测试 gap 已由原 runner/test 闭合；manifest runner blob 由用户后续 exact-3 re-admission 纳入并在 PR #1233 更新。
 - 本阶段未连接数据库，也未执行 rebuild、backup、restore、candidate、baseline、transfer、cutover、Schema 或 Migration。
 
 Canonical evidence：`docs/operations/seven-stream-system-sys01-rebuild-execution-prerequisite-implementation-admission-20260815.md`。
