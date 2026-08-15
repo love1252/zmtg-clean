@@ -36,9 +36,10 @@ S30_POST_MERGE_P1_RESOLVED=2
 S31_POST_MERGE_P1_RESOLVED=3
 S31_POST_MERGE_P2_RESOLVED=1
 S32_POST_MERGE_P2_RESOLVED=1
+S33_POST_MERGE_P2_RESOLVED=1
 S33_EXACT_SCOPE_GOVERNANCE_THREAD_RESOLVED=1
-ULTRA_GOAL_CORRECTIVE_REVIEW_THREAD_COUNT=9
-ULTRA_GOAL_REVIEW_THREAD_DISPOSITION_COUNT=10
+ULTRA_GOAL_CORRECTIVE_REVIEW_THREAD_COUNT=10
+ULTRA_GOAL_REVIEW_THREAD_DISPOSITION_COUNT=11
 ULTRA_GOAL_ACTIONABLE_P0_P1_P2_P3=0
 ULTRA_GOAL_POST_MERGE_REVIEW_DEBT=0
 S33_ACTIONABLE_P0_P1_P2_P3=0
@@ -63,7 +64,7 @@ NEXT_CARE_TASK=SEVEN_STREAM_CARE_APPOINTMENTS_READONLY_FRESH_READMISSION_AFTER_S
 NEXT_CARE_TASK_AUTHORIZED=false
 ```
 
-appointments 以最小 capability complexity 胜出：5 rows、tenant null=0、5/5 对 Customer pair exact-one、zero/multi match=0，且不依赖外部系统。original source 尚无 `appointments.institution_id`；S33 不允许 Care Reader 借 Customers repository 临时取得 ownership。S29–S32 的 9 条 actionable post-merge review thread 已由 PR #1232/#1233/#1234/#1235/#1237 全部修复并 resolved；S33 exact-6 范围线程也已依据用户显式授权正式处置。SYS-01 controlled rebuild 仍未授权、未执行，因此本阶段只完成 formal closure，不伪造 Runtime allowlist。
+appointments 以最小 capability complexity 胜出：5 rows、tenant null=0、5/5 对 Customer pair exact-one、zero/multi match=0，且不依赖外部系统。original source 尚无 `appointments.institution_id`；S33 不允许 Care Reader 借 Customers repository 临时取得 ownership。10 条 actionable post-merge review thread 已由 PR #1232/#1233/#1234/#1235/#1237 全部修复并 resolved；S33 exact-6 范围线程也已依据用户显式授权正式处置。SYS-01 controlled rebuild 仍未授权、未执行，因此本阶段只完成 formal closure，不伪造 Runtime allowlist。
 
 Canonical evidence：`docs/operations/seven-stream-care-formal-fresh-admission-20260815.md`。
 

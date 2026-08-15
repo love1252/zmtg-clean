@@ -39,9 +39,10 @@ S30_POST_MERGE_P1_RESOLVED=2
 S31_POST_MERGE_P1_RESOLVED=3
 S31_POST_MERGE_P2_RESOLVED=1
 S32_POST_MERGE_P2_RESOLVED=1
+S33_POST_MERGE_P2_RESOLVED=1
 S33_EXACT_SCOPE_GOVERNANCE_THREAD_RESOLVED=1
-ULTRA_GOAL_CORRECTIVE_REVIEW_THREAD_COUNT=9
-ULTRA_GOAL_REVIEW_THREAD_DISPOSITION_COUNT=10
+ULTRA_GOAL_CORRECTIVE_REVIEW_THREAD_COUNT=10
+ULTRA_GOAL_REVIEW_THREAD_DISPOSITION_COUNT=11
 ULTRA_GOAL_ACTIONABLE_P0_P1_P2_P3=0
 ULTRA_GOAL_POST_MERGE_REVIEW_DEBT=0
 S33_ACTIONABLE_P0_P1_P2_P3=0
@@ -76,7 +77,7 @@ SEVEN_STREAM_FORMAL_RELEASE_COUNT=0
 CONTROLLED_CREATE_RELEASE_COUNT=0
 ```
 
-七线当前顺序：S29–S32 的 9 条 actionable post-merge review thread 已通过 PR #1232/#1233/#1234/#1235/#1237 全部修复并 resolved，S33 exact-6 范围线程也已依据用户显式授权正式处置；System execution prerequisite 与 Admission 已闭合，但实际 controlled rebuild 需要新的显式授权；Care 的首个 read-only slice 已选，却必须等待该数据前置完成。Canonical evidence：`docs/operations/seven-stream-care-formal-fresh-admission-20260815.md`。
+七线当前顺序：10 条 actionable post-merge review thread 已通过 PR #1232/#1233/#1234/#1235/#1237 全部修复并 resolved，S33 exact-6 范围线程也已依据用户显式授权正式处置；System execution prerequisite 与 Admission 已闭合，但实际 controlled rebuild 需要新的显式授权；Care 的首个 read-only slice 已选，却必须等待该数据前置完成。Canonical evidence：`docs/operations/seven-stream-care-formal-fresh-admission-20260815.md`。
 
 ## S32 历史入口：System rebuild execution ready，仍待独立授权
 

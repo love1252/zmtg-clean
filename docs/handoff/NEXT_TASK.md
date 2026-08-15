@@ -26,9 +26,10 @@ S30_POST_MERGE_P1_RESOLVED=2
 S31_POST_MERGE_P1_RESOLVED=3
 S31_POST_MERGE_P2_RESOLVED=1
 S32_POST_MERGE_P2_RESOLVED=1
+S33_POST_MERGE_P2_RESOLVED=1
 S33_EXACT_SCOPE_GOVERNANCE_THREAD_RESOLVED=1
-ULTRA_GOAL_CORRECTIVE_REVIEW_THREAD_COUNT=9
-ULTRA_GOAL_REVIEW_THREAD_DISPOSITION_COUNT=10
+ULTRA_GOAL_CORRECTIVE_REVIEW_THREAD_COUNT=10
+ULTRA_GOAL_REVIEW_THREAD_DISPOSITION_COUNT=11
 ULTRA_GOAL_ACTIONABLE_P0_P1_P2_P3=0
 ULTRA_GOAL_POST_MERGE_REVIEW_DEBT=0
 S33_ACTIONABLE_P0_P1_P2_P3=0
@@ -48,7 +49,7 @@ NEXT_STAGE=UNASSIGNED
 NEXT_STAGE_AUTO_EXECUTION=false
 ```
 
-S29–S32 的 9 条 actionable post-merge review thread 已全部通过 corrective PR #1232/#1233/#1234/#1235/#1237 解决，S33 exact-6 范围线程也已依据用户显式授权正式处置，formal closure 完成。下一任务仍必须由用户独立授权 SYS-01 controlled local-development rebuild execution；它不是 S33 的自动延伸。只有 rebuild 完成且 candidate 通过 validation，才重新审计 appointments data readiness 与 exact Runtime allowlist。不得在 original source 上通过 Care → Customers repository 反向依赖或 runtime 临时 join 规避 blocker。
+10 条 actionable post-merge review thread 已全部通过 corrective PR #1232/#1233/#1234/#1235/#1237 解决，S33 exact-6 范围线程也已依据用户显式授权正式处置，formal closure 完成。下一任务仍必须由用户独立授权 SYS-01 controlled local-development rebuild execution；它不是 S33 的自动延伸。只有 rebuild 完成且 candidate 通过 validation，才重新审计 appointments data readiness 与 exact Runtime allowlist。不得在 original source 上通过 Care → Customers repository 反向依赖或 runtime 临时 join 规避 blocker。
 
 Canonical evidence：`docs/operations/seven-stream-care-formal-fresh-admission-20260815.md`。
 

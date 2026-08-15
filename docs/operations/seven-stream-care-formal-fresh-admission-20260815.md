@@ -46,9 +46,10 @@ S30_POST_MERGE_P1_RESOLVED=2
 S31_POST_MERGE_P1_RESOLVED=3
 S31_POST_MERGE_P2_RESOLVED=1
 S32_POST_MERGE_P2_RESOLVED=1
+S33_POST_MERGE_P2_RESOLVED=1
 S33_EXACT_SCOPE_GOVERNANCE_THREAD_RESOLVED=1
-ULTRA_GOAL_CORRECTIVE_REVIEW_THREAD_COUNT=9
-ULTRA_GOAL_REVIEW_THREAD_DISPOSITION_COUNT=10
+ULTRA_GOAL_CORRECTIVE_REVIEW_THREAD_COUNT=10
+ULTRA_GOAL_REVIEW_THREAD_DISPOSITION_COUNT=11
 ULTRA_GOAL_ACTIONABLE_P0_P1_P2_P3=0
 ULTRA_GOAL_POST_MERGE_REVIEW_DEBT=0
 S33_ACTIONABLE_P0_P1_P2_P3=0
@@ -69,7 +70,7 @@ CARE_PAGE_RELEASE_ADMISSION_READY=false
 
 ### Post-merge corrective formal closure
 
-S29–S32 的最终 review sweep 共发现 9 条 actionable thread，均已通过各自原 stage/scope 的实际 commit、Required Check 与 merge 证据闭合：S29 修复完整 Cookie provenance 与 PostgreSQL 字符长度；S31 修复 build-time exact Head、直接 Next child cleanup，并由 PR #1237 锁定 `SIGKILL` 后继续等待真实 `close`；S30 校准 durable authorization 与 canonical probe 描述；S32 用真实 Node/Vitest 路径分别重跑 31+54 项。另 1 条 S33 exact-6 范围线程与用户显式冻结 allowlist 冲突，已按 AGENTS.md 权威顺序正式回复并 resolved。PR #1227/#1228/#1229/#1230/#1231/#1234 的对应线程均已处置。
+最终 review sweep 共发现 10 条 actionable thread，均已通过各自原 stage/scope 的实际 commit、Required Check 与 merge 证据闭合：S29 修复完整 Cookie provenance 与 PostgreSQL 字符长度；S31 修复 build-time exact Head、直接 Next child cleanup，并由 PR #1237 锁定 `SIGKILL` 后继续等待真实 `close`；S30 校准 durable authorization 与 canonical probe 描述；S32 用真实 Node/Vitest 路径分别重跑 31+54 项；S33 PR #1236 的退出等待证据 P2 同样由 #1237 的已合并 Runtime 事实闭合。另 1 条 S33 exact-6 范围线程与用户显式冻结 allowlist 冲突，已按 AGENTS.md 权威顺序正式回复并 resolved。PR #1227/#1228/#1229/#1230/#1231/#1234/#1236 的对应线程均已处置。
 
 ```text
 APPLICATION_SMOKE_EXPECTED_COMMIT_ENV_INJECTED=false

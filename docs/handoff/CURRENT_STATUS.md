@@ -45,9 +45,10 @@ S30_POST_MERGE_P1_RESOLVED=2
 S31_POST_MERGE_P1_RESOLVED=3
 S31_POST_MERGE_P2_RESOLVED=1
 S32_POST_MERGE_P2_RESOLVED=1
+S33_POST_MERGE_P2_RESOLVED=1
 S33_EXACT_SCOPE_GOVERNANCE_THREAD_RESOLVED=1
-ULTRA_GOAL_CORRECTIVE_REVIEW_THREAD_COUNT=9
-ULTRA_GOAL_REVIEW_THREAD_DISPOSITION_COUNT=10
+ULTRA_GOAL_CORRECTIVE_REVIEW_THREAD_COUNT=10
+ULTRA_GOAL_REVIEW_THREAD_DISPOSITION_COUNT=11
 ULTRA_GOAL_ACTIONABLE_P0_P1_P2_P3=0
 ULTRA_GOAL_POST_MERGE_REVIEW_DEBT=0
 S33_ACTIONABLE_P0_P1_P2_P3=0
@@ -106,7 +107,7 @@ SEVEN_STREAM_FORMAL_RELEASE_COUNT=0
 CONTROLLED_CREATE_RELEASE_COUNT=0
 ```
 
-S29–S32 的 9 条 actionable post-merge review thread 已由 PR #1232/#1233/#1234/#1235/#1237 全部通过实际修复与 merge 证据解决；S33 exact-6 范围线程也已依据用户显式授权正式处置，formal closure 完成。System rebuild 与 Care Runtime 均仍未授权、未执行。
+10 条 actionable post-merge review thread 已由 PR #1232/#1233/#1234/#1235/#1237 全部通过实际修复与 merge 证据解决；S33 exact-6 范围线程也已依据用户显式授权正式处置，formal closure 完成。System rebuild 与 Care Runtime 均仍未授权、未执行。
 
 Canonical evidence：`docs/operations/seven-stream-care-formal-fresh-admission-20260815.md`。
 
