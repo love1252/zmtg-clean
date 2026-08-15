@@ -10,13 +10,13 @@ CUS01_READER_ADMISSION_READY=true
 CUS01_API_ADMISSION_READY=true
 CUS01_PAGE_RELEASE_ADMISSION_READY=false
 CUS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=true
-CUS01_EXACT_RUNTIME_FILE_COUNT=9
-CUS01_EXACT_PRODUCTION_FILE_COUNT=5
-CUS01_EXACT_TEST_FILE_COUNT=4
+CUS01_EXACT_RUNTIME_FILE_COUNT=11
+CUS01_EXACT_PRODUCTION_FILE_COUNT=6
+CUS01_EXACT_TEST_FILE_COUNT=5
 
 NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEMENTATION_ADMISSION
 NEXT_SYSTEM_TASK_AUTHORIZED=false
-NEXT_CUSTOMERS_TASK=SEVEN_STREAM_CUSTOMERS_CUS_01_READONLY_EXACT_9_FILE_RUNTIME_IMPLEMENTATION
+NEXT_CUSTOMERS_TASK=SEVEN_STREAM_CUSTOMERS_CUS_01_READONLY_EXACT_11_FILE_RUNTIME_IMPLEMENTATION
 NEXT_CUSTOMERS_TASK_AUTHORIZED=false
 NEXT_CARE_TASK=SEVEN_STREAM_CARE_FORMAL_FRESH_ADMISSION
 NEXT_CARE_TASK_AUTHORIZED=false
@@ -34,7 +34,7 @@ SEVEN_STREAM_FORMAL_RELEASE_COUNT=0
 CONTROLLED_CREATE_RELEASE_COUNT=0
 ```
 
-Customers 下一原子任务是 exact 9-file Reader/API Runtime implementation；page 与 Capability Authority 不在 scope，继续 hidden/not_released。System 下一原子任务仍是 execution prerequisite 的 fresh exact Admission，而不是 rebuild；必须先闭合 deterministic issuer、private backup key source 与 low-level adapter behavior tests。Care 只保留第三槽候选，不在本轮自动启动。
+Customers 下一原子任务是 exact 11-file Reader/API Runtime implementation；formal authorization 与 Reader composition 各自有独立 production/test pair，page 与 Capability Authority 不在 scope并继续 hidden/not_released。System 下一原子任务仍是 execution prerequisite 的 fresh exact Admission，而不是 rebuild；必须先闭合 deterministic issuer、private backup key source 与 low-level adapter behavior tests。Care 只保留第三槽候选，不在本轮自动启动。
 
 三个候选均 `AUTHORIZED=false`。下一轮若用户分别授权，可在 System checkpoint 等待窗口推进 Customers Runtime；这不是本轮授权，也不能把两个 Git 写入任务放在同一工作树并行执行。
 

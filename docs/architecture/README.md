@@ -40,9 +40,9 @@ CUS01_READER_ADMISSION_READY=true
 CUS01_API_ADMISSION_READY=true
 CUS01_PAGE_RELEASE_ADMISSION_READY=false
 CUS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=true
-CUS01_EXACT_RUNTIME_FILE_COUNT=9
-CUS01_EXACT_PRODUCTION_FILE_COUNT=5
-CUS01_EXACT_TEST_FILE_COUNT=4
+CUS01_EXACT_RUNTIME_FILE_COUNT=11
+CUS01_EXACT_PRODUCTION_FILE_COUNT=6
+CUS01_EXACT_TEST_FILE_COUNT=5
 CUS01_RUNTIME_IMPLEMENTATION=false
 ```
 
@@ -50,7 +50,7 @@ CUS01_RUNTIME_IMPLEMENTATION=false
 
 original `127.0.0.1:55433` fresh audit 在 startup/transaction read-only session 内只执行 aggregate SELECT 并显式 ROLLBACK。9/9 rows 的 tenant/institution pair 非空，2 个 distinct pairs，无 tenant orphan 或重复主键，与 S24 verified evidence 一致。正式 Reader/API 可独立实施；legacy source 仍待 System rebuild preservation，但不得因此把 customer facts改判 blocked。
 
-V1 只暴露 `contractVersion/customerId/displayName/lifecycle/priority/updatedAt`，固定 `updated_at DESC, customer_id ASC`、20 rows/page、max page 100；首切片只含 lifecycle/priority filters，不含 free-text search。exact 9-file allowlist 只覆盖 Reader、repository、orchestration、versioned GET route 与 exact tests；不含 legacy route、page、Capability Authority、Schema 或 Migration，故 `page_customer_list` 继续 hidden/not_released。
+V1 只暴露 `contractVersion/customerId/displayName/lifecycle/priority/updatedAt`，固定 `updated_at DESC, customer_id ASC`、20 rows/page、max page 100；首切片只含 lifecycle/priority filters，不含 free-text search。exact 11-file allowlist 以独立 one-shot authorization contract 配对 Reader composition，并覆盖 repository、versioned GET route 与 exact tests；不含 legacy route、page、Capability Authority、Schema 或 Migration，故 `page_customer_list` 继续 hidden/not_released。
 
 Canonical evidence：`docs/operations/seven-stream-customers-cus01-readonly-fresh-admission-20260815.md`。
 

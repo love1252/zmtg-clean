@@ -56,9 +56,9 @@ CUS01_READER_ADMISSION_READY=true
 CUS01_API_ADMISSION_READY=true
 CUS01_PAGE_RELEASE_ADMISSION_READY=false
 CUS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=true
-CUS01_EXACT_RUNTIME_FILE_COUNT=9
-CUS01_EXACT_PRODUCTION_FILE_COUNT=5
-CUS01_EXACT_TEST_FILE_COUNT=4
+CUS01_EXACT_RUNTIME_FILE_COUNT=11
+CUS01_EXACT_PRODUCTION_FILE_COUNT=6
+CUS01_EXACT_TEST_FILE_COUNT=5
 CUS01_RUNTIME_IMPLEMENTATION=false
 
 DATABASE_CONNECTION=true
@@ -72,7 +72,7 @@ STAGING_CHANGE=false
 PRODUCTION_CHANGE=false
 PRODUCTION_DEPLOYMENT=false
 
-NEXT_CUSTOMERS_TASK=SEVEN_STREAM_CUSTOMERS_CUS_01_READONLY_EXACT_9_FILE_RUNTIME_IMPLEMENTATION
+NEXT_CUSTOMERS_TASK=SEVEN_STREAM_CUSTOMERS_CUS_01_READONLY_EXACT_11_FILE_RUNTIME_IMPLEMENTATION
 NEXT_CUSTOMERS_TASK_AUTHORIZED=false
 NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEMENTATION_ADMISSION
 NEXT_SYSTEM_TASK_AUTHORIZED=false
@@ -89,7 +89,7 @@ CONTROLLED_CREATE_RELEASE_COUNT=0
 - original `127.0.0.1:55433` 只读 audit 证明 9/9 customer persisted pair 非空，2 个 distinct pairs，tenant orphan 与 duplicate PK 均为 0；所有 SQL 在 startup/transaction read-only 下执行并 ROLLBACK。
 - 四机构角色均由 current section/action policy允许 customer read；Runtime 仍须逐 request 取得 formal scope，并对每条 source row pair做 fail-closed corroboration。
 - V1 DTO、fixed sort、20 rows/page、max page 100 与 lifecycle/priority filters 已冻结；free-text search、phone/email/medical/notes/external IDs 不属于 first slice。
-- exact 9-file Runtime allowlist 为 5 production + 4 tests；只覆盖 formal Reader、customer repository、orchestration 与 `/api/v1/institution/customers` GET，不包含旧 API、page、Capability Authority、Schema 或 Migration。
+- exact 11-file Runtime allowlist 为 6 production + 5 tests；独立冻结 one-shot formal authorization 与 Reader composition，再覆盖 customer repository、`/api/v1/institution/customers` GET 及 exact tests；不包含旧 API、page、Capability Authority、Schema 或 Migration。
 - 本阶段没有实施 Runtime、执行 DB write 或发布 page；`page_customer_list` 保持 hidden/not_released。
 
 Canonical evidence：`docs/operations/seven-stream-customers-cus01-readonly-fresh-admission-20260815.md`。

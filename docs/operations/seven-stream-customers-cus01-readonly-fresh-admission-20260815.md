@@ -173,11 +173,11 @@ CUS01_PAGE_STATE=hidden/not_released
 
 ```text
 CUS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=true
-CUS01_EXACT_RUNTIME_FILE_COUNT=9
-CUS01_EXACT_PRODUCTION_FILE_COUNT=5
-CUS01_EXACT_TEST_FILE_COUNT=4
+CUS01_EXACT_RUNTIME_FILE_COUNT=11
+CUS01_EXACT_PRODUCTION_FILE_COUNT=6
+CUS01_EXACT_TEST_FILE_COUNT=5
 CUS01_EXISTING_RUNTIME_FILE_COUNT=0
-CUS01_NEW_RUNTIME_FILE_COUNT=9
+CUS01_NEW_RUNTIME_FILE_COUNT=11
 CUS01_DELETE_RUNTIME_FILE_COUNT=0
 ```
 
@@ -186,14 +186,16 @@ CUS01_DELETE_RUNTIME_FILE_COUNT=0
 | `src/modules/customer-center/ports/customer-list-source.ts` | read-source port | new | 冻结 exact pair-scoped query、low-sensitive source row 与 bounded page result；隔离 read model 和 persistence |
 | `src/modules/customer-center/application/customer-list-reader.ts` | formal list application Reader + DTO/query boundary | new | exact query parse、row pair corroboration、DTO projection、pageInfo 与 fail-closed result |
 | `src/modules/customers/server/customer-list-repository.ts` | authoritative customer list repository adapter | new | 对 `public.customers` 做 exact selected columns、tenant/institution predicate、lifecycle/priority filters、stable order 与 bounded limit/offset |
-| `src/server/orchestration/institution-customer-list-reader.ts` | request/role/formal scope composition | new | 同一 formal request 内完成 current membership/anchor、customers section、customer/read role、one-shot pair 与 Reader composition |
+| `src/server/orchestration/institution-customer-read-authorization.ts` | one-shot request/role/formal scope authorization | new | 按既有 Audit Reader pattern，在同一 formal request 内闭合 current membership/anchor、customers section、customer/read role并签发一次性 pair；不把 Capability 当授权 |
+| `src/server/orchestration/institution-customer-list-reader.ts` | cross-owner Reader composition | new | consume one-shot pair，组合 customer-center Reader 与 customers repository；不重复解析 session/scope |
 | `src/app/api/v1/institution/customers/route.ts` | versioned GET API | new | no-store、strict query、403/400/503/200 boundary；不修改 legacy mixed-method route |
 | `src/modules/customer-center/tests/CustomerListReader.test.ts` | Reader unit closure | new | DTO whitelist、query/pagination、pair mismatch、extra/sensitive field与source failure fail closed |
 | `src/modules/customers/tests/CustomerListRepository.test.ts` | repository unit closure | new | exact select、pair predicate、filters、stable order、limit/offset、single query与no full-row load |
-| `src/server/orchestration/institution-customer-list-reader.test.ts` | authorization/composition closure | new | 四角色 allow、invalid role/request/scope denial、one-shot pair、repository not called on failure |
+| `src/server/orchestration/institution-customer-read-authorization.test.ts` | formal authorization closure | new | 四角色 allow、invalid role/request/membership/anchor/section/action denial、one-shot consume 与 pair provenance |
+| `src/server/orchestration/institution-customer-list-reader.test.ts` | composition closure | new | authorization failure、pair consume failure、repository/Reader ordering、repository not called on failure |
 | `src/modules/customers/tests/InstitutionCustomersV1ApiRoute.test.ts` | API contract closure | new | exact GET response、no-store、query failure、forbidden/unavailable、no legacy route/page release drift |
 
-不允许目录 glob。不得加入 legacy `tenant-business-repository.ts`、Capability Authority、page、client shell、schema、Migration 或 generic repository/framework。若 Runtime 实施证明第 10 个文件不可避免，必须 STOP 并重新准入。
+不允许目录 glob。不得加入 legacy `tenant-business-repository.ts`、Capability Authority、page、client shell、schema、Migration 或 generic repository/framework。若 Runtime 实施证明第 12 个文件不可避免，必须 STOP 并重新准入。
 
 ## 九、Runtime test closure
 
@@ -227,7 +229,7 @@ REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=2
 SEVEN_STREAM_FORMAL_RELEASE_COUNT=0
 CONTROLLED_CREATE_RELEASE_COUNT=0
 
-NEXT_CUSTOMERS_TASK=SEVEN_STREAM_CUSTOMERS_CUS_01_READONLY_EXACT_9_FILE_RUNTIME_IMPLEMENTATION
+NEXT_CUSTOMERS_TASK=SEVEN_STREAM_CUSTOMERS_CUS_01_READONLY_EXACT_11_FILE_RUNTIME_IMPLEMENTATION
 NEXT_CUSTOMERS_TASK_AUTHORIZED=false
 NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEMENTATION_ADMISSION
 NEXT_SYSTEM_TASK_AUTHORIZED=false

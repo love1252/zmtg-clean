@@ -9,7 +9,7 @@
 - 已发布受治理页面切片：2/26（`page_workbench`、`page_system_audit`）
 - 受控创建能力发布：0/3
 - 首选业务线：`system`（S26 baseline/rebuild tooling 已实现并经隔离 PostgreSQL 实证；S27 因 evidence issuer、backup key source 与 low-level adapter behavior tests 未闭合，rebuild execution 仍未准入）
-- 第二候选：`customers`（CUS-01 Reader/API exact 9-file Admission ready；page 继续隐藏）
+- 第二候选：`customers`（CUS-01 Reader/API exact 11-file Admission ready；page 继续隐藏）
 - 本文性质：当前开发入口基线，不是 Runtime、数据库或 Migration 授权
 
 ## 零、S28 七线当前入口状态
@@ -74,16 +74,16 @@ CUS01_READER_ADMISSION_READY=true
 CUS01_API_ADMISSION_READY=true
 CUS01_PAGE_RELEASE_ADMISSION_READY=false
 CUS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=true
-CUS01_EXACT_RUNTIME_FILE_COUNT=9
-CUS01_EXACT_PRODUCTION_FILE_COUNT=5
-CUS01_EXACT_TEST_FILE_COUNT=4
+CUS01_EXACT_RUNTIME_FILE_COUNT=11
+CUS01_EXACT_PRODUCTION_FILE_COUNT=6
+CUS01_EXACT_TEST_FILE_COUNT=5
 CUS01_RUNTIME_IMPLEMENTATION=false
 
 REBUILD_EXECUTION_ADMISSION_READY=false
 
 NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEMENTATION_ADMISSION
 NEXT_SYSTEM_TASK_AUTHORIZED=false
-NEXT_CUSTOMERS_TASK=SEVEN_STREAM_CUSTOMERS_CUS_01_READONLY_EXACT_9_FILE_RUNTIME_IMPLEMENTATION
+NEXT_CUSTOMERS_TASK=SEVEN_STREAM_CUSTOMERS_CUS_01_READONLY_EXACT_11_FILE_RUNTIME_IMPLEMENTATION
 NEXT_CUSTOMERS_TASK_AUTHORIZED=false
 NEXT_CARE_TASK=SEVEN_STREAM_CARE_FORMAL_FRESH_ADMISSION
 NEXT_CARE_TASK_AUTHORIZED=false
@@ -93,7 +93,7 @@ NEXT_STAGE_AUTO_EXECUTION=false
 
 S20 frozen architecture 继续有效：AI usage facts、command 与正式 read source 由 `analytics` 持有，`institution-system` 持有低敏 read model 与 presentation，cross-owner composition 位于 `src/server/orchestration/**`；canonical API 为 `/api/v1/institution/ai-service-usage`，旧 `/api/institution/ai-service-usage` 保持 capability-off compatibility-only。
 
-S21—S27 已从 source audit 推进到 baseline/rebuild tooling 实现与隔离 PostgreSQL 实证；System execution 仍因 deterministic issuer、backup key source 与 low-level adapter tests 缺口禁止。S28 fresh 证明 9/9 customer facts 的 persisted tenant/institution pair 完整，四机构角色均具 customer read policy，现有 schema 足以实现正式 list Reader 与 versioned API；exact 9-file Runtime slice 已冻结，page 不在 allowlist并继续 hidden。Canonical evidence：`docs/operations/seven-stream-customers-cus01-readonly-fresh-admission-20260815.md`。
+S21—S27 已从 source audit 推进到 baseline/rebuild tooling 实现与隔离 PostgreSQL 实证；System execution 仍因 deterministic issuer、backup key source 与 low-level adapter tests 缺口禁止。S28 fresh 证明 9/9 customer facts 的 persisted tenant/institution pair 完整，四机构角色均具 customer read policy，现有 schema 足以实现正式 list Reader 与 versioned API；exact 11-file Runtime slice 已冻结，page 不在 allowlist并继续 hidden。Canonical evidence：`docs/operations/seven-stream-customers-cus01-readonly-fresh-admission-20260815.md`。
 
 ## 一、统一完成尺度
 
@@ -130,7 +130,7 @@ NO_NEW_FOUNDATION_BY_DEFAULT=true
 | Rank | Stream | 当前 Runtime | 正式 API / 页面 | 权威数据与权限 | 当前 blocker | 下一有限切片 |
 |---:|---|---|---|---|---|---|
 | 1 | 管理中心 `system` | `institution-system` 36 files；Audit owner 已完成 Writer/Reader/role closure；baseline/rebuild tooling 已实现 | `/hospital/system/audit` 与 `/api/institution/audit-events` 已 admin-only release；AI usage/entitlement 仍 off | SYS-01 static Reader/role/DTO 已冻结；56-row data inventory 与 marker baseline contract 已冻结 | deterministic readiness/smoke issuers、backup key source、low-level adapter behavior tests | rebuild execution prerequisite exact Admission（未授权） |
-| 2 | 客户中心 `customers` | `customer-center` 14 + `customers` 7；command/object fact 存在 | legacy API 503；versioned API 不存在；canonical page hidden | 9/9 persisted pair，null/orphan/duplicate=0；四角色 read policy成立 | formal list Reader 尚未实现；future candidate preservation待 System | CUS-01 exact 9-file Reader/API Runtime（未授权） |
+| 2 | 客户中心 `customers` | `customer-center` 14 + `customers` 7；command/object fact 存在 | legacy API 503；versioned API 不存在；canonical page hidden | 9/9 persisted pair，null/orphan/duplicate=0；四角色 read policy成立 | formal list Reader 尚未实现；future candidate preservation待 System | CUS-01 exact 11-file Reader/API Runtime（未授权） |
 | 3 | 预约与随访 `care` | `care` 30；domain/command/repository/transaction 较成熟 | appointments/followups 主 API 与页面 off | institution 历史形状 nullable；read model 未闭环 | Customer 稳定引用、正式 Reader/API/page | 人工随访只读/人工闭环 fresh Admission |
 | 4 | 知识库 `knowledge` | `institution-knowledge` 8 + `knowledge` 8；旧/new runtime 并存 | items 根 API 与页面 off | 旧 preview/mock/demo 与正式事实边界未退出 | MIG-03、Reader、worker/OCR/index 与低敏授权 | 资料库只读 fresh Admission |
 | 5 | 会话工作台 `conversations` | `institution-conversations` 24；domain 状态机较强 | 无正式 conversations API/page | 无正式 persistence、assignment/identity facts | MIG-04 与真实渠道后置审批 | domain/persistence Admission，不发布页面 |
@@ -204,7 +204,7 @@ FIRST_STREAM_NEXT_ATOMIC_TASK=SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEM
 ```text
 NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEMENTATION_ADMISSION
 NEXT_SYSTEM_TASK_AUTHORIZED=false
-NEXT_CUSTOMERS_TASK=SEVEN_STREAM_CUSTOMERS_CUS_01_READONLY_EXACT_9_FILE_RUNTIME_IMPLEMENTATION
+NEXT_CUSTOMERS_TASK=SEVEN_STREAM_CUSTOMERS_CUS_01_READONLY_EXACT_11_FILE_RUNTIME_IMPLEMENTATION
 NEXT_CUSTOMERS_TASK_AUTHORIZED=false
 NEXT_CARE_TASK=SEVEN_STREAM_CARE_FORMAL_FRESH_ADMISSION
 NEXT_CARE_TASK_AUTHORIZED=false
