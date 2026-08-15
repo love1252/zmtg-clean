@@ -1,5 +1,49 @@
 # 项目重构历史
 
+<!-- SEVEN_STREAM_CARE_FORMAL_FRESH_ADMISSION_HISTORY -->
+
+## 2026-08-15：S32 System re-admission 合并，S33 Care 首切片选择完成并正式记录 data blocker
+
+```text
+STAGE=S33
+STREAM=care
+TASK=SEVEN_STREAM_CARE_FORMAL_FRESH_ADMISSION
+BASELINE=5b7023aa78a78ead98c25071cda99c2df978bb89
+
+S32_PR=1230
+S32_HEAD=b5fed81fd9b976f94ac09156d1547ad94b09b9b8
+S32_MERGE=5b7023aa78a78ead98c25071cda99c2df978bb89
+S32_REQUIRED_CHECKS=passed
+S32_ACTIONABLE_P0_P1_P2_P3=0
+S32_POST_MERGE_REVIEW_DEBT=0
+S32_FORMAL_CLOSURE=true
+
+CARE_SELECTED_FIRST_SLICE=APPOINTMENTS_LIST_BY_CURRENT_INSTITUTION
+APPOINTMENT_COUNT=5
+APPOINTMENT_CUSTOMER_PAIR_UNIQUE_MATCH_COUNT=5
+APPOINTMENT_CUSTOMER_PAIR_ZERO_MATCH_COUNT=0
+APPOINTMENT_CUSTOMER_PAIR_MULTI_MATCH_COUNT=0
+SOURCE_INSTITUTION_COLUMN_ABSENT=true
+
+CARE_DATA_READINESS=blocked_pending_system_rebuild
+CARE_SCHEMA_CHANGE_REQUIRED=false
+CARE_MIGRATION_REQUIRED=false
+CARE_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
+CARE_PAGE_RELEASE_ADMISSION_READY=false
+
+NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CONTROLLED_LOCAL_DEVELOPMENT_REBUILD_EXECUTION
+NEXT_SYSTEM_TASK_AUTHORIZED=false
+```
+
+- S32 docs-only PR #1230 Required Check 通过、review thread=0，并 squash merge 为 `5b7023aa`；System execution Admission ready，但 execution 未授权、未发生。
+- S33 比较 appointments、follow-up tasks 与 treatment summaries，选择 capability complexity 最低的 appointments list；四个机构角色的 `care_task/read` 正式 policy 均允许。
+- original `55433` read-only audit 证明 5/5 appointment customer pair exact-one，但 source table 无 `institution_id`。这只证明 rebuild reconstruction 有安全来源，不允许 runtime 临时跨 owner join。
+- 因 SYS-01 rebuild 尚未执行，Care data readiness blocked；没有冻结 Runtime allowlist，也没有实施 Reader/API/page 或发布能力。
+
+Canonical evidence：`docs/operations/seven-stream-care-formal-fresh-admission-20260815.md`。
+
+<!-- SEVEN_STREAM_CARE_FORMAL_FRESH_ADMISSION_HISTORY_END -->
+
 <!-- SEVEN_STREAM_SYSTEM_SYS01_REBUILD_EXECUTION_READMISSION_HISTORY -->
 
 ## 2026-08-15：S31 prerequisite exact 3-file Runtime 闭合，S32 rebuild execution 重新准入

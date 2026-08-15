@@ -1,5 +1,44 @@
 # 智美天工架构文档索引
 
+<!-- SEVEN_STREAM_CARE_FORMAL_FRESH_ADMISSION_START -->
+
+## Care formal Fresh Admission（2026-08-15）
+
+```text
+STAGE=S33
+STREAM=care
+BASELINE=5b7023aa78a78ead98c25071cda99c2df978bb89
+S32_PR=1230
+S32_HEAD=b5fed81fd9b976f94ac09156d1547ad94b09b9b8
+S32_MERGE=5b7023aa78a78ead98c25071cda99c2df978bb89
+S32_REQUIRED_CHECKS=passed
+S32_POST_MERGE_REVIEW_DEBT=0
+S32_FORMAL_CLOSURE=true
+
+CARE_SELECTED_FIRST_SLICE=APPOINTMENTS_LIST_BY_CURRENT_INSTITUTION
+CARE_FORMAL_READER_EXISTS=false
+CARE_CURRENT_API=/api/institution/appointments
+CARE_TARGET_VERSIONED_API=/api/v1/institution/appointments
+CARE_CANONICAL_PAGE=/hospital/care/appointments
+CARE_CAPABILITY_KEY=page_care_appointments
+CARE_DATA_READINESS=blocked_pending_system_rebuild
+CARE_SCHEMA_CHANGE_REQUIRED=false
+CARE_MIGRATION_REQUIRED=false
+CARE_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
+CARE_PAGE_RELEASE_ADMISSION_READY=false
+
+NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CONTROLLED_LOCAL_DEVELOPMENT_REBUILD_EXECUTION
+NEXT_SYSTEM_TASK_AUTHORIZED=false
+NEXT_CARE_TASK=SEVEN_STREAM_CARE_APPOINTMENTS_READONLY_FRESH_READMISSION_AFTER_SYSTEM_REBUILD
+NEXT_CARE_TASK_AUTHORIZED=false
+```
+
+appointments 以最小 capability complexity 胜出：5 rows、tenant null=0、5/5 对 Customer pair exact-one、zero/multi match=0，且不依赖外部系统。original source 尚无 `appointments.institution_id`；S33 不允许 Care Reader 借 Customers repository 临时取得 ownership。SYS-01 runner 已冻结 owner reconstruction，但 controlled rebuild 尚未授权、未执行，因此本阶段正式记录 blocker，不伪造 Runtime allowlist。
+
+Canonical evidence：`docs/operations/seven-stream-care-formal-fresh-admission-20260815.md`。
+
+<!-- SEVEN_STREAM_CARE_FORMAL_FRESH_ADMISSION_END -->
+
 <!-- SEVEN_STREAM_SYSTEM_SYS01_REBUILD_EXECUTION_READMISSION_START -->
 
 ## System SYS-01 controlled local-development rebuild execution 重新准入（2026-08-15）
