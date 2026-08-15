@@ -17,6 +17,7 @@ const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
 const SYS01_APPLICATION_SMOKE_HOST = '127.0.0.1';
 const SYS01_APPLICATION_SMOKE_PORT = 5011;
 const SYS01_APPLICATION_SMOKE_PATH = '/api/version';
+const SYS01_APPLICATION_STOP_TIMEOUT_MS = 5_000;
 const SYS01_EVIDENCE_CONTRACT_VERSION = 'zmtg.sys01.rebuild-evidence/v1';
 
 export const SYS01_REBUILD_TASK =
@@ -3513,6 +3514,8 @@ export async function probeSys01CandidateBoundApplicationV1({
     portOccupied = false;
   }
   if (portOccupied) fail('runner_application_smoke_port_conflict');
+  const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+  const nextCli = path.join(repositoryRoot, 'node_modules/next/dist/bin/next');
   const childEnvironment = Object.fromEntries(
     ['HOME', 'LANG', 'LC_ALL', 'PATH', 'TMPDIR', 'TZ']
       .filter((key) => typeof env[key] === 'string' && env[key].length > 0)
@@ -3520,15 +3523,14 @@ export async function probeSys01CandidateBoundApplicationV1({
   );
   const child = spawnImpl(
     process.execPath,
-    ['scripts/run-next.mjs', 'start', '--hostname', SYS01_APPLICATION_SMOKE_HOST, '--port', String(SYS01_APPLICATION_SMOKE_PORT)],
+    [nextCli, 'start', '--hostname', SYS01_APPLICATION_SMOKE_HOST, '--port', String(SYS01_APPLICATION_SMOKE_PORT)],
     {
-      cwd: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'),
+      cwd: repositoryRoot,
       env: {
         ...childEnvironment,
         NODE_ENV: 'production',
         NEXT_TELEMETRY_DISABLED: '1',
         DATABASE_URL: requiredExecutionEnv(env, 'ZMTG_SYS01_CANDIDATE_DATABASE_URL'),
-        ZMTG_DEPLOY_COMMIT: implementationHead,
       },
       stdio: ['ignore', 'ignore', 'ignore'],
     },
@@ -3553,7 +3555,7 @@ export async function probeSys01CandidateBoundApplicationV1({
         if (
           response.status === 200 &&
           version?.commit === implementationHead &&
-          ['env', 'build'].includes(version?.source)
+          version?.source === 'build'
         ) {
           return Object.freeze({
             status: 200,
@@ -3573,7 +3575,29 @@ export async function probeSys01CandidateBoundApplicationV1({
     }
     fail('runner_application_smoke_probe_failed');
   } finally {
-    child?.kill?.('SIGTERM');
+    await new Promise((resolveStop, rejectStop) => {
+      if (!child || typeof child.kill !== 'function' || typeof child.once !== 'function') {
+        rejectStop(new Error('runner_application_smoke_cleanup_failed'));
+        return;
+      }
+      let settled = false;
+      const timeout = setTimeout(() => {
+        if (settled) return;
+        child.kill('SIGKILL');
+        settled = true;
+        rejectStop(new Error('runner_application_smoke_cleanup_failed'));
+      }, SYS01_APPLICATION_STOP_TIMEOUT_MS);
+      timeout.unref?.();
+      const settle = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolveStop();
+      };
+      child.once('close', settle);
+      child.once('error', settle);
+      if (child.kill('SIGTERM') === false) settle();
+    });
   }
 }
 
@@ -3612,7 +3636,7 @@ export async function issueSys01DeterministicApplicationSmokeEvidenceV1({
     evidence.port === SYS01_APPLICATION_SMOKE_PORT &&
     evidence.httpStatus === 200 &&
     evidence.versionCommit === executionManifest.implementationHead &&
-    ['env', 'build'].includes(evidence.versionSource) &&
+    evidence.versionSource === 'build' &&
     evidence.databaseTarget === 'candidate' &&
     evidence.processDatabaseIdentityBound;
   const evidenceSha256 = safeResultFingerprint(evidence);

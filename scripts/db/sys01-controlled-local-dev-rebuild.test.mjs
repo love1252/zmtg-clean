@@ -139,6 +139,7 @@ function fakeChildProcess({
   child.killedWith = null;
   child.kill = (signal = 'SIGTERM') => {
     child.killedWith = signal;
+    queueMicrotask(() => child.emit('close', closeCode));
     return true;
   };
   const close = () => queueMicrotask(() => child.emit('close', closeCode));
@@ -1485,7 +1486,7 @@ describe('S26 controlled runner guards and mapping', () => {
           host: '127.0.0.1',
           port: 5011,
           versionCommit: executionManifest.implementationHead,
-          versionSource: 'env',
+          versionSource: 'build',
           databaseTarget: 'candidate',
           processDatabaseIdentityBound: true,
         }),
@@ -1527,7 +1528,7 @@ describe('S26 controlled runner guards and mapping', () => {
         if (fetchCalls === 1) throw new Error('expected unused port');
         return {
           status: 200,
-          json: async () => ({ commit: implementationHead, source: 'env' }),
+          json: async () => ({ commit: implementationHead, source: 'build' }),
           url,
         };
       },
@@ -1536,8 +1537,14 @@ describe('S26 controlled runner guards and mapping', () => {
     });
     assert.equal(result.databaseTarget, 'candidate');
     assert.equal(spawnCalls.length, 1);
+    assert.equal(
+      spawnCalls[0].args[0],
+      path.join(repositoryRoot, 'node_modules/next/dist/bin/next'),
+    );
     assert.deepEqual(spawnCalls[0].args.slice(-4), ['--hostname', '127.0.0.1', '--port', '5011']);
     assert.equal(spawnCalls[0].options.env.DATABASE_URL, env.ZMTG_SYS01_CANDIDATE_DATABASE_URL);
+    assert.equal(Object.hasOwn(spawnCalls[0].options.env, 'ZMTG_DEPLOY_COMMIT'), false);
+    assert.equal(Object.hasOwn(spawnCalls[0].options.env, 'ZMTG_BUILD_COMMIT'), false);
     assert.equal(Object.hasOwn(spawnCalls[0].options.env, 'ZMTG_SYS01_BACKUP_KEY_PATH'), false);
     assert.equal(Object.hasOwn(spawnCalls[0].options.env, 'ZMTG_SYS01_POSTGRES_PASSWORD'), false);
     assert.equal(child.killedWith, 'SIGTERM');
@@ -1567,7 +1574,28 @@ describe('S26 controlled runner guards and mapping', () => {
             if (calls === 1) throw new Error('expected unused port');
             return {
               status: 200,
-              json: async () => ({ commit: '5'.repeat(40), source: 'env' }),
+              json: async () => ({ commit: '5'.repeat(40), source: 'build' }),
+            };
+          };
+        })(),
+        waitImpl: async () => undefined,
+        attempts: 1,
+      }),
+      /runner_application_smoke_probe_failed/,
+    );
+    await assert.rejects(
+      probeSys01CandidateBoundApplicationV1({
+        env,
+        implementationHead,
+        spawnImpl: () => fakeChildProcess({ autoClose: false }),
+        fetchImpl: (() => {
+          let calls = 0;
+          return async () => {
+            calls += 1;
+            if (calls === 1) throw new Error('expected unused port');
+            return {
+              status: 200,
+              json: async () => ({ commit: implementationHead, source: 'env' }),
             };
           };
         })(),
