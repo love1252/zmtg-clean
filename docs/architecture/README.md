@@ -1,5 +1,61 @@
 # 智美天工架构文档索引
 
+<!-- SEVEN_STREAM_CUSTOMERS_CUS01_READONLY_ADMISSION_START -->
+
+## Customers CUS-01 readonly Fresh Admission（2026-08-15）
+
+```text
+STAGE=S28
+STREAM=customers
+SLICE=CUS_01_READONLY
+COMPLETION_MODE=ADMISSION_READY_READER_API_PAGE_HIDDEN
+BASELINE=73edd17666426dd4aedf304fcc7f89dd2b075369
+
+CUS01_FACT_OWNER=public.customers
+CUS01_COMMAND_OWNER=src/modules/customers
+CUS01_REPOSITORY_OWNER=src/modules/customers
+CUS01_READ_MODEL_OWNER=src/modules/customer-center
+CUS01_PRESENTATION_OWNER=src/modules/customer-center
+CUS01_FORMAL_LIST_READER_EXISTS=false
+
+CUS01_CURRENT_API=/api/institution/customers
+CUS01_CURRENT_API_STATE=capability_off_compatibility_only_503
+CUS01_VERSIONED_API_EXISTS=false
+CUS01_TARGET_VERSIONED_API=/api/v1/institution/customers
+CUS01_CANONICAL_PAGE=/hospital/customers
+CUS01_CAPABILITY_KEY=page_customer_list
+
+CUSTOMER_COUNT=9
+CUSTOMER_NULL_INSTITUTION_COUNT=0
+CUSTOMER_NULL_TENANT_COUNT=0
+CUSTOMER_DISTINCT_TENANT_COUNT=2
+CUSTOMER_DISTINCT_TENANT_INSTITUTION_PAIR_COUNT=2
+CUSTOMER_TENANT_ORPHAN_COUNT=0
+CUSTOMER_DUPLICATE_PRIMARY_KEY_COUNT=0
+CUS01_DATA_READINESS=ready
+
+CUS01_SCHEMA_CHANGE_REQUIRED=false
+CUS01_MIGRATION_REQUIRED=false
+CUS01_READER_ADMISSION_READY=true
+CUS01_API_ADMISSION_READY=true
+CUS01_PAGE_RELEASE_ADMISSION_READY=false
+CUS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=true
+CUS01_EXACT_RUNTIME_FILE_COUNT=9
+CUS01_EXACT_PRODUCTION_FILE_COUNT=5
+CUS01_EXACT_TEST_FILE_COUNT=4
+CUS01_RUNTIME_IMPLEMENTATION=false
+```
+
+`public.customers` 是 authoritative fact owner；`src/modules/customers/**` 持有 command 与 future formal repository；`src/modules/customer-center/**` 持有 read model/presentation；legacy institution tenant-business repository 只保留现有 compatibility callers。cross-owner formal request/role/scope composition 冻结在 orchestration，不新建 generic repository。
+
+original `127.0.0.1:55433` fresh audit 在 startup/transaction read-only session 内只执行 aggregate SELECT 并显式 ROLLBACK。9/9 rows 的 tenant/institution pair 非空，2 个 distinct pairs，无 tenant orphan 或重复主键，与 S24 verified evidence 一致。正式 Reader/API 可独立实施；legacy source 仍待 System rebuild preservation，但不得因此把 customer facts改判 blocked。
+
+V1 只暴露 `contractVersion/customerId/displayName/lifecycle/priority/updatedAt`，固定 `updated_at DESC, customer_id ASC`、20 rows/page、max page 100；首切片只含 lifecycle/priority filters，不含 free-text search。exact 9-file allowlist 只覆盖 Reader、repository、orchestration、versioned GET route 与 exact tests；不含 legacy route、page、Capability Authority、Schema 或 Migration，故 `page_customer_list` 继续 hidden/not_released。
+
+Canonical evidence：`docs/operations/seven-stream-customers-cus01-readonly-fresh-admission-20260815.md`。
+
+<!-- SEVEN_STREAM_CUSTOMERS_CUS01_READONLY_ADMISSION_END -->
+
 <!-- SEVEN_STREAM_SYSTEM_SYS01_REBUILD_EXECUTION_ADMISSION_START -->
 
 ## System SYS-01 controlled rebuild execution 准入（2026-08-15）
