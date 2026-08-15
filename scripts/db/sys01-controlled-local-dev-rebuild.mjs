@@ -3493,8 +3493,14 @@ export async function probeSys01CandidateBoundApplicationV1({
   fetchImpl = globalThis.fetch,
   waitImpl = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds)),
   attempts = 60,
+  stopTimeoutMs = SYS01_APPLICATION_STOP_TIMEOUT_MS,
 } = {}) {
-  if (!SHA1_PATTERN.test(implementationHead ?? '') || typeof fetchImpl !== 'function') {
+  if (
+    !SHA1_PATTERN.test(implementationHead ?? '') ||
+    typeof fetchImpl !== 'function' ||
+    !Number.isSafeInteger(stopTimeoutMs) ||
+    stopTimeoutMs < 1
+  ) {
     fail('runner_application_smoke_probe_invalid', 2);
   }
   parseLocalDatabaseUrl(
@@ -3536,11 +3542,15 @@ export async function probeSys01CandidateBoundApplicationV1({
     },
   );
   let childFailed = false;
+  let childExitObserved = false;
+  let childErrorObserved = false;
   child?.once?.('error', () => {
     childFailed = true;
+    childErrorObserved = true;
   });
   child?.once?.('close', () => {
     childFailed = true;
+    childExitObserved = true;
   });
   try {
     for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -3580,23 +3590,36 @@ export async function probeSys01CandidateBoundApplicationV1({
         rejectStop(new Error('runner_application_smoke_cleanup_failed'));
         return;
       }
+      if (childExitObserved) {
+        resolveStop();
+        return;
+      }
       let settled = false;
+      let forced = false;
       const timeout = setTimeout(() => {
         if (settled) return;
+        forced = true;
         child.kill('SIGKILL');
-        settled = true;
-        rejectStop(new Error('runner_application_smoke_cleanup_failed'));
-      }, SYS01_APPLICATION_STOP_TIMEOUT_MS);
+      }, stopTimeoutMs);
       timeout.unref?.();
-      const settle = () => {
+      const settle = (error = null) => {
         if (settled) return;
         settled = true;
         clearTimeout(timeout);
-        resolveStop();
+        if (error) rejectStop(error);
+        else resolveStop();
       };
-      child.once('close', settle);
-      child.once('error', settle);
-      if (child.kill('SIGTERM') === false) settle();
+      child.once('close', () => {
+        settle(
+          forced || childErrorObserved
+            ? new Error('runner_application_smoke_cleanup_failed')
+            : null,
+        );
+      });
+      child.once('error', () => {
+        childErrorObserved = true;
+      });
+      child.kill('SIGTERM');
     });
   }
 }

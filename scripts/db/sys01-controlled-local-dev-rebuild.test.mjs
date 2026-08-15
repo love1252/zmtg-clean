@@ -1614,6 +1614,58 @@ describe('S26 controlled runner guards and mapping', () => {
       }),
       /runner_application_smoke_port_conflict/,
     );
+
+    const stubbornChild = new EventEmitter();
+    stubbornChild.exitCode = null;
+    stubbornChild.signalCode = null;
+    const cleanupSignals = [];
+    let observeForcedSignal;
+    const forcedSignal = new Promise((resolveForcedSignal) => {
+      observeForcedSignal = resolveForcedSignal;
+    });
+    stubbornChild.kill = (signal) => {
+      cleanupSignals.push(signal);
+      if (signal === 'SIGKILL') observeForcedSignal();
+      return true;
+    };
+    let cleanupSettled = false;
+    let cleanupError = null;
+    const cleanupObservation = probeSys01CandidateBoundApplicationV1({
+      env,
+      implementationHead,
+      spawnImpl: () => stubbornChild,
+      fetchImpl: (() => {
+        let calls = 0;
+        return async () => {
+          calls += 1;
+          if (calls === 1) throw new Error('expected unused port');
+          return {
+            status: 200,
+            json: async () => ({ commit: implementationHead, source: 'build' }),
+          };
+        };
+      })(),
+      waitImpl: async () => undefined,
+      attempts: 1,
+      stopTimeoutMs: 1,
+    }).then(
+      () => {
+        cleanupSettled = true;
+      },
+      (error) => {
+        cleanupSettled = true;
+        cleanupError = error;
+      },
+    );
+    await forcedSignal;
+    await Promise.resolve();
+    assert.deepEqual(cleanupSignals, ['SIGTERM', 'SIGKILL']);
+    assert.equal(cleanupSettled, false);
+    stubbornChild.signalCode = 'SIGKILL';
+    stubbornChild.emit('close', null, 'SIGKILL');
+    await cleanupObservation;
+    assert.equal(cleanupSettled, true);
+    assert.match(cleanupError?.message ?? '', /runner_application_smoke_cleanup_failed/);
   });
 
   test('prerequisite adapter inventory is exact and production dependencies dispatch through it', () => {
