@@ -1,5 +1,34 @@
 # 下一任务
 
+## S35 SYS-01 readmission blocker 与当前 ultra-goal 下一阶段
+
+```text
+S35_COMPLETION_MODE=READMISSION_COMPLETE_BLOCKED_PENDING_FORMAL_PROVISIONING
+S35_BASELINE=519d3f383f9758b17c5ee0e3bdd944717f378df8
+SYS01_FORMAL_SCOPE_READY=false
+SYS01_FORMAL_CONTEXT_READY=false
+SYS01_BINDING_READY=false
+SYS01_RUNTIME_ADMISSION_READY=false
+SYS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
+SYS01_EXACT_RUNTIME_FILE_COUNT=0
+
+PRIMARY_BLOCKING_PREREQUISITE=authoritative_formal_institution_scope_context_binding_provisioning_source_missing
+NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_FORMAL_INSTITUTION_SCOPE_CONTEXT_BINDING_PROVISIONING_SOURCE_FRESH_ADMISSION
+NEXT_SYSTEM_TASK_AUTHORIZED=false
+
+NEXT_CARE_TASK=SEVEN_STREAM_CARE_APPOINTMENTS_READONLY_FRESH_READMISSION_AFTER_SYSTEM_REBUILD
+NEXT_CARE_TASK_AUTHORIZED=true_by_current_ultra_goal_after_S35_merge
+NEXT_KNOWLEDGE_TASK=SEVEN_STREAM_KNOWLEDGE_FORMAL_FRESH_ADMISSION
+NEXT_KNOWLEDGE_TASK_AUTHORIZED=true_by_current_ultra_goal_after_S36_merge
+
+NEXT_STAGE=S36
+NEXT_STAGE_AUTO_EXECUTION=false
+```
+
+System blocker 要求 independently admitted authoritative tenant/institution pair、operating context version 与 account Binding approval source；不得用 membership/customer/default institution 推造。当前 ultra goal 不授权该 System provisioning，但明确授权 S35 merge 后继续 S36：在 active candidate 上重新验证 appointments reconstruction 与 formal auth dependency，仍不实施 Care Runtime。
+
+Canonical S35 evidence：`docs/operations/seven-stream-system-sys01-post-rebuild-data-runtime-readmission-20260815.md`。
+
 ## S34 controlled rebuild closure 后的下一原子任务
 
 ```text
