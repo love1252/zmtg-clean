@@ -1,24 +1,24 @@
 # 机构端七条业务线重启基线
 
 - 日期：2026-08-15
-- 基线：`e29f0373e10dbab32cb307e4c61aa984e937a9b8`
-- 来源：S24 SYS-01 controlled local-development database rebuild Admission
+- 基线：`369ed0724566b2ed83ac3dd95caff9cadcae7a20`
+- 来源：S25 SYS-01 candidate migration baseline governance Admission
 - POST-V2-R1C：正式收口
 - 七线开发入口：ready
 - 七线正式发布：0/7
 - 已发布受治理页面切片：2/26（`page_workbench`、`page_system_audit`）
 - 受控创建能力发布：0/3
-- 首选业务线：`system`（SYS-01 当前因缺少可同时表示 current schema 与 future migration lineage 的正式 candidate baseline 而阻断）
+- 首选业务线：`system`（SYS-01 已冻结正式 candidate baseline 与 exact tooling allowlist；等待显式授权实施，rebuild execution 仍未准入）
 - 第二候选：`customers`
 - 本文性质：当前开发入口基线，不是 Runtime、数据库或 Migration 授权
 
-## 零、S24 SYS-01 当前入口状态
+## 零、S25 SYS-01 当前入口状态
 
 ```text
-STAGE=S24
+STAGE=S25
 STREAM=system
 SLICE=SYS_01_AI_USAGE_READONLY
-COMPLETION_MODE=CONTROLLED_REBUILD_ADMISSION_COMPLETE_BLOCKED
+COMPLETION_MODE=CANDIDATE_BASELINE_GOVERNANCE_ADMISSION_COMPLETE
 SYS01_FRESH_ADMISSION=passed
 SYS01_DB_READINESS_REAUDIT=passed
 SYS01_RUNTIME_ADMISSION_READY=false
@@ -43,24 +43,36 @@ BINDING_COUNT=0
 
 IN_PLACE_PHASED_RECOVERY_FEASIBLE=false
 CONTROLLED_LOCAL_DEV_REBUILD_FEASIBLE=true_as_separately_admitted_data_preserving_direction
-SELECTED_CANDIDATE_SCHEMA_STRATEGY=blocked_no_safe_candidate_schema_strategy
-CANDIDATE_MIGRATION_BASELINE_STRATEGY=not_frozen_blocked_pending_formal_baseline_governance
+CURRENT_REPOSITORY_JOURNAL_HEAD=0045_base02_binding_legacy_calibration
+CURRENT_REPOSITORY_SNAPSHOT_HEAD=0026_snapshot
+CURRENT_SCHEMA_TABLE_COUNT=60
+SELECTED_CANDIDATE_SCHEMA_STRATEGY=current_schema_reviewed_baseline_artifact
+CANDIDATE_MIGRATION_BASELINE_STRATEGY=DRIZZLE_JOURNAL_BASELINE_MARKER
 SELECTED_DATA_TRANSFER_MECHANISM=controlled_application_level_table_by_table_copy
 
+BASELINE_GOVERNANCE_ADMISSION_READY=true
+BASELINE_CLAIMS_MIGRATIONS_EXECUTED=false
+LEGACY_CHAIN_DATABASES_REMAIN_VALID=true
+FUTURE_MIGRATION_SINGLE_LINEAGE_POSSIBLE=true
+FUTURE_MIGRATION_DUAL_ORIGIN_SUPPORT_REQUIRED=true
+BASELINE_TOOL_IMPLEMENTATION_REQUIRED=true
+BASELINE_EXACT_ALLOWLIST_FROZEN=true
+BASELINE_EXACT_FILE_COUNT=6
 CONTROLLED_REBUILD_TOOL_IMPLEMENTATION_REQUIRED=true
-CONTROLLED_REBUILD_EXACT_ALLOWLIST_FROZEN=false
-CONTROLLED_REBUILD_EXACT_FILE_COUNT=0
+CONTROLLED_REBUILD_EXACT_ALLOWLIST_FROZEN=true
+CONTROLLED_REBUILD_EXACT_FILE_COUNT=6
 REBUILD_EXECUTION_ADMISSION_READY=false
 
-PRIMARY_BLOCKING_PREREQUISITE=no_repository_supported_candidate_baseline_can_represent_current_schema_and_remain_future_migration_safe_without_falsifying_0038_0045_history
-NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CANDIDATE_MIGRATION_BASELINE_GOVERNANCE_ADMISSION
+PRIMARY_BLOCKING_PREREQUISITE=baseline_and_controlled_rebuild_tooling_not_implemented
+NEXT_STAGE=S26
+NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CANDIDATE_BASELINE_AND_CONTROLLED_REBUILD_TOOL_EXACT_IMPLEMENTATION
 NEXT_TASK_AUTHORIZED=false
 NEXT_STAGE_AUTO_EXECUTION=false
 ```
 
 S20 frozen architecture 继续有效：AI usage facts、command 与正式 read source 由 `analytics` 持有，`institution-system` 持有低敏 read model 与 presentation，cross-owner composition 位于 `src/server/orchestration/**`；canonical API 为 `/api/v1/institution/ai-service-usage`，旧 `/api/institution/ai-service-usage` 保持 capability-off compatibility-only。
 
-S21 安全启动既有 Colima/PostgreSQL 后，loopback transaction-read-only audit 成功，AI usage cohort 为 0，但缺失 `institution_scopes`。S22/S23 排除了 all-pending 与原地 phased replay。S24 fresh 枚举 55 张 public 表与 Drizzle journal，完成 56-row 唯一 classification、42 张保留/特殊表 mapping、backup/restore、side-by-side candidate、validation、cutover 与 rollback contract；但 repository 既没有 current-schema baseline，也没有不会伪造 `0038..0045` 历史且保持 future migration safety 的 candidate marker/lineage。因此 rebuild execution 与 exact tooling allowlist 均保持 blocked。Canonical evidence：`docs/operations/seven-stream-system-sys01-controlled-local-dev-rebuild-admission-20260815.md`。
+S21 安全启动既有 Colima/PostgreSQL 后，loopback transaction-read-only audit 成功，AI usage cohort 为 0，但缺失 `institution_scopes`。S22/S23 排除了 all-pending 与原地 phased replay。S24 fresh 枚举 55 张 public 表与 Drizzle journal，完成 56-row 唯一 classification、42 张保留/特殊表 mapping、backup/restore、side-by-side candidate、validation、cutover 与 rollback contract。S25 进一步从 Drizzle 0.45.2 源码冻结 `DRIZZLE_JOURNAL_BASELINE_MARKER`：reviewed current-schema SQL + immutable manifest + marker-only journal provenance，不伪造 `0038..0045` history，legacy DB 不改写，future common tail 保持单一。baseline/rebuild exact 6-file allowlist 已冻结，但尚未实现或执行。Canonical evidence：`docs/operations/seven-stream-system-sys01-candidate-migration-baseline-governance-admission-20260815.md`。
 
 ## 一、统一完成尺度
 
@@ -96,7 +108,7 @@ NO_NEW_FOUNDATION_BY_DEFAULT=true
 
 | Rank | Stream | 当前 Runtime | 正式 API / 页面 | 权威数据与权限 | 当前 blocker | 下一有限切片 |
 |---:|---|---|---|---|---|---|
-| 1 | 管理中心 `system` | `institution-system` 36 files；Audit owner 已完成 Writer/Reader/role closure | `/hospital/system/audit` 与 `/api/institution/audit-events` 已 admin-only release；AI usage/entitlement 仍 off | SYS-01 static Reader/role/DTO 已冻结；journal strict-prefix 到 0037；56-row data inventory 已冻结 | 无 future-migration-safe candidate baseline/marker；rebuild tooling allowlist 不能提前伪冻 | candidate migration baseline governance Admission |
+| 1 | 管理中心 `system` | `institution-system` 36 files；Audit owner 已完成 Writer/Reader/role closure | `/hospital/system/audit` 与 `/api/institution/audit-events` 已 admin-only release；AI usage/entitlement 仍 off | SYS-01 static Reader/role/DTO 已冻结；56-row data inventory 与 marker baseline contract 已冻结 | baseline/rebuild exact 6-file tooling 尚未实现，execution 未准入 | candidate baseline + controlled rebuild exact implementation（未授权） |
 | 2 | 客户中心 `customers` | `customer-center` 14 + `customers` 7；command/object fact 存在 | `/api/institution/customers` 与 canonical 页面 off | `customers.institution_id` nullable；S19 未连接 DB | 正式 Reader、数据完整性、object guard 与 low-sensitive DTO | `CUS_01_READONLY_FRESH_ADMISSION`，排在 SYS-01 后 |
 | 3 | 预约与随访 `care` | `care` 30；domain/command/repository/transaction 较成熟 | appointments/followups 主 API 与页面 off | institution 历史形状 nullable；read model 未闭环 | Customer 稳定引用、正式 Reader/API/page | 人工随访只读/人工闭环 fresh Admission |
 | 4 | 知识库 `knowledge` | `institution-knowledge` 8 + `knowledge` 8；旧/new runtime 并存 | items 根 API 与页面 off | 旧 preview/mock/demo 与正式事实边界未退出 | MIG-03、Reader、worker/OCR/index 与低敏授权 | 资料库只读 fresh Admission |
@@ -128,15 +140,16 @@ FIRST_STREAM_DB_READINESS_REAUDIT_COMPLETE=true
 FIRST_STREAM_MIGRATION_ADMISSION_COMPLETE=true
 FIRST_STREAM_PHASED_RECOVERY_ADMISSION_COMPLETE=true
 FIRST_STREAM_CONTROLLED_REBUILD_ADMISSION_COMPLETE=true
+FIRST_STREAM_BASELINE_GOVERNANCE_ADMISSION_COMPLETE=true
 FIRST_STREAM_RUNTIME_ADMISSION_READY=false
 FIRST_STREAM_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
 FIRST_STREAM_EXACT_RUNTIME_FILE_COUNT=0
 FIRST_STREAM_DB_READ_PREREQUISITE=false
 FIRST_STREAM_CONTROLLED_REBUILD_PREREQUISITE=true
-FIRST_STREAM_NEXT_ATOMIC_TASK=SYS_01_CANDIDATE_MIGRATION_BASELINE_GOVERNANCE_ADMISSION
+FIRST_STREAM_NEXT_ATOMIC_TASK=SYS_01_CANDIDATE_BASELINE_AND_CONTROLLED_REBUILD_TOOL_EXACT_IMPLEMENTATION
 ```
 
-`system` 是唯一已有真实、持久化、角色感知并正式发布子页的业务线，复用 Foundation 的证据最强。S20 已冻结 SYS-01 的 owner、Reader、composition、API、角色与 DTO；S21 已连接 actual DB；S22 证明不是简单运行全部 pending 即可恢复；S23 排除了原地 replay。S24 已证明 6/11/11 数据、252 条 Audit 与全部 56 个 table inventory 可保留，并冻结 side-by-side safety contract；但 candidate migration baseline 仍未形成正式表示，Runtime Admission 保持 blocked。
+`system` 是唯一已有真实、持久化、角色感知并正式发布子页的业务线，复用 Foundation 的证据最强。S20 已冻结 SYS-01 的 owner、Reader、composition、API、角色与 DTO；S21 已连接 actual DB；S22 证明不是简单运行全部 pending 即可恢复；S23 排除了原地 replay。S24 已证明 6/11/11 数据、252 条 Audit 与全部 56 个 table inventory 可保留，并冻结 side-by-side safety contract；S25 已形成正式 baseline provenance 与 future lineage 表示。Runtime Admission 仍因 tooling 尚未实现、rebuild execution 未准入而保持 blocked。
 
 `customers` 无外部系统且是 Care/Workbench 上游，排第二；但主 Reader/API/data readiness 尚未闭环，不能先于当前证据更强的 `system`。
 
@@ -147,7 +160,8 @@ FIRST_STREAM_NEXT_ATOMIC_TASK=SYS_01_CANDIDATE_MIGRATION_BASELINE_GOVERNANCE_ADM
 - S23 已确认正式 Provisioning 只产生 Scope/Context 三表，不会产生 0039 所需 Binding；`0041/0043` 又把 historical acceptance Membership count 冻结为 1，current=11。
 - 不得删除 Membership、伪造 Binding/Scope/Context、改 journal、改 consumed SQL、reset、seed 或换用 55432 acceptance DB；continuous pending list 不是 executable chain。
 - S24 已冻结 repo 外加密 backup、独立 restore drill、side-by-side candidate、data-preserving mapping 与 unknown-outcome stop/no-retry；尚未执行任何一步。
-- 下一 Admission 必须唯一冻结 current-schema candidate baseline artifact、canonical marker/journal semantics 与 future migration lineage；不得伪造 `0038..0045` 已执行。
+- S25 已唯一冻结 current-schema candidate baseline artifact、canonical marker/journal semantics 与 future migration lineage；marker 只引用 `0045` parent 高水位，不得伪造 `0038..0045` 已执行。
+- 下一阶段只能按 exact 6-file allowlist 实现 baseline/rebuild tooling；artifact/bootstrap/rebuild/database execution 仍需后续独立授权。
 - `customers`、Care 与其他旧表中的 nullable institution 形状必须逐切片 fresh 证明，不能用旧 MIG 计划自动推导完整性。
 - 如下一切片确需 Schema/Migration，必须拆为独立授权、独立 PR、升级/回退验证；业务线 PR 不得顺手修改 `src/server/db/schema.ts` 或 `drizzle/**`。
 - 不允许以当前单机构、默认机构、membership 当前值、mock/seed/demo 或目录位置补推历史机构归属。
@@ -164,7 +178,8 @@ FIRST_STREAM_NEXT_ATOMIC_TASK=SYS_01_CANDIDATE_MIGRATION_BASELINE_GOVERNANCE_ADM
 ## 八、下一任务
 
 ```text
-NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CANDIDATE_MIGRATION_BASELINE_GOVERNANCE_ADMISSION
+NEXT_STAGE=S26
+NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CANDIDATE_BASELINE_AND_CONTROLLED_REBUILD_TOOL_EXACT_IMPLEMENTATION
 NEXT_TASK_AUTHORIZED=false
 NEXT_STAGE_AUTO_EXECUTION=false
 SEVEN_STREAM_RUNTIME_IMPLEMENTED=false
@@ -173,4 +188,4 @@ MIGRATION_EXECUTION_AUTHORIZED=false
 PROVISIONING_WRITE_EXECUTION_AUTHORIZED=false
 ```
 
-S24 canonical evidence：`docs/operations/seven-stream-system-sys01-controlled-local-dev-rebuild-admission-20260815.md`。S23 phased recovery evidence：`docs/operations/seven-stream-system-sys01-local-dev-phased-schema-recovery-admission-20260815.md`。
+S25 canonical evidence：`docs/operations/seven-stream-system-sys01-candidate-migration-baseline-governance-admission-20260815.md`。S24 controlled rebuild evidence：`docs/operations/seven-stream-system-sys01-controlled-local-dev-rebuild-admission-20260815.md`。

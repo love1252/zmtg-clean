@@ -28,3 +28,29 @@
 7. 未完成上述步骤前，不新增 snapshot-diff Migration。
 
 若发现某环境已执行过与当前仓库内容不同的 migration，应停止并创建新的 forward-fix migration；不得原地修改已执行 SQL 或手改生产 journal。
+
+## SYS-01 current-schema candidate baseline 治理
+
+S25 fresh 读取当前安装的 `drizzle-orm@0.45.2` 后确认，PostgreSQL migrator 只读取 `drizzle.__drizzle_migrations` 中 `created_at` 最大的一行，并以 `database.created_at < repository entry.when` 决定 pending；`hash` 会被写入但不参与 pending 判断，原生实现也不支持 external baseline marker 或 baseline metadata。基于该语义，SYS-01 side-by-side local-development candidate 的唯一受准入表示为：
+
+- 一份 `drizzle/baselines/sys01-local-dev-current-schema-0045-v1.sql` reviewed schema-only artifact；
+- 一份同名 `.json` immutable manifest，记录 S26 frozen base commit、parent、artifact/schema fingerprint 与受审查 tooling blob identity；marker hash由 manifest exact bytes 外部计算，manifest 不记录自身 digest；
+- `drizzle.__drizzle_migrations` 中恰好一条 formal marker row，以 `0045_base02_binding_legacy_calibration` 的 `when=1785738060856` 为 parent 高水位，`hash` 为 manifest exact bytes 的 SHA-256；
+- marker hash 不等于 `0045` SQL hash，不写入 `0000..0045` 的伪历史，也不声明这些 Migration 曾在 candidate 执行；
+- existing legacy-chain DB 不加 marker、不 rebase、不改 journal；两种 origin 只在 guard provenance 上分流，之后消费同一 repository future tail。
+
+future common-tail Migration 的 SQL/precheck 必须同时接受 exact legacy prefix 与 exact marker+tail prefix；不得只以 legacy journal row count 作为唯一 predecessor 条件。两种 origin 都必须通过 migration-specific catalog/data preconditions 后才可执行。
+
+baseline schema 的 source of truth 是 current `schema.ts` model 加逐对象审查的 hand-written catalog additions。后者必须覆盖 model 未完整表达的 `NOT VALID`／validation state、functions、triggers 等对象。artifact 只可在隔离空白 loopback PostgreSQL 中验证，不得从 outdated local-development DB、acceptance/production 数据或业务行导出。
+
+fingerprint 使用 deterministic canonical catalog JSON 的 UTF-8 SHA-256，覆盖 schemas、tables、columns、types、enums、PK、FK、unique、checks、indexes、triggers、defaults、nullability、sequences 与 application functions；排除 OID、owner、数据库名、timestamp、环境标识、secret、PII 与业务数据。artifact 自身使用 exact UTF-8/LF bytes SHA-256。
+
+该 candidate baseline 独立于 Drizzle snapshot lineage：
+
+- 最新 snapshot 继续是 `0026_snapshot.json`，不新建、不修改、不伪造 `id`／`prevId`；
+- baseline SQL/manifest 不是 snapshot，也不关闭 snapshot drift；
+- `NEW_DRIZZLE_SNAPSHOT_REQUIRED=false_for_selected_candidate_baseline`；
+- future `db:generate` 仍须独立、version-locked、isolated snapshot baseline 治理与逐对象审查；
+- 本文仍不批准、预留或占用下一 Migration 编号。
+
+marker missing/mismatch、manifest/artifact/schema fingerprint mismatch、unknown version、mixed legacy+baseline lineage、journal drift、repository SHA drift 或 production target 必须 fail closed，不得自动 repair。正式 contract 与 exact tooling allowlist 见 `docs/operations/seven-stream-system-sys01-candidate-migration-baseline-governance-admission-20260815.md`；该文档不构成 artifact、tooling、数据库或 Migration 执行授权。

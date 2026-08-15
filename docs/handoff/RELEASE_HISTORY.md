@@ -1,8 +1,98 @@
 # 项目重构历史
 
+<!-- SEVEN_STREAM_SYSTEM_SYS01_CANDIDATE_BASELINE_GOVERNANCE_HISTORY -->
+
+## 2026-08-15：System SYS-01 candidate migration baseline 治理完成准入工作
+
+```text
+STAGE=S25
+STREAM=system
+SLICE=SYS_01_AI_USAGE_READONLY
+TASK=SEVEN_STREAM_SYSTEM_SYS_01_CANDIDATE_MIGRATION_BASELINE_GOVERNANCE_ADMISSION
+COMPLETION_MODE=CANDIDATE_BASELINE_GOVERNANCE_ADMISSION_COMPLETE
+BASELINE=369ed0724566b2ed83ac3dd95caff9cadcae7a20
+
+CURRENT_REPOSITORY_JOURNAL_HEAD=0045_base02_binding_legacy_calibration
+CURRENT_REPOSITORY_JOURNAL_ENTRY_COUNT=46
+CURRENT_REPOSITORY_SNAPSHOT_HEAD=0026_snapshot
+CURRENT_SCHEMA_TABLE_COUNT=60
+
+DRIZZLE_PENDING_DECISION_KEY=max_database_created_at_less_than_repository_entry_when
+DRIZZLE_REQUIRES_FULL_HISTORICAL_CHAIN=false
+DRIZZLE_SUPPORTS_EXTERNAL_BASELINE_MARKER=false
+CURRENT_MIGRATION_GUARD_BASELINE_AWARE=false
+CURRENT_MIGRATION_GUARD_SCHEMA_FINGERPRINT_AWARE=false
+CURRENT_MIGRATION_GUARD_ACTUAL_DB_PREFIX_AWARE=false
+
+SELECTED_CANDIDATE_BASELINE_STRATEGY=DRIZZLE_JOURNAL_BASELINE_MARKER
+BASELINE_CLAIMS_MIGRATIONS_EXECUTED=false
+BASELINE_CONTAINS_SCHEMA_EFFECTS_THROUGH=0045_base02_binding_legacy_calibration
+BASELINE_SCHEMA_FIDELITY_CONTRACT_FROZEN=true
+BASELINE_VALIDATION_MATRIX_FROZEN=true
+LEGACY_CHAIN_DATABASES_REMAIN_VALID=true
+LEGACY_CHAIN_DATABASE_REBASE_REQUIRED=false
+LEGACY_CHAIN_JOURNAL_REWRITE_REQUIRED=false
+FUTURE_MIGRATION_SINGLE_LINEAGE_POSSIBLE=true
+FUTURE_MIGRATION_DUAL_ORIGIN_SUPPORT_REQUIRED=true
+NEXT_MIGRATION_NUMBER_RESERVED=false
+
+NEW_DRIZZLE_SNAPSHOT_REQUIRED=false_for_selected_candidate_baseline
+SNAPSHOT_BASELINE_GOVERNANCE_REQUIRED=true_before_any_future_db_generate
+BASELINE_GOVERNANCE_ADMISSION_READY=true
+BASELINE_TOOL_IMPLEMENTATION_REQUIRED=true
+BASELINE_EXACT_ALLOWLIST_FROZEN=true
+BASELINE_EXACT_FILE_COUNT=6
+CONTROLLED_REBUILD_EXACT_ALLOWLIST_FROZEN=true
+CONTROLLED_REBUILD_EXACT_FILE_COUNT=6
+REBUILD_EXECUTION_ADMISSION_READY=false
+SYS01_RUNTIME_ADMISSION_READY=false
+
+DATABASE_CONNECTION=false
+DATABASE_WRITE_EXECUTION=false
+DATABASE_CREATE=false
+DATABASE_DROP=false
+DATABASE_RESET=false
+DATABASE_REBUILD_EXECUTION=false
+BACKUP_EXECUTION=false
+RESTORE_EXECUTION=false
+MIGRATION_EXECUTION=false
+NEW_MIGRATION_IMPLEMENTATION=false
+DB_GENERATE_EXECUTION=false
+SNAPSHOT_GENERATION=false
+PROVISIONING_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+DDL_EXECUTION=false
+DML_EXECUTION=false
+SEED_EXECUTION=false
+REBUILD_TOOL_IMPLEMENTATION=false
+RUNTIME_IMPLEMENTATION=false
+STAGING_CHANGE=false
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+
+NEXT_STAGE=S26
+NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CANDIDATE_BASELINE_AND_CONTROLLED_REBUILD_TOOL_EXACT_IMPLEMENTATION
+NEXT_TASK_AUTHORIZED=false
+NEXT_STAGE_AUTO_EXECUTION=false
+S25_ADMISSION_WORK_COMPLETE=true
+S25_COMPLETE=false_pending_explicit_ready_merge_authorization
+S25_FORMAL_CLOSURE=false
+```
+
+- fresh 从 `drizzle-orm@0.45.2` 源码确认 native pending 只比较数据库最大 `created_at` 与 repository `when`；hash 及完整 prefix 不参与原生 pending 判断，也没有 external baseline metadata API；
+- 比较 fake history、journal marker、separate ledger、new lineage 与 squash 五种策略后，唯一选择 `DRIZZLE_JOURNAL_BASELINE_MARKER`；
+- baseline 为 reviewed schema-only SQL + immutable manifest + marker-only row；marker 只锚定 `0045` parent 高水位，不复用其 SQL hash，不声称 `0000..0045` 在 candidate 执行；
+- current schema model 为 60 tables／59 enums，latest snapshot 仍为 0026 的 38 tables／29 enums；schema fidelity 另覆盖 hand-written `NOT VALID` state、functions、triggers 等 catalog 对象；
+- legacy-chain DB 不 rebase、不改 journal；marker origin 与 legacy origin 在 guard provenance 上双起点、future repository SQL/journal 为单一 common tail；
+- baseline/rebuild tooling exact 6 files 已冻结，artifact、snapshot、tooling 与数据库均未实施或执行。
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-candidate-migration-baseline-governance-admission-20260815.md`。
+
+<!-- SEVEN_STREAM_SYSTEM_SYS01_CANDIDATE_BASELINE_GOVERNANCE_HISTORY_END -->
+
 <!-- SEVEN_STREAM_SYSTEM_SYS01_CONTROLLED_REBUILD_ADMISSION_HISTORY -->
 
-## 2026-08-15：System SYS-01 controlled local-development rebuild Admission 工作完成，正式合并前仍阻断
+## 2026-08-15：System SYS-01 controlled local-development rebuild Admission 正式收口，execution 仍阻断
 
 ```text
 STAGE=S24
@@ -87,8 +177,13 @@ NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CANDIDATE_MIGRATION_BASELINE_GOVERNANCE_ADM
 NEXT_TASK_AUTHORIZED=false
 NEXT_STAGE_AUTO_EXECUTION=false
 S24_ADMISSION_WORK_COMPLETE=true
-S24_COMPLETE=false_pending_explicit_ready_merge_authorization
-S24_FORMAL_MERGE_CLOSURE=false
+S24_COMPLETE=true
+S24_FORMAL_CLOSURE=true
+S24_FORMAL_MERGE_CLOSURE=true
+S24_PR=1221
+S24_FINAL_HEAD=c0f5ea8d8de3cf1689f64404cbc450389336f24f
+S24_MERGE=369ed0724566b2ed83ac3dd95caff9cadcae7a20
+S24_POST_MERGE_REVIEW_DEBT=0
 ```
 
 - strict startup/transaction read-only audit fresh 枚举 55 张 public 表与 Drizzle journal；56 张表全部唯一分类，`UNKNOWN=0`；
@@ -96,6 +191,7 @@ S24_FORMAL_MERGE_CLOSURE=false
 - 已冻结 repo 外加密 custom-format backup、isolated restore drill、localhost-only candidate、table-by-table transfer、aggregate validation、reversible `.env.local` cutover、rollback 与 stop/no-auto-retry；全部仅为设计，执行均为 0；
 - full replay、schema push bootstrap 与 restore-then-forward 均不能提供可信 candidate migration lineage；derived baseline 只是需独立治理的方向；
 - 因 candidate baseline 尚未冻结，exact rebuild tooling allowlist 不得伪造；下一任务仅处理 baseline artifact、canonical marker/journal semantics 与 future migration safety。
+- PR #1221 Required Check 通过、Review thread 为 0，以 final Head `c0f5ea8d8de3cf1689f64404cbc450389336f24f` 合并为 `369ed0724566b2ed83ac3dd95caff9cadcae7a20`；post-merge comments/reviews/threads debt 为 0。
 
 Canonical evidence：`docs/operations/seven-stream-system-sys01-controlled-local-dev-rebuild-admission-20260815.md`。
 
