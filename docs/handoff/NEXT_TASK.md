@@ -1,5 +1,28 @@
 # 下一任务
 
+## S33 formal blocker closure 后的下一原子任务
+
+```text
+S33_COMPLETION_MODE=ADMISSION_COMPLETE_BLOCKED_PENDING_SYSTEM_REBUILD
+S33_BASELINE=5b7023aa78a78ead98c25071cda99c2df978bb89
+CARE_SELECTED_FIRST_SLICE=APPOINTMENTS_LIST_BY_CURRENT_INSTITUTION
+CARE_DATA_READINESS=blocked_pending_system_rebuild
+CARE_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
+CARE_RUNTIME_IMPLEMENTATION=false
+
+PRIMARY_BLOCKING_PREREQUISITE=SYS01_CONTROLLED_LOCAL_DEVELOPMENT_REBUILD_EXECUTION_NOT_COMPLETED
+NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CONTROLLED_LOCAL_DEVELOPMENT_REBUILD_EXECUTION
+NEXT_SYSTEM_TASK_AUTHORIZED=false
+NEXT_CARE_TASK=SEVEN_STREAM_CARE_APPOINTMENTS_READONLY_FRESH_READMISSION_AFTER_SYSTEM_REBUILD
+NEXT_CARE_TASK_AUTHORIZED=false
+NEXT_STAGE=UNASSIGNED
+NEXT_STAGE_AUTO_EXECUTION=false
+```
+
+下一任务必须由用户独立授权 SYS-01 controlled local-development rebuild execution；它不是 S33 的自动延伸。只有 rebuild 完成且 candidate 通过 validation，才重新审计 appointments data readiness 与 exact Runtime allowlist。不得在 original source 上通过 Care → Customers repository 反向依赖或 runtime 临时 join 规避 blocker。
+
+Canonical evidence：`docs/operations/seven-stream-care-formal-fresh-admission-20260815.md`。
+
 ## S32 后续 System execution 保持未授权
 
 ```text

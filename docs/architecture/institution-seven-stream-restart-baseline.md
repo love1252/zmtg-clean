@@ -1,6 +1,54 @@
 # 机构端七条业务线重启基线
 
-## S32 当前入口：System rebuild execution ready，仍待独立授权
+## S33 当前入口：Care 首切片已选，data readiness 等待 SYS-01 rebuild
+
+- S33 基线：`5b7023aa78a78ead98c25071cda99c2df978bb89`
+- S32 System：PR #1230 已合并，rebuild execution Admission ready，execution 仍未授权
+- S33 Care：选择 appointments list；5/5 customer pair exact-one，source 无 `institution_id`
+- S33 结论：不伪造 Care Runtime allowlist；下一原子任务回到 System controlled rebuild explicit authorization
+
+```text
+STAGE=S33
+STREAM=care
+TASK=SEVEN_STREAM_CARE_FORMAL_FRESH_ADMISSION
+BASELINE=5b7023aa78a78ead98c25071cda99c2df978bb89
+
+S32_PR=1230
+S32_HEAD=b5fed81fd9b976f94ac09156d1547ad94b09b9b8
+S32_MERGE=5b7023aa78a78ead98c25071cda99c2df978bb89
+S32_FORMAL_CLOSURE=true
+
+CARE_SELECTED_FIRST_SLICE=APPOINTMENTS_LIST_BY_CURRENT_INSTITUTION
+CARE_FORMAL_READER_EXISTS=false
+CARE_CURRENT_API=/api/institution/appointments
+CARE_TARGET_VERSIONED_API=/api/v1/institution/appointments
+CARE_CANONICAL_PAGE=/hospital/care/appointments
+CARE_CAPABILITY_KEY=page_care_appointments
+
+APPOINTMENT_COUNT=5
+APPOINTMENT_CUSTOMER_PAIR_UNIQUE_MATCH_COUNT=5
+APPOINTMENT_CUSTOMER_PAIR_ZERO_MATCH_COUNT=0
+APPOINTMENT_CUSTOMER_PAIR_MULTI_MATCH_COUNT=0
+SOURCE_INSTITUTION_COLUMN_ABSENT=true
+
+CARE_DATA_READINESS=blocked_pending_system_rebuild
+CARE_SCHEMA_CHANGE_REQUIRED=false
+CARE_MIGRATION_REQUIRED=false
+CARE_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
+CARE_PAGE_RELEASE_ADMISSION_READY=false
+
+NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CONTROLLED_LOCAL_DEVELOPMENT_REBUILD_EXECUTION
+NEXT_SYSTEM_TASK_AUTHORIZED=false
+NEXT_CARE_TASK=SEVEN_STREAM_CARE_APPOINTMENTS_READONLY_FRESH_READMISSION_AFTER_SYSTEM_REBUILD
+NEXT_CARE_TASK_AUTHORIZED=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=2
+SEVEN_STREAM_FORMAL_RELEASE_COUNT=0
+CONTROLLED_CREATE_RELEASE_COUNT=0
+```
+
+七线当前顺序：System execution prerequisite 与 Admission 已闭合，但实际 controlled rebuild 需要新的显式授权；Care 的首个 read-only slice 已选，却必须等待该数据前置完成。Canonical evidence：`docs/operations/seven-stream-care-formal-fresh-admission-20260815.md`。
+
+## S32 历史入口：System rebuild execution ready，仍待独立授权
 
 - S32 基线：`fc3353d34e77d3704fccc70546735db84a671a24`
 - S31 Runtime：PR #1229 corrective exact 3-file prerequisite implementation 已合并并 formal closure
