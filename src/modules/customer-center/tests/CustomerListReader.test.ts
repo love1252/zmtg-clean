@@ -1,0 +1,175 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import {
+  createCustomerListReaderV1,
+  CUSTOMER_LIST_MAX_OFFSET_V1,
+  CUSTOMER_LIST_MAX_PAGE_V1,
+  CUSTOMER_LIST_PAGE_SIZE_V1,
+} from '@/modules/customer-center/application/customer-list-reader';
+import type { CustomerListSourceV1 } from '@/modules/customer-center/ports/customer-list-source';
+
+const baseRow = Object.freeze({
+  customerId: 'customer-001',
+  displayName: '客户甲',
+  lifecycle: 'consulting' as const,
+  priority: 'high' as const,
+  updatedAt: '2026-08-15T08:00:00.000Z',
+  tenantId: 'tenant-001',
+  institutionId: 'institution-001',
+});
+
+function createReader(rows: readonly unknown[] = [baseRow]) {
+  const list = vi.fn(async () => rows);
+  const source = Object.freeze({ list }) as unknown as CustomerListSourceV1;
+  return { reader: createCustomerListReaderV1({ source }), list };
+}
+
+function read(
+  reader: ReturnType<typeof createCustomerListReaderV1>,
+  query = '',
+) {
+  return reader.read({
+    tenantId: 'tenant-001',
+    institutionId: 'institution-001',
+    searchParams: new URLSearchParams(query),
+  });
+}
+
+describe('Customers CUS-01 formal list Reader', () => {
+  it('固定 6-field 低敏 DTO，并把 attribution pair 只留在 source query', async () => {
+    const { reader, list } = createReader();
+
+    await expect(read(reader)).resolves.toEqual({
+      kind: 'ready',
+      records: [
+        {
+          contractVersion: 'v1',
+          customerId: 'customer-001',
+          displayName: '客户甲',
+          lifecycle: 'consulting',
+          priority: 'high',
+          updatedAt: '2026-08-15T08:00:00.000Z',
+        },
+      ],
+      pageInfo: { page: 1, pageSize: 20, hasMore: false },
+    });
+    expect(list).toHaveBeenCalledWith({
+      tenantId: 'tenant-001',
+      institutionId: 'institution-001',
+      lifecycle: null,
+      priority: null,
+      limit: 21,
+      offset: 0,
+    });
+    expect(JSON.stringify((await read(reader)))).not.toMatch(
+      /tenantId|institutionId|phone|email|medical|notes|ownerUserId|external/i,
+    );
+  });
+
+  it('page 100 使用 max offset 与 limit+1，精确产生 hasMore', async () => {
+    const rows = Array.from({ length: 21 }, (_, index) => ({
+      ...baseRow,
+      customerId: `customer-${String(index).padStart(3, '0')}`,
+    }));
+    const { reader, list } = createReader(rows);
+    const result = await read(reader, 'page=100');
+
+    expect(result).toMatchObject({
+      kind: 'ready',
+      pageInfo: { page: CUSTOMER_LIST_MAX_PAGE_V1, hasMore: true },
+    });
+    if (result.kind !== 'ready') throw new Error('expected ready');
+    expect(result.records).toHaveLength(CUSTOMER_LIST_PAGE_SIZE_V1);
+    expect(list).toHaveBeenCalledWith(
+      expect.objectContaining({
+        limit: 21,
+        offset: CUSTOMER_LIST_MAX_OFFSET_V1,
+      }),
+    );
+  });
+
+  it('只接受 page、lifecycle、priority 且把合法 filters 下推', async () => {
+    const { reader, list } = createReader();
+
+    await expect(
+      read(reader, 'page=2&lifecycle=post_care&priority=observe'),
+    ).resolves.toMatchObject({ kind: 'ready' });
+    expect(list).toHaveBeenCalledWith({
+      tenantId: 'tenant-001',
+      institutionId: 'institution-001',
+      lifecycle: 'post_care',
+      priority: 'observe',
+      limit: 21,
+      offset: 20,
+    });
+  });
+
+  it.each([
+    'page=101',
+    'page=0',
+    'page=1.5',
+    'page=01',
+    'q=customer',
+    'search=customer',
+    'ownerId=owner-001',
+    'page=1&page=1',
+    'lifecycle=legacy',
+    'priority=watch',
+  ])('非法或未准入 query %s 返回统一 400 contract 且不读 source', async (query) => {
+    const { reader, list } = createReader();
+
+    await expect(read(reader, query)).resolves.toEqual({
+      kind: 'invalid_query',
+      code: 'invalid_customer_query',
+    });
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { ...baseRow, tenantId: 'tenant-other' },
+    { ...baseRow, institutionId: 'institution-other' },
+  ])('任一 source row pair 漂移都整页 fail-closed', async (row) => {
+    const { reader } = createReader([baseRow, row]);
+    await expect(read(reader)).resolves.toEqual({ kind: 'unavailable' });
+  });
+
+  it('拒绝 source extra/sensitive fields，不能先读取再投影', async () => {
+    const { reader } = createReader([
+      { ...baseRow, phone: 'SENSITIVE', notes: 'SENSITIVE' },
+    ]);
+    await expect(read(reader)).resolves.toEqual({ kind: 'unavailable' });
+  });
+
+  it('拒绝非法时间、空 displayName、overflow 与 source failure', async () => {
+    for (const rows of [
+      [{ ...baseRow, updatedAt: 'not-time' }],
+      [{ ...baseRow, displayName: '' }],
+      Array.from({ length: 22 }, (_, index) => ({
+        ...baseRow,
+        customerId: `customer-${index}`,
+      })),
+    ]) {
+      await expect(read(createReader(rows).reader)).resolves.toEqual({
+        kind: 'unavailable',
+      });
+    }
+
+    const source = Object.freeze({
+      list: vi.fn(async () => {
+        throw new Error('database secret');
+      }),
+    });
+    await expect(
+      read(createCustomerListReaderV1({ source })),
+    ).resolves.toEqual({ kind: 'unavailable' });
+  });
+
+  it('返回 records/pageInfo 及其成员均冻结', async () => {
+    const result = await read(createReader().reader);
+    if (result.kind !== 'ready') throw new Error('expected ready');
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Object.isFrozen(result.records)).toBe(true);
+    expect(Object.isFrozen(result.records[0])).toBe(true);
+    expect(Object.isFrozen(result.pageInfo)).toBe(true);
+  });
+});
