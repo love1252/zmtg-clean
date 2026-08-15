@@ -1,39 +1,44 @@
 # 机构端七条业务线重启基线
 
 - 日期：2026-08-15
-- 基线：`d2ae875cb75bda0c09aaa86d0cc410bf94f0dd78`
-- 来源：S20 SYS-01 fresh Admission
+- 基线：`d8293ee64c1d051b123d022a6764b0c191084ca1`
+- 来源：S21 SYS-01 local-development DB readiness re-audit
 - POST-V2-R1C：正式收口
 - 七线开发入口：ready
 - 七线正式发布：0/7
 - 已发布受治理页面切片：2/26（`page_workbench`、`page_system_audit`）
 - 受控创建能力发布：0/3
-- 首选业务线：`system`（SYS-01 当前因 local-development PostgreSQL readiness unavailable 阻断）
+- 首选业务线：`system`（SYS-01 当前因 local-development schema parity 缺失 `institution_scopes` 阻断）
 - 第二候选：`customers`
 - 本文性质：当前开发入口基线，不是 Runtime、数据库或 Migration 授权
 
-## 零、S20 SYS-01 当前入口状态
+## 零、S21 SYS-01 当前入口状态
 
 ```text
-STAGE=S20
+STAGE=S21
 STREAM=system
 SLICE=SYS_01_AI_USAGE_READONLY
-COMPLETION_MODE=ADMISSION_COMPLETE_BLOCKED
+COMPLETION_MODE=READINESS_REAUDIT_COMPLETE_BLOCKED
 SYS01_FRESH_ADMISSION=passed
 SYS01_RUNTIME_ADMISSION_READY=false
-SYS01_DATA_READINESS=unavailable
+SYS01_DATA_READINESS=blocked
+SYS01_TENANT_ISOLATION_SAFE=true
+SYS01_INSTITUTION_ISOLATION_SAFE=false
+SYS01_SCHEMA_CHANGE_REQUIRED=false
+SYS01_MIGRATION_REQUIRED=true
+SYS01_DML_BACKFILL_REQUIRED=false
 SYS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
 SYS01_EXACT_RUNTIME_FILE_COUNT=0
 
-PRIMARY_BLOCKING_PREREQUISITE=local_development_postgresql_127_0_0_1_55433_available_for_transaction_read_only_SYS01_cohort_audit
-NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_AI_USAGE_READONLY_LOCAL_DEVELOPMENT_DB_READINESS_REAUDIT
+PRIMARY_BLOCKING_PREREQUISITE=local_development_schema_parity_missing_public_institution_scopes_requires_separately_authorized_migration_admission
+NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_LOCAL_DEVELOPMENT_SCHEMA_PARITY_MIGRATION_ADMISSION
 NEXT_TASK_AUTHORIZED=false
 NEXT_STAGE_AUTO_EXECUTION=false
 ```
 
-Fresh code、Git history、Architecture 与 tests 已确认：AI usage facts、command 与正式 read source 应由 `analytics` 持有，`institution-system` 持有低敏 read model 与 presentation，cross-owner composition 位于 `src/server/orchestration/**`；canonical API 为 `/api/v1/institution/ai-service-usage`，旧 `/api/institution/ai-service-usage` 保持 capability-off compatibility-only。
+S20 frozen architecture 继续有效：AI usage facts、command 与正式 read source 由 `analytics` 持有，`institution-system` 持有低敏 read model 与 presentation，cross-owner composition 位于 `src/server/orchestration/**`；canonical API 为 `/api/v1/institution/ai-service-usage`，旧 `/api/institution/ai-service-usage` 保持 capability-off compatibility-only。
 
-实际 `.env.local` 指向 loopback `127.0.0.1:55433`，但当前没有 listener，连接在 transaction 与任何 SQL 之前即 `ECONNREFUSED`。因此 tenant/institution pair integrity、历史覆盖、未知 service/status 与 metric validity 均不可验证；本次不冻结 Runtime allowlist，不授权启动数据库、Runtime、Schema、Migration、DDL、DML 或 Seed。Canonical evidence：`docs/operations/seven-stream-system-sys01-ai-usage-readonly-fresh-admission-20260815.md`。
+S21 安全启动既有 Colima/PostgreSQL 后，loopback transaction-read-only audit 成功，AI usage cohort 为 0；actual DB 存在 `ai_call_usage_records` 与 `tenants`，但缺失 current code 必需的 `institution_scopes`。因此 readiness 从 `unavailable` 精确推进为 `blocked`，不冻结 Runtime allowlist；Migration 需独立 Admission。Canonical evidence：`docs/operations/seven-stream-system-sys01-ai-usage-readonly-db-readiness-reaudit-20260815.md`。
 
 ## 一、统一完成尺度
 
@@ -69,7 +74,7 @@ NO_NEW_FOUNDATION_BY_DEFAULT=true
 
 | Rank | Stream | 当前 Runtime | 正式 API / 页面 | 权威数据与权限 | 当前 blocker | 下一有限切片 |
 |---:|---|---|---|---|---|---|
-| 1 | 管理中心 `system` | `institution-system` 36 files；Audit owner 已完成 Writer/Reader/role closure | `/hospital/system/audit` 与 `/api/institution/audit-events` 已 admin-only release；AI usage/entitlement 仍 off | SYS-01 static Reader/role/DTO 已 fresh 冻结；actual DB cohort unavailable | local-development PostgreSQL `127.0.0.1:55433` 当前无 listener | `SYS_01_AI_USAGE_READONLY_LOCAL_DEVELOPMENT_DB_READINESS_REAUDIT` |
+| 1 | 管理中心 `system` | `institution-system` 36 files；Audit owner 已完成 Writer/Reader/role closure | `/hospital/system/audit` 与 `/api/institution/audit-events` 已 admin-only release；AI usage/entitlement 仍 off | SYS-01 static Reader/role/DTO 已冻结；actual AI usage cohort 0 | local-development DB 缺失 `institution_scopes`，schema parity blocked | `SYS_01_LOCAL_DEVELOPMENT_SCHEMA_PARITY_MIGRATION_ADMISSION` |
 | 2 | 客户中心 `customers` | `customer-center` 14 + `customers` 7；command/object fact 存在 | `/api/institution/customers` 与 canonical 页面 off | `customers.institution_id` nullable；S19 未连接 DB | 正式 Reader、数据完整性、object guard 与 low-sensitive DTO | `CUS_01_READONLY_FRESH_ADMISSION`，排在 SYS-01 后 |
 | 3 | 预约与随访 `care` | `care` 30；domain/command/repository/transaction 较成熟 | appointments/followups 主 API 与页面 off | institution 历史形状 nullable；read model 未闭环 | Customer 稳定引用、正式 Reader/API/page | 人工随访只读/人工闭环 fresh Admission |
 | 4 | 知识库 `knowledge` | `institution-knowledge` 8 + `knowledge` 8；旧/new runtime 并存 | items 根 API 与页面 off | 旧 preview/mock/demo 与正式事实边界未退出 | MIG-03、Reader、worker/OCR/index 与低敏授权 | 资料库只读 fresh Admission |
@@ -97,20 +102,23 @@ SECOND_CANDIDATE=customers
 FIRST_STREAM_CAN_START=true
 FIRST_STREAM_FIRST_SLICE=SYS_01_AI_USAGE_READONLY_FRESH_ADMISSION
 FIRST_STREAM_FRESH_ADMISSION_COMPLETE=true
+FIRST_STREAM_DB_READINESS_REAUDIT_COMPLETE=true
 FIRST_STREAM_RUNTIME_ADMISSION_READY=false
 FIRST_STREAM_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
 FIRST_STREAM_EXACT_RUNTIME_FILE_COUNT=0
-FIRST_STREAM_DB_READ_PREREQUISITE=true
-FIRST_STREAM_NEXT_ATOMIC_TASK=SYS_01_AI_USAGE_READONLY_LOCAL_DEVELOPMENT_DB_READINESS_REAUDIT
+FIRST_STREAM_DB_READ_PREREQUISITE=false
+FIRST_STREAM_MIGRATION_PREREQUISITE=true
+FIRST_STREAM_NEXT_ATOMIC_TASK=SYS_01_LOCAL_DEVELOPMENT_SCHEMA_PARITY_MIGRATION_ADMISSION
 ```
 
-`system` 是唯一已有真实、持久化、角色感知并正式发布子页的业务线，复用 Foundation 的证据最强。S20 已冻结 SYS-01 的 owner、authoritative Reader、formal composition、canonical v1 API、角色与低敏 DTO；但 local-development DB 当前不可连接，无法验证实际 cohort，因此 Runtime Admission 保持 blocked，不能猜 Runtime allowlist。
+`system` 是唯一已有真实、持久化、角色感知并正式发布子页的业务线，复用 Foundation 的证据最强。S20 已冻结 SYS-01 的 owner、authoritative Reader、formal composition、canonical v1 API、角色与低敏 DTO；S21 已连接实际 local-development DB，但 schema parity 缺失 `institution_scopes`，无法验证 formal institution pair authority，因此 Runtime Admission 保持 blocked。
 
 `customers` 无外部系统且是 Care/Workbench 上游，排第二；但主 Reader/API/data readiness 尚未闭环，不能先于当前证据更强的 `system`。
 
 ## 六、数据与 Migration 停止线
 
-- S20 已获一次 local-development loopback SELECT-only 授权，但连接在 transaction/SQL 前即 `ECONNREFUSED`；下一 readiness re-audit 仍需新的明确授权，不得自行启动 Docker/PostgreSQL。
+- S21 已完成 local-development loopback transaction-read-only SELECT audit；所有事务 ROLLBACK，数据库写入为 0。
+- actual DB 缺失 `institution_scopes`；current code Schema 与既有 migration provenance 已有该表定义，因此下一 prerequisite 是独立 Migration Admission，不是顺手执行 migration。
 - `customers`、Care 与其他旧表中的 nullable institution 形状必须逐切片 fresh 证明，不能用旧 MIG 计划自动推导完整性。
 - 如下一切片确需 Schema/Migration，必须拆为独立授权、独立 PR、升级/回退验证；业务线 PR 不得顺手修改 `src/server/db/schema.ts` 或 `drizzle/**`。
 - 不允许以当前单机构、默认机构、membership 当前值、mock/seed/demo 或目录位置补推历史机构归属。
@@ -127,12 +135,12 @@ FIRST_STREAM_NEXT_ATOMIC_TASK=SYS_01_AI_USAGE_READONLY_LOCAL_DEVELOPMENT_DB_READ
 ## 八、下一任务
 
 ```text
-NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_AI_USAGE_READONLY_LOCAL_DEVELOPMENT_DB_READINESS_REAUDIT
+NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_LOCAL_DEVELOPMENT_SCHEMA_PARITY_MIGRATION_ADMISSION
 NEXT_TASK_AUTHORIZED=false
 NEXT_STAGE_AUTO_EXECUTION=false
 SEVEN_STREAM_RUNTIME_IMPLEMENTED=false
-DATABASE_CONNECTION_AUTHORIZED=requires_explicit_next_task_authorization
 DATABASE_WRITE_EXECUTION_AUTHORIZED=false
+MIGRATION_EXECUTION_AUTHORIZED=false
 ```
 
-S20 canonical evidence：`docs/operations/seven-stream-system-sys01-ai-usage-readonly-fresh-admission-20260815.md`。S19 七线入口证据：`docs/operations/post-v2-r1c-final-closure-seven-stream-entry-audit-20260814.md`。
+S21 canonical evidence：`docs/operations/seven-stream-system-sys01-ai-usage-readonly-db-readiness-reaudit-20260815.md`。S20 Admission：`docs/operations/seven-stream-system-sys01-ai-usage-readonly-fresh-admission-20260815.md`。

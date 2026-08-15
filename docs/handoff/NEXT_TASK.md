@@ -3,18 +3,29 @@
 ## 下一任务选择状态
 
 ```text
-NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_AI_USAGE_READONLY_LOCAL_DEVELOPMENT_DB_READINESS_REAUDIT
+NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_LOCAL_DEVELOPMENT_SCHEMA_PARITY_MIGRATION_ADMISSION
 NEXT_STAGE=UNASSIGNED
 NEXT_TASK_AUTHORIZED=false
 NEXT_TASK_SELECTION_REQUIRED=false
 NEXT_STAGE_AUTO_EXECUTION=false
+S21_COMPLETION_MODE=READINESS_REAUDIT_COMPLETE_BLOCKED
+S21_DB_READINESS_REAUDIT=passed
+DATABASE_CONNECTION=true
+DATABASE_TRANSACTION_READ_ONLY=true
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_MATCHES_CURRENT_CODE=false
+MISSING_REQUIRED_SOURCE_TABLES=public.institution_scopes
+SYS01_MIGRATION_REQUIRED=true
+SYS01_INSTITUTION_ISOLATION_SAFE=false
+SYS01_READER_LIMIT_SAFE=true
+S21_RUNTIME_ADMISSION_READY=false
 S20_COMPLETION_MODE=ADMISSION_COMPLETE_BLOCKED
 S20_SYS01_FRESH_ADMISSION=passed
 SYS01_RUNTIME_ADMISSION_READY=false
-SYS01_DATA_READINESS=unavailable
+SYS01_DATA_READINESS=blocked
 SYS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
 SYS01_EXACT_RUNTIME_FILE_COUNT=0
-PRIMARY_BLOCKING_PREREQUISITE=local_development_postgresql_127_0_0_1_55433_available_for_transaction_read_only_SYS01_cohort_audit
+PRIMARY_BLOCKING_PREREQUISITE=local_development_schema_parity_missing_public_institution_scopes_requires_separately_authorized_migration_admission
 S19_COMPLETE=true
 POST_V2_R1C_COMPLETE=true
 POST_V2_R1C_FORMAL_CLOSURE=true
@@ -26,20 +37,21 @@ FIRST_STREAM_FIRST_SLICE=SYS_01_AI_USAGE_READONLY_FRESH_ADMISSION
 FIRST_STREAM_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
 FIRST_STREAM_FRESH_ADMISSION_COMPLETE=true
 FIRST_STREAM_FRESH_ADMISSION_REQUIRED=false
-FIRST_STREAM_DB_READ_PREREQUISITE=true
+FIRST_STREAM_DB_READ_PREREQUISITE=false
+FIRST_STREAM_MIGRATION_PREREQUISITE=true
 POST_R1C_DEFAULT_MODE=business_slice_delivery
 S18_COMPLETE=true
 SEVEN_STREAM_DEVELOPMENT_AUTHORIZED=false
-DATABASE_CONNECTION_AUTHORIZED=requires_explicit_next_task_authorization
+MIGRATION_EXECUTION_AUTHORIZED=false
 DATABASE_WRITE_EXECUTION_AUTHORIZED=false
 PAGE_SYSTEM_AUDIT_RUNTIME_RELEASE_COMPLETE=true
 ```
 
-S20 已完成 SYS-01 的 fresh source/ownership、Reader、API/page/capability、角色、低敏 DTO 与静态隔离审计。实际 local-development PostgreSQL `127.0.0.1:55433` 当前没有 listener，连接在 transaction 与任何 SQL 之前即 `ECONNREFUSED`，因此实际 cohort、历史覆盖、unknown service/status、metric validity 与 tenant/institution pair integrity 均不可验证。
+S21 已安全启动既有 local-development PostgreSQL 并完成 transaction-read-only aggregate audit。实际 `ai_call_usage_records` cohort 为 0，但 current code 所需 `public.institution_scopes` 不存在，schema parity 不成立，formal institution pair authority 无法验证。
 
-下一原子任务只能在新的明确授权下，让当前项目 local-development PostgreSQL 可连接后重跑 transaction-read-only metadata/aggregate cohort audit；仍不得写数据库、执行 Schema/Migration/DDL/DML/Seed 或实现 Runtime。只有实际 readiness 证据通过后，才可重新决定是否冻结 exact Runtime allowlist。
+下一原子任务只能 fresh Admission 既有 migration chain 的 local-development schema parity 方案、precheck、rollback 与验证；当前不授权执行 Migration、Schema、DDL/DML、Seed 或 Runtime。不得直接假定运行单个历史 migration 即安全。
 
-S20 canonical evidence：`docs/operations/seven-stream-system-sys01-ai-usage-readonly-fresh-admission-20260815.md`。
+S21 canonical evidence：`docs/operations/seven-stream-system-sys01-ai-usage-readonly-db-readiness-reaudit-20260815.md`。
 
 ## S18 exact 5-file Runtime 最终发布闭环
 
