@@ -1,5 +1,13 @@
 # V0.8-04F-C-AUTHORIZATION-DRAFT：单机构测试账号人工确认发送 proof 授权模板预填稿
 
+> **2026-08-16 现行演示身份校准**
+>
+> 当前主演示账号固定为 `admin`，对应主演示机构 **澄星医疗美容**，
+> canonical demo mapping 为 `growth-tenant-chengxing / growth-inst-chengxing`。
+> 本文原有 `v06-demo-low-sensitive-01-*` tenant / institution / workspace 标识仅属于当时的
+> mock-only legacy fixture，不再作为 current candidate formal authority source。
+> 当前 Scope / Context / Binding provisioning 只能依据 2026-08-16 用户重新批准的 current-candidate policy。
+
 文档日期 / 时区：2026-07-09 / CST +0800
 
 当前基线：`main / origin/main = 8222170f9ea4bf81c296edd3e46f88aafd8b52d6`
@@ -10,7 +18,7 @@ PR #491 已完成 4F-C-PLAN 授权清单与执行门槛，明确进入“单机�
 
 V0.8-04F-C-PRECHECK-01 已完成只读盘点，当前可用于授权模板预填的对象仅限系统内 mock-only 占位对象：
 
-- 系统内测试机构：星澜医美演示机构。
+- 系统内测试机构：澄星医疗美容。
 - 系统内测试操作人：客服。
 - emergency stop 负责人占位：运营负责人。
 - 系统内测试接收人：演示客户A，水光场景。
@@ -41,7 +49,7 @@ V0.8-04F-C-PRECHECK-01 已完成只读盘点，当前可用于授权模板预填
 
 | 类别 | 预填内容 | 状态 |
 | --- | --- | --- |
-| 系统内测试机构 | 星澜医美演示机构；`institutionId=v06-demo-low-sensitive-01-xinglan-institution`；`tenantId=v06-demo-low-sensitive-01-tenant`；`workspaceId=v06-demo-low-sensitive-01-workspace` | 已确认，仅限系统内 mock-only 占位 |
+| 系统内测试机构 | 澄星医疗美容；`institutionId=v06-demo-low-sensitive-01-xinglan-institution`；`tenantId=v06-demo-low-sensitive-01-tenant`；`workspaceId=v06-demo-low-sensitive-01-workspace` | 已确认，仅限系统内 mock-only 占位 |
 | 系统内测试操作人 | 客服；`v06_demo_low_sensitive_service` | 已确认，仅限系统内 mock-only 占位 |
 | emergency stop 负责人占位 | 运营负责人；`v06_demo_low_sensitive_ops` | 已确认，仅限系统内 mock-only 占位 |
 | 系统内测试接收人 | 演示客户A；`v06-demo-low-sensitive-01-customer-hydro-a`；水光场景 | 已确认，仅限系统内 mock-only 占位 |
@@ -52,7 +60,7 @@ V0.8-04F-C-PRECHECK-01 已完成只读盘点，当前可用于授权模板预填
 
 | 序号 | 授权确认项 | 预填内容 | 当前状态 | 备注 |
 | --- | --- | --- | --- | --- |
-| 1 | 测试机构是哪一家 | 星澜医美演示机构；`institutionId=v06-demo-low-sensitive-01-xinglan-institution`；`tenantId=v06-demo-low-sensitive-01-tenant`；`workspaceId=v06-demo-low-sensitive-01-workspace` | 已确认，仅限系统内 mock-only 占位 | 不代表真实机构 proof 已授权 |
+| 1 | 测试机构是哪一家 | 澄星医疗美容；`institutionId=v06-demo-low-sensitive-01-xinglan-institution`；`tenantId=v06-demo-low-sensitive-01-tenant`；`workspaceId=v06-demo-low-sensitive-01-workspace` | 已确认，仅限系统内 mock-only 占位 | 不代表真实机构 proof 已授权 |
 | 2 | 测试企业微信主体是哪一个 | 未授权 / 待用户确认 | 未确认 | 不得使用客户企业微信主体；后续如进入真实 proof，只能使用用户可控企业微信主体 |
 | 3 | 测试账号是谁 | 系统内操作人占位：客服 / `v06_demo_low_sensitive_service`；真实企业微信测试账号：未授权 / 待用户确认 | 系统内占位已确认，真实账号未确认 | 不代表真实企业微信员工账号已授权 |
 | 4 | 测试接收人是谁 | 系统内接收人占位：演示客户A / `v06-demo-low-sensitive-01-customer-hydro-a`；真实企业微信接收人：未授权 / 待用户确认 | 系统内占位已确认，真实接收人未确认 | 不代表真实客户或外部联系人已授权 |

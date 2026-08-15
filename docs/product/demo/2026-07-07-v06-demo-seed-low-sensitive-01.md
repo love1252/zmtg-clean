@@ -1,5 +1,12 @@
 # V0.6 低敏 demo seed 01
 
+> **2026-08-16 现行演示口径校准**
+>
+> 当前主演示账号固定为 `admin`，对应主演示机构 **澄星医疗美容**。
+> 当前代码映射为 `growth-tenant-chengxing / growth-inst-chengxing`。
+> 本文涉及的 `v06-demo-low-sensitive-01-*` 标识继续仅作为历史 V0.6 deterministic fixture ID，
+> 不代表 current formal institution authority，也不得替代当前 Scope / Context / Binding provisioning authority。
+
 ## 1. 用途
 
 - 日期 / 时区：2026-07-07 / Asia/Shanghai
@@ -16,7 +23,7 @@
 本 seed 覆盖：
 
 1. 演示租户：`智美天工 V0.6 演示租户`。
-2. 演示机构：`星澜医美演示机构`。
+2. 演示机构：`澄星医疗美容`。
 3. 角色：机构管理员、咨询师、客服、医助、运营负责人。
 4. 低敏客户 4 个：水光术后、光子 / 光电术后、双眼皮术后修复、皮肤管理。
 5. 治疗摘要 4 条：`hydro_injection_care`、`photoelectric_care`、`post_surgery_repair`、`skin_management`。
