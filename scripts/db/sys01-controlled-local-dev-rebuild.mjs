@@ -10,9 +10,14 @@ import { fileURLToPath } from 'node:url';
 const execFile = promisify(execFileCallback);
 const O_NOFOLLOW = fsConstants.O_NOFOLLOW;
 const MAX_EXECUTION_MANIFEST_BYTES = 2 * 1024 * 1024;
+const SYS01_ADAPTER_PROCESS_TIMEOUT_MS = 30 * 60 * 1_000;
 const ALLOWED_PRIVATE_FILE_MODES = new Set([0o400, 0o600]);
 const SHA1_PATTERN = /^[0-9a-f]{40}$/u;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
+const SYS01_APPLICATION_SMOKE_HOST = '127.0.0.1';
+const SYS01_APPLICATION_SMOKE_PORT = 5011;
+const SYS01_APPLICATION_SMOKE_PATH = '/api/version';
+const SYS01_EVIDENCE_CONTRACT_VERSION = 'zmtg.sys01.rebuild-evidence/v1';
 
 export const SYS01_REBUILD_TASK =
   'SEVEN_STREAM_SYSTEM_SYS_01_CANDIDATE_BASELINE_AND_CONTROLLED_REBUILD_TOOL';
@@ -29,6 +34,15 @@ export const SYS01_PARENT_JOURNAL = Object.freeze({
   when: 1785738060856,
 });
 export const SYS01_EXECUTION_CONFIRMATION = 'S26_SYS01_LOCAL_DEV_EXACT_PHASE';
+
+export const SYS01_PREREQUISITE_ADAPTERS = Object.freeze([
+  'backup',
+  'restore',
+  'candidate-create',
+  'baseline-bootstrap',
+  'transfer',
+  'validate',
+]);
 
 export const SYS01_IDENTITIES = Object.freeze({
   original: Object.freeze({
@@ -1960,11 +1974,42 @@ async function execOpaque(command, arguments_, options = {}) {
     return await execFile(command, arguments_, {
       encoding: 'utf8',
       maxBuffer: 16 * 1024 * 1024,
+      timeout: 5 * 60 * 1_000,
+      killSignal: 'SIGTERM',
       ...options,
     });
   } catch {
     fail('runner_phase_executor_failed');
   }
+}
+
+function waitForSpawnExit(
+  child,
+  errorCode,
+  {
+    timeoutMs = SYS01_ADAPTER_PROCESS_TIMEOUT_MS,
+    setTimeoutImpl = setTimeout,
+    clearTimeoutImpl = clearTimeout,
+  } = {},
+) {
+  return new Promise((resolveResult, rejectResult) => {
+    let settled = false;
+    let timer = null;
+    const settle = (error = null) => {
+      if (settled) return;
+      settled = true;
+      if (timer !== null) clearTimeoutImpl(timer);
+      if (error) rejectResult(error);
+      else resolveResult();
+    };
+    timer = setTimeoutImpl(() => {
+      child.kill?.('SIGTERM');
+      settle(new Error(errorCode));
+    }, timeoutMs);
+    timer?.unref?.();
+    child.once('error', () => settle(new Error(errorCode)));
+    child.once('close', (code) => settle(code === 0 ? null : new Error(errorCode)));
+  });
 }
 
 async function inspectContainer(expected) {
@@ -1973,6 +2018,8 @@ async function inspectContainer(expected) {
     const { stdout } = await execFile('docker', ['inspect', expected.container], {
       encoding: 'utf8',
       maxBuffer: 4 * 1024 * 1024,
+      timeout: 30_000,
+      killSignal: 'SIGTERM',
     });
     inspected = JSON.parse(stdout)[0];
   } catch {
@@ -1981,6 +2028,8 @@ async function inspectContainer(expected) {
       await execFile('docker', ['volume', 'inspect', expected.volume], {
         encoding: 'utf8',
         maxBuffer: 4 * 1024 * 1024,
+        timeout: 30_000,
+        killSignal: 'SIGTERM',
       });
       volumeExists = true;
     } catch {
@@ -2004,6 +2053,8 @@ async function inspectContainer(expected) {
   try {
     const { stdout } = await execFile('docker', ['exec', expected.container, 'postgres', '--version'], {
       encoding: 'utf8',
+      timeout: 30_000,
+      killSignal: 'SIGTERM',
     });
     postgresVersion = stdout.match(/(\d+\.\d+)/u)?.[1] ?? null;
   } catch {
@@ -2145,30 +2196,39 @@ function opaqueRowsDigest(rows) {
   );
 }
 
-async function createExactPostgresContainer(identity, env) {
+function buildExactPostgresContainerSteps(identity) {
+  return Object.freeze([
+    Object.freeze({ command: 'docker', args: ['volume', 'create', identity.volume] }),
+    Object.freeze({
+      command: 'docker',
+      args: [
+        'run',
+        '--pull',
+        'never',
+        '--detach',
+        '--name',
+        identity.container,
+        '--env',
+        'POSTGRES_PASSWORD',
+        '--env',
+        `POSTGRES_DB=${identity.database}`,
+        '--publish',
+        `${identity.host}:${identity.port}:5432`,
+        '--volume',
+        `${identity.volume}:/var/lib/postgresql/data`,
+        identity.image,
+      ],
+    }),
+  ]);
+}
+
+async function createExactPostgresContainer(identity, env, { execOpaqueImpl = execOpaque } = {}) {
   const password = requiredExecutionEnv(env, 'ZMTG_SYS01_POSTGRES_PASSWORD');
-  await execOpaque('docker', ['volume', 'create', identity.volume], { env });
-  await execOpaque(
-    'docker',
-    [
-      'run',
-      '--pull',
-      'never',
-      '--detach',
-      '--name',
-      identity.container,
-      '--env',
-      'POSTGRES_PASSWORD',
-      '--env',
-      `POSTGRES_DB=${identity.database}`,
-      '--publish',
-      `${identity.host}:${identity.port}:5432`,
-      '--volume',
-      `${identity.volume}:/var/lib/postgresql/data`,
-      identity.image,
-    ],
-    { env: { ...env, POSTGRES_PASSWORD: password } },
-  );
+  const [volumeStep, containerStep] = buildExactPostgresContainerSteps(identity);
+  await execOpaqueImpl(volumeStep.command, volumeStep.args, { env });
+  await execOpaqueImpl(containerStep.command, containerStep.args, {
+    env: { ...env, POSTGRES_PASSWORD: password },
+  });
 }
 
 async function fileSha256(filePath) {
@@ -2210,42 +2270,133 @@ async function assertRepoExternalPath(filePath, repositoryRoot, { mustExist = fa
   return resolved;
 }
 
-async function createEncryptedBackup(env, repositoryRoot) {
-  const backupPath = path.resolve(requiredExecutionEnv(env, 'ZMTG_SYS01_ENCRYPTED_BACKUP_PATH'));
-  const keyPath = path.resolve(requiredExecutionEnv(env, 'ZMTG_SYS01_BACKUP_KEY_PATH'));
-  await assertRepoExternalPath(backupPath, repositoryRoot);
-  await assertRepoExternalPath(keyPath, repositoryRoot, { mustExist: true, privateFile: true });
-  const keySource = readFileSync(keyPath);
-  const key = keySource.length === 32
-    ? Buffer.from(keySource)
-    : /^[0-9a-f]{64}$/iu.test(keySource.toString('utf8').trim())
-      ? Buffer.from(keySource.toString('utf8').trim(), 'hex')
+function decodeSys01BackupKey(source) {
+  const key = source.length === 32
+    ? Buffer.from(source)
+    : /^[0-9a-f]{64}$/iu.test(source.toString('utf8').trim())
+      ? Buffer.from(source.toString('utf8').trim(), 'hex')
       : null;
-  keySource.fill(0);
-  if (!key) fail('runner_backup_path_or_key_invalid');
+  source.fill(0);
+  if (!key || key.length !== 32) fail('runner_backup_path_or_key_invalid');
+  return key;
+}
+
+async function readSys01BackupKey(env, repositoryRoot, { openImpl = open } = {}) {
+  const keyPath = path.resolve(requiredExecutionEnv(env, 'ZMTG_SYS01_BACKUP_KEY_PATH'));
+  await assertRepoExternalPath(keyPath, repositoryRoot, { mustExist: true, privateFile: true });
+  let handle;
+  try {
+    handle = await openImpl(keyPath, fsConstants.O_RDONLY | O_NOFOLLOW);
+    const stat = await handle.stat();
+    if (
+      !stat.isFile() ||
+      stat.nlink !== 1 ||
+      ![32, 64, 65, 66].includes(stat.size) ||
+      !ALLOWED_PRIVATE_FILE_MODES.has(stat.mode & 0o777)
+    ) fail('runner_backup_path_or_key_invalid');
+    return decodeSys01BackupKey(await handle.readFile());
+  } catch (error) {
+    if (error instanceof Sys01RebuildError) throw error;
+    fail('runner_backup_path_or_key_invalid');
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
+
+export async function preflightSys01BackupKeySourceV1({
+  env = process.env,
+  repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'),
+} = {}) {
+  const key = await readSys01BackupKey(env, repositoryRoot);
+  key.fill(0);
+  return Object.freeze({
+    available: true,
+    formatValid: true,
+    permissionValid: true,
+    repositoryExternal: true,
+    regularFile: true,
+    symlink: false,
+    valueReadOrLogged: false,
+  });
+}
+
+export function buildSys01PrerequisiteAdapterStepsV1(adapter, { postgresUser = 'postgres' } = {}) {
+  if (!SYS01_PREREQUISITE_ADAPTERS.includes(adapter)) {
+    fail('runner_prerequisite_adapter_invalid', 2);
+  }
+  const common = { adapter, originalMutationAllowed: false, automaticRetryAllowed: false };
+  if (adapter === 'backup') {
+    return Object.freeze([
+      Object.freeze({ ...common, kind: 'execFile', command: 'docker', args: ['exec', SYS01_IDENTITIES.original.container, 'pg_dump', '--version'] }),
+      Object.freeze({ ...common, kind: 'spawn', command: 'docker', args: ['exec', SYS01_IDENTITIES.original.container, 'pg_dump', '-U', postgresUser, '-d', SYS01_IDENTITIES.original.database, '--format=custom', '--no-owner', '--no-privileges'], output: 'aes-256-gcm-encrypted-repository-external-file' }),
+      Object.freeze({ ...common, kind: 'filesystem', operation: 'commit-encrypted-artifact', flags: ['O_CREAT', 'O_EXCL', 'O_NOFOLLOW'], mode: 0o600 }),
+    ]);
+  }
+  if (adapter === 'restore') {
+    return Object.freeze([
+      Object.freeze({ ...common, kind: 'filesystem', operation: 'read-encrypted-artifact', flags: ['O_RDONLY', 'O_NOFOLLOW'] }),
+      Object.freeze({ ...common, kind: 'spawn', command: 'docker', args: ['run', '--rm', '--interactive', SYS01_IDENTITIES.restoreDrill.image, 'pg_restore', '--list'] }),
+      Object.freeze({ ...common, kind: 'spawn', command: 'docker', args: ['exec', '-i', SYS01_IDENTITIES.restoreDrill.container, 'pg_restore', '-U', postgresUser, '-d', SYS01_IDENTITIES.restoreDrill.database, '--exit-on-error', '--no-owner', '--no-privileges'] }),
+      Object.freeze({ ...common, kind: 'database', operation: 'verify-restore-opaque-equality' }),
+    ]);
+  }
+  if (adapter === 'candidate-create') {
+    const [volumeStep, containerStep] = buildExactPostgresContainerSteps(SYS01_IDENTITIES.candidate);
+    return Object.freeze([
+      Object.freeze({ ...common, kind: 'execFile', ...volumeStep }),
+      Object.freeze({ ...common, kind: 'execFile', ...containerStep, secretEnvironmentKeys: ['POSTGRES_PASSWORD'] }),
+      Object.freeze({ ...common, kind: 'database', operation: 'verify-candidate-empty-and-exact-identity' }),
+    ]);
+  }
+  if (adapter === 'baseline-bootstrap') {
+    return Object.freeze([
+      Object.freeze({ ...common, kind: 'database', operation: 'assert-candidate-empty' }),
+      Object.freeze({ ...common, kind: 'database', operation: 'apply-manifest-bound-baseline-in-one-transaction' }),
+      Object.freeze({ ...common, kind: 'database', operation: 'verify-schema-fingerprint-and-marker-only-origin' }),
+    ]);
+  }
+  if (adapter === 'transfer') {
+    return Object.freeze([
+      Object.freeze({ ...common, kind: 'database', operation: 'read-original-single-repeatable-read-snapshot' }),
+      Object.freeze({ ...common, kind: 'database', operation: 'copy-mapped-rows-to-exact-candidate' }),
+      Object.freeze({ ...common, kind: 'database', operation: 'verify-count-digest-secret-equality-and-original-unchanged' }),
+    ]);
+  }
+  return Object.freeze([
+    Object.freeze({ ...common, kind: 'database', operation: 'inspect-candidate-catalog-count-mapping-null-and-marker' }),
+    Object.freeze({ ...common, kind: 'database', operation: 'verify-original-unchanged' }),
+  ]);
+}
+
+async function createEncryptedBackup(env, repositoryRoot, runtime = {}) {
+  const backupPath = path.resolve(requiredExecutionEnv(env, 'ZMTG_SYS01_ENCRYPTED_BACKUP_PATH'));
+  await (runtime.assertRepoExternalPath ?? assertRepoExternalPath)(backupPath, repositoryRoot);
+  const key = await (runtime.readBackupKey ?? readSys01BackupKey)(env, repositoryRoot);
   const user = requiredExecutionEnv(env, 'ZMTG_SYS01_POSTGRES_USER');
-  const version = await execOpaque('docker', ['exec', SYS01_IDENTITIES.original.container, 'pg_dump', '--version']);
+  const adapterSteps = buildSys01PrerequisiteAdapterStepsV1('backup', { postgresUser: user });
+  const version = await (runtime.execOpaque ?? execOpaque)(adapterSteps[0].command, adapterSteps[0].args);
   if (!version.stdout.includes('16.14')) fail('runner_backup_tool_version_mismatch');
-  const iv = randomBytes(12);
+  const iv = (runtime.randomBytes ?? randomBytes)(12);
   let headerHandle;
   try {
-    headerHandle = await open(backupPath, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | O_NOFOLLOW, 0o600);
+    headerHandle = await (runtime.open ?? open)(backupPath, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | O_NOFOLLOW, 0o600);
     await headerHandle.write(Buffer.concat([Buffer.from('ZMTGS26BKP1\0', 'ascii'), iv]));
-    const child = spawn(
-      'docker',
-      ['exec', SYS01_IDENTITIES.original.container, 'pg_dump', '-U', user, '-d', SYS01_IDENTITIES.original.database, '--format=custom', '--no-owner', '--no-privileges'],
+    const child = (runtime.spawn ?? spawn)(
+      adapterSteps[1].command,
+      adapterSteps[1].args,
       { env, stdio: ['ignore', 'pipe', 'ignore'] },
     );
-    const cipher = createCipheriv('aes-256-gcm', key, iv);
-    const childResult = new Promise((resolveResult, rejectResult) => {
-      child.once('error', () => rejectResult(new Error('backup failed')));
-      child.once('close', (code) => (code === 0 ? resolveResult() : rejectResult(new Error('backup failed'))));
-    });
+    const cipher = (runtime.createCipheriv ?? createCipheriv)('aes-256-gcm', key, iv);
+    const childResult = (runtime.waitForSpawnExit ?? waitForSpawnExit)(
+      child,
+      'runner_backup_process_failed',
+      { timeoutMs: runtime.processTimeoutMs },
+    );
     await Promise.all([
-      pipeline(
+      (runtime.pipeline ?? pipeline)(
         child.stdout,
         cipher,
-        createWriteStream(backupPath, { fd: headerHandle.fd, autoClose: false }),
+        (runtime.createWriteStream ?? createWriteStream)(backupPath, { fd: headerHandle.fd, autoClose: false }),
       ),
       childResult,
     ]);
@@ -2253,9 +2404,9 @@ async function createEncryptedBackup(env, repositoryRoot) {
     await headerHandle.sync();
     await headerHandle.close();
     headerHandle = null;
-    const stat = await lstat(backupPath);
+    const stat = await (runtime.lstat ?? lstat)(backupPath);
     const evidence = {
-      ciphertextSha256: await fileSha256(backupPath),
+      ciphertextSha256: await (runtime.fileSha256 ?? fileSha256)(backupPath),
       ciphertextBytes: stat.size,
       pgDumpVersion: '16.14',
       plaintextResidual: false,
@@ -2265,7 +2416,7 @@ async function createEncryptedBackup(env, repositoryRoot) {
       status: 'succeeded',
       postconditionVerified: true,
       ...evidence,
-      completedAt: new Date().toISOString(),
+      completedAt: (runtime.now ?? (() => new Date().toISOString()))(),
       postconditionFingerprint: safeResultFingerprint(evidence),
     };
   } catch {
@@ -2273,7 +2424,7 @@ async function createEncryptedBackup(env, repositoryRoot) {
     return {
       status: 'unknown',
       postconditionVerified: false,
-      completedAt: new Date().toISOString(),
+      completedAt: (runtime.now ?? (() => new Date().toISOString()))(),
       postconditionFingerprint: sha256Bytes(Buffer.from('backup_unknown', 'utf8')),
     };
   } finally {
@@ -2297,23 +2448,15 @@ async function waitForPostgresContainer(container, user, database, env) {
   fail('runner_postgres_readiness_timeout');
 }
 
-async function restoreEncryptedBackup(env, repositoryRoot, executionManifest) {
+async function restoreEncryptedBackup(env, repositoryRoot, executionManifest, runtime = {}) {
   const backupPath = path.resolve(requiredExecutionEnv(env, 'ZMTG_SYS01_ENCRYPTED_BACKUP_PATH'));
-  const keyPath = path.resolve(requiredExecutionEnv(env, 'ZMTG_SYS01_BACKUP_KEY_PATH'));
-  await assertRepoExternalPath(backupPath, repositoryRoot, { mustExist: true, privateFile: true });
-  await assertRepoExternalPath(keyPath, repositoryRoot, { mustExist: true, privateFile: true });
-  const keySource = readFileSync(keyPath);
-  const key = keySource.length === 32
-    ? Buffer.from(keySource)
-    : /^[0-9a-f]{64}$/iu.test(keySource.toString('utf8').trim())
-      ? Buffer.from(keySource.toString('utf8').trim(), 'hex')
-      : null;
-  keySource.fill(0);
-  if (!key) fail('runner_backup_path_or_key_invalid');
+  await (runtime.assertRepoExternalPath ?? assertRepoExternalPath)(backupPath, repositoryRoot, { mustExist: true, privateFile: true });
+  const key = await (runtime.readBackupKey ?? readSys01BackupKey)(env, repositoryRoot);
   const user = requiredExecutionEnv(env, 'ZMTG_SYS01_POSTGRES_USER');
+  const adapterSteps = buildSys01PrerequisiteAdapterStepsV1('restore', { postgresUser: user });
   let mutationStarted = false;
   try {
-    const stat = await lstat(backupPath);
+    const stat = await (runtime.lstat ?? lstat)(backupPath);
     if (!stat.isFile() || stat.size <= 40) fail('runner_backup_artifact_invalid');
     const backupReceipt = executionManifest?.phaseReceipts
       ?.filter((receipt) => receipt.phase === 'backup' && receipt.status === 'succeeded')
@@ -2321,11 +2464,11 @@ async function restoreEncryptedBackup(env, repositoryRoot, executionManifest) {
     const frozenCiphertextSha256 = backupReceipt?.evidence?.ciphertextSha256;
     if (
       !SHA256_PATTERN.test(frozenCiphertextSha256 ?? '') ||
-      (await fileSha256(backupPath)) !== frozenCiphertextSha256
+      (await (runtime.fileSha256 ?? fileSha256)(backupPath)) !== frozenCiphertextSha256
     ) fail('runner_backup_artifact_drift');
     const header = Buffer.alloc(24);
     const tag = Buffer.alloc(16);
-    const handle = await open(backupPath, fsConstants.O_RDONLY | O_NOFOLLOW);
+    const handle = await (runtime.open ?? open)(backupPath, fsConstants.O_RDONLY | O_NOFOLLOW);
     await handle.read(header, 0, header.length, 0);
     await handle.read(tag, 0, tag.length, stat.size - tag.length);
     await handle.close();
@@ -2335,11 +2478,11 @@ async function restoreEncryptedBackup(env, repositoryRoot, executionManifest) {
     const pipeDecryptedArchive = async (destination) => {
       let archiveHandle;
       try {
-        archiveHandle = await open(backupPath, fsConstants.O_RDONLY | O_NOFOLLOW);
-        const decipher = createDecipheriv('aes-256-gcm', key, header.subarray(12, 24));
+        archiveHandle = await (runtime.open ?? open)(backupPath, fsConstants.O_RDONLY | O_NOFOLLOW);
+        const decipher = (runtime.createDecipheriv ?? createDecipheriv)('aes-256-gcm', key, header.subarray(12, 24));
         decipher.setAuthTag(tag);
-        await pipeline(
-          createReadStream(backupPath, {
+        await (runtime.pipeline ?? pipeline)(
+          (runtime.createReadStream ?? createReadStream)(backupPath, {
             fd: archiveHandle.fd,
             autoClose: false,
             start: 24,
@@ -2352,9 +2495,9 @@ async function restoreEncryptedBackup(env, repositoryRoot, executionManifest) {
         await archiveHandle?.close();
       }
     };
-    const archiveCheck = spawn(
-      'docker',
-      ['run', '--rm', '--interactive', SYS01_IDENTITIES.restoreDrill.image, 'pg_restore', '--list'],
+    const archiveCheck = (runtime.spawn ?? spawn)(
+      adapterSteps[1].command,
+      adapterSteps[1].args,
       { env, stdio: ['pipe', 'pipe', 'ignore'] },
     );
     const archiveListChunks = [];
@@ -2364,42 +2507,50 @@ async function restoreEncryptedBackup(env, repositoryRoot, executionManifest) {
       if (archiveListBytes > 2 * 1024 * 1024) archiveCheck.kill();
       else archiveListChunks.push(chunk);
     });
-    const archiveCheckResult = new Promise((resolveResult, rejectResult) => {
-      archiveCheck.once('error', () => rejectResult(new Error('restore archive check failed')));
-      archiveCheck.once('close', (code) =>
-        (code === 0 ? resolveResult() : rejectResult(new Error('restore archive check failed'))));
-    });
+    const archiveCheckResult = (runtime.waitForSpawnExit ?? waitForSpawnExit)(
+      archiveCheck,
+      'runner_restore_archive_check_failed',
+      { timeoutMs: runtime.processTimeoutMs },
+    );
     await Promise.all([pipeDecryptedArchive(archiveCheck.stdin), archiveCheckResult]);
     const archiveTables = [...Buffer.concat(archiveListChunks).toString('utf8').matchAll(
       /^\d+;\s+\d+\s+\d+\s+TABLE\s+(\S+)\s+(\S+)\s+\S+$/gmu,
     )].map((match) => `${match[1]}.${match[2]}`).sort();
-    const expectedArchiveTables = SYS01_TABLE_CONTRACT.map((entry) => entry.table).sort();
+    const expectedArchiveTables = SYS01_TABLE_CONTRACT.map((entry) =>
+      entry.table.includes('.') ? entry.table : `public.${entry.table}`,
+    ).sort();
     if (canonicalJson(archiveTables) !== canonicalJson(expectedArchiveTables)) {
       fail('runner_backup_archive_table_set_mismatch');
     }
     mutationStarted = true;
-    await createExactPostgresContainer(SYS01_IDENTITIES.restoreDrill, env);
-    await waitForPostgresContainer(
+    await (runtime.createExactPostgresContainer ?? createExactPostgresContainer)(SYS01_IDENTITIES.restoreDrill, env);
+    await (runtime.waitForPostgresContainer ?? waitForPostgresContainer)(
       SYS01_IDENTITIES.restoreDrill.container,
       user,
       SYS01_IDENTITIES.restoreDrill.database,
       env,
     );
-    const child = spawn(
-      'docker',
-      ['exec', '-i', SYS01_IDENTITIES.restoreDrill.container, 'pg_restore', '-U', user, '-d', SYS01_IDENTITIES.restoreDrill.database, '--exit-on-error', '--no-owner', '--no-privileges'],
+    const restoreIdentity = await (runtime.inspectContainer ?? inspectContainer)(
+      SYS01_IDENTITIES.restoreDrill,
+    );
+    assertDatabaseIdentity('restoreDrill', restoreIdentity);
+    if (restoreIdentity.exists !== true) fail('runner_restoreDrill_missing');
+    const child = (runtime.spawn ?? spawn)(
+      adapterSteps[2].command,
+      adapterSteps[2].args,
       { env, stdio: ['pipe', 'ignore', 'ignore'] },
     );
-    const childResult = new Promise((resolveResult, rejectResult) => {
-      child.once('error', () => rejectResult(new Error('restore failed')));
-      child.once('close', (code) => (code === 0 ? resolveResult() : rejectResult(new Error('restore failed'))));
-    });
+    const childResult = (runtime.waitForSpawnExit ?? waitForSpawnExit)(
+      child,
+      'runner_restore_process_failed',
+      { timeoutMs: runtime.processTimeoutMs },
+    );
     await Promise.all([pipeDecryptedArchive(child.stdin), childResult]);
-    const restored = await readDatabaseInventory(
+    const restored = await (runtime.readDatabaseInventory ?? readDatabaseInventory)(
       requiredExecutionEnv(env, 'ZMTG_SYS01_RESTORE_DRILL_DATABASE_URL'),
       { includeOpaque: true },
     );
-    const original = await readDatabaseInventory(
+    const original = await (runtime.readDatabaseInventory ?? readDatabaseInventory)(
       requiredExecutionEnv(env, 'ZMTG_SYS01_ORIGINAL_DATABASE_URL'),
       { includeOpaque: true },
     );
@@ -2421,7 +2572,7 @@ async function restoreEncryptedBackup(env, repositoryRoot, executionManifest) {
       status: valid ? 'succeeded' : 'unknown',
       postconditionVerified: valid,
       ...evidence,
-      completedAt: new Date().toISOString(),
+      completedAt: (runtime.now ?? (() => new Date().toISOString()))(),
       postconditionFingerprint: safeResultFingerprint(evidence),
     };
   } catch {
@@ -2429,7 +2580,7 @@ async function restoreEncryptedBackup(env, repositoryRoot, executionManifest) {
       status: mutationStarted ? 'unknown' : 'not_started',
       preconditionFailed: !mutationStarted,
       postconditionVerified: false,
-      completedAt: new Date().toISOString(),
+      completedAt: (runtime.now ?? (() => new Date().toISOString()))(),
       postconditionFingerprint: sha256Bytes(Buffer.from('restore_unknown', 'utf8')),
     };
   } finally {
@@ -2437,34 +2588,48 @@ async function restoreEncryptedBackup(env, repositoryRoot, executionManifest) {
   }
 }
 
-async function createCandidateDatabase(env) {
+async function inspectCandidateEmptyDatabase(env) {
+  let sql;
+  try {
+    const postgres = (await import('postgres')).default;
+    sql = postgres(requiredExecutionEnv(env, 'ZMTG_SYS01_CANDIDATE_DATABASE_URL'), {
+      max: 1,
+      prepare: false,
+      onnotice: () => undefined,
+    });
+    const rows = await sql`
+      SELECT count(*)::integer AS count
+      FROM information_schema.tables
+      WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+    `;
+    return rows[0]?.count === 0;
+  } finally {
+    await sql?.end({ timeout: 1 }).catch(() => undefined);
+  }
+}
+
+async function createCandidateDatabase(env, runtime = {}) {
   let mutationStarted = false;
   try {
     mutationStarted = true;
-    await createExactPostgresContainer(SYS01_IDENTITIES.candidate, env);
-    await waitForPostgresContainer(
+    await (runtime.createExactPostgresContainer ?? createExactPostgresContainer)(
+      SYS01_IDENTITIES.candidate,
+      env,
+      { execOpaqueImpl: runtime.execOpaque ?? execOpaque },
+    );
+    await (runtime.waitForPostgresContainer ?? waitForPostgresContainer)(
       SYS01_IDENTITIES.candidate.container,
       requiredExecutionEnv(env, 'ZMTG_SYS01_POSTGRES_USER'),
       SYS01_IDENTITIES.candidate.database,
       env,
     );
-    let sql;
-    try {
-      const postgres = (await import('postgres')).default;
-      sql = postgres(requiredExecutionEnv(env, 'ZMTG_SYS01_CANDIDATE_DATABASE_URL'), {
-        max: 1,
-        prepare: false,
-        onnotice: () => undefined,
-      });
-      const rows = await sql`
-        SELECT count(*)::integer AS count
-        FROM information_schema.tables
-        WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
-      `;
-      if (rows[0]?.count !== 0) fail('runner_candidate_not_empty');
-    } finally {
-      await sql?.end({ timeout: 1 }).catch(() => undefined);
-    }
+    const candidateIdentity = await (runtime.inspectContainer ?? inspectContainer)(
+      SYS01_IDENTITIES.candidate,
+    );
+    assertDatabaseIdentity('candidate', candidateIdentity);
+    if (candidateIdentity.exists !== true) fail('runner_candidate_missing');
+    const candidateEmpty = await (runtime.inspectCandidateEmpty ?? inspectCandidateEmptyDatabase)(env);
+    if (!candidateEmpty) fail('runner_candidate_not_empty');
     const evidence = {
       candidateIdentityVerified: true,
       candidateEmpty: true,
@@ -2474,7 +2639,7 @@ async function createCandidateDatabase(env) {
       status: 'succeeded',
       postconditionVerified: true,
       ...evidence,
-      completedAt: new Date().toISOString(),
+      completedAt: (runtime.now ?? (() => new Date().toISOString()))(),
       postconditionFingerprint: safeResultFingerprint(evidence),
     };
   } catch {
@@ -2482,16 +2647,47 @@ async function createCandidateDatabase(env) {
       status: mutationStarted ? 'unknown' : 'not_started',
       preconditionFailed: !mutationStarted,
       postconditionVerified: false,
-      completedAt: new Date().toISOString(),
+      completedAt: (runtime.now ?? (() => new Date().toISOString()))(),
       postconditionFingerprint: sha256Bytes(Buffer.from('candidate_create_unknown', 'utf8')),
     };
   }
 }
 
-async function bootstrapCandidateBaseline(env, bundle) {
+function baselineBootstrapResult(evidence, bundle, now) {
+  const valid =
+    evidence.actualSchemaFingerprintSha256 === bundle.validation.schemaFingerprintSha256 &&
+    evidence.markerId === 1 &&
+    evidence.markerHash === bundle.validation.marker.hash &&
+    evidence.markerCreatedAt === bundle.validation.marker.createdAt &&
+    evidence.markerRowCount === 1 &&
+    evidence.markerShapeVerified === true &&
+    evidence.originalMutationCount === 0;
+  return {
+    status: valid ? 'succeeded' : 'unknown',
+    postconditionVerified: valid,
+    ...evidence,
+    completedAt: now(),
+    postconditionFingerprint: safeResultFingerprint(evidence),
+  };
+}
+
+async function bootstrapCandidateBaseline(env, bundle, runtime = {}) {
   let transactionStarted = false;
   let sql;
   try {
+    if (typeof runtime.bootstrapDatabase === 'function') {
+      transactionStarted = true;
+      const evidence = await runtime.bootstrapDatabase({
+        bundle,
+        candidateIdentity: SYS01_IDENTITIES.candidate,
+        originalMutationAllowed: false,
+      });
+      return baselineBootstrapResult(
+        evidence,
+        bundle,
+        runtime.now ?? (() => new Date().toISOString()),
+      );
+    }
     const postgres = (await import('postgres')).default;
     const { SYS01_ACTUAL_CATALOG_FINGERPRINT_SQL } = await import('./guarded-migrate.mjs');
     sql = postgres(requiredExecutionEnv(env, 'ZMTG_SYS01_CANDIDATE_DATABASE_URL'), {
@@ -2623,32 +2819,24 @@ async function bootstrapCandidateBaseline(env, bundle) {
     const marker = markerRows[0];
     const evidence = {
       actualSchemaFingerprintSha256,
+      markerId: marker?.id,
       markerHash: marker?.hash,
       markerCreatedAt: Number(marker?.created_at),
       markerRowCount: markerRows.length,
       markerShapeVerified,
       originalMutationCount: 0,
     };
-    const valid =
-      actualSchemaFingerprintSha256 === bundle.validation.schemaFingerprintSha256 &&
-      marker?.id === 1 &&
-      marker?.hash === bundle.validation.marker.hash &&
-      Number(marker?.created_at) === bundle.validation.marker.createdAt &&
-      markerRows.length === 1;
-    const postconditionValid = valid && markerShapeVerified;
-    return {
-      status: postconditionValid ? 'succeeded' : 'unknown',
-      postconditionVerified: postconditionValid,
-      ...evidence,
-      completedAt: new Date().toISOString(),
-      postconditionFingerprint: safeResultFingerprint(evidence),
-    };
+    return baselineBootstrapResult(
+      evidence,
+      bundle,
+      runtime.now ?? (() => new Date().toISOString()),
+    );
   } catch {
     return {
       status: transactionStarted ? 'unknown' : 'not_started',
       preconditionFailed: !transactionStarted,
       postconditionVerified: false,
-      completedAt: new Date().toISOString(),
+      completedAt: (runtime.now ?? (() => new Date().toISOString()))(),
       postconditionFingerprint: sha256Bytes(Buffer.from('baseline_bootstrap_unknown', 'utf8')),
     };
   } finally {
@@ -2713,10 +2901,44 @@ function projectedRowsDigest(rows, expectedRows) {
   );
 }
 
-async function transferCandidateData(env, executionManifest) {
+function transferAdapterResult(evidence, executionManifest, now) {
+  const valid =
+    evidence.specialMappingsVerified === true &&
+    evidence.secretOpaqueEqualityVerified === true &&
+    evidence.excludedTargetsEmpty === true &&
+    evidence.mappedRowsVerified === true &&
+    evidence.originalUnchanged === true &&
+    evidence.originalBeforeFingerprint === evidence.originalAfterFingerprint &&
+    evidence.sourceAggregateFingerprint === executionManifest.lowSensitiveAggregateFingerprint &&
+    SHA256_PATTERN.test(evidence.targetAggregateFingerprint ?? '') &&
+    evidence.originalMutationCount === 0;
+  return {
+    status: valid ? 'succeeded' : 'unknown',
+    postconditionVerified: valid,
+    ...evidence,
+    completedAt: now(),
+    postconditionFingerprint: safeResultFingerprint(evidence),
+  };
+}
+
+async function transferCandidateData(env, executionManifest, runtime = {}) {
   let target;
   let mutationStarted = false;
   try {
+    if (typeof runtime.transferDatabase === 'function') {
+      mutationStarted = true;
+      const evidence = await runtime.transferDatabase({
+        executionManifest,
+        originalIdentity: SYS01_IDENTITIES.original,
+        candidateIdentity: SYS01_IDENTITIES.candidate,
+        originalMutationAllowed: false,
+      });
+      return transferAdapterResult(
+        evidence,
+        executionManifest,
+        runtime.now ?? (() => new Date().toISOString()),
+      );
+    }
     const postgres = (await import('postgres')).default;
     target = postgres(requiredExecutionEnv(env, 'ZMTG_SYS01_CANDIDATE_DATABASE_URL'), {
       max: 1,
@@ -2838,20 +3060,17 @@ async function transferCandidateData(env, executionManifest) {
       targetAggregateFingerprint: sha256Bytes(Buffer.from(canonicalJson(targetCounts), 'utf8')),
       originalMutationCount: 0,
     };
-    const valid = mappedRowsVerified && originalUnchanged;
-    return {
-      status: valid ? 'succeeded' : 'unknown',
-      postconditionVerified: valid,
-      ...evidence,
-      completedAt: new Date().toISOString(),
-      postconditionFingerprint: safeResultFingerprint(evidence),
-    };
+    return transferAdapterResult(
+      evidence,
+      executionManifest,
+      runtime.now ?? (() => new Date().toISOString()),
+    );
   } catch {
     return {
       status: mutationStarted ? 'unknown' : 'not_started',
       preconditionFailed: !mutationStarted,
       postconditionVerified: false,
-      completedAt: new Date().toISOString(),
+      completedAt: (runtime.now ?? (() => new Date().toISOString()))(),
       postconditionFingerprint: sha256Bytes(Buffer.from('transfer_unknown', 'utf8')),
     };
   } finally {
@@ -2859,9 +3078,46 @@ async function transferCandidateData(env, executionManifest) {
   }
 }
 
-async function inspectCandidateValidation(env, bundle, executionManifest) {
+function validationAdapterResult(evidence, bundle, now) {
+  const valid =
+    evidence.actualSchemaFingerprintSha256 === bundle.validation.schemaFingerprintSha256 &&
+    evidence.constraintsVerified === true &&
+    evidence.primaryKeysVerified === true &&
+    evidence.foreignKeysVerified === true &&
+    evidence.rowCountsVerified === true &&
+    evidence.businessAggregatesVerified === true &&
+    evidence.mappedRowsVerified === true &&
+    evidence.nullShapeVerified === true &&
+    evidence.markerVerified === true &&
+    evidence.originalUnchanged === true &&
+    evidence.originalMutationCount === 0;
+  return {
+    status: valid ? 'succeeded' : 'not_started',
+    preconditionFailed: !valid,
+    postconditionVerified: valid,
+    ...evidence,
+    completedAt: now(),
+    postconditionFingerprint: safeResultFingerprint(evidence),
+  };
+}
+
+async function inspectCandidateValidation(env, bundle, executionManifest, runtime = {}) {
   let sql;
   try {
+    if (typeof runtime.validateDatabase === 'function') {
+      const evidence = await runtime.validateDatabase({
+        bundle,
+        executionManifest,
+        originalIdentity: SYS01_IDENTITIES.original,
+        candidateIdentity: SYS01_IDENTITIES.candidate,
+        originalMutationAllowed: false,
+      });
+      return validationAdapterResult(
+        evidence,
+        bundle,
+        runtime.now ?? (() => new Date().toISOString()),
+      );
+    }
     const postgres = (await import('postgres')).default;
     const { SYS01_ACTUAL_CATALOG_FINGERPRINT_SQL } = await import('./guarded-migrate.mjs');
     const originalBefore = await readDatabaseInventory(
@@ -3043,32 +3299,18 @@ async function inspectCandidateValidation(env, bundle, executionManifest) {
       evidence.originalUnchanged =
         originalBefore.originalFingerprint === originalAfter.originalFingerprint &&
         originalBefore.opaqueDatabaseFingerprint === originalAfter.opaqueDatabaseFingerprint;
-      const valid =
-        evidence.actualSchemaFingerprintSha256 === bundle.validation.schemaFingerprintSha256 &&
-        evidence.constraintsVerified &&
-        evidence.primaryKeysVerified &&
-        evidence.foreignKeysVerified &&
-        evidence.rowCountsVerified &&
-        evidence.businessAggregatesVerified &&
-        evidence.mappedRowsVerified &&
-        evidence.nullShapeVerified &&
-        evidence.markerVerified &&
-        evidence.originalUnchanged;
-      return {
-        status: valid ? 'succeeded' : 'not_started',
-        preconditionFailed: !valid,
-        postconditionVerified: valid,
-        ...evidence,
-        completedAt: new Date().toISOString(),
-        postconditionFingerprint: safeResultFingerprint(evidence),
-      };
+      return validationAdapterResult(
+        evidence,
+        bundle,
+        runtime.now ?? (() => new Date().toISOString()),
+      );
     });
   } catch {
     return {
       status: 'not_started',
       preconditionFailed: true,
       postconditionVerified: false,
-      completedAt: new Date().toISOString(),
+      completedAt: (runtime.now ?? (() => new Date().toISOString()))(),
       postconditionFingerprint: sha256Bytes(Buffer.from('validate_failed', 'utf8')),
     };
   } finally {
@@ -3143,38 +3385,257 @@ export function buildBoundCutoverEvidenceReceipt({
   });
 }
 
+function expectedIssuerState(kind) {
+  if (kind === 'pre_cutover_readiness' || kind === 'pre_cutover_application_smoke') {
+    return 'ROLLBACK_READY';
+  }
+  if (kind === 'post_cutover_readiness' || kind === 'post_cutover_application_smoke') {
+    return 'CUTOVER_READY';
+  }
+  fail('runner_cutover_evidence_issuer_kind_invalid', 2);
+}
+
+function buildIssuerContext({ kind, activeTarget, bundle, executionManifest }) {
+  const prerequisiteState = expectedIssuerState(kind);
+  const previousPhaseReceiptSha256 = executionManifest?.phaseReceipts?.at(-1)?.digest;
+  if (
+    activeTarget !== 'candidate' ||
+    executionManifest?.state?.current !== prerequisiteState ||
+    !SHA1_PATTERN.test(executionManifest?.implementationHead ?? '') ||
+    !SHA256_PATTERN.test(executionManifest?.baselineManifestSha256 ?? '') ||
+    executionManifest.baselineManifestSha256 !== bundle?.validation?.manifestSha256 ||
+    !SHA256_PATTERN.test(previousPhaseReceiptSha256 ?? '')
+  ) {
+    fail('runner_cutover_evidence_issuer_context_invalid', 2);
+  }
+  return Object.freeze({
+    contractVersion: SYS01_EVIDENCE_CONTRACT_VERSION,
+    kind,
+    activeTarget,
+    activeEndpoint: `${SYS01_IDENTITIES.candidate.host}:${SYS01_IDENTITIES.candidate.port}/${SYS01_IDENTITIES.candidate.database}`,
+    implementationHead: executionManifest.implementationHead,
+    baselineManifestSha256: executionManifest.baselineManifestSha256,
+    previousPhaseReceiptSha256,
+    rebuildState: executionManifest.state.current,
+    prerequisiteState,
+  });
+}
+
+export async function issueSys01DeterministicReadinessEvidenceV1({
+  kind,
+  activeTarget = 'candidate',
+  bundle,
+  executionManifest,
+  probe,
+}) {
+  if (!['pre_cutover_readiness', 'post_cutover_readiness'].includes(kind) || typeof probe !== 'function') {
+    fail('runner_readiness_evidence_issuer_invalid', 2);
+  }
+  const context = buildIssuerContext({ kind, activeTarget, bundle, executionManifest });
+  let observation;
+  try {
+    observation = await probe();
+    assertDatabaseIdentity('candidate', observation?.identity);
+  } catch {
+    fail('runner_readiness_evidence_probe_failed');
+  }
+  const validation = observation.validation;
+  const evidence = Object.freeze({
+    ...context,
+    databaseIdentityVerified:
+      observation.identity?.exists === true && observation.identity?.conflict !== true,
+    expectedSchemaFingerprintSha256: bundle.validation.schemaFingerprintSha256,
+    actualSchemaFingerprintSha256: validation?.actualSchemaFingerprintSha256 ?? null,
+    markerOriginVerified: validation?.markerVerified === true,
+    constraintsVerified: validation?.constraintsVerified === true,
+    primaryKeysVerified: validation?.primaryKeysVerified === true,
+    foreignKeysVerified: validation?.foreignKeysVerified === true,
+    rowCountsVerified: validation?.rowCountsVerified === true,
+    mappedRowsVerified: validation?.mappedRowsVerified === true,
+    nullShapeVerified: validation?.nullShapeVerified === true,
+    postconditionVerified: validation?.postconditionVerified === true,
+    originalMutationCount: 0,
+  });
+  const verified =
+    evidence.databaseIdentityVerified &&
+    evidence.actualSchemaFingerprintSha256 === evidence.expectedSchemaFingerprintSha256 &&
+    evidence.markerOriginVerified &&
+    evidence.constraintsVerified &&
+    evidence.primaryKeysVerified &&
+    evidence.foreignKeysVerified &&
+    evidence.rowCountsVerified &&
+    evidence.mappedRowsVerified &&
+    evidence.nullShapeVerified &&
+    evidence.postconditionVerified;
+  const evidenceSha256 = safeResultFingerprint(evidence);
+  return Object.freeze({
+    kind,
+    verified,
+    evidenceSha256,
+    receiptSha256: verified
+      ? buildBoundCutoverEvidenceReceipt({
+        kind,
+        evidenceSha256,
+        activeTarget,
+        bundle,
+        executionManifest,
+      })
+      : null,
+    validation,
+  });
+}
+
+export async function probeSys01CandidateBoundApplicationV1({
+  env = process.env,
+  implementationHead,
+  spawnImpl = spawn,
+  fetchImpl = globalThis.fetch,
+  waitImpl = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds)),
+  attempts = 60,
+} = {}) {
+  if (!SHA1_PATTERN.test(implementationHead ?? '') || typeof fetchImpl !== 'function') {
+    fail('runner_application_smoke_probe_invalid', 2);
+  }
+  parseLocalDatabaseUrl(
+    requiredExecutionEnv(env, 'ZMTG_SYS01_CANDIDATE_DATABASE_URL'),
+    SYS01_IDENTITIES.candidate,
+  );
+  const url = `http://${SYS01_APPLICATION_SMOKE_HOST}:${SYS01_APPLICATION_SMOKE_PORT}${SYS01_APPLICATION_SMOKE_PATH}`;
+  let portOccupied = false;
+  try {
+    await fetchImpl(url, {
+      method: 'GET',
+      cache: 'no-store',
+      signal: AbortSignal.timeout(250),
+    });
+    portOccupied = true;
+  } catch {
+    portOccupied = false;
+  }
+  if (portOccupied) fail('runner_application_smoke_port_conflict');
+  const childEnvironment = Object.fromEntries(
+    ['HOME', 'LANG', 'LC_ALL', 'PATH', 'TMPDIR', 'TZ']
+      .filter((key) => typeof env[key] === 'string' && env[key].length > 0)
+      .map((key) => [key, env[key]]),
+  );
+  const child = spawnImpl(
+    process.execPath,
+    ['scripts/run-next.mjs', 'start', '--hostname', SYS01_APPLICATION_SMOKE_HOST, '--port', String(SYS01_APPLICATION_SMOKE_PORT)],
+    {
+      cwd: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'),
+      env: {
+        ...childEnvironment,
+        NODE_ENV: 'production',
+        NEXT_TELEMETRY_DISABLED: '1',
+        DATABASE_URL: requiredExecutionEnv(env, 'ZMTG_SYS01_CANDIDATE_DATABASE_URL'),
+        ZMTG_DEPLOY_COMMIT: implementationHead,
+      },
+      stdio: ['ignore', 'ignore', 'ignore'],
+    },
+  );
+  let childFailed = false;
+  child?.once?.('error', () => {
+    childFailed = true;
+  });
+  child?.once?.('close', () => {
+    childFailed = true;
+  });
+  try {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      if (childFailed) break;
+      try {
+        const response = await fetchImpl(url, {
+          method: 'GET',
+          cache: 'no-store',
+          signal: AbortSignal.timeout(1_000),
+        });
+        const version = await response.json();
+        if (
+          response.status === 200 &&
+          version?.commit === implementationHead &&
+          ['env', 'build'].includes(version?.source)
+        ) {
+          return Object.freeze({
+            status: 200,
+            route: SYS01_APPLICATION_SMOKE_PATH,
+            host: SYS01_APPLICATION_SMOKE_HOST,
+            port: SYS01_APPLICATION_SMOKE_PORT,
+            versionCommit: version.commit,
+            versionSource: version.source,
+            databaseTarget: 'candidate',
+            processDatabaseIdentityBound: true,
+          });
+        }
+      } catch {
+        // The single controlled process gets a bounded startup poll; no phase retry occurs.
+      }
+      await waitImpl(500);
+    }
+    fail('runner_application_smoke_probe_failed');
+  } finally {
+    child?.kill?.('SIGTERM');
+  }
+}
+
+export async function issueSys01DeterministicApplicationSmokeEvidenceV1({
+  kind,
+  activeTarget = 'candidate',
+  bundle,
+  executionManifest,
+  probe,
+}) {
+  if (!['pre_cutover_application_smoke', 'post_cutover_application_smoke'].includes(kind) || typeof probe !== 'function') {
+    fail('runner_application_smoke_evidence_issuer_invalid', 2);
+  }
+  const context = buildIssuerContext({ kind, activeTarget, bundle, executionManifest });
+  let observation;
+  try {
+    observation = await probe();
+  } catch {
+    fail('runner_application_smoke_evidence_probe_failed');
+  }
+  const evidence = Object.freeze({
+    ...context,
+    route: observation?.route ?? null,
+    host: observation?.host ?? null,
+    port: observation?.port ?? null,
+    httpStatus: observation?.status ?? null,
+    versionCommit: observation?.versionCommit ?? null,
+    versionSource: observation?.versionSource ?? null,
+    databaseTarget: observation?.databaseTarget ?? null,
+    processDatabaseIdentityBound: observation?.processDatabaseIdentityBound === true,
+    originalMutationCount: 0,
+  });
+  const verified =
+    evidence.route === SYS01_APPLICATION_SMOKE_PATH &&
+    evidence.host === SYS01_APPLICATION_SMOKE_HOST &&
+    evidence.port === SYS01_APPLICATION_SMOKE_PORT &&
+    evidence.httpStatus === 200 &&
+    evidence.versionCommit === executionManifest.implementationHead &&
+    ['env', 'build'].includes(evidence.versionSource) &&
+    evidence.databaseTarget === 'candidate' &&
+    evidence.processDatabaseIdentityBound;
+  const evidenceSha256 = safeResultFingerprint(evidence);
+  return Object.freeze({
+    kind,
+    verified,
+    evidenceSha256,
+    receiptSha256: verified
+      ? buildBoundCutoverEvidenceReceipt({
+        kind,
+        evidenceSha256,
+        activeTarget,
+        bundle,
+        executionManifest,
+      })
+      : null,
+  });
+}
+
 async function inspectCutoverReadiness(env, bundle, executionManifest) {
   const identities = await inspectExactIdentities(env);
   const sourceQuiescenceVerified =
     env.ZMTG_SYS01_SOURCE_QUIESCED_CONFIRMATION?.trim() === 'S26_SYS01_SOURCE_QUIESCED';
-  const readinessReceiptSha256 = env.ZMTG_SYS01_READINESS_RECEIPT_SHA256?.trim();
-  const applicationSmokeReceiptSha256 = env.ZMTG_SYS01_APPLICATION_SMOKE_RECEIPT_SHA256?.trim();
-  const readinessEvidenceSha256 = env.ZMTG_SYS01_READINESS_EVIDENCE_SHA256?.trim();
-  const applicationSmokeEvidenceSha256 = env.ZMTG_SYS01_APPLICATION_SMOKE_EVIDENCE_SHA256?.trim();
-  const expectedReadinessReceipt = SHA256_PATTERN.test(readinessEvidenceSha256 ?? '')
-    ? buildBoundCutoverEvidenceReceipt({
-      kind: 'pre_cutover_readiness',
-      evidenceSha256: readinessEvidenceSha256,
-      activeTarget: 'candidate',
-      bundle,
-      executionManifest,
-    })
-    : null;
-  const expectedApplicationSmokeReceipt = SHA256_PATTERN.test(applicationSmokeEvidenceSha256 ?? '')
-    ? buildBoundCutoverEvidenceReceipt({
-      kind: 'pre_cutover_application_smoke',
-      evidenceSha256: applicationSmokeEvidenceSha256,
-      activeTarget: 'candidate',
-      bundle,
-      executionManifest,
-    })
-    : null;
-  const readinessEvidenceVerified =
-    readinessReceiptSha256 === expectedReadinessReceipt &&
-    applicationSmokeReceiptSha256 === expectedApplicationSmokeReceipt;
-  const validation = sourceQuiescenceVerified
-    ? await inspectCandidateValidation(env, bundle, executionManifest)
-    : null;
   const activeUrl = env.ZMTG_SYS01_ACTIVE_DATABASE_URL?.trim();
   let activeStillOriginal = false;
   try {
@@ -3185,6 +3646,40 @@ async function inspectCutoverReadiness(env, bundle, executionManifest) {
   } catch {
     activeStillOriginal = false;
   }
+  let readinessIssue = null;
+  let applicationSmokeIssue = null;
+  if (
+    sourceQuiescenceVerified &&
+    activeStillOriginal &&
+    identities.original.exists === true &&
+    identities.candidate.exists === true &&
+    identities.original.conflict !== true &&
+    identities.candidate.conflict !== true
+  ) {
+    readinessIssue = await issueSys01DeterministicReadinessEvidenceV1({
+      kind: 'pre_cutover_readiness',
+      bundle,
+      executionManifest,
+      probe: async () => ({
+        identity: identities.candidate,
+        validation: await inspectCandidateValidation(env, bundle, executionManifest),
+      }),
+    });
+    if (readinessIssue.verified) {
+      applicationSmokeIssue = await issueSys01DeterministicApplicationSmokeEvidenceV1({
+        kind: 'pre_cutover_application_smoke',
+        bundle,
+        executionManifest,
+        probe: async () => probeSys01CandidateBoundApplicationV1({
+          env,
+          implementationHead: executionManifest.implementationHead,
+        }),
+      });
+    }
+  }
+  const readinessEvidenceVerified =
+    readinessIssue?.verified === true && applicationSmokeIssue?.verified === true;
+  const validation = readinessIssue?.validation ?? null;
   const ready =
     identities.original.exists === true &&
     identities.candidate.exists === true &&
@@ -3201,8 +3696,10 @@ async function inspectCutoverReadiness(env, bundle, executionManifest) {
     activeTargetBeforeCutover: activeStillOriginal ? 'original' : 'unknown',
     sourceQuiescenceVerified,
     mappedRowsVerified: validation?.mappedRowsVerified === true,
-    readinessReceiptSha256: readinessReceiptSha256 ?? null,
-    applicationSmokeReceiptSha256: applicationSmokeReceiptSha256 ?? null,
+    readinessEvidenceSha256: readinessIssue?.evidenceSha256 ?? null,
+    applicationSmokeEvidenceSha256: applicationSmokeIssue?.evidenceSha256 ?? null,
+    readinessReceiptSha256: readinessIssue?.receiptSha256 ?? null,
+    applicationSmokeReceiptSha256: applicationSmokeIssue?.receiptSha256 ?? null,
     readinessEvidenceVerified,
     selectedMechanism: 'explicit_local_env_endpoint_and_database_switch',
     originalMutationCount: 0,
@@ -3230,8 +3727,17 @@ async function verifyPostCutover(env, bundle, executionManifest) {
     requiredExecutionEnv(env, 'ZMTG_SYS01_ACTIVE_DATABASE_URL'),
     SYS01_IDENTITIES.candidate,
   );
-  const validation = await inspectCandidateValidation(env, bundle, executionManifest);
-  if (validation.status !== 'succeeded' || validation.postconditionVerified !== true) {
+  const identities = await inspectExactIdentities(env);
+  const readinessIssue = await issueSys01DeterministicReadinessEvidenceV1({
+    kind: 'post_cutover_readiness',
+    bundle,
+    executionManifest,
+    probe: async () => ({
+      identity: identities.candidate,
+      validation: await inspectCandidateValidation(env, bundle, executionManifest),
+    }),
+  });
+  if (!readinessIssue.verified) {
     return {
       status: 'not_started',
       preconditionFailed: true,
@@ -3240,43 +3746,24 @@ async function verifyPostCutover(env, bundle, executionManifest) {
       postconditionFingerprint: sha256Bytes(Buffer.from('post_cutover_validation_failed', 'utf8')),
     };
   }
-  const postCutoverReadinessEvidenceSha256 = requiredExecutionEnv(
-    env,
-    'ZMTG_SYS01_POST_CUTOVER_READINESS_EVIDENCE_SHA256',
-  );
-  const postCutoverApplicationSmokeEvidenceSha256 = requiredExecutionEnv(
-    env,
-    'ZMTG_SYS01_POST_CUTOVER_APPLICATION_SMOKE_EVIDENCE_SHA256',
-  );
-  const postCutoverReadinessReceiptSha256 = requiredExecutionEnv(
-    env,
-    'ZMTG_SYS01_POST_CUTOVER_READINESS_RECEIPT_SHA256',
-  );
-  const postCutoverApplicationSmokeReceiptSha256 = requiredExecutionEnv(
-    env,
-    'ZMTG_SYS01_POST_CUTOVER_APPLICATION_SMOKE_RECEIPT_SHA256',
-  );
-  const postCutoverEvidenceVerified =
-    postCutoverReadinessReceiptSha256 === buildBoundCutoverEvidenceReceipt({
-      kind: 'post_cutover_readiness',
-      evidenceSha256: postCutoverReadinessEvidenceSha256,
-      activeTarget: 'candidate',
-      bundle,
-      executionManifest,
-    }) &&
-    postCutoverApplicationSmokeReceiptSha256 === buildBoundCutoverEvidenceReceipt({
-      kind: 'post_cutover_application_smoke',
-      evidenceSha256: postCutoverApplicationSmokeEvidenceSha256,
-      activeTarget: 'candidate',
-      bundle,
-      executionManifest,
-    });
+  const applicationSmokeIssue = await issueSys01DeterministicApplicationSmokeEvidenceV1({
+    kind: 'post_cutover_application_smoke',
+    bundle,
+    executionManifest,
+    probe: async () => probeSys01CandidateBoundApplicationV1({
+      env,
+      implementationHead: executionManifest.implementationHead,
+    }),
+  });
+  const postCutoverEvidenceVerified = applicationSmokeIssue.verified;
   if (!postCutoverEvidenceVerified) fail('runner_post_cutover_evidence_invalid', 2);
-  const identities = await inspectExactIdentities(env);
+  const validation = readinessIssue.validation;
   const evidence = {
     externalCutoverReceiptSha256: receipt,
-    postCutoverReadinessReceiptSha256,
-    postCutoverApplicationSmokeReceiptSha256,
+    postCutoverReadinessEvidenceSha256: readinessIssue.evidenceSha256,
+    postCutoverApplicationSmokeEvidenceSha256: applicationSmokeIssue.evidenceSha256,
+    postCutoverReadinessReceiptSha256: readinessIssue.receiptSha256,
+    postCutoverApplicationSmokeReceiptSha256: applicationSmokeIssue.receiptSha256,
     postCutoverEvidenceVerified,
     activeTarget: 'candidate',
     originalRetained: identities.original.exists === true && identities.original.conflict !== true,
@@ -3294,6 +3781,38 @@ async function verifyPostCutover(env, bundle, executionManifest) {
   };
 }
 
+export async function runSys01PrerequisiteAdapterV1({
+  adapter,
+  env = process.env,
+  repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'),
+  bundle = null,
+  executionManifest = null,
+  runtime = {},
+} = {}) {
+  if (!SYS01_PREREQUISITE_ADAPTERS.includes(adapter)) {
+    fail('runner_prerequisite_adapter_invalid', 2);
+  }
+  if (adapter === 'backup') {
+    return createEncryptedBackup(env, repositoryRoot, runtime);
+  }
+  if (adapter === 'restore') {
+    return restoreEncryptedBackup(env, repositoryRoot, executionManifest, runtime);
+  }
+  if (adapter === 'candidate-create') {
+    return createCandidateDatabase(env, runtime);
+  }
+  if (!bundle && adapter !== 'transfer') fail('runner_prerequisite_bundle_required', 2);
+  if (adapter === 'baseline-bootstrap') {
+    return bootstrapCandidateBaseline(env, bundle, runtime);
+  }
+  if (adapter === 'transfer') {
+    if (!executionManifest) fail('runner_prerequisite_manifest_required', 2);
+    return transferCandidateData(env, executionManifest, runtime);
+  }
+  if (!executionManifest) fail('runner_prerequisite_manifest_required', 2);
+  return inspectCandidateValidation(env, bundle, executionManifest, runtime);
+}
+
 function defaultDependencies(env, rootDir) {
   return {
     gitState: defaultGitState,
@@ -3303,6 +3822,7 @@ function defaultDependencies(env, rootDir) {
     writeExecutionManifest: writeSecureExecutionManifest,
     inspectIdentities: async () => inspectExactIdentities(env),
     readSourceInventory: async () => {
+      await preflightSys01BackupKeySourceV1({ env, repositoryRoot: rootDir });
       const inventory = await readDatabaseInventory(
         requiredExecutionEnv(env, 'ZMTG_SYS01_ORIGINAL_DATABASE_URL'),
       );
@@ -3321,14 +3841,43 @@ function defaultDependencies(env, rootDir) {
         postconditionFingerprint: safeResultFingerprint(evidence),
       };
     },
-    createEncryptedBackup: async () => createEncryptedBackup(env, rootDir),
+    createEncryptedBackup: async () => runSys01PrerequisiteAdapterV1({
+      adapter: 'backup',
+      env,
+      repositoryRoot: rootDir,
+    }),
     restoreDrill: async ({ executionManifest }) =>
-      restoreEncryptedBackup(env, rootDir, executionManifest),
-    createCandidate: async () => createCandidateDatabase(env),
-    bootstrapCandidate: async ({ bundle }) => bootstrapCandidateBaseline(env, bundle),
-    transferCandidate: async ({ executionManifest }) => transferCandidateData(env, executionManifest),
+      runSys01PrerequisiteAdapterV1({
+        adapter: 'restore',
+        env,
+        repositoryRoot: rootDir,
+        executionManifest,
+      }),
+    createCandidate: async () => runSys01PrerequisiteAdapterV1({
+      adapter: 'candidate-create',
+      env,
+      repositoryRoot: rootDir,
+    }),
+    bootstrapCandidate: async ({ bundle }) => runSys01PrerequisiteAdapterV1({
+      adapter: 'baseline-bootstrap',
+      env,
+      repositoryRoot: rootDir,
+      bundle,
+    }),
+    transferCandidate: async ({ executionManifest }) => runSys01PrerequisiteAdapterV1({
+      adapter: 'transfer',
+      env,
+      repositoryRoot: rootDir,
+      executionManifest,
+    }),
     validateCandidate: async ({ bundle, executionManifest }) =>
-      inspectCandidateValidation(env, bundle, executionManifest),
+      runSys01PrerequisiteAdapterV1({
+        adapter: 'validate',
+        env,
+        repositoryRoot: rootDir,
+        bundle,
+        executionManifest,
+      }),
     inspectCutoverReadiness: async ({ bundle, executionManifest }) =>
       inspectCutoverReadiness(env, bundle, executionManifest),
     verifyPostCutover: async ({ bundle, executionManifest }) =>
