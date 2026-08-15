@@ -1,5 +1,36 @@
 # 智美天工架构文档索引
 
+<!-- SEVEN_STREAM_SYSTEM_SYS01_REBUILD_EXECUTION_START -->
+
+## System SYS-01 controlled local-development rebuild execution（2026-08-15）
+
+```text
+STAGE=S34
+EXECUTION_HEAD=cf0be4480020dcc4e22e086cb1ba11e924cc78c9
+CORRECTIVE_RUNTIME_PR=1240
+CORRECTIVE_RUNTIME_MERGE=cf0be4480020dcc4e22e086cb1ba11e924cc78c9
+PHASE_COUNT=10
+PHASE_SUCCEEDED_COUNT=10
+EXECUTION_MANIFEST_STATE=POST_CUTOVER_VERIFIED
+ORIGINAL_MUTATION_COUNT=0
+ACTIVE_LOCAL_DATABASE=candidate
+ORIGINAL_RETAINED=true
+RESTORE_DRILL_RETAINED=true
+CANDIDATE_RETAINED=true
+ENCRYPTED_BACKUP_RETAINED=true
+S34_COMPLETE=true
+
+NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_POST_REBUILD_DATA_AND_RUNTIME_READMISSION
+NEXT_SYSTEM_TASK_AUTHORIZED=true_by_current_ultra_goal_after_S34_merge
+NEXT_STAGE=S35
+```
+
+S34 在 corrective PR #1240 合并后，以新冻结 Head 与新 repo-external manifest 从 `preflight` fresh restart；backup、restore drill、candidate baseline、transfer、validation、rollback/cutover readiness 与 post-cutover verification 全部成功。local `.env.local` 的唯一 `DATABASE_URL` 已显式切到 candidate，original 保留且 mutation count 为 0。该 closure 不代表 SYS-01 formal facts 或 Runtime 已准入，S35 必须重新只读审计。
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-controlled-local-dev-rebuild-execution-20260815.md`。
+
+<!-- SEVEN_STREAM_SYSTEM_SYS01_REBUILD_EXECUTION_END -->
+
 <!-- SEVEN_STREAM_CARE_FORMAL_FRESH_ADMISSION_START -->
 
 ## Care formal Fresh Admission（2026-08-15）

@@ -1,5 +1,53 @@
 # 项目重构历史
 
+<!-- SEVEN_STREAM_SYSTEM_SYS01_REBUILD_EXECUTION_HISTORY -->
+
+## 2026-08-15：S34 controlled local-development rebuild 与 candidate cutover 完成
+
+```text
+STAGE=S34
+TASK=SEVEN_STREAM_SYSTEM_SYS_01_CONTROLLED_LOCAL_DEVELOPMENT_REBUILD_EXECUTION
+INITIAL_MAIN=2c9c6fdf209c9e5598d8ddea35922ad8ed6e01e1
+EXECUTION_HEAD=cf0be4480020dcc4e22e086cb1ba11e924cc78c9
+
+CORRECTIVE_RUNTIME_PR=1240
+CORRECTIVE_RUNTIME_HEAD=5a6621c9a0b8c3597c8018c96e53469a4e4fa078
+CORRECTIVE_RUNTIME_MERGE=cf0be4480020dcc4e22e086cb1ba11e924cc78c9
+CORRECTIVE_REQUIRED_CHECK=passed
+CORRECTIVE_POST_MERGE_REVIEW_DEBT=0
+
+PHASE_COUNT=10
+PHASE_SUCCEEDED_COUNT=10
+EXECUTION_MANIFEST_STATE=POST_CUTOVER_VERIFIED
+ORIGINAL_MUTATION_COUNT=0
+ACTIVE_LOCAL_DATABASE=candidate
+ORIGINAL_RETAINED=true
+RESTORE_DRILL_RETAINED=true
+CANDIDATE_RETAINED=true
+ENCRYPTED_BACKUP_RETAINED=true
+
+RUNNER_TESTS=1_file_31_tests_passed
+DB_GOVERNANCE_TARGETED_TESTS=4_files_138_tests_passed
+ARCHITECTURE_QUALITY_TESTS=148_tests_passed
+FULL_TESTS=502_files_6976_tests_passed
+TYPECHECK=passed
+DIFF_CHECK=passed
+
+S34_COMPLETE=true
+S34_FORMAL_CLOSURE=true_after_docs_pr_merge_and_post_merge_sweep
+NEXT_STAGE=S35
+```
+
+- 初次 restore drill 因 PostgreSQL deparse 双重等价 cast 被旧 canonicalizer false reject；runner 写入 outcome unknown 后停止，没有自动 retry。
+- 用户准入 exact 3-file corrective Runtime；PR #1240 锁定等价链正例与异质链反例，baseline SQL/schema fingerprint/migration 均未改变。
+- corrective merge 后旧 manifest/backup 保留，旧 restore container/volume 按授权删除；fresh execution 使用新 Head、新 repo-external manifest 从 preflight 重启。
+- backup、restore、candidate baseline、transfer、validation、rollback/cutover readiness 与 post-cutover verification 全部成功；local env 已显式切到 candidate，original mutation count 为 0。
+- 本阶段未执行 repository migration、generate/snapshot、seed、Staging/Production change 或页面发布；formal Scope/Context/Binding 与 SYS-01 Runtime readiness 留待 S35 fresh re-admission。
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-controlled-local-dev-rebuild-execution-20260815.md`。
+
+<!-- SEVEN_STREAM_SYSTEM_SYS01_REBUILD_EXECUTION_HISTORY_END -->
+
 <!-- SEVEN_STREAM_CARE_FORMAL_FRESH_ADMISSION_HISTORY -->
 
 ## 2026-08-15：S32 System re-admission 合并，S33 Care 首切片选择完成并正式记录 data blocker
