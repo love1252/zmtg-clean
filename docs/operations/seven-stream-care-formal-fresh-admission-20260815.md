@@ -34,6 +34,9 @@ S30_CORRECTIVE_DOCS_MERGE=23b1784ca61c0cdbb950cc6291fc83302b8f83a2
 S31_CORRECTIVE_RUNTIME_PR=1233
 S31_CORRECTIVE_RUNTIME_HEAD=dc1524cc4b3d7656bf60b3aaf10be5ab7cf85ca5
 S31_CORRECTIVE_RUNTIME_MERGE=f7eefd101d05b8c07468de677d5013658816972a
+S31_EXIT_AWAIT_CORRECTIVE_PR=1237
+S31_EXIT_AWAIT_CORRECTIVE_HEAD=3a2a45bbe20d51a7d2a15d702bb1da2f0c777584
+S31_EXIT_AWAIT_CORRECTIVE_MERGE=ca6a32212ab19a0014cb353680e612480a500a1e
 S32_CORRECTIVE_DOCS_PR=1235
 S32_CORRECTIVE_DOCS_HEAD=a4f07114a97fece89312cfccc166daa179f6b345
 S32_CORRECTIVE_DOCS_MERGE=f981c6c06448eed2fa63edd0a8a38f9cfc3b5b1d
@@ -41,8 +44,11 @@ S32_CORRECTIVE_DOCS_MERGE=f981c6c06448eed2fa63edd0a8a38f9cfc3b5b1d
 S29_POST_MERGE_P2_RESOLVED=2
 S30_POST_MERGE_P1_RESOLVED=2
 S31_POST_MERGE_P1_RESOLVED=3
+S31_POST_MERGE_P2_RESOLVED=1
 S32_POST_MERGE_P2_RESOLVED=1
-ULTRA_GOAL_CORRECTIVE_REVIEW_THREAD_COUNT=8
+S33_EXACT_SCOPE_GOVERNANCE_THREAD_RESOLVED=1
+ULTRA_GOAL_CORRECTIVE_REVIEW_THREAD_COUNT=9
+ULTRA_GOAL_REVIEW_THREAD_DISPOSITION_COUNT=10
 ULTRA_GOAL_ACTIONABLE_P0_P1_P2_P3=0
 ULTRA_GOAL_POST_MERGE_REVIEW_DEBT=0
 S33_ACTIONABLE_P0_P1_P2_P3=0
@@ -63,13 +69,14 @@ CARE_PAGE_RELEASE_ADMISSION_READY=false
 
 ### Post-merge corrective formal closure
 
-S29–S32 的最终 review sweep 共发现 8 条 actionable thread，均已通过各自原 stage/scope 的实际 commit、Required Check 与 merge 证据闭合：S29 修复完整 Cookie provenance 与 PostgreSQL 字符长度；S31 修复 build-time exact Head 与实际 Next child cleanup，并按用户明确 exact-3 re-admission 同步 manifest runner blob；S30 校准 durable authorization 与 canonical probe 描述；S32 用真实 Node/Vitest 路径分别重跑 31+54 项。PR #1227/#1228/#1229/#1230 的对应线程均已回复并 resolved。
+S29–S32 的最终 review sweep 共发现 9 条 actionable thread，均已通过各自原 stage/scope 的实际 commit、Required Check 与 merge 证据闭合：S29 修复完整 Cookie provenance 与 PostgreSQL 字符长度；S31 修复 build-time exact Head、直接 Next child cleanup，并由 PR #1237 锁定 `SIGKILL` 后继续等待真实 `close`；S30 校准 durable authorization 与 canonical probe 描述；S32 用真实 Node/Vitest 路径分别重跑 31+54 项。另 1 条 S33 exact-6 范围线程与用户显式冻结 allowlist 冲突，已按 AGENTS.md 权威顺序正式回复并 resolved。PR #1227/#1228/#1229/#1230/#1231/#1234 的对应线程均已处置。
 
 ```text
 APPLICATION_SMOKE_EXPECTED_COMMIT_ENV_INJECTED=false
 APPLICATION_SMOKE_VERSION_SOURCE_REQUIRED=build
 APPLICATION_SMOKE_DIRECT_NEXT_CHILD=true
 APPLICATION_SMOKE_CHILD_EXIT_AWAITED=true
+APPLICATION_SMOKE_FORCE_KILL_CLOSE_AWAITED=true
 S31_RUNNER_TESTS=1_file_31_tests_passed
 S31_MIGRATION_GUARD_TESTS=1_file_54_tests_passed
 S31_TARGETED_TESTS=2_files_85_tests_passed

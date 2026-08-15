@@ -14,6 +14,9 @@ S30_CORRECTIVE_DOCS_MERGE=23b1784ca61c0cdbb950cc6291fc83302b8f83a2
 S31_CORRECTIVE_RUNTIME_PR=1233
 S31_CORRECTIVE_RUNTIME_HEAD=dc1524cc4b3d7656bf60b3aaf10be5ab7cf85ca5
 S31_CORRECTIVE_RUNTIME_MERGE=f7eefd101d05b8c07468de677d5013658816972a
+S31_EXIT_AWAIT_CORRECTIVE_PR=1237
+S31_EXIT_AWAIT_CORRECTIVE_HEAD=3a2a45bbe20d51a7d2a15d702bb1da2f0c777584
+S31_EXIT_AWAIT_CORRECTIVE_MERGE=ca6a32212ab19a0014cb353680e612480a500a1e
 S32_CORRECTIVE_DOCS_PR=1235
 S32_CORRECTIVE_DOCS_HEAD=a4f07114a97fece89312cfccc166daa179f6b345
 S32_CORRECTIVE_DOCS_MERGE=f981c6c06448eed2fa63edd0a8a38f9cfc3b5b1d
@@ -21,8 +24,11 @@ S32_CORRECTIVE_DOCS_MERGE=f981c6c06448eed2fa63edd0a8a38f9cfc3b5b1d
 S29_POST_MERGE_P2_RESOLVED=2
 S30_POST_MERGE_P1_RESOLVED=2
 S31_POST_MERGE_P1_RESOLVED=3
+S31_POST_MERGE_P2_RESOLVED=1
 S32_POST_MERGE_P2_RESOLVED=1
-ULTRA_GOAL_CORRECTIVE_REVIEW_THREAD_COUNT=8
+S33_EXACT_SCOPE_GOVERNANCE_THREAD_RESOLVED=1
+ULTRA_GOAL_CORRECTIVE_REVIEW_THREAD_COUNT=9
+ULTRA_GOAL_REVIEW_THREAD_DISPOSITION_COUNT=10
 ULTRA_GOAL_ACTIONABLE_P0_P1_P2_P3=0
 ULTRA_GOAL_POST_MERGE_REVIEW_DEBT=0
 S33_ACTIONABLE_P0_P1_P2_P3=0
@@ -42,7 +48,7 @@ NEXT_STAGE=UNASSIGNED
 NEXT_STAGE_AUTO_EXECUTION=false
 ```
 
-S29–S32 的 8 条 post-merge review thread 已全部通过 corrective PR #1232/#1233/#1234/#1235 解决，S33 formal closure 完成。下一任务仍必须由用户独立授权 SYS-01 controlled local-development rebuild execution；它不是 S33 的自动延伸。只有 rebuild 完成且 candidate 通过 validation，才重新审计 appointments data readiness 与 exact Runtime allowlist。不得在 original source 上通过 Care → Customers repository 反向依赖或 runtime 临时 join 规避 blocker。
+S29–S32 的 9 条 actionable post-merge review thread 已全部通过 corrective PR #1232/#1233/#1234/#1235/#1237 解决，S33 exact-6 范围线程也已依据用户显式授权正式处置，formal closure 完成。下一任务仍必须由用户独立授权 SYS-01 controlled local-development rebuild execution；它不是 S33 的自动延伸。只有 rebuild 完成且 candidate 通过 validation，才重新审计 appointments data readiness 与 exact Runtime allowlist。不得在 original source 上通过 Care → Customers repository 反向依赖或 runtime 临时 join 规避 blocker。
 
 Canonical evidence：`docs/operations/seven-stream-care-formal-fresh-admission-20260815.md`。
 
