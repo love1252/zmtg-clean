@@ -44,7 +44,7 @@ NEXT_TASK_AUTHORIZED=false
 
 S24 在 `127.0.0.1:55433` 的 startup/transaction read-only session 内枚举全部 55 张 public 表与 Drizzle journal，完成 56-row 唯一 classification、42 张保留/特殊表 exact mapping、secret/file boundary、加密 backup、隔离 restore drill、side-by-side candidate、validation、cutover、rollback 与 unknown-outcome contract。original 仍是唯一 canonical DB，未执行 backup/restore/create/rebuild/Migration/DDL/DML。
 
-`FULL_CURRENT_MIGRATION_REPLAY` 会撞上 `0039` checkpoint 与 `0041/0043` historical guards；repository 也没有 journal-safe、future-migration-safe 的 current-schema baseline。derived baseline 仅是需要独立治理的方向，不得先伪冻 tooling allowlist。因此 S24 Admission 完成但 execution blocked；下一原子任务只决定 candidate baseline artifact、canonical marker/journal semantics 与 future migration lineage。
+`FULL_CURRENT_MIGRATION_REPLAY` 会撞上 `0039` checkpoint 与 `0041/0043` historical guards；repository 也没有 journal-safe、future-migration-safe 的 current-schema baseline。derived baseline 仅是需要独立治理的方向，不得先伪冻 tooling allowlist。因此 S24 Admission 工作已完成但尚未经过 Ready/Merge 正式收口，execution 仍 blocked；下一原子任务只决定 candidate baseline artifact、canonical marker/journal semantics 与 future migration lineage。
 
 Canonical evidence：`docs/operations/seven-stream-system-sys01-controlled-local-dev-rebuild-admission-20260815.md`。
 

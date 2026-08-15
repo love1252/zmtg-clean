@@ -2,7 +2,7 @@
 
 <!-- SEVEN_STREAM_SYSTEM_SYS01_CONTROLLED_REBUILD_ADMISSION_HISTORY -->
 
-## 2026-08-15：System SYS-01 controlled local-development rebuild Admission 完成但 candidate baseline governance 阻断
+## 2026-08-15：System SYS-01 controlled local-development rebuild Admission 工作完成，正式合并前仍阻断
 
 ```text
 STAGE=S24
@@ -86,7 +86,8 @@ NEXT_STAGE=UNASSIGNED
 NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CANDIDATE_MIGRATION_BASELINE_GOVERNANCE_ADMISSION
 NEXT_TASK_AUTHORIZED=false
 NEXT_STAGE_AUTO_EXECUTION=false
-S24_COMPLETE=true
+S24_ADMISSION_WORK_COMPLETE=true
+S24_COMPLETE=false_pending_explicit_ready_merge_authorization
 S24_FORMAL_MERGE_CLOSURE=false
 ```
 
