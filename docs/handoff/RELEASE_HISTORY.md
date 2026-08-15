@@ -1,5 +1,76 @@
 # 项目重构历史
 
+<!-- SEVEN_STREAM_SYSTEM_SYS01_AI_USAGE_READONLY_ADMISSION_HISTORY -->
+
+## 2026-08-15：System SYS-01 AI 使用只读 fresh Admission 完成但 Runtime 准入阻断
+
+```text
+STAGE=S20
+STREAM=system
+SLICE=SYS_01_AI_USAGE_READONLY
+COMPLETION_MODE=ADMISSION_COMPLETE_BLOCKED
+BASELINE=d2ae875cb75bda0c09aaa86d0cc410bf94f0dd78
+
+SYS01_FRESH_ADMISSION=passed
+SYS01_RUNTIME_ADMISSION_READY=false
+SYS01_DATA_READINESS=unavailable
+SYS01_HISTORICAL_COVERAGE_COMPLETE=false
+SYS01_PARTIAL_COVERAGE_SAFE=false
+SYS01_TENANT_ISOLATION_SAFE=unverified
+SYS01_INSTITUTION_ISOLATION_SAFE=unverified
+
+AI_USAGE_FACT_DATA_OWNER=analytics
+AI_USAGE_READ_MODEL_OWNER=institution-system
+SYS01_FORMAL_COMPOSITION_OWNER=src/server/orchestration
+SYS01_CANONICAL_API=/api/v1/institution/ai-service-usage
+SYS01_CAPABILITY_KEY=page_system_ai_usage
+SYS01_CURRENT_CAPABILITY_STATE=hidden/not_released
+
+SYS01_SCHEMA_CHANGE_REQUIRED=false
+SYS01_MIGRATION_REQUIRED=false
+SYS01_DML_BACKFILL_REQUIRED=false
+SYS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
+SYS01_EXACT_RUNTIME_FILE_COUNT=0
+
+TARGETED_TEST_FILES=17
+TARGETED_TESTS=486/486 passed
+TYPECHECK=passed
+ARCHITECTURE_UNIT=148/148 passed
+ARCHITECTURE_INCREMENTAL=passed
+PRODUCTION_READINESS_DOCS=8/8 passed
+GIT_DIFF_CHECK=passed
+
+DATABASE_CONNECTION_ATTEMPTED=true
+DATABASE_CONNECTION=false
+DATABASE_QUERY_EXECUTED=false
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+MIGRATION=false
+DDL_EXECUTION=false
+DML_EXECUTION=false
+SEED_EXECUTION=false
+STAGING_CHANGE=false
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+
+PRIMARY_BLOCKING_PREREQUISITE=local_development_postgresql_127_0_0_1_55433_available_for_transaction_read_only_SYS01_cohort_audit
+NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_AI_USAGE_READONLY_LOCAL_DEVELOPMENT_DB_READINESS_REAUDIT
+NEXT_STAGE=UNASSIGNED
+NEXT_TASK_AUTHORIZED=false
+NEXT_STAGE_AUTO_EXECUTION=false
+```
+
+- Fresh audit 将 `analytics` 冻结为 AI usage fact/command/read-source owner，将 `institution-system` 冻结为 low-sensitive read-model/presentation owner；cross-owner composition 必须位于 `src/server/orchestration/**`；
+- authoritative Reader 已具备 exact tenant/institution + half-open window、owner service-key/terminal-status policy、10,000-row 上限与整体 fail-closed 语义；
+- canonical API 冻结为 `/api/v1/institution/ai-service-usage`，旧 unversioned API 继续 capability-off compatibility-only；page/capability 仍 hidden/not_released；
+- `.env.local` 目标为 loopback `127.0.0.1:55433`，但当前没有 listener；连接在 transaction 与 SQL 前失败，未执行 SELECT 或任何写入；
+- 因 actual cohort、历史覆盖、unknown policy value 与 pair integrity 不可验证，S20 不冻结 Runtime allowlist；唯一 prerequisite 是在新授权下恢复该 local-development PostgreSQL 的只读审计可用性；
+- S20 exact-6 Markdown docs-only；没有 Runtime、数据库写、Schema/Migration/DDL/DML/Seed、Staging 或 Production。
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-ai-usage-readonly-fresh-admission-20260815.md`。
+
+<!-- SEVEN_STREAM_SYSTEM_SYS01_AI_USAGE_READONLY_ADMISSION_HISTORY_END -->
+
 <!-- POST_V2_R1C_FINAL_CLOSURE_SEVEN_STREAM_ENTRY_HISTORY -->
 
 ## 2026-08-14：POST-V2-R1C 正式收口并通过七条业务线开发入口

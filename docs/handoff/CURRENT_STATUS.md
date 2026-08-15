@@ -1,5 +1,71 @@
 # 智美天工当前项目状态
 
+<!-- SEVEN_STREAM_SYSTEM_SYS01_AI_USAGE_READONLY_STATUS_START -->
+
+## S20 System SYS-01 AI 使用只读 fresh Admission
+
+- 更新日期：2026-08-15
+- fresh Admission：passed；Runtime Admission：blocked
+- ownership：AI usage facts/command/read source 归 `analytics`，低敏 read model/presentation 归 `institution-system`，formal composition 归 `src/server/orchestration/**`
+- local-development DB：`.env.local` 指向 loopback `127.0.0.1:55433`，当前无 listener；连接在 transaction/SQL 前 `ECONNREFUSED`
+- data readiness：unavailable；实际 tenant/institution isolation 与历史覆盖未验证
+- Runtime allowlist：未冻结；Runtime、数据库写入、Schema/Migration、DDL/DML、Seed、Staging、Production 均未执行
+
+```text
+STAGE=S20
+STREAM=system
+SLICE=SYS_01_AI_USAGE_READONLY
+COMPLETION_MODE=ADMISSION_COMPLETE_BLOCKED
+BASELINE=d2ae875cb75bda0c09aaa86d0cc410bf94f0dd78
+
+SYS01_FRESH_ADMISSION=passed
+SYS01_RUNTIME_ADMISSION_READY=false
+SYS01_DATA_READINESS=unavailable
+SYS01_HISTORICAL_COVERAGE_COMPLETE=false
+SYS01_PARTIAL_COVERAGE_SAFE=false
+SYS01_STATIC_TENANT_ISOLATION_SAFE=true
+SYS01_STATIC_INSTITUTION_ISOLATION_SAFE=true
+SYS01_TENANT_ISOLATION_SAFE=unverified
+SYS01_INSTITUTION_ISOLATION_SAFE=unverified
+
+SYS01_CANONICAL_API=/api/v1/institution/ai-service-usage
+SYS01_CAPABILITY_KEY=page_system_ai_usage
+SYS01_CURRENT_CAPABILITY_STATE=hidden/not_released
+SYS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
+SYS01_EXACT_RUNTIME_FILE_COUNT=0
+
+TARGETED_TEST_FILES=17
+TARGETED_TESTS=486/486 passed
+TYPECHECK=passed
+ARCHITECTURE_UNIT=148/148 passed
+ARCHITECTURE_INCREMENTAL=passed
+PRODUCTION_READINESS_DOCS=8/8 passed
+GIT_DIFF_CHECK=passed
+
+DATABASE_CONNECTION_ATTEMPTED=true
+DATABASE_CONNECTION=false
+DATABASE_QUERY_EXECUTED=false
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+MIGRATION=false
+DDL_EXECUTION=false
+DML_EXECUTION=false
+SEED_EXECUTION=false
+STAGING_CHANGE=false
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+
+PRIMARY_BLOCKING_PREREQUISITE=local_development_postgresql_127_0_0_1_55433_available_for_transaction_read_only_SYS01_cohort_audit
+NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_AI_USAGE_READONLY_LOCAL_DEVELOPMENT_DB_READINESS_REAUDIT
+NEXT_STAGE=UNASSIGNED
+NEXT_TASK_AUTHORIZED=false
+NEXT_STAGE_AUTO_EXECUTION=false
+```
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-ai-usage-readonly-fresh-admission-20260815.md`。
+
+<!-- SEVEN_STREAM_SYSTEM_SYS01_AI_USAGE_READONLY_STATUS_END -->
+
 <!-- POST_V2_R1C_FINAL_CLOSURE_SEVEN_STREAM_ENTRY_STATUS_START -->
 
 ## S19 最终收口与七线开发入口
