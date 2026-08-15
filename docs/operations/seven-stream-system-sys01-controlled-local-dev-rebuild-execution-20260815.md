@@ -24,6 +24,11 @@ S34_CORRECTIVE_RUNTIME_MERGE=cf0be4480020dcc4e22e086cb1ba11e924cc78c9
 S34_CORRECTIVE_REQUIRED_CHECK=passed
 S34_CORRECTIVE_ACTIONABLE_P0_P1_P2_P3=0
 S34_CORRECTIVE_POST_MERGE_REVIEW_DEBT=0
+S34_DOCS_PR=1241
+S34_DOCS_INITIAL_HEAD=ec91fea2d83ea637b88171656ea261c75a5624f5
+S34_DOCS_REQUIRED_CHECK=passed
+S34_ACTIONABLE_P0_P1_P2_P3=0
+S34_POST_MERGE_REVIEW_DEBT=0
 
 PREFLIGHT_STATUS=succeeded
 BACKUP_STATUS=succeeded
@@ -50,7 +55,7 @@ ENCRYPTED_BACKUP_RETAINED=true
 ORIGINAL_DATABASE_DISPOSAL=false
 
 S34_COMPLETE=true
-S34_FORMAL_CLOSURE=true_after_docs_pr_merge_and_post_merge_sweep
+S34_FORMAL_CLOSURE=true
 ```
 
 S34 只操作用户授权的 local-development resources。original `127.0.0.1:55433` 始终由 read-only transaction、before/after fingerprint 与 runner invariant 保护；所有业务数据写入只发生在 candidate。没有执行 repository migration、`drizzle-kit migrate`、`db:generate`、snapshot generation、seed、Staging 或 Production 变更。
