@@ -15,6 +15,30 @@ S32_REQUIRED_CHECKS=passed
 S32_POST_MERGE_REVIEW_DEBT=0
 S32_FORMAL_CLOSURE=true
 
+S29_CORRECTIVE_PR=1232
+S29_CORRECTIVE_HEAD=1d1719f82afb9959c22e5ba6d5f8df0d65fae3c4
+S29_CORRECTIVE_MERGE=00e9b91382538f29764853d9fdd67ae42a9872af
+S30_CORRECTIVE_DOCS_PR=1234
+S30_CORRECTIVE_DOCS_HEAD=357661bf1646296174de714deee47de8abf5aa0d
+S30_CORRECTIVE_DOCS_MERGE=23b1784ca61c0cdbb950cc6291fc83302b8f83a2
+S31_CORRECTIVE_RUNTIME_PR=1233
+S31_CORRECTIVE_RUNTIME_HEAD=dc1524cc4b3d7656bf60b3aaf10be5ab7cf85ca5
+S31_CORRECTIVE_RUNTIME_MERGE=f7eefd101d05b8c07468de677d5013658816972a
+S32_CORRECTIVE_DOCS_PR=1235
+S32_CORRECTIVE_DOCS_HEAD=a4f07114a97fece89312cfccc166daa179f6b345
+S32_CORRECTIVE_DOCS_MERGE=f981c6c06448eed2fa63edd0a8a38f9cfc3b5b1d
+
+S29_POST_MERGE_P2_RESOLVED=2
+S30_POST_MERGE_P1_RESOLVED=2
+S31_POST_MERGE_P1_RESOLVED=3
+S32_POST_MERGE_P2_RESOLVED=1
+ULTRA_GOAL_CORRECTIVE_REVIEW_THREAD_COUNT=8
+ULTRA_GOAL_ACTIONABLE_P0_P1_P2_P3=0
+ULTRA_GOAL_POST_MERGE_REVIEW_DEBT=0
+S33_ACTIONABLE_P0_P1_P2_P3=0
+POST_MERGE_REVIEW_DEBT=0
+S33_FORMAL_CLOSURE=true
+
 CARE_SELECTED_FIRST_SLICE=APPOINTMENTS_LIST_BY_CURRENT_INSTITUTION
 CARE_FORMAL_READER_EXISTS=false
 CARE_CURRENT_API=/api/institution/appointments
@@ -33,7 +57,7 @@ NEXT_CARE_TASK=SEVEN_STREAM_CARE_APPOINTMENTS_READONLY_FRESH_READMISSION_AFTER_S
 NEXT_CARE_TASK_AUTHORIZED=false
 ```
 
-appointments 以最小 capability complexity 胜出：5 rows、tenant null=0、5/5 对 Customer pair exact-one、zero/multi match=0，且不依赖外部系统。original source 尚无 `appointments.institution_id`；S33 不允许 Care Reader 借 Customers repository 临时取得 ownership。SYS-01 runner 已冻结 owner reconstruction，但 controlled rebuild 尚未授权、未执行，因此本阶段正式记录 blocker，不伪造 Runtime allowlist。
+appointments 以最小 capability complexity 胜出：5 rows、tenant null=0、5/5 对 Customer pair exact-one、zero/multi match=0，且不依赖外部系统。original source 尚无 `appointments.institution_id`；S33 不允许 Care Reader 借 Customers repository 临时取得 ownership。S29–S32 的 8 条 post-merge review thread 已由 PR #1232/#1233/#1234/#1235 全部修复并 resolved；SYS-01 controlled rebuild 仍未授权、未执行，因此本阶段只完成 formal closure，不伪造 Runtime allowlist。
 
 Canonical evidence：`docs/operations/seven-stream-care-formal-fresh-admission-20260815.md`。
 

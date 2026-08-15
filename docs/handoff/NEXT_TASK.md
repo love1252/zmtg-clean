@@ -5,6 +5,29 @@
 ```text
 S33_COMPLETION_MODE=ADMISSION_COMPLETE_BLOCKED_PENDING_SYSTEM_REBUILD
 S33_BASELINE=5b7023aa78a78ead98c25071cda99c2df978bb89
+S29_CORRECTIVE_PR=1232
+S29_CORRECTIVE_HEAD=1d1719f82afb9959c22e5ba6d5f8df0d65fae3c4
+S29_CORRECTIVE_MERGE=00e9b91382538f29764853d9fdd67ae42a9872af
+S30_CORRECTIVE_DOCS_PR=1234
+S30_CORRECTIVE_DOCS_HEAD=357661bf1646296174de714deee47de8abf5aa0d
+S30_CORRECTIVE_DOCS_MERGE=23b1784ca61c0cdbb950cc6291fc83302b8f83a2
+S31_CORRECTIVE_RUNTIME_PR=1233
+S31_CORRECTIVE_RUNTIME_HEAD=dc1524cc4b3d7656bf60b3aaf10be5ab7cf85ca5
+S31_CORRECTIVE_RUNTIME_MERGE=f7eefd101d05b8c07468de677d5013658816972a
+S32_CORRECTIVE_DOCS_PR=1235
+S32_CORRECTIVE_DOCS_HEAD=a4f07114a97fece89312cfccc166daa179f6b345
+S32_CORRECTIVE_DOCS_MERGE=f981c6c06448eed2fa63edd0a8a38f9cfc3b5b1d
+
+S29_POST_MERGE_P2_RESOLVED=2
+S30_POST_MERGE_P1_RESOLVED=2
+S31_POST_MERGE_P1_RESOLVED=3
+S32_POST_MERGE_P2_RESOLVED=1
+ULTRA_GOAL_CORRECTIVE_REVIEW_THREAD_COUNT=8
+ULTRA_GOAL_ACTIONABLE_P0_P1_P2_P3=0
+ULTRA_GOAL_POST_MERGE_REVIEW_DEBT=0
+S33_ACTIONABLE_P0_P1_P2_P3=0
+POST_MERGE_REVIEW_DEBT=0
+S33_FORMAL_CLOSURE=true
 CARE_SELECTED_FIRST_SLICE=APPOINTMENTS_LIST_BY_CURRENT_INSTITUTION
 CARE_DATA_READINESS=blocked_pending_system_rebuild
 CARE_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
@@ -19,7 +42,7 @@ NEXT_STAGE=UNASSIGNED
 NEXT_STAGE_AUTO_EXECUTION=false
 ```
 
-下一任务必须由用户独立授权 SYS-01 controlled local-development rebuild execution；它不是 S33 的自动延伸。只有 rebuild 完成且 candidate 通过 validation，才重新审计 appointments data readiness 与 exact Runtime allowlist。不得在 original source 上通过 Care → Customers repository 反向依赖或 runtime 临时 join 规避 blocker。
+S29–S32 的 8 条 post-merge review thread 已全部通过 corrective PR #1232/#1233/#1234/#1235 解决，S33 formal closure 完成。下一任务仍必须由用户独立授权 SYS-01 controlled local-development rebuild execution；它不是 S33 的自动延伸。只有 rebuild 完成且 candidate 通过 validation，才重新审计 appointments data readiness 与 exact Runtime allowlist。不得在 original source 上通过 Care → Customers repository 反向依赖或 runtime 临时 join 规避 blocker。
 
 Canonical evidence：`docs/operations/seven-stream-care-formal-fresh-admission-20260815.md`。
 
