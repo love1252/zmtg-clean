@@ -3,11 +3,26 @@
 ## 下一任务选择状态
 
 ```text
-NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_LOCAL_DEVELOPMENT_SCHEMA_PARITY_MIGRATION_ADMISSION
+NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_LOCAL_DEVELOPMENT_PHASED_SCHEMA_RECOVERY_ENTRYPOINT_AND_DATA_PRECONDITION_ADMISSION
 NEXT_STAGE=UNASSIGNED
 NEXT_TASK_AUTHORIZED=false
 NEXT_TASK_SELECTION_REQUIRED=false
 NEXT_STAGE_AUTO_EXECUTION=false
+S22_COMPLETION_MODE=MIGRATION_ADMISSION_COMPLETE_BLOCKED
+S22_MIGRATION_ADMISSION_AUDIT=passed
+LOCAL_DB_APPLIED_MIGRATION_HEAD_TAG=0037_v08_05b_b3a_real_task_readiness_foundation
+LOCAL_DB_JOURNAL_IS_REPOSITORY_PREFIX=true
+LOCAL_DB_JOURNAL_INTERNAL_GAP_COUNT=0
+LOCAL_DB_JOURNAL_UNKNOWN_ENTRY_COUNT=0
+M0038_OBJECT_STATE=all_missing
+NORMAL_SCHEMA_LAG=true
+PENDING_MIGRATION_CHAIN=0038,0039,0040,0041,0042,0043,0044,0045
+PENDING_CHAIN_DATA_PRECONDITIONS_SAFE=false
+MIGRATOR_APPLIES_ALL_PENDING=true
+MIGRATOR_TARGETED_EXECUTION_SUPPORTED=false
+MIGRATION_EXECUTION_ADMISSION_READY=false
+EXACT_MIGRATION_CHAIN_FROZEN=false
+EXACT_MIGRATION_COUNT=0
 S21_COMPLETION_MODE=READINESS_REAUDIT_COMPLETE_BLOCKED
 S21_DB_READINESS_REAUDIT=passed
 DATABASE_CONNECTION=true
@@ -25,7 +40,7 @@ SYS01_RUNTIME_ADMISSION_READY=false
 SYS01_DATA_READINESS=blocked
 SYS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
 SYS01_EXACT_RUNTIME_FILE_COUNT=0
-PRIMARY_BLOCKING_PREREQUISITE=local_development_schema_parity_missing_public_institution_scopes_requires_separately_authorized_migration_admission
+PRIMARY_BLOCKING_PREREQUISITE=formal_migrator_all_pending_only_cannot_pause_after_0038_for_required_provisioning_and_current_0039_0045_data_preconditions_mismatch
 S19_COMPLETE=true
 POST_V2_R1C_COMPLETE=true
 POST_V2_R1C_FORMAL_CLOSURE=true
@@ -47,11 +62,11 @@ DATABASE_WRITE_EXECUTION_AUTHORIZED=false
 PAGE_SYSTEM_AUDIT_RUNTIME_RELEASE_COMPLETE=true
 ```
 
-S21 已安全启动既有 local-development PostgreSQL 并完成 transaction-read-only aggregate audit。实际 `ai_call_usage_records` cohort 为 0，但 current code 所需 `public.institution_scopes` 不存在，schema parity 不成立，formal institution pair authority 无法验证。
+S22 已确认 actual journal 是 repository `0000..0037` 的逐项 timestamp/hash 严格前缀，`0038` objects 全部缺失并属于正常 schema lag。Repository continuous pending list 是 `0038..0045`，但它不是当前 executable chain。
 
-下一原子任务只能 fresh Admission 既有 migration chain 的 local-development schema parity 方案、precheck、rollback 与验证；当前不授权执行 Migration、Schema、DDL/DML、Seed 或 Runtime。不得直接假定运行单个历史 migration 即安全。
+正式 migrator 只能执行全部 pending，不能在 `0038` 后暂停完成 `0039` 明确要求的 Provisioning；current DB 的 11 Membership / 0 Binding 也不符合 `0039–0045` acceptance data guards。下一原子任务只能准入 phased recovery entrypoint 与各 checkpoint 的数据前置，不得执行 Migration、Provisioning write、Schema、DDL/DML、Seed 或 Runtime。
 
-S21 canonical evidence：`docs/operations/seven-stream-system-sys01-ai-usage-readonly-db-readiness-reaudit-20260815.md`。
+S22 canonical evidence：`docs/operations/seven-stream-system-sys01-local-dev-schema-parity-migration-admission-20260815.md`。
 
 ## S18 exact 5-file Runtime 最终发布闭环
 
