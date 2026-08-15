@@ -38,7 +38,7 @@
   "sourceBaselineCommit": "5d40cfb0e0862e2b11208918c21808571e67c6db",
   "toolingBlobs": {
     "scripts/db/guarded-migrate.mjs": "ee15905525284d5caa236cbfc5379bafd6556e63",
-    "scripts/db/sys01-controlled-local-dev-rebuild.mjs": "0ebf29133453a3bd6048817a837b71ca87a92f96"
+    "scripts/db/sys01-controlled-local-dev-rebuild.mjs": "efd273d0cdfb4905ab072abecea900b531e4cdca"
   },
   "version": "zmtg.sys01.local-dev-current-schema-baseline/v1"
 }

@@ -576,8 +576,18 @@ function normalizeCatalogExpression(
       const strings = new Set(['text', 'character varying']);
       return strings.has(normalizedCast) && strings.has(normalizedTarget);
     };
-    const stripLiteralCast = (literal, cast, target) =>
-      isEquivalentCoercion(cast, target) ? literal : `${literal}::${cast}`;
+    const stripEquivalentLiteralCastChain = (entry, target) => {
+      const match = entry.match(
+        new RegExp(`^('(?:''|[^'])*')((?:::(?:${castType}))+)$`, 'iu'),
+      );
+      if (!match) return entry;
+      const [, literal, suffix] = match;
+      const casts = [...suffix.matchAll(new RegExp(`::(${castType})`, 'giu'))]
+        .map((castMatch) => castMatch[1]);
+      return casts.length > 0 && casts.every((cast) => isEquivalentCoercion(cast, target))
+        ? literal
+        : entry;
+    };
     normalized = normalized
       .replace(
         new RegExp(`(\\(?)([a-z_][a-z0-9_]*)(\\)?)::(${castType})`, 'giu'),
@@ -612,10 +622,7 @@ function normalizeCatalogExpression(
           const target = knownColumnTypes?.get(left);
           if (!target || (arrayCast && !isEquivalentCoercion(arrayCast, target))) return match;
           const normalizedEntries = splitTopLevelCommas(entries).map((entry) =>
-            entry.replace(
-              new RegExp(`^('(?:''|[^'])*')::(${castType})$`, 'iu'),
-              (_entry, literal, cast) => stripLiteralCast(literal, cast, target),
-            ));
+            stripEquivalentLiteralCastChain(entry, target));
           if (normalizedEntries.some((entry) => /::/u.test(entry))) return match;
           return `${left} IN(${normalizedEntries.join(',')})`;
         },
@@ -626,10 +633,7 @@ function normalizeCatalogExpression(
           const target = knownColumnTypes?.get(left);
           if (!target || (arrayCast && !isEquivalentCoercion(arrayCast, target))) return match;
           const normalizedEntries = splitTopLevelCommas(entries).map((entry) =>
-            entry.replace(
-              new RegExp(`^('(?:''|[^'])*')::(${castType})$`, 'iu'),
-              (_entry, literal, cast) => stripLiteralCast(literal, cast, target),
-            ));
+            stripEquivalentLiteralCastChain(entry, target));
           if (normalizedEntries.some((entry) => /::/u.test(entry))) return match;
           return `${left} NOT IN(${normalizedEntries.join(',')})`;
         },
