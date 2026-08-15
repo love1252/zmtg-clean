@@ -34,7 +34,7 @@
 S25 fresh 读取当前安装的 `drizzle-orm@0.45.2` 后确认，PostgreSQL migrator 只读取 `drizzle.__drizzle_migrations` 中 `created_at` 最大的一行，并以 `database.created_at < repository entry.when` 决定 pending；`hash` 会被写入但不参与 pending 判断，原生实现也不支持 external baseline marker 或 baseline metadata。基于该语义，SYS-01 side-by-side local-development candidate 的唯一受准入表示为：
 
 - 一份 `drizzle/baselines/sys01-local-dev-current-schema-0045-v1.sql` reviewed schema-only artifact；
-- 一份同名 `.json` immutable manifest，记录 S26 frozen base commit、parent、artifact/schema fingerprint 与受审查 tooling blob identity；marker hash由 manifest exact bytes 外部计算，manifest 不记录自身 digest；
+- 一份同名 `.json` immutable manifest，记录 S26 frozen base commit、parent、artifact/schema fingerprint 与受审查 tooling blob identities；marker hash由 manifest exact bytes 外部计算，manifest 不记录自身 digest；
 - `drizzle.__drizzle_migrations` 中恰好一条 formal marker row，以 `0045_base02_binding_legacy_calibration` 的 `when=1785738060856` 为 parent 高水位，`hash` 为 manifest exact bytes 的 SHA-256；
 - marker hash 不等于 `0045` SQL hash，不写入 `0000..0045` 的伪历史，也不声明这些 Migration 曾在 candidate 执行；
 - existing legacy-chain DB 不加 marker、不 rebase、不改 journal；两种 origin 只在 guard provenance 上分流，之后消费同一 repository future tail。

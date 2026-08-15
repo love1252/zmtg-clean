@@ -62,7 +62,7 @@ fresh 读取 `node_modules/drizzle-orm/migrator.js` 与 `node_modules/drizzle-or
 DRIZZLE_PENDING_DECISION_KEY=max(database.created_at) < repository_entry.when
 DRIZZLE_JOURNAL_SCHEMA=drizzle
 DRIZZLE_JOURNAL_TABLE=__drizzle_migrations
-DRIZZLE_JOURNAL_REQUIRED_FIELDS=id_serial_primary_key,hash_text_not_null,created_at_bigint
+DRIZZLE_JOURNAL_REQUIRED_FIELDS=id_serial_primary_key,hash_text_not_null,created_at_bigint_nullable_in_native_ddl_but_non_null_required_for_all_governed_rows
 DRIZZLE_REPOSITORY_HASH_ALGORITHM=sha256_exact_migration_sql_bytes
 DRIZZLE_REQUIRES_FULL_HISTORICAL_CHAIN=false
 DRIZZLE_SUPPORTS_EXTERNAL_BASELINE_MARKER=false
@@ -187,7 +187,7 @@ BASELINE_MARKER_CREATED_FROM_COMMIT=manifest.sourceBaselineCommit_exact_S26_froz
 BASELINE_MARKER_PARENT_JOURNAL_HEAD=0045_base02_binding_legacy_calibration
 ```
 
-marker-only origin 的 database journal 在 baseline bootstrap 完成时必须恰好一行：`created_at` 等于 parent `when`，`hash` 等于 exact manifest SHA-256；它不等于 `0045` SQL hash。manifest 只包含 version、S26 frozen base commit、artifact/schema fingerprint、受审查 tooling blob identity、parent tag／when 与规范化策略版本，不包含自身 digest，也不包含 secret、PII、数据库名、host、port 或 environment identifier。以 frozen base commit 而不是 implementation Head 作为 provenance，可避免 commit SHA 与 manifest bytes 的循环自引用；实际执行文件仍须通过 clean HEAD blob 与 manifest 中受审查 blob identity 的 exact 校验。
+marker-only origin 的 database journal 在 baseline bootstrap 完成时必须恰好一行：`created_at` 等于 parent `when`，`hash` 等于 exact manifest SHA-256；它不等于 `0045` SQL hash。虽然 Drizzle native DDL 未给 `created_at` 声明 `NOT NULL`，项目 guard 必须拒绝任何 governed row 的 null `created_at`。manifest 只包含 version、S26 frozen base commit、artifact/schema fingerprint、受审查 tooling blob identities、parent tag／when 与规范化策略版本，不包含自身 digest，也不包含 secret、PII、数据库名、host、port 或 environment identifier。以 frozen base commit 而不是 implementation Head 作为 provenance，可避免 commit SHA 与 manifest bytes 的循环自引用；实际执行文件仍须通过 clean HEAD blobs 与 manifest 中受审查 blob identities 的 exact 校验。
 
 legacy-chain origin 必须继续是 repository SQL hash／`when` 的严格 prefix；不写入 marker。任何同时出现 legacy `0000..0045` rows 与 baseline marker、两种 marker、未知 row、重复／逆序 timestamp 或 hash drift 的状态均为 ambiguous mixed lineage，必须停止。
 
@@ -269,7 +269,7 @@ CONTROLLED_REBUILD_EXACT_FILE_COUNT=6
 | PATH | ROLE | WHY_REQUIRED | EXISTING_OR_NEW | PRODUCTION_OR_TEST_OR_DOC_OR_METADATA |
 |---|---|---|---|---|
 | `drizzle/baselines/sys01-local-dev-current-schema-0045-v1.sql` | reviewed schema-only baseline artifact | 建立 current schema，不包含业务数据或历史 execution claim | new | metadata |
-| `drizzle/baselines/sys01-local-dev-current-schema-0045-v1.json` | immutable baseline manifest | 冻结 version、frozen base、parent、artifact/schema fingerprint 与受审查 tooling blob identity；marker hash由其 exact bytes 外部计算 | new | metadata |
+| `drizzle/baselines/sys01-local-dev-current-schema-0045-v1.json` | immutable baseline manifest | 冻结 version、frozen base、parent、artifact/schema fingerprint 与受审查 tooling blob identities；marker hash由其 exact bytes 外部计算 | new | metadata |
 | `scripts/db/sys01-controlled-local-dev-rebuild.mjs` | baseline bootstrap + S24 controlled rebuild runner | 只在显式 loopback candidate mode 下执行 artifact、marker、transfer、validation、cutover/rollback state machine | new | production |
 | `scripts/db/sys01-controlled-local-dev-rebuild.test.mjs` | runner tests | 锁定 no-secret、marker-only、fingerprint、backup/restore、transfer、rollback、unknown-outcome 与 fail-closed | new | test |
 | `scripts/db/guarded-migrate.mjs` | origin-aware migration guard | 在 spawn 前读取 actual journal/catalog，区分 strict legacy prefix 与 exact marker origin，并拒绝 production marker | existing | production |
