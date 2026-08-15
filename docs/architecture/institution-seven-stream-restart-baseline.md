@@ -1,5 +1,49 @@
 # 机构端七条业务线重启基线
 
+## S35 当前入口：candidate 已重建，SYS-01 formal facts 仍为空
+
+- S34：PR #1241 已合并，active local database 为 candidate，original mutation count 为 0
+- S35 candidate：Scope=0、Context Version=0、Context=0、Binding=0、AI usage=0、Membership=11
+- 结论：空表 orphan=0 是 vacuous truth；SYS-01 Runtime allowlist 不冻结
+- 并行顺序：当前 ultra goal 继续 S36 Care read-only re-admission；System provisioning prerequisite 未授权
+
+```text
+STAGE=S35
+BASELINE=519d3f383f9758b17c5ee0e3bdd944717f378df8
+S34_PR=1241
+S34_HEAD=77ec36a489a5f3cf5c1f91187ef197871045f58f
+S34_MERGE=519d3f383f9758b17c5ee0e3bdd944717f378df8
+S34_FORMAL_CLOSURE=true
+
+INSTITUTION_SCOPE_COUNT=0
+OPERATING_CONTEXT_VERSION_COUNT=0
+OPERATING_CONTEXT_COUNT=0
+BINDING_COUNT=0
+TENANT_MEMBER_COUNT=11
+AI_USAGE_COUNT=0
+
+SYS01_DATA_READINESS=blocked_target_only_formal_scope_context_binding_cohorts_empty
+SYS01_TENANT_ISOLATION_SAFE=false
+SYS01_INSTITUTION_ISOLATION_SAFE=false
+SYS01_FORMAL_SCOPE_READY=false
+SYS01_FORMAL_CONTEXT_READY=false
+SYS01_BINDING_READY=false
+SYS01_RUNTIME_ADMISSION_READY=false
+SYS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
+SYS01_EXACT_RUNTIME_FILE_COUNT=0
+
+NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_FORMAL_INSTITUTION_SCOPE_CONTEXT_BINDING_PROVISIONING_SOURCE_FRESH_ADMISSION
+NEXT_SYSTEM_TASK_AUTHORIZED=false
+NEXT_CARE_TASK=SEVEN_STREAM_CARE_APPOINTMENTS_READONLY_FRESH_READMISSION_AFTER_SYSTEM_REBUILD
+NEXT_CARE_TASK_AUTHORIZED=true_by_current_ultra_goal_after_S35_merge
+NEXT_STAGE=S36
+NEXT_STAGE_AUTO_EXECUTION=false
+```
+
+S34 mapping contract 有意将三个 target-only formal tables 保持空，并拒绝从 membership/customer/default institution 猜 pair；binding source 也 authoritative-empty exact preserve。S35 在 candidate repeatable-read read-only transaction 内验证所有相关 orphan 为 0，但没有任何 positive formal authority，因此不能把 schema parity 或 zero-row AI cohort当作 Runtime admission。
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-post-rebuild-data-runtime-readmission-20260815.md`。
+
 ## S34 当前入口：SYS-01 controlled rebuild 与 local cutover 已完成
 
 - 初始基线：`2c9c6fdf209c9e5598d8ddea35922ad8ed6e01e1`

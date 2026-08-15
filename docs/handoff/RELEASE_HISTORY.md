@@ -1,5 +1,52 @@
 # 项目重构历史
 
+<!-- SEVEN_STREAM_SYSTEM_SYS01_POST_REBUILD_READMISSION_HISTORY -->
+
+## 2026-08-16：S35 candidate data/runtime re-admission 完成，formal provisioning 仍阻断 SYS-01
+
+```text
+STAGE=S35
+TASK=SEVEN_STREAM_SYSTEM_SYS_01_POST_REBUILD_DATA_AND_RUNTIME_READMISSION
+BASELINE=519d3f383f9758b17c5ee0e3bdd944717f378df8
+S34_PR=1241
+S34_HEAD=77ec36a489a5f3cf5c1f91187ef197871045f58f
+S34_MERGE=519d3f383f9758b17c5ee0e3bdd944717f378df8
+S34_REQUIRED_CHECK=passed
+S34_REVIEW_P2_RESOLVED=1
+S34_POST_MERGE_REVIEW_DEBT=0
+S34_FORMAL_CLOSURE=true
+
+INSTITUTION_SCOPE_COUNT=0
+OPERATING_CONTEXT_VERSION_COUNT=0
+OPERATING_CONTEXT_COUNT=0
+BINDING_COUNT=0
+TENANT_MEMBER_COUNT=11
+AI_USAGE_COUNT=0
+NULL_AUDIT_ATTRIBUTION_COUNT=252
+ORPHAN_COUNT=0
+
+SYS01_DATA_READINESS=blocked_target_only_formal_scope_context_binding_cohorts_empty
+SYS01_RUNTIME_ADMISSION_READY=false
+SYS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
+SYS01_EXACT_RUNTIME_FILE_COUNT=0
+
+DATABASE_TRANSACTION_READ_ONLY=true
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+MIGRATION_EXECUTION=false
+NEXT_STAGE=S36
+```
+
+- S34 PR #1241 的 1 条 P2 已由 `77ec36a4...` 修正文档 restore-drill 写入范围后回复并 resolved；final Required Check 与 post-merge sweep 均通过。
+- S35 在 active candidate 的 startup read-only + repeatable-read read-only transaction 内重算 Scope/Context/Binding/Membership/AI usage/audit attribution 与 orphan aggregates，并显式 ROLLBACK。
+- 三个 target-only formal cohort 与 authoritative Binding 均为空；这是 rebuild `target_empty_no_guess` / authoritative-empty policy 的预期结果，不是 schema/data transfer failure。
+- Membership=11 不能代替 institution authority；AI usage=0 与 orphan=0 不能以 vacuous truth 证明 Runtime isolation ready。
+- 本阶段没有 Runtime allowlist、DB write、Schema/Migration/DDL/DML、页面发布、Staging 或 Production 变更。
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-post-rebuild-data-runtime-readmission-20260815.md`。
+
+<!-- SEVEN_STREAM_SYSTEM_SYS01_POST_REBUILD_READMISSION_HISTORY_END -->
+
 <!-- SEVEN_STREAM_SYSTEM_SYS01_REBUILD_EXECUTION_HISTORY -->
 
 ## 2026-08-15：S34 controlled local-development rebuild 与 candidate cutover 完成

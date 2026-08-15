@@ -1,5 +1,35 @@
 # 智美天工架构文档索引
 
+<!-- SEVEN_STREAM_SYSTEM_SYS01_POST_REBUILD_READMISSION_START -->
+
+## System SYS-01 post-rebuild data / Runtime 重新准入（2026-08-16）
+
+```text
+STAGE=S35
+BASELINE=519d3f383f9758b17c5ee0e3bdd944717f378df8
+ACTIVE_LOCAL_DATABASE=candidate
+INSTITUTION_SCOPE_COUNT=0
+OPERATING_CONTEXT_VERSION_COUNT=0
+OPERATING_CONTEXT_COUNT=0
+BINDING_COUNT=0
+TENANT_MEMBER_COUNT=11
+AI_USAGE_COUNT=0
+SYS01_DATA_READINESS=blocked_target_only_formal_scope_context_binding_cohorts_empty
+SYS01_RUNTIME_ADMISSION_READY=false
+SYS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
+SYS01_EXACT_RUNTIME_FILE_COUNT=0
+
+NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_FORMAL_INSTITUTION_SCOPE_CONTEXT_BINDING_PROVISIONING_SOURCE_FRESH_ADMISSION
+NEXT_SYSTEM_TASK_AUTHORIZED=false
+NEXT_STAGE=S36
+```
+
+candidate catalog 与 S34 transfer closure 正常；fresh read-only audit 证明 formal Scope/Context/Binding cohort 仍为 frozen `target_empty_no_guess`。Membership 不能代替 institution authority，AI usage 的 0-row cohort 也不能证明 tenant/institution isolation。S35 不实施 Runtime、Schema、Migration 或 provisioning DML。
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-post-rebuild-data-runtime-readmission-20260815.md`。
+
+<!-- SEVEN_STREAM_SYSTEM_SYS01_POST_REBUILD_READMISSION_END -->
+
 <!-- SEVEN_STREAM_SYSTEM_SYS01_REBUILD_EXECUTION_START -->
 
 ## System SYS-01 controlled local-development rebuild execution（2026-08-15）
