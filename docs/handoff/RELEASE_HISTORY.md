@@ -1,5 +1,54 @@
 # 项目重构历史
 
+<!-- SEVEN_STREAM_KNOWLEDGE_FORMAL_FRESH_ADMISSION_HISTORY -->
+
+## 2026-08-16：S37 Knowledge 首切片完成选择，formal fact/source prerequisites 正式冻结
+
+```text
+STAGE=S37
+STREAM=knowledge
+TASK=SEVEN_STREAM_KNOWLEDGE_FORMAL_FRESH_ADMISSION
+BASELINE=ab5b4b12bac381d4eb62c554a35ff476657f7901
+S36_PR=1243
+S36_HEAD=a3d8f2f7c624f2eee50ac2cef94631bae813cdc5
+S36_MERGE=ab5b4b12bac381d4eb62c554a35ff476657f7901
+S36_REQUIRED_CHECK=passed
+S36_ACTIONABLE_P0_P1_P2_P3=0
+S36_POST_MERGE_REVIEW_DEBT=0
+S36_FORMAL_CLOSURE=true
+
+KNOWLEDGE_SELECTED_FIRST_SLICE=KNOWLEDGE_DOCUMENT_METADATA_LIST_BY_FORMAL_INSTITUTION_SCOPE
+KNOWLEDGE_SOURCE_COUNT=0
+KNOWLEDGE_DOCUMENT_COUNT=0
+KNOWLEDGE_DOWNSTREAM_ROW_COUNT=0
+INSTITUTION_SCOPE_COUNT=0
+ACTIVE_BINDING_COUNT=0
+
+KNOWLEDGE_DATA_READINESS=blocked_authoritative_fact_and_formal_scope_cohorts_empty
+KNOWLEDGE_SCHEMA_CHANGE_REQUIRED=true
+KNOWLEDGE_MIGRATION_REQUIRED=true
+KNOWLEDGE_EXTERNAL_SYSTEM_REQUIRED_FOR_SELECTED_SLICE=false
+KNOWLEDGE_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
+KNOWLEDGE_EXACT_RUNTIME_FILE_COUNT=0
+
+DATABASE_TRANSACTION_READ_ONLY=true
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+MIGRATION_EXECUTION=false
+NEXT_STAGE=UNASSIGNED
+```
+
+- S36 docs-only PR #1243 Required Check 通过，Codex review 未发现重大问题，review threads=0、post-merge debt=0。
+- S37 比较 document metadata、source list 与 QA/read-only，选择不依赖 file/OCR/parse/embedding/index worker/AI 的 document metadata list。
+- active candidate 的 Knowledge facts、downstream artifacts、formal Scope 与 active Binding 全为空；全部 orphan/mismatch=0 仅是 vacuous truth。
+- current source kind exact 只有 `mock|seed|demo`，历史 architecture contract 禁止把它们当正式 Reader provenance；formal version/publication persistence 也尚未闭合。
+- canonical Knowledge owner 冻结为 `src/modules/knowledge/**`；`institution-knowledge` 待合并，`knowledge-base`、legacy institution 与 open-platform Knowledge 只作 compatibility，不新增第二套 generic foundation。
+- 本阶段没有 Runtime allowlist、DB write、Schema/Migration/DDL/DML、Knowledge Reader/API/page 实现、页面发布、Staging 或 Production 变更。
+
+Canonical evidence：`docs/operations/seven-stream-knowledge-formal-fresh-admission-20260815.md`。
+
+<!-- SEVEN_STREAM_KNOWLEDGE_FORMAL_FRESH_ADMISSION_HISTORY_END -->
+
 <!-- SEVEN_STREAM_CARE_APPOINTMENTS_POST_REBUILD_READMISSION_HISTORY -->
 
 ## 2026-08-16：S36 appointments mapping 重新验证完成，formal provisioning 仍阻断 Care Runtime

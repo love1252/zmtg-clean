@@ -1,5 +1,38 @@
 # 智美天工架构文档索引
 
+<!-- SEVEN_STREAM_KNOWLEDGE_FORMAL_FRESH_ADMISSION_START -->
+
+## Knowledge formal Fresh Admission（2026-08-16）
+
+```text
+STAGE=S37
+BASELINE=ab5b4b12bac381d4eb62c554a35ff476657f7901
+KNOWLEDGE_SELECTED_FIRST_SLICE=KNOWLEDGE_DOCUMENT_METADATA_LIST_BY_FORMAL_INSTITUTION_SCOPE
+KNOWLEDGE_DATA_READINESS=blocked_authoritative_fact_and_formal_scope_cohorts_empty
+KNOWLEDGE_SCHEMA_CHANGE_REQUIRED=true
+KNOWLEDGE_MIGRATION_REQUIRED=true
+KNOWLEDGE_EXTERNAL_SYSTEM_REQUIRED_FOR_SELECTED_SLICE=false
+KNOWLEDGE_FORMAL_READER_API_AUTH_CHAIN_READY=false
+KNOWLEDGE_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
+KNOWLEDGE_EXACT_RUNTIME_FILE_COUNT=0
+
+KNOWLEDGE_FACT_OWNER=src/modules/knowledge
+KNOWLEDGE_REPOSITORY_OWNER=src/modules/knowledge/server
+KNOWLEDGE_READ_MODEL_OWNER=src/modules/knowledge/application/institution
+KNOWLEDGE_PRESENTATION_OWNER=src/modules/knowledge
+LEGACY_INSTITUTION_KNOWLEDGE_ROLE=compatibility_only_no_new_fact_ownership
+
+NEXT_KNOWLEDGE_TASK=SEVEN_STREAM_KNOWLEDGE_DOCUMENT_METADATA_FORMAL_FACT_PROVENANCE_AND_SCOPE_PROVISIONING_FRESH_ADMISSION
+NEXT_KNOWLEDGE_TASK_AUTHORIZED=false
+NEXT_STAGE=UNASSIGNED
+```
+
+document metadata list 是不依赖真实 AI、OCR、parse、embedding 或 index worker 的最小 read-only slice。candidate Knowledge/final authority cohort 全空，current source provenance 又只支持 `mock|seed|demo`，不能形成 formal Reader positive evidence。S37 不建立第二套 generic foundation，不冻结 speculative Runtime allowlist。
+
+Canonical evidence：`docs/operations/seven-stream-knowledge-formal-fresh-admission-20260815.md`。
+
+<!-- SEVEN_STREAM_KNOWLEDGE_FORMAL_FRESH_ADMISSION_END -->
+
 <!-- SEVEN_STREAM_CARE_APPOINTMENTS_POST_REBUILD_READMISSION_START -->
 
 ## Care appointments post-rebuild 重新准入（2026-08-16）

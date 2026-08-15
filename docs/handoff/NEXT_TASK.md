@@ -1,5 +1,33 @@
 # 下一任务
 
+## S37 formal blocker 与下一原子任务
+
+```text
+S37_COMPLETION_MODE=ADMISSION_COMPLETE_BLOCKED_FORMAL_FACT_AND_SCOPE_PREREQUISITES
+S37_BASELINE=ab5b4b12bac381d4eb62c554a35ff476657f7901
+KNOWLEDGE_SELECTED_FIRST_SLICE=KNOWLEDGE_DOCUMENT_METADATA_LIST_BY_FORMAL_INSTITUTION_SCOPE
+KNOWLEDGE_DATA_READINESS=blocked_authoritative_fact_and_formal_scope_cohorts_empty
+KNOWLEDGE_SCHEMA_CHANGE_REQUIRED=true
+KNOWLEDGE_MIGRATION_REQUIRED=true
+KNOWLEDGE_EXTERNAL_SYSTEM_REQUIRED_FOR_SELECTED_SLICE=false
+KNOWLEDGE_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
+KNOWLEDGE_EXACT_RUNTIME_FILE_COUNT=0
+
+PRIMARY_BLOCKING_PREREQUISITE=authoritative_knowledge_fact_model_and_source_provenance_missing
+SECONDARY_BLOCKING_PREREQUISITE=authoritative_formal_institution_scope_context_binding_provisioning_source_missing
+
+NEXT_KNOWLEDGE_TASK=SEVEN_STREAM_KNOWLEDGE_DOCUMENT_METADATA_FORMAL_FACT_PROVENANCE_AND_SCOPE_PROVISIONING_FRESH_ADMISSION
+NEXT_KNOWLEDGE_TASK_AUTHORIZED=false
+NEXT_KNOWLEDGE_TASK_RUNTIME_IMPLEMENTATION=false
+
+NEXT_STAGE=UNASSIGNED
+NEXT_STAGE_AUTO_EXECUTION=false
+```
+
+下一任务必须先以独立 docs-only fresh Admission 冻结 authoritative source provenance、immutable/current publication semantics、formal scope provisioning 与必要 Schema/Migration 边界；不能直接实施 Reader/API/page，也不能把 `mock|seed|demo` 或 query parameters 当正式 institution facts。S34-S37 ultra goal 至此不再授权后续阶段。
+
+Canonical S37 evidence：`docs/operations/seven-stream-knowledge-formal-fresh-admission-20260815.md`。
+
 ## S36 Care readmission blocker 与当前 ultra-goal 下一阶段
 
 ```text
