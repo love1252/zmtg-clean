@@ -2,7 +2,7 @@
 
 <!-- SEVEN_STREAM_SYSTEM_SYS01_CANDIDATE_BASELINE_GOVERNANCE_HISTORY -->
 
-## 2026-08-15：System SYS-01 candidate migration baseline 治理完成准入工作
+## 2026-08-15：System SYS-01 candidate migration baseline 治理正式收口
 
 ```text
 STAGE=S25
@@ -64,6 +64,7 @@ SCHEMA_CHANGE=false
 DDL_EXECUTION=false
 DML_EXECUTION=false
 SEED_EXECUTION=false
+BASELINE_ARTIFACT_IMPLEMENTATION=false
 REBUILD_TOOL_IMPLEMENTATION=false
 RUNTIME_IMPLEMENTATION=false
 STAGING_CHANGE=false
@@ -73,10 +74,27 @@ PRODUCTION_DEPLOYMENT=false
 NEXT_STAGE=S26
 NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CANDIDATE_BASELINE_AND_CONTROLLED_REBUILD_TOOL_EXACT_IMPLEMENTATION
 NEXT_TASK_AUTHORIZED=false
+S26_AUTHORIZED=false
+S26_RUNTIME_TOOL_IMPLEMENTATION_AUTHORIZED=false
 NEXT_STAGE_AUTO_EXECUTION=false
 S25_ADMISSION_WORK_COMPLETE=true
-S25_COMPLETE=false_pending_explicit_ready_merge_authorization
-S25_FORMAL_CLOSURE=false
+S25_TECHNICAL_ADMISSION_ACCEPTED=true
+S25_PR=1222
+S25_HEAD=fb3d28ebb5526b28e168b337754e1722e2db830a
+S25_MERGE=859b35273518d701d1c49b4ed910faba3987f024
+S25_REQUIRED_CHECKS=passed
+S25_ACTIONABLE_P0_P1=0
+S25_ACTIONABLE_P0_P1_P2_P3=0
+S25_UNRESOLVED_REVIEW_THREAD_COUNT=0
+S25_POST_MERGE_REVIEW_DEBT=0
+POST_MERGE_REVIEW_DEBT=0
+S25_COMPLETE=true
+S25_FORMAL_CLOSURE=true
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=2
+RELEASED_GOVERNED_PAGES=page_workbench,page_system_audit
+PAGE_SYSTEM_AI_USAGE=hidden/not_released
+SEVEN_STREAM_FORMAL_RELEASE_COUNT=0
+CONTROLLED_CREATE_RELEASE_COUNT=0
 ```
 
 - fresh 从 `drizzle-orm@0.45.2` 源码确认 native pending 只比较数据库最大 `created_at` 与 repository `when`；hash 及完整 prefix 不参与原生 pending 判断，也没有 external baseline metadata API；
@@ -85,6 +103,7 @@ S25_FORMAL_CLOSURE=false
 - current schema model 为 60 tables／59 enums，latest snapshot 仍为 0026 的 38 tables／29 enums；schema fidelity 另覆盖 hand-written `NOT VALID` state、functions、triggers 等 catalog 对象；
 - legacy-chain DB 不 rebase、不改 journal；marker origin 与 legacy origin 在 guard provenance 上双起点、future repository SQL/journal 为单一 common tail；
 - baseline/rebuild tooling exact 6 files 已冻结，artifact、snapshot、tooling 与数据库均未实施或执行。
+- PR #1222 Required Check 通过，以 Head `fb3d28ebb5526b28e168b337754e1722e2db830a` 合并为 `859b35273518d701d1c49b4ed910faba3987f024`；comments/reviews/threads 均为 0，post-merge Review debt 为 0，S25 正式收口。
 
 Canonical evidence：`docs/operations/seven-stream-system-sys01-candidate-migration-baseline-governance-admission-20260815.md`。
 
