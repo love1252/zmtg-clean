@@ -1,5 +1,37 @@
 # 智美天工架构文档索引
 
+<!-- SEVEN_STREAM_SYSTEM_SYS01_SCHEMA_PARITY_MIGRATION_ADMISSION_START -->
+
+## System SYS-01 local-development schema parity Migration 准入（2026-08-15）
+
+```text
+STAGE=S22
+COMPLETION_MODE=MIGRATION_ADMISSION_COMPLETE_BLOCKED
+BASELINE=68d87b0d32c96966fe0fcf0ba2dc8091689f2bfe
+
+LOCAL_DB_MIGRATION_HEAD=0037_v08_05b_b3a_real_task_readiness_foundation
+LOCAL_DB_JOURNAL_IS_REPOSITORY_PREFIX=true
+M0038_OBJECT_STATE=all_missing
+NORMAL_SCHEMA_LAG=true
+
+PENDING_MIGRATION_CHAIN=0038,0039,0040,0041,0042,0043,0044,0045
+PENDING_CHAIN_DATA_PRECONDITIONS_SAFE=false
+MIGRATOR_APPLIES_ALL_PENDING=true
+MIGRATOR_TARGETED_EXECUTION_SUPPORTED=false
+MIGRATION_EXECUTION_ADMISSION_READY=false
+EXACT_MIGRATION_CHAIN_FROZEN=false
+
+PRIMARY_BLOCKING_PREREQUISITE=formal_migrator_all_pending_only_cannot_pause_after_0038_for_required_provisioning_and_current_0039_0045_data_preconditions_mismatch
+NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_LOCAL_DEVELOPMENT_PHASED_SCHEMA_RECOVERY_ENTRYPOINT_AND_DATA_PRECONDITION_ADMISSION
+NEXT_TASK_AUTHORIZED=false
+```
+
+Actual journal 的 38 行逐项匹配 repository `0000..0037` timestamp 与 SQL SHA-256；`0038` 对象全部缺失，属于正常 lag。正式 migrator 只能运行全部 pending，不能在 `0038` 后暂停完成 `0039` 的精确 Provisioning；当前 `tenant_members=11`、Binding=0 也不符合后续冻结的 acceptance 数据基线，因此不能执行 `0038..0045` 一波迁移。
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-local-dev-schema-parity-migration-admission-20260815.md`。
+
+<!-- SEVEN_STREAM_SYSTEM_SYS01_SCHEMA_PARITY_MIGRATION_ADMISSION_END -->
+
 <!-- SEVEN_STREAM_SYSTEM_SYS01_AI_USAGE_DB_READINESS_REAUDIT_START -->
 
 ## System SYS-01 AI 使用只读 DB readiness 复审（2026-08-15）
