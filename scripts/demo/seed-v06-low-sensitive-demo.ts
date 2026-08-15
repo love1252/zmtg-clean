@@ -7,8 +7,10 @@ import { assertDemoSeedAllowed } from '../../src/server/db/seed-guard';
 export const DEMO_SEED_KEY = 'v06_demo_low_sensitive_01';
 export const DEMO_TENANT_ID = 'v06-demo-low-sensitive-01-tenant';
 export const DEMO_TENANT_NAME = '智美天工 V0.6 演示租户';
+// 2026-08-16 当前主演示口径：username=admin → 澄星医疗美容。
+// 下方 xinglan 仅为 V0.6 legacy deterministic fixture ID；为保持幂等与 cleanup 兼容，不重命名内部 ID。
 export const DEMO_INSTITUTION_ID = 'v06-demo-low-sensitive-01-xinglan-institution';
-export const DEMO_INSTITUTION_NAME = '星澜医美演示机构';
+export const DEMO_INSTITUTION_NAME = '澄星医疗美容';
 export const DEMO_WORKSPACE_ID = 'v06-demo-low-sensitive-01-workspace';
 export const demoSeedDatabaseWriteDisabledMessage =
   '低敏 demo seed 数据库写入已关闭；Membership 必须由 Access Control Owner command 管理';
