@@ -180,7 +180,8 @@ describe('S26 static baseline artifact', () => {
   });
 
   test('explicit indexes preserve unique/partial traits and exclude constraint backing indexes', () => {
-    const indexes = buildExpectedCatalogModel(readBaseline()).filter(
+    const baseline = readBaseline();
+    const indexes = buildExpectedCatalogModel(baseline).filter(
       (record) => record.objectClass === 'indexes',
     );
     assert.equal(indexes.length, 136);
@@ -188,6 +189,34 @@ describe('S26 static baseline artifact', () => {
     assert.equal(indexes.filter((record) => record.signature.predicate !== null).length, 6);
     assert.equal(indexes.filter((record) => record.signature.keys.some((key) => key.includes('('))).length, 0);
     assert.equal(indexes.filter((record) => record.signature.method !== 'btree').length, 0);
+    assert.equal(
+      SYS01_ACTUAL_CATALOG_FINGERPRINT_SQL.includes(
+        "constraint_row.contype IN ('p', 'u', 'x')",
+      ),
+      true,
+    );
+    for (const [requiredIndex, dependentForeignKey] of [
+      [
+        'CREATE UNIQUE INDEX "tenant_members_tenant_user_unique_idx"',
+        'ADD CONSTRAINT "auth_account_institution_bindings_tenant_account_fk"',
+      ],
+      [
+        'CREATE UNIQUE INDEX "his_conn_cred_comp_ops_tenant_connection_operation_unique_idx"',
+        'ADD CONSTRAINT "his_conn_cred_comp_jobs_operation_scope_fk"',
+      ],
+    ]) {
+      assert.equal(baseline.indexOf(requiredIndex) >= 0, true);
+      assert.equal(baseline.indexOf(dependentForeignKey) >= 0, true);
+      assert.equal(baseline.indexOf(requiredIndex) < baseline.indexOf(dependentForeignKey), true);
+    }
+    assert.equal(
+      indexes.some((record) =>
+        record.name ===
+        'auth_account_institution_bindings_active_account_tenant_unique_'
+      ),
+      true,
+    );
+    for (const record of indexes) assert.equal(Buffer.byteLength(record.name, 'utf8') <= 63, true);
   });
 
   test('baseline is schema-only and contains neither marker nor historical journal DML', () => {
@@ -373,6 +402,12 @@ describe('S26 static baseline artifact', () => {
         canonicalJson(canonicalCatalogRecords(checkRecord(catalogExpression))),
       );
     }
+    assert.equal(
+      canonicalCatalogRecords(
+        checkRecord('length(recipient_binding_digest)=64'),
+      ).find((record) => record.objectClass === 'checks').signature.expression,
+      'length(recipient_binding_digest)=64',
+    );
     assert.equal(
       canonicalJson(
         canonicalCatalogRecords(

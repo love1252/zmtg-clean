@@ -1390,6 +1390,8 @@ CREATE TABLE "wecom_real_send_proof_operations" (
 	CONSTRAINT "wecom_real_send_proof_operations_version_positive_check" CHECK ("wecom_real_send_proof_operations"."version" > 0)
 );
 
+CREATE UNIQUE INDEX "tenant_members_tenant_user_unique_idx" ON "tenant_members" USING btree ("tenant_id","user_id");
+CREATE UNIQUE INDEX "his_conn_cred_comp_ops_tenant_connection_operation_unique_idx" ON "his_connection_credential_compensation_operations" USING btree ("tenant_id","connection_id","operation_id");
 ALTER TABLE "ai_call_usage_records" ADD CONSTRAINT "ai_call_usage_records_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;
 ALTER TABLE "appointments" ADD CONSTRAINT "appointments_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;
 ALTER TABLE "appointments" ADD CONSTRAINT "appointments_tenant_customer_fk" FOREIGN KEY ("tenant_id","customer_id") REFERENCES "public"."customers"("tenant_id","id") ON DELETE no action ON UPDATE no action;
@@ -1543,7 +1545,6 @@ CREATE INDEX "his_conn_cred_comp_jobs_tenant_connection_operation_idx" ON "his_c
 CREATE INDEX "his_conn_cred_comp_jobs_tenant_state_next_attempt_idx" ON "his_connection_credential_compensation_jobs" USING btree ("tenant_id","job_state","next_attempt_at");
 CREATE INDEX "his_conn_cred_comp_jobs_lock_idx" ON "his_connection_credential_compensation_jobs" USING btree ("job_state","locked_until","claim_version");
 CREATE UNIQUE INDEX "his_conn_cred_comp_ops_operation_id_unique_idx" ON "his_connection_credential_compensation_operations" USING btree ("operation_id");
-CREATE UNIQUE INDEX "his_conn_cred_comp_ops_tenant_connection_operation_unique_idx" ON "his_connection_credential_compensation_operations" USING btree ("tenant_id","connection_id","operation_id");
 CREATE INDEX "his_conn_cred_comp_ops_tenant_connection_state_idx" ON "his_connection_credential_compensation_operations" USING btree ("tenant_id","connection_id","state");
 CREATE INDEX "his_conn_cred_comp_ops_tenant_state_updated_idx" ON "his_connection_credential_compensation_operations" USING btree ("tenant_id","state","updated_at");
 CREATE INDEX "his_connections_tenant_idx" ON "his_connections" USING btree ("tenant_id");
@@ -1607,7 +1608,6 @@ CREATE INDEX "tenant_commercial_records_tenant_created_idx" ON "tenant_commercia
 CREATE INDEX "tenant_commercial_records_related_plan_change_idx" ON "tenant_commercial_records" USING btree ("related_plan_change_id");
 CREATE UNIQUE INDEX "tenant_contacts_tenant_unique_idx" ON "tenant_contacts" USING btree ("tenant_id");
 CREATE INDEX "tenant_contacts_admin_user_idx" ON "tenant_contacts" USING btree ("initial_admin_user_id");
-CREATE UNIQUE INDEX "tenant_members_tenant_user_unique_idx" ON "tenant_members" USING btree ("tenant_id","user_id");
 CREATE INDEX "tenant_members_tenant_role_idx" ON "tenant_members" USING btree ("tenant_id","role");
 CREATE INDEX "tenant_membership_transitions_tenant_membership_revision_idx" ON "tenant_membership_transitions" USING btree ("tenant_id","membership_id","to_revision");
 CREATE INDEX "tenant_plan_assignments_tenant_status_idx" ON "tenant_plan_assignments" USING btree ("tenant_id","status");

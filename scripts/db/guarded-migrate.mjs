@@ -556,7 +556,9 @@ export const SYS01_ACTUAL_CATALOG_FINGERPRINT_SQL = String.raw`
     JOIN pg_catalog.pg_namespace namespace_row ON namespace_row.oid = relation_row.relnamespace
     JOIN pg_catalog.pg_class index_relation ON index_relation.oid = index_row.indexrelid
     JOIN pg_catalog.pg_am access_method ON access_method.oid = index_relation.relam
-    LEFT JOIN pg_catalog.pg_constraint constraint_row ON constraint_row.conindid = index_row.indexrelid
+    LEFT JOIN pg_catalog.pg_constraint constraint_row
+      ON constraint_row.conindid = index_row.indexrelid
+     AND constraint_row.contype IN ('p', 'u', 'x')
     WHERE namespace_row.nspname = 'public' AND constraint_row.oid IS NULL
     UNION ALL
     SELECT 'sequences', 'public', relation_row.relname,

@@ -497,6 +497,15 @@ function normalizedIdentifier(value) {
   return value.replaceAll('"', '').replace(/^public\./u, '');
 }
 
+function postgresIdentifier(value) {
+  const normalized = normalizedIdentifier(value);
+  const bytes = Buffer.from(normalized, 'utf8');
+  if (bytes.length <= 63) return normalized;
+  let end = 63;
+  while (end > 0 && (bytes[end] & 0xc0) === 0x80) end -= 1;
+  return bytes.subarray(0, end).toString('utf8');
+}
+
 function constraintClass(definition) {
   const normalized = definition.toUpperCase();
   if (normalized.includes('PRIMARY KEY')) return 'primary_keys';
@@ -525,6 +534,7 @@ function normalizeCatalogExpression(
     .replaceAll('"', '')
     .replace(/\bpublic\./giu, '')
     .replace(/\s*([(),=<>+])\s*/gu, '$1')
+    .replace(/\s*(!~|~)\s*/gu, '$1')
     .replace(/\s+/gu, ' ')
     .replace(/;$/u, '')
     .trim();
@@ -555,10 +565,12 @@ function normalizeCatalogExpression(
       isEquivalentCoercion(cast, target) ? literal : `${literal}::${cast}`;
     normalized = normalized
       .replace(
-        new RegExp(`\\(?([a-z_][a-z0-9_]*)\\)?::(${castType})`, 'giu'),
-        (match, column, cast) => {
+        new RegExp(`(\\(?)([a-z_][a-z0-9_]*)(\\)?)::(${castType})`, 'giu'),
+        (match, open, column, close, cast) => {
           const target = knownColumnTypes?.get(column);
-          return target && isEquivalentCoercion(cast, target) ? column : match;
+          return target && isEquivalentCoercion(cast, target)
+            ? `${open}${column}${close}`
+            : match;
         },
       )
       .replace(
@@ -580,7 +592,7 @@ function normalizeCatalogExpression(
         },
       )
       .replace(
-        /\b([a-z_][a-z0-9_]*)=ANY\(ARRAY\[((?:(?!\]\)).)*)\](?:::([a-z_][a-z0-9_ ]*)\[\])?\)/giu,
+        /\b([a-z_][a-z0-9_]*)=ANY\(ARRAY\[([^\]]*)\](?:::([a-z_][a-z0-9_ ]*)\[\])?\)/giu,
         (match, left, entries, arrayCast) => {
           const target = knownColumnTypes?.get(left);
           if (!target || (arrayCast && !isEquivalentCoercion(arrayCast, target))) return match;
@@ -594,7 +606,7 @@ function normalizeCatalogExpression(
         },
       )
       .replace(
-        /\b([a-z_][a-z0-9_]*)<>ALL\(ARRAY\[((?:(?!\]\)).)*)\](?:::([a-z_][a-z0-9_ ]*)\[\])?\)/giu,
+        /\b([a-z_][a-z0-9_]*)<>ALL\(ARRAY\[([^\]]*)\](?:::([a-z_][a-z0-9_ ]*)\[\])?\)/giu,
         (match, left, entries, arrayCast) => {
           const target = knownColumnTypes?.get(left);
           if (!target || (arrayCast && !isEquivalentCoercion(arrayCast, target))) return match;
@@ -626,6 +638,11 @@ function normalizeCatalogExpression(
       .replace(/\bTRIM\(BOTH FROM ([^()]*)\)/giu, 'BTRIM($1)')
       .replace(/\bTRIM\(([^()]*)\)/giu, 'BTRIM($1)')
       .replace(/\bBTRIM\(/giu, 'BTRIM(')
+      .replace(/\(\(([a-z_][a-z0-9_]*)\)\)/giu, '($1)')
+      .replace(
+        /(?<![A-Za-z0-9_])\(([a-z_][a-z0-9_]*)\)(?=\s*(?:NOT LIKE|LIKE|!~|~|=|<>|<=|>=|<|>))/giu,
+        '$1',
+      )
       .replace(/\s+/gu, ' ')
       .trim();
     if (defaultResultType) {
@@ -636,34 +653,14 @@ function normalizeCatalogExpression(
       );
     }
   }
-  while (
-    normalized.startsWith('(') &&
-    normalized.endsWith(')') &&
-    splitOuterParentheses(normalized)
-  ) {
-    normalized = normalized.slice(1, -1);
-  }
   if (normalizeCatalogCoercions) {
-    let previous;
-    do {
-      previous = normalized;
-      normalized = normalized
-        .replace(/\)(AND|OR)\(/giu, ') $1 (')
-        .replace(/\(([a-z_][a-z0-9_]*(?:<>|<=|>=|=|<|>)[^()]*)\)/giu, '$1')
-        .replace(/\(([a-z_][a-z0-9_]*\s+IN\([^()]*\))\)/giu, '$1')
-        .replace(/\(([a-z_][a-z0-9_]*\s+NOT\s+IN\([^()]*\))\)/giu, '$1')
-        .replace(/\(([a-z_][a-z0-9_]*\s+IS\s+(?:NOT\s+)?NULL)\)/giu, '$1')
-        .replace(/\b(AND|OR)\b/giu, ' $1 ')
+    normalized = canonicalizeBooleanExpression(
+      normalized
+        .replace(/\)(AND|OR)\(/gu, ') $1 (')
+        .replace(/\b(AND|OR)\b/gu, ' $1 ')
         .replace(/\s+/gu, ' ')
-        .trim();
-      while (
-        normalized.startsWith('(') &&
-        normalized.endsWith(')') &&
-        splitOuterParentheses(normalized)
-      ) {
-        normalized = normalized.slice(1, -1).trim();
-      }
-    } while (normalized !== previous);
+        .trim(),
+    );
   }
   return normalized;
 }
@@ -687,6 +684,77 @@ function splitOuterParentheses(value) {
   return depth === 0 && !single;
 }
 
+function splitTopLevelBoolean(value, operator) {
+  const parts = [];
+  let depth = 0;
+  let single = false;
+  let start = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    const next = value[index + 1];
+    if (character === "'") {
+      if (single && next === "'") index += 1;
+      else single = !single;
+      continue;
+    }
+    if (single) continue;
+    if (character === '(') depth += 1;
+    if (character === ')') depth -= 1;
+    if (
+      depth === 0 &&
+      value.slice(index, index + operator.length).toUpperCase() === operator &&
+      !/[A-Za-z0-9_]/u.test(value[index - 1] ?? '') &&
+      !/[A-Za-z0-9_]/u.test(value[index + operator.length] ?? '')
+    ) {
+      parts.push(value.slice(start, index).trim());
+      start = index + operator.length;
+      index += operator.length - 1;
+    }
+  }
+  if (parts.length === 0) return [value.trim()];
+  parts.push(value.slice(start).trim());
+  return parts;
+}
+
+function canonicalizeBooleanExpression(value) {
+  const parse = (source) => {
+    let expression = source.trim();
+    while (
+      expression.startsWith('(') &&
+      expression.endsWith(')') &&
+      splitOuterParentheses(expression)
+    ) {
+      expression = expression.slice(1, -1).trim();
+    }
+    const orParts = splitTopLevelBoolean(expression, 'OR');
+    if (orParts.length > 1) return { operator: 'OR', children: orParts.map(parse) };
+    const andParts = splitTopLevelBoolean(expression, 'AND');
+    if (andParts.length > 1) return { operator: 'AND', children: andParts.map(parse) };
+    return {
+      operator: null,
+      value: expression.replace(
+        /(=|<>|<=|>=|<|>)\(([^()]+)\+INTERVAL_SECONDS\((\d+)\)\)/gu,
+        '$1$2+INTERVAL_SECONDS($3)',
+      ).replace(
+        /(=|<>|<=|>=|<|>)\(([^()]+\+[^()]*)\)/gu,
+        '$1$2',
+      ),
+    };
+  };
+  const serialize = (node, parentPrecedence = 0) => {
+    if (node.operator === null) return node.value;
+    const precedence = node.operator === 'OR' ? 1 : 2;
+    const children = node.children.flatMap((child) =>
+      child.operator === node.operator ? child.children : [child],
+    );
+    const serialized = children
+      .map((child) => serialize(child, precedence))
+      .join(` ${node.operator} `);
+    return precedence < parentPrecedence ? `(${serialized})` : serialized;
+  };
+  return serialize(parse(value));
+}
+
 function normalizeColumnType(definition) {
   const type = definition.match(
     /^(.+?)(?=\s+(?:DEFAULT|NOT NULL|PRIMARY KEY|UNIQUE|CHECK|REFERENCES|GENERATED|COLLATE)\b|$)/iu,
@@ -695,6 +763,7 @@ function normalizeColumnType(definition) {
   return normalizedIdentifier(type)
     .replace(/^varchar(?=\(|$)/iu, 'character varying')
     .replace(/^timestamptz$/iu, 'timestamp with time zone')
+    .replace(/\s*,\s*/gu, ',')
     .toLowerCase();
 }
 
@@ -739,7 +808,7 @@ function constraintSignature(definition, kind) {
     ...shared,
     keys: identifierList(foreign[1]),
     referencedSchema: referencedParts.length > 1 ? referencedParts.at(-2) : 'public',
-    referencedTable: normalizedIdentifier(foreign[2]),
+    referencedTable: postgresIdentifier(foreign[2]),
     referencedKeys: identifierList(foreign[3]),
     match,
     onUpdate,
@@ -755,7 +824,7 @@ function indexSignature(unique, definition) {
   const include = match[4].match(/\bINCLUDE\s*\(([^)]*)\)/iu)?.[1];
   const predicate = match[4].match(/\bWHERE\s+([\s\S]*?);?$/iu)?.[1];
   return {
-    table: normalizedIdentifier(match[1]),
+    table: postgresIdentifier(match[1]),
     unique,
     nullsNotDistinct: /\bNULLS\s+NOT\s+DISTINCT\b/iu.test(definition),
     method: match[2].toLowerCase(),
@@ -839,7 +908,7 @@ export function buildExpectedCatalogModel(sqlSource) {
     const normalized = normalizeSql(statement);
     let match = normalized.match(/^CREATE TYPE (.+?) AS ENUM\((.*)\);?$/iu);
     if (match) {
-      const name = normalizedIdentifier(match[1]);
+      const name = postgresIdentifier(match[1]);
       const labels = [...match[2].matchAll(/'((?:''|[^'])*)'/gu)].map((entry) =>
         entry[1].replaceAll("''", "'"),
       );
@@ -849,7 +918,7 @@ export function buildExpectedCatalogModel(sqlSource) {
     }
     match = normalized.match(/^CREATE TABLE (.+?) \((.*)\);?$/iu);
     if (match) {
-      const table = normalizedIdentifier(match[1]);
+      const table = postgresIdentifier(match[1]);
       records.push({ objectClass: 'tables', schema: 'public', name: table, signature: 'table' });
       for (const item of splitTopLevelCommas(match[2])) {
         const column = item.match(/^"([^"]+)"\s+(.+)$/u);
@@ -857,10 +926,11 @@ export function buildExpectedCatalogModel(sqlSource) {
           const definition = normalizeSql(column[2]);
           const identity = definition.match(/\bGENERATED\s+(ALWAYS|BY DEFAULT)\s+AS\s+IDENTITY\b/iu)?.[1];
           const generatedExpression = definition.match(/\bGENERATED\s+ALWAYS\s+AS\s*\((.*)\)\s+STORED\b/iu)?.[1];
+          const columnName = postgresIdentifier(column[1]);
           records.push({
             objectClass: 'columns',
             schema: 'public',
-            name: `${table}.${column[1]}`,
+            name: `${table}.${columnName}`,
             signature: {
               type: normalizeColumnType(definition),
               identity: identity === 'ALWAYS' ? 'a' : identity === 'BY DEFAULT' ? 'd' : '',
@@ -872,14 +942,14 @@ export function buildExpectedCatalogModel(sqlSource) {
             },
           });
           if (/\bPRIMARY KEY\b/iu.test(definition)) {
-            records.push({ objectClass: 'primary_keys', schema: 'public', name: `${table}.${table}_pkey`, signature: { validated: true, deferrable: false, deferred: false, keys: [column[1]] } });
+            records.push({ objectClass: 'primary_keys', schema: 'public', name: `${table}.${postgresIdentifier(`${table}_pkey`)}`, signature: { validated: true, deferrable: false, deferred: false, keys: [columnName] } });
           }
-          records.push({ objectClass: 'nullability', schema: 'public', name: `${table}.${column[1]}`, signature: /\bNOT NULL\b/iu.test(definition) ? 'not_null' : 'nullable' });
+          records.push({ objectClass: 'nullability', schema: 'public', name: `${table}.${columnName}`, signature: /\bNOT NULL\b/iu.test(definition) ? 'not_null' : 'nullable' });
           const defaultMatch = definition.match(/\bDEFAULT\s+(.+?)(?:\s+NOT NULL)?$/iu);
           if (defaultMatch) records.push({
             objectClass: 'defaults',
             schema: 'public',
-            name: `${table}.${column[1]}`,
+            name: `${table}.${columnName}`,
             signature: {
               expression: normalizeCatalogExpression(defaultMatch[1]),
               resultType: normalizeColumnType(definition),
@@ -890,7 +960,7 @@ export function buildExpectedCatalogModel(sqlSource) {
         const kind = constraintClass(item);
         if (kind) {
           const nameMatch = item.match(/^CONSTRAINT\s+"?([^"\s]+)"?/iu);
-          records.push({ objectClass: kind, schema: 'public', name: `${table}.${nameMatch?.[1] ?? sha256Bytes(item).slice(0, 16)}`, signature: constraintSignature(item, kind) });
+          records.push({ objectClass: kind, schema: 'public', name: `${table}.${postgresIdentifier(nameMatch?.[1] ?? sha256Bytes(item).slice(0, 16))}`, signature: constraintSignature(item, kind) });
         }
       }
       continue;
@@ -898,12 +968,12 @@ export function buildExpectedCatalogModel(sqlSource) {
     match = normalized.match(/^ALTER TABLE (.+?) ADD CONSTRAINT "?([^"\s]+)"? (.*);?$/iu);
     if (match) {
       const kind = constraintClass(match[3]);
-      if (kind) records.push({ objectClass: kind, schema: 'public', name: `${normalizedIdentifier(match[1])}.${match[2]}`, signature: constraintSignature(match[3], kind) });
+      if (kind) records.push({ objectClass: kind, schema: 'public', name: `${postgresIdentifier(match[1])}.${postgresIdentifier(match[2])}`, signature: constraintSignature(match[3], kind) });
       continue;
     }
     match = normalized.match(/^CREATE (UNIQUE )?INDEX "?([^"\s]+)"? ON (.*);?$/iu);
     if (match) {
-      records.push({ objectClass: 'indexes', schema: 'public', name: match[2], signature: indexSignature(Boolean(match[1]), match[3]) });
+      records.push({ objectClass: 'indexes', schema: 'public', name: postgresIdentifier(match[2]), signature: indexSignature(Boolean(match[1]), match[3]) });
       continue;
     }
     match = normalized.match(/^CREATE FUNCTION (.+?)\(([^)]*)\)/iu);
@@ -918,7 +988,7 @@ export function buildExpectedCatalogModel(sqlSource) {
     }
     match = normalized.match(/^CREATE TRIGGER "?([^"\s]+)"?/iu);
     if (match) {
-      records.push({ objectClass: 'triggers', schema: 'public', name: match[1], signature: triggerSignature(normalized) });
+      records.push({ objectClass: 'triggers', schema: 'public', name: postgresIdentifier(match[1]), signature: triggerSignature(normalized) });
     }
   }
   records.sort((left, right) => canonicalJson(left).localeCompare(canonicalJson(right)));
