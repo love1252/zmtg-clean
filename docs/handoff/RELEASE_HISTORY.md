@@ -39,9 +39,10 @@ S30_POST_MERGE_P1_RESOLVED=2
 S31_POST_MERGE_P1_RESOLVED=3
 S31_POST_MERGE_P2_RESOLVED=1
 S32_POST_MERGE_P2_RESOLVED=1
+S33_POST_MERGE_P2_RESOLVED=1
 S33_EXACT_SCOPE_GOVERNANCE_THREAD_RESOLVED=1
-ULTRA_GOAL_CORRECTIVE_REVIEW_THREAD_COUNT=9
-ULTRA_GOAL_REVIEW_THREAD_DISPOSITION_COUNT=10
+ULTRA_GOAL_CORRECTIVE_REVIEW_THREAD_COUNT=10
+ULTRA_GOAL_REVIEW_THREAD_DISPOSITION_COUNT=11
 ULTRA_GOAL_ACTIONABLE_P0_P1_P2_P3=0
 ULTRA_GOAL_POST_MERGE_REVIEW_DEBT=0
 S33_ACTIONABLE_P0_P1_P2_P3=0
@@ -67,6 +68,7 @@ NEXT_SYSTEM_TASK_AUTHORIZED=false
 
 - S32 docs-only PR #1230 合并后的 1 条 P2 已由 corrective PR #1235 修复并解决；System execution Admission ready，但 execution 未授权、未发生。
 - S29–S31 的其余 8 条 actionable post-merge review thread 已分别由 PR #1232、#1233、#1234、#1237 修复并解决；五个 corrective PR 的 Required Checks 均通过。
+- S33 PR #1236 的 1 条退出等待证据 P2 已由 #1237 的实际 Runtime 修复、merge 与验证证据闭合。
 - S33 PR #1231 的 exact-6 范围线程与用户显式冻结 allowlist 冲突，已按 AGENTS.md 权威顺序正式回复并 resolved，不计入 corrective defect。
 - S33 比较 appointments、follow-up tasks 与 treatment summaries，选择 capability complexity 最低的 appointments list；四个机构角色的 `care_task/read` 正式 policy 均允许。
 - original `55433` read-only audit 证明 5/5 appointment customer pair exact-one，但 source table 无 `institution_id`。这只证明 rebuild reconstruction 有安全来源，不允许 runtime 临时跨 owner join。
