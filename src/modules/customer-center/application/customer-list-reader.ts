@@ -176,7 +176,7 @@ function parseSourceRow(
     !isId(row.customerId) ||
     typeof row.displayName !== 'string' ||
     row.displayName.length === 0 ||
-    row.displayName.length > 120 ||
+    [...row.displayName].length > 120 ||
     !isLifecycle(row.lifecycle) ||
     !isPriority(row.priority) ||
     typeof row.updatedAt !== 'string' ||

@@ -4,8 +4,8 @@ const resolverOwners = vi.hoisted(() => new WeakSet<object>());
 const mocks = vi.hoisted(() => ({
   consumeClaims: vi.fn(),
   consumeSnapshot: vi.fn(),
-  cookieGet: vi.fn(),
-  cookies: vi.fn(),
+  headerGet: vi.fn(),
+  headers: vi.fn(),
   createIdentityReader: vi.fn(),
   createMembershipReader: vi.fn(),
   createResolver: vi.fn(),
@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   verifyClaims: vi.fn(),
 }));
 
-vi.mock('next/headers', () => ({ cookies: mocks.cookies }));
+vi.mock('next/headers', () => ({ headers: mocks.headers }));
 vi.mock('@/modules/auth/server/formal-server-session-provenance-owner', () => ({
   FORMAL_SERVER_SESSION_COOKIE_V1: 'zmtg_formal_session_v1',
   consumeFormalServerSessionVerifiedClaimsV1: mocks.consumeClaims,
@@ -103,10 +103,8 @@ beforeEach(() => {
       institutionGuardReferenceKeyRing: Object.freeze({ key: 'test' }),
     }),
   );
-  mocks.cookieGet.mockReturnValue(
-    Object.freeze({ name: 'zmtg_formal_session_v1', value: 'signed-cookie' }),
-  );
-  mocks.cookies.mockResolvedValue(Object.freeze({ get: mocks.cookieGet }));
+  mocks.headerGet.mockReturnValue('zmtg_formal_session_v1=signed-cookie');
+  mocks.headers.mockResolvedValue(Object.freeze({ get: mocks.headerGet }));
   mocks.verifyClaims.mockReturnValue(
     Object.freeze({ kind: 'verified', verifiedClaims: Object.freeze({}) }),
   );
@@ -129,7 +127,12 @@ describe('Customers CUS-01 formal read authorization', () => {
     await expect(resolveInstitutionCustomerReadAuthorizationV1()).resolves.toMatchObject({
       kind: 'allowed',
     });
-    expect(mocks.cookieGet).toHaveBeenCalledWith('zmtg_formal_session_v1');
+    expect(mocks.headerGet).toHaveBeenCalledWith('cookie');
+    expect(mocks.verifyClaims).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cookieHeader: 'zmtg_formal_session_v1=signed-cookie',
+      }),
+    );
     expect(mocks.resolveForSession).toHaveBeenCalledOnce();
     expect(mocks.resolveForSession).toHaveBeenCalledWith(claims);
   });
@@ -199,8 +202,23 @@ describe('Customers CUS-01 formal read authorization', () => {
     });
   });
 
-  it('缺失 cookie、runtime unavailable 与非 genuine resolver 不进入授权', async () => {
-    mocks.cookieGet.mockReturnValueOnce(undefined);
+  it('原样传递 mixed/duplicate Cookie header，由 provenance owner 统一 fail-closed', async () => {
+    const mixed =
+      'zmtg_demo_session=demo; zmtg_formal_session_v1=formal-a; zmtg_formal_session_v1=formal-b';
+    mocks.headerGet.mockReturnValueOnce(mixed);
+    mocks.verifyClaims.mockReturnValueOnce(Object.freeze({ kind: 'source_denied' }));
+
+    await expect(resolveInstitutionCustomerReadAuthorizationV1()).resolves.toEqual({
+      kind: 'unavailable',
+    });
+    expect(mocks.verifyClaims).toHaveBeenCalledWith(
+      expect.objectContaining({ cookieHeader: mixed }),
+    );
+    expect(mocks.resolveForSession).not.toHaveBeenCalled();
+  });
+
+  it('缺失 cookie header、runtime unavailable 与非 genuine resolver 不进入授权', async () => {
+    mocks.headerGet.mockReturnValueOnce(null);
     await expect(resolveInstitutionCustomerReadAuthorizationV1()).resolves.toEqual({
       kind: 'unavailable',
     });
