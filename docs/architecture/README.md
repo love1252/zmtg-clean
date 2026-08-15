@@ -1,5 +1,40 @@
 # 智美天工架构文档索引
 
+<!-- SEVEN_STREAM_SYSTEM_SYS01_REBUILD_PREREQUISITE_ADMISSION_START -->
+
+## System SYS-01 rebuild prerequisite exact implementation 准入（2026-08-15）
+
+```text
+STAGE=S30
+BASELINE=707c378afffb3e3b96790a26a0de8a17a8364f3c
+S29_PR=1227
+S29_HEAD=d22ee7264d400d65905521a3718dc6be7efc55c4
+S29_MERGE=707c378afffb3e3b96790a26a0de8a17a8364f3c
+S29_FORMAL_CLOSURE=true
+
+SYSTEM_PREREQUISITE_IMPLEMENTATION_ADMISSION_READY=true
+SYSTEM_PREREQUISITE_EXACT_ALLOWLIST_FROZEN=true
+SYSTEM_PREREQUISITE_EXACT_FILE_COUNT=2
+SYSTEM_PREREQUISITE_EXACT_ALLOWLIST=scripts/db/sys01-controlled-local-dev-rebuild.mjs,scripts/db/sys01-controlled-local-dev-rebuild.test.mjs
+
+BACKUP_KEY_CONTRACT_FROZEN=true
+BACKUP_KEY_SOURCE_CREATED=true
+BACKUP_KEY_SOURCE_AVAILABLE=true
+BACKUP_KEY_VALUE_READ_OR_LOGGED=false
+LOW_LEVEL_ADAPTER_TEST_GAP_COUNT=6
+
+DATABASE_REBUILD_EXECUTION=false
+DATABASE_WRITE_ON_ORIGINAL_55433=false
+NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEMENTATION
+NEXT_SYSTEM_TASK_AUTHORIZED=true_conditionally_by_current_ultra_goal
+```
+
+四类 issuer 复用现有 runner 的 candidate catalog/inventory validation、receipt chain 与 loopback `/api/version`；不新建 smoke framework。S31 只允许修改 runner 与同名 test，补 deterministic probe/receipt、key metadata preflight 与 backup/restore/candidate/bootstrap/transfer/validate 六类 concrete fake-executor tests。S30 未连接数据库或执行任何 rebuild phase。
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-rebuild-execution-prerequisite-implementation-admission-20260815.md`。
+
+<!-- SEVEN_STREAM_SYSTEM_SYS01_REBUILD_PREREQUISITE_ADMISSION_END -->
+
 <!-- SEVEN_STREAM_CUSTOMERS_CUS01_READONLY_ADMISSION_START -->
 
 ## Customers CUS-01 readonly Fresh Admission（2026-08-15）

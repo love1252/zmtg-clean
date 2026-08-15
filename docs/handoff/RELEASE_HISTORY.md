@@ -1,5 +1,78 @@
 # 项目重构历史
 
+<!-- SEVEN_STREAM_SYSTEM_SYS01_REBUILD_PREREQUISITE_ADMISSION_HISTORY -->
+
+## 2026-08-15：S29 Customers Runtime 合并，S30 System rebuild prerequisite exact Admission ready
+
+```text
+STAGE=S30
+TASK=SEVEN_STREAM_SYSTEM_SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEMENTATION_ADMISSION
+BASELINE=707c378afffb3e3b96790a26a0de8a17a8364f3c
+
+S29_PR=1227
+S29_HEAD=d22ee7264d400d65905521a3718dc6be7efc55c4
+S29_MERGE=707c378afffb3e3b96790a26a0de8a17a8364f3c
+S29_REQUIRED_CHECKS=passed
+S29_ACTIONABLE_P0_P1_P2_P3=0
+S29_POST_MERGE_REVIEW_DEBT=0
+S29_COMPLETE=true
+S29_FORMAL_CLOSURE=true
+
+CUS01_RUNTIME_IMPLEMENTED=true
+CUS01_FORMAL_READER_IMPLEMENTED=true
+CUS01_VERSIONED_API_IMPLEMENTED=true
+CUS01_PAGE_RELEASE=false
+CUS01_LEGACY_API_UNCHANGED=true
+CUS01_TARGETED_TESTS=24_files_431_tests_passed
+CUS01_FULL_TESTS=502_files_6966_tests_passed
+CUS01_POST_MERGE_TESTS=9_files_160_tests_passed
+
+SYSTEM_PREREQUISITE_IMPLEMENTATION_ADMISSION_READY=true
+SYSTEM_PREREQUISITE_EXACT_ALLOWLIST_FROZEN=true
+SYSTEM_PREREQUISITE_EXACT_FILE_COUNT=2
+SYSTEM_PREREQUISITE_EXACT_ALLOWLIST=scripts/db/sys01-controlled-local-dev-rebuild.mjs,scripts/db/sys01-controlled-local-dev-rebuild.test.mjs
+
+BACKUP_KEY_CONTRACT_FROZEN=true
+BACKUP_KEY_SOURCE_CREATED=true
+BACKUP_KEY_SOURCE_AVAILABLE=true
+BACKUP_KEY_SOURCE_FORMAT_VALID=true
+BACKUP_KEY_SOURCE_PERMISSION_VALID=true
+BACKUP_KEY_VALUE_READ_OR_LOGGED=false
+LOW_LEVEL_ADAPTER_TEST_GAP_COUNT=6
+
+DATABASE_CONNECTION=false
+DATABASE_WRITE_ON_ORIGINAL_55433=false
+DATABASE_REBUILD_EXECUTION=false
+BACKUP_EXECUTION=false
+RESTORE_EXECUTION=false
+CANDIDATE_DATABASE_CREATE=false
+BASELINE_SQL_EXECUTION=false
+DATA_TRANSFER_EXECUTION=false
+CUTOVER=false
+MIGRATION_EXECUTION=false
+DB_GENERATE_EXECUTION=false
+SNAPSHOT_GENERATION=false
+STAGING_CHANGE=false
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+
+NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEMENTATION
+NEXT_SYSTEM_TASK_AUTHORIZED=true_conditionally_by_current_ultra_goal
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=2
+SEVEN_STREAM_FORMAL_RELEASE_COUNT=0
+CONTROLLED_CREATE_RELEASE_COUNT=0
+```
+
+- S29 exact 11-file Runtime PR #1227 Required Check 通过、review debt=0，并 squash merge 为 `707c378a`；merged main 独立回归 9/160 通过。
+- S30 fresh audit 证明两个 prerequisite issuer 可复用现有 candidate validation、receipt chain、loopback `/api/version` 与 Next 启动入口，不需要第二套 smoke framework或 package change。
+- runner key contract 已冻结；新的 repo-external raw 32-byte owner-only key source 只做 metadata/byte-count preflight，未输出、记录或提交 key/value/hash。
+- concrete backup、restore、candidate-create、baseline-bootstrap、transfer、validate 共 6 个行为测试 gap，全部可在现有 runner/test exact 2 files 中用 fake low-level adapters 闭合。
+- 本阶段未连接数据库，也未执行 rebuild、backup、restore、candidate、baseline、transfer、cutover、Schema 或 Migration。
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-rebuild-execution-prerequisite-implementation-admission-20260815.md`。
+
+<!-- SEVEN_STREAM_SYSTEM_SYS01_REBUILD_PREREQUISITE_ADMISSION_HISTORY_END -->
+
 <!-- SEVEN_STREAM_CUSTOMERS_CUS01_READONLY_ADMISSION_HISTORY -->
 
 ## 2026-08-15：Customers CUS-01 readonly Fresh Admission 冻结 Reader/API exact scope，page 保持隐藏
