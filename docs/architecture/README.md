@@ -1,5 +1,47 @@
 # 智美天工架构文档索引
 
+<!-- SEVEN_STREAM_SYSTEM_SYS01_PHASED_SCHEMA_RECOVERY_ADMISSION_START -->
+
+## System SYS-01 local-development phased schema recovery 准入（2026-08-15）
+
+```text
+STAGE=S23
+COMPLETION_MODE=PHASED_RECOVERY_ADMISSION_COMPLETE_BLOCKED_IN_PLACE
+BASELINE=786acda0d87ddbdbe801ef9fefee0d7ff68218dc
+
+CURRENT_LOCAL_MIGRATOR_TARGET_SUPPORT=false
+CURRENT_LOCAL_MIGRATOR_ALL_PENDING_ONLY=true
+DRIZZLE_NATIVE_TARGET_SUPPORTED=false
+DRIZZLE_PREFIX_FOLDER_SUPPORTED=true
+
+TENANT_COUNT=6
+AUTH_USER_COUNT=11
+TENANT_MEMBER_COUNT=11
+BINDING_COUNT=0
+M0041_EXPECTED_MEMBERSHIP_COUNT=1
+M0041_CAN_RUN_WITH_11_MEMBERSHIPS=false
+LEGACY_CALIBRATION_CHAIN_CURRENT_LOCAL_DEV_COMPATIBLE=false
+
+IN_PLACE_PHASED_RECOVERY_FEASIBLE=false
+CONTROLLED_LOCAL_DEV_REBUILD_FEASIBLE=true_as_separately_admitted_data_preserving_direction
+FORWARD_RECOVERY_MECHANISM_EXISTS=false
+SELECTED_SCHEMA_RECOVERY_STRATEGY=controlled_local_dev_rebuild
+
+PHASED_RECOVERY_ENTRYPOINT_IMPLEMENTATION_REQUIRED=false
+PHASED_ENTRYPOINT_EXACT_ALLOWLIST_FROZEN=false
+SCHEMA_RECOVERY_EXECUTION_READY=false
+
+PRIMARY_BLOCKING_PREREQUISITE=current_11_membership_local_dev_cannot_replay_consumed_single_membership_0041_0043_chain_and_no_repository_supported_data_preserving_rebuild_mechanism_exists
+NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CONTROLLED_LOCAL_DEVELOPMENT_DATABASE_REBUILD_ADMISSION
+NEXT_TASK_AUTHORIZED=false
+```
+
+S23 证明当前 `0041/0043` consumed migration 只接受历史单 Membership acceptance shape，不能安全消费 actual 11 Membership；现有 A2 Provisioning runner 只产生 Scope/Context Version/Context Head，不会产生 0039 要求的 Binding。受控、数据保留的 side-by-side local-development rebuild 是唯一推荐方向，但当前 repository 没有完成该 workflow 的正式 tooling，因此只准入下一 fresh Admission，不执行数据库写入或 Runtime。
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-local-dev-phased-schema-recovery-admission-20260815.md`。
+
+<!-- SEVEN_STREAM_SYSTEM_SYS01_PHASED_SCHEMA_RECOVERY_ADMISSION_END -->
+
 <!-- SEVEN_STREAM_SYSTEM_SYS01_SCHEMA_PARITY_MIGRATION_ADMISSION_START -->
 
 ## System SYS-01 local-development schema parity Migration 准入（2026-08-15）
