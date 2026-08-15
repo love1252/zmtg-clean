@@ -1,5 +1,51 @@
 # 机构端七条业务线重启基线
 
+## S36 当前入口：appointments pair 已重建，formal authority 仍为空
+
+- S35：PR #1242 已合并，candidate 上的 formal Scope/Context/Binding cohort 均为空
+- S36 candidate：appointments=5，5/5 customer authoritative pair exact-one，null/orphan/mismatch=0
+- 结论：data mapping ready；formal Scope/Binding/active institution anchor 不 ready；Care Runtime allowlist 不冻结
+- 当前 ultra goal：S36 合并后继续 S37 Knowledge formal fresh Admission；System/Care blocker 均未授权实施
+
+```text
+STAGE=S36
+BASELINE=51e40b2a154d9d32c57e865e50cc4172da8a39a1
+S35_PR=1242
+S35_HEAD=f6af73e8d830278f51646bdceff5781c18388429
+S35_MERGE=51e40b2a154d9d32c57e865e50cc4172da8a39a1
+S35_FORMAL_CLOSURE=true
+
+CARE_SELECTED_FIRST_SLICE=APPOINTMENTS_LIST_BY_CURRENT_INSTITUTION
+APPOINTMENT_COUNT=5
+APPOINTMENT_PAIR_UNIQUE_MATCH_COUNT=5
+APPOINTMENT_PAIR_ZERO_MATCH_COUNT=0
+APPOINTMENT_PAIR_MULTI_MATCH_COUNT=0
+APPOINTMENT_FORMAL_SCOPE_ORPHAN_COUNT=5
+
+CARE_APPOINTMENT_DATA_MAPPING_READY=true
+CARE_FORMAL_SCOPE_READY=false
+CARE_ACTIVE_INSTITUTION_ANCHOR_READY=false
+CARE_MEMBERSHIP_READY=true
+CARE_ACTION_POLICY_READY=true
+CARE_READER_API_AUTH_CHAIN_READY=false
+CARE_DATA_READINESS=blocked_pending_formal_scope_provisioning
+CARE_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
+CARE_EXACT_RUNTIME_FILE_COUNT=0
+
+NEXT_CARE_TASK=SEVEN_STREAM_CARE_APPOINTMENTS_READONLY_FRESH_READMISSION_AFTER_FORMAL_SCOPE_PROVISIONING
+NEXT_CARE_TASK_AUTHORIZED=false
+NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_FORMAL_INSTITUTION_SCOPE_CONTEXT_BINDING_PROVISIONING_SOURCE_FRESH_ADMISSION
+NEXT_SYSTEM_TASK_AUTHORIZED=false
+NEXT_KNOWLEDGE_TASK=SEVEN_STREAM_KNOWLEDGE_FORMAL_FRESH_ADMISSION
+NEXT_KNOWLEDGE_TASK_AUTHORIZED=true_by_current_ultra_goal_after_S36_merge
+NEXT_STAGE=S37
+NEXT_STAGE_AUTO_EXECUTION=false
+```
+
+S34 已安全重建 `appointments.institution_id`，但 persisted business pair 不能替代 request-scoped formal authority。candidate 没有 matching `institution_scopes` 或 active Binding；11 条 active membership 只证明 tenant membership，不能选定 institution。S36 不新建 Reader/API/page，也不借 current customer pair、默认机构或单机构租户假设绕过 formal authorization。
+
+Canonical evidence：`docs/operations/seven-stream-care-appointments-post-rebuild-readmission-20260815.md`。
+
 ## S35 当前入口：candidate 已重建，SYS-01 formal facts 仍为空
 
 - S34：PR #1241 已合并，active local database 为 candidate，original mutation count 为 0

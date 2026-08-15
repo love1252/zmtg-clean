@@ -1,5 +1,35 @@
 # 下一任务
 
+## S36 Care readmission blocker 与当前 ultra-goal 下一阶段
+
+```text
+S36_COMPLETION_MODE=READMISSION_COMPLETE_BLOCKED_PENDING_FORMAL_SCOPE_PROVISIONING
+S36_BASELINE=51e40b2a154d9d32c57e865e50cc4172da8a39a1
+CARE_APPOINTMENT_DATA_MAPPING_READY=true
+CARE_FORMAL_SCOPE_READY=false
+CARE_ACTIVE_INSTITUTION_ANCHOR_READY=false
+CARE_READER_API_AUTH_CHAIN_READY=false
+CARE_DATA_READINESS=blocked_pending_formal_scope_provisioning
+CARE_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
+CARE_EXACT_RUNTIME_FILE_COUNT=0
+
+PRIMARY_BLOCKING_PREREQUISITE=authoritative_formal_institution_scope_context_binding_provisioning_source_missing
+NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_FORMAL_INSTITUTION_SCOPE_CONTEXT_BINDING_PROVISIONING_SOURCE_FRESH_ADMISSION
+NEXT_SYSTEM_TASK_AUTHORIZED=false
+
+NEXT_CARE_TASK=SEVEN_STREAM_CARE_APPOINTMENTS_READONLY_FRESH_READMISSION_AFTER_FORMAL_SCOPE_PROVISIONING
+NEXT_CARE_TASK_AUTHORIZED=false
+NEXT_KNOWLEDGE_TASK=SEVEN_STREAM_KNOWLEDGE_FORMAL_FRESH_ADMISSION
+NEXT_KNOWLEDGE_TASK_AUTHORIZED=true_by_current_ultra_goal_after_S36_merge
+
+NEXT_STAGE=S37
+NEXT_STAGE_AUTO_EXECUTION=false
+```
+
+Care business data 已具备 exact persisted tenant/institution pair，但 candidate 的 formal Scope/Binding 与 active institution anchor 仍为空；因此下一 Care 原子任务只能在 authoritative provisioning 完成后 fresh re-admit，当前未授权。当前 ultra goal 明确授权 S36 merge 后进入 S37 Knowledge formal fresh Admission；S37 仍只允许 docs-only 与 candidate read-only 审计，不授权 Knowledge Runtime 或页面发布。
+
+Canonical S36 evidence：`docs/operations/seven-stream-care-appointments-post-rebuild-readmission-20260815.md`。
+
 ## S35 SYS-01 readmission blocker 与当前 ultra-goal 下一阶段
 
 ```text

@@ -1,5 +1,53 @@
 # 项目重构历史
 
+<!-- SEVEN_STREAM_CARE_APPOINTMENTS_POST_REBUILD_READMISSION_HISTORY -->
+
+## 2026-08-16：S36 appointments mapping 重新验证完成，formal provisioning 仍阻断 Care Runtime
+
+```text
+STAGE=S36
+STREAM=care
+TASK=SEVEN_STREAM_CARE_APPOINTMENTS_READONLY_FRESH_READMISSION_AFTER_SYSTEM_REBUILD
+BASELINE=51e40b2a154d9d32c57e865e50cc4172da8a39a1
+S35_PR=1242
+S35_HEAD=f6af73e8d830278f51646bdceff5781c18388429
+S35_MERGE=51e40b2a154d9d32c57e865e50cc4172da8a39a1
+S35_REQUIRED_CHECK=passed
+S35_ACTIONABLE_P0_P1_P2_P3=0
+S35_POST_MERGE_REVIEW_DEBT=0
+S35_FORMAL_CLOSURE=true
+
+APPOINTMENT_COUNT=5
+APPOINTMENT_PAIR_UNIQUE_MATCH_COUNT=5
+APPOINTMENT_PAIR_ZERO_MATCH_COUNT=0
+APPOINTMENT_PAIR_MULTI_MATCH_COUNT=0
+APPOINTMENT_FORMAL_SCOPE_ORPHAN_COUNT=5
+
+CARE_APPOINTMENT_DATA_MAPPING_READY=true
+CARE_FORMAL_SCOPE_READY=false
+CARE_ACTIVE_INSTITUTION_ANCHOR_READY=false
+CARE_READER_API_AUTH_CHAIN_READY=false
+CARE_DATA_READINESS=blocked_pending_formal_scope_provisioning
+CARE_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
+CARE_EXACT_RUNTIME_FILE_COUNT=0
+
+DATABASE_TRANSACTION_READ_ONLY=true
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+MIGRATION_EXECUTION=false
+NEXT_STAGE=S37
+```
+
+- S35 docs-only PR #1242 Required Check 通过、actionable review=0、post-merge debt=0，candidate formal cohort 空值事实正式闭合。
+- S36 在 active candidate 的 startup read-only + repeatable-read read-only transaction 内重算 appointment/customer/formal-scope aggregates，并显式 ROLLBACK。
+- 5/5 appointments 的 persisted `tenant_id + customer_id + institution_id` 均与 customer authoritative pair exact-one 匹配，null/orphan/mismatch/zero/multi 均为 0。
+- candidate formal Scope 与 active Binding 仍为空，五条 appointment pair 均没有 matching formal authority；membership 与业务 pair 不得替代 active institution anchor。
+- 本阶段没有 Runtime allowlist、DB write、Schema/Migration/DDL/DML、Care Reader/API/page 实现、页面发布、Staging 或 Production 变更。
+
+Canonical evidence：`docs/operations/seven-stream-care-appointments-post-rebuild-readmission-20260815.md`。
+
+<!-- SEVEN_STREAM_CARE_APPOINTMENTS_POST_REBUILD_READMISSION_HISTORY_END -->
+
 <!-- SEVEN_STREAM_SYSTEM_SYS01_POST_REBUILD_READMISSION_HISTORY -->
 
 ## 2026-08-16：S35 candidate data/runtime re-admission 完成，formal provisioning 仍阻断 SYS-01
