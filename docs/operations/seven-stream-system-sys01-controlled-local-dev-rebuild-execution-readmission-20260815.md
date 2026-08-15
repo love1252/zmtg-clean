@@ -22,6 +22,9 @@ S30_DOCS_MERGE=90de22e81769c313810d27cb7ad96f7260e3a805
 S31_RUNTIME_PR=1229
 S31_RUNTIME_HEAD=ea3639fc8ac55c900a6bbdd2d041f1280ea29870
 S31_RUNTIME_MERGE=fc3353d34e77d3704fccc70546735db84a671a24
+S31_CORRECTIVE_RUNTIME_PR=1233
+S31_CORRECTIVE_RUNTIME_HEAD=dc1524cc4b3d7656bf60b3aaf10be5ab7cf85ca5
+S31_CORRECTIVE_RUNTIME_MERGE=f7eefd101d05b8c07468de677d5013658816972a
 S31_REQUIRED_CHECKS=passed
 S31_ACTIONABLE_P0_P1_P2_P3=0
 S31_POST_MERGE_REVIEW_DEBT=0
@@ -62,17 +65,23 @@ LOW_LEVEL_ADAPTER_TEST_COVERAGE_SUFFICIENT=true
 RUNNER_BLOB_MATCHES_BASELINE_MANIFEST=true
 MIGRATION_GUARD_BLOB_MATCHES_BASELINE_MANIFEST=true
 
+S31_RUNNER_TEST_COMMAND=node_--test_scripts/db/sys01-controlled-local-dev-rebuild.test.mjs
 S31_RUNNER_TESTS=1_file_31_tests_passed
-S31_RUNNER_AND_MIGRATION_GUARD_TESTS=2_files_85_tests_passed
+S31_MIGRATION_GUARD_TEST_COMMAND=pnpm_test_--_src/server/db/tests/MigrationGuard.test.ts
+S31_MIGRATION_GUARD_TESTS=1_file_54_tests_passed
+S31_TARGETED_TESTS=2_files_85_tests_passed
 S31_ARCHITECTURE_QUALITY_TESTS=148_tests_passed
 S31_PRODUCTION_READINESS_DOCS_TESTS=8_tests_passed
-S31_FULL_TESTS=502_files_6974_tests_passed
+S31_INITIAL_FULL_TESTS=502_files_6974_tests_passed
+S31_CORRECTIVE_FULL_TESTS=502_files_6976_tests_passed
 S31_TYPECHECK=passed
 S31_LINT=passed_with_0_errors_4_pre_existing_img_warnings
 S31_BUILD=passed
 S31_ARCHITECTURE_INCREMENTAL=passed
 S31_DIFF_CHECK=passed
 ```
+
+上述 85 项不是单个 `node --test` glob 的结果：runner 的 31 项由 Node test runner 执行，MigrationGuard 的 54 项由仓库 Vitest 入口执行；不存在的旧脚本路径不作为任何 closure 证据。
 
 ## 三、original `55433` fresh read-only audit
 
