@@ -1,5 +1,62 @@
 # 智美天工架构文档索引
 
+<!-- SEVEN_STREAM_SYSTEM_SYS01_REBUILD_EXECUTION_ADMISSION_START -->
+
+## System SYS-01 controlled rebuild execution 准入（2026-08-15）
+
+```text
+STAGE=S27
+TASK=SEVEN_STREAM_SYSTEM_SYS_01_CONTROLLED_LOCAL_DEVELOPMENT_REBUILD_EXECUTION_ADMISSION
+COMPLETION_MODE=EXECUTION_ADMISSION_COMPLETE_BLOCKED
+BASELINE=afea901fad078ae45bd9815d5d6513d833f3449d
+
+S26_RUNTIME_PR=1224
+S26_RUNTIME_HEAD=b6cbc6ccf6e4c0429d955cec674f6cf42bbc2acf
+S26_RUNTIME_MERGE=afea901fad078ae45bd9815d5d6513d833f3449d
+S26_BASELINE_SQL_ISOLATED_POSTGRES_APPLY_VERIFIED=true
+S26_CATALOG_FINGERPRINT_EQUAL=true
+S26_COMPLETE=true
+S26_FORMAL_CLOSURE=true
+
+SOURCE_PUBLIC_TABLE_COUNT=55
+SOURCE_TENANT_COUNT=6
+SOURCE_AUTH_USER_COUNT=11
+SOURCE_TENANT_MEMBER_COUNT=11
+SOURCE_CUSTOMER_COUNT=9
+SOURCE_BINDING_COUNT=0
+SOURCE_AUDIT_COUNT=252
+SOURCE_AI_USAGE_COUNT=0
+TABLE_SET_MATCHES_S24_MAPPING=true
+SEMANTIC_SOURCE_DRIFT_COUNT=0
+
+BACKUP_ADAPTER_IMPLEMENTED=true
+RESTORE_ADAPTER_IMPLEMENTED=true
+CANDIDATE_CREATE_ADAPTER_IMPLEMENTED=true
+BASELINE_BOOTSTRAP_ADAPTER_IMPLEMENTED=true
+TRANSFER_ADAPTER_IMPLEMENTED=true
+VALIDATION_ADAPTER_IMPLEMENTED=true
+LOW_LEVEL_ADAPTER_TEST_COVERAGE_SUFFICIENT=false
+READINESS_AND_SMOKE_EVIDENCE_ISSUERS_AVAILABLE=false
+BACKUP_ENCRYPTION_KEY_SOURCE_AVAILABLE=false
+
+MIGRATION_CHILD_SPAWN_TOCTOU_PRESENT=true
+MIGRATION_CHILD_SPAWN_TOCTOU_BLOCKS_REBUILD_EXECUTION=false
+FUTURE_MIGRATION_HARDENING_REQUIRED=true
+REBUILD_EXECUTION_ADMISSION_READY=false
+
+PRIMARY_BLOCKING_PREREQUISITE=deterministic_readiness_and_application_smoke_evidence_issuers_plus_private_backup_key_source_and_low_level_adapter_behavior_tests
+NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEMENTATION_ADMISSION
+NEXT_SYSTEM_TASK_AUTHORIZED=false
+```
+
+S26 exact tooling 已经实现，并以隔离 `postgres:16.14-alpine` 完成 baseline apply、marker-only journal 与 actual/expected catalog fingerprint 等值验证。S27 在 original `127.0.0.1:55433` 的 startup read-only + `BEGIN TRANSACTION READ ONLY` 会话内完成 aggregate/catalog recheck 并显式 ROLLBACK，source table set 与 S24 row-count contract 均无 drift。
+
+execution 仍未准入：runner 能验证 bound receipt，但仓库没有生成四类 readiness/application smoke evidence 的 deterministic issuer；当前没有合法 repo-external backup key source；concrete destructive adapters 也缺 fake low-level executor behavior tests。migration child spawn TOCTOU 只影响 future common-tail migration，本 rebuild pipeline 不调用 migration child，因此单独记录为 future hardening，不误判为当前 rebuild blocker。未执行 backup、restore、candidate create、baseline bootstrap、transfer、cutover 或任何 database write。
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-controlled-local-dev-rebuild-execution-admission-20260815.md`。
+
+<!-- SEVEN_STREAM_SYSTEM_SYS01_REBUILD_EXECUTION_ADMISSION_END -->
+
 <!-- SEVEN_STREAM_SYSTEM_SYS01_CANDIDATE_BASELINE_GOVERNANCE_ADMISSION_START -->
 
 ## System SYS-01 candidate migration baseline 治理准入（2026-08-15）
