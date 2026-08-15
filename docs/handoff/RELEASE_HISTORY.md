@@ -1,5 +1,53 @@
 # 项目重构历史
 
+<!-- SEVEN_STREAM_SYSTEM_SYS01_REBUILD_EXECUTION_READMISSION_HISTORY -->
+
+## 2026-08-15：S31 prerequisite exact 3-file Runtime 闭合，S32 rebuild execution 重新准入
+
+```text
+STAGE=S32
+TASK=SEVEN_STREAM_SYSTEM_SYS_01_CONTROLLED_LOCAL_DEVELOPMENT_REBUILD_EXECUTION_READMISSION
+BASELINE=fc3353d34e77d3704fccc70546735db84a671a24
+
+S30_DOCS_PR=1228
+S30_DOCS_HEAD=d4d441fc6af3037b4254791c04811c70c1fb7f34
+S30_DOCS_MERGE=90de22e81769c313810d27cb7ad96f7260e3a805
+S31_RUNTIME_PR=1229
+S31_RUNTIME_HEAD=ea3639fc8ac55c900a6bbdd2d041f1280ea29870
+S31_RUNTIME_MERGE=fc3353d34e77d3704fccc70546735db84a671a24
+S31_REQUIRED_CHECKS=passed
+S31_ACTIONABLE_P0_P1_P2_P3=0
+S31_POST_MERGE_REVIEW_DEBT=0
+S31_FORMAL_CLOSURE=true
+
+SYSTEM_PREREQUISITE_IMPLEMENTED=true
+SYSTEM_PREREQUISITE_EXACT_FILE_COUNT=3
+DETERMINISTIC_READINESS_ISSUER_IMPLEMENTED=true
+DETERMINISTIC_APPLICATION_SMOKE_ISSUER_IMPLEMENTED=true
+BACKUP_KEY_PREFLIGHT_IMPLEMENTED=true
+LOW_LEVEL_ADAPTER_TEST_COVERAGE_SUFFICIENT=true
+S31_RUNNER_TESTS=1_file_31_tests_passed
+S31_RUNNER_AND_MIGRATION_GUARD_TESTS=2_files_85_tests_passed
+S31_FULL_TESTS=502_files_6974_tests_passed
+
+SOURCE_PUBLIC_TABLE_COUNT=55
+SOURCE_INVENTORY_TABLE_COUNT=56
+SEMANTIC_SOURCE_DRIFT_COUNT=0
+BACKUP_ENCRYPTION_KEY_SOURCE_AVAILABLE=true
+BACKUP_ENCRYPTION_KEY_SOURCE_SAFE=true
+REBUILD_EXECUTION_ADMISSION_READY=true
+FORMAL_REBUILD_EXECUTION=false
+```
+
+- S30 PR #1228 冻结 prerequisite 设计；subsequent corrective authorization 将 S31 scope 修正为 runner、runner test 与 manifest exact 3 files。
+- S31 PR #1229 Required Check、review 与 post-merge sweep 均通过；manifest 只更新 runner tooling blob，不改变 baseline SQL、artifact SHA 或 schema fingerprint。
+- S32 original `55433` 只读事务重算全部 56-table set 与逐表 counts，source drift 为 0；repo-external key 只做 metadata 检查，未读取或记录 value/hash。
+- 四类 issuer、key preflight 与六类 adapter behavior test 均 ready；execution 仍保持 false，下一 System task 未授权。
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-controlled-local-dev-rebuild-execution-readmission-20260815.md`。
+
+<!-- SEVEN_STREAM_SYSTEM_SYS01_REBUILD_EXECUTION_READMISSION_HISTORY_END -->
+
 <!-- SEVEN_STREAM_SYSTEM_SYS01_REBUILD_PREREQUISITE_ADMISSION_HISTORY -->
 
 ## 2026-08-15：S29 Customers Runtime 合并，S30 System rebuild prerequisite exact Admission ready

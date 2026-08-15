@@ -1,5 +1,51 @@
 # 机构端七条业务线重启基线
 
+## S32 当前入口：System rebuild execution ready，仍待独立授权
+
+- S32 基线：`fc3353d34e77d3704fccc70546735db84a671a24`
+- S31 Runtime：PR #1229 corrective exact 3-file prerequisite implementation 已合并并 formal closure
+- S32 source：original `55433` 的 56-table set 与逐表 count 均无 drift；只读事务已 ROLLBACK
+- S32 key：repo-external metadata 安全门通过；value/hash 未读取或记录
+- S32 结论：rebuild execution Admission ready；未执行任何 rebuild phase
+
+```text
+STAGE=S32
+TASK=SEVEN_STREAM_SYSTEM_SYS_01_CONTROLLED_LOCAL_DEVELOPMENT_REBUILD_EXECUTION_READMISSION
+BASELINE=fc3353d34e77d3704fccc70546735db84a671a24
+
+S31_RUNTIME_PR=1229
+S31_RUNTIME_HEAD=ea3639fc8ac55c900a6bbdd2d041f1280ea29870
+S31_RUNTIME_MERGE=fc3353d34e77d3704fccc70546735db84a671a24
+S31_FORMAL_CLOSURE=true
+
+SYSTEM_PREREQUISITE_IMPLEMENTED=true
+SYSTEM_PREREQUISITE_EXACT_FILE_COUNT=3
+DETERMINISTIC_READINESS_ISSUER_IMPLEMENTED=true
+DETERMINISTIC_APPLICATION_SMOKE_ISSUER_IMPLEMENTED=true
+BACKUP_KEY_PREFLIGHT_IMPLEMENTED=true
+LOW_LEVEL_ADAPTER_TEST_COVERAGE_SUFFICIENT=true
+
+SOURCE_PUBLIC_TABLE_COUNT=55
+SOURCE_INVENTORY_TABLE_COUNT=56
+SEMANTIC_SOURCE_DRIFT_COUNT=0
+BACKUP_ENCRYPTION_KEY_SOURCE_AVAILABLE=true
+BACKUP_ENCRYPTION_KEY_SOURCE_SAFE=true
+REBUILD_EXECUTION_ADMISSION_READY=true
+FORMAL_REBUILD_EXECUTION=false
+
+NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CONTROLLED_LOCAL_DEVELOPMENT_REBUILD_EXECUTION
+NEXT_SYSTEM_TASK_AUTHORIZED=false
+NEXT_CARE_TASK=SEVEN_STREAM_CARE_FORMAL_FRESH_ADMISSION
+NEXT_CARE_TASK_AUTHORIZED=true_by_current_ultra_goal_after_S32_merge
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=2
+SEVEN_STREAM_FORMAL_RELEASE_COUNT=0
+CONTROLLED_CREATE_RELEASE_COUNT=0
+```
+
+当前七线排序仍以 System execution 为下一独立授权 task；本轮 ultra-goal 只继续 Care fresh Admission，不会把 System execution 自动夹带到 S33。Canonical evidence：`docs/operations/seven-stream-system-sys01-controlled-local-dev-rebuild-execution-readmission-20260815.md`。
+
+## S30 历史入口：prerequisite implementation Admission
+
 - S30 基线：`707c378afffb3e3b96790a26a0de8a17a8364f3c`
 - S29 Customers：PR #1227 已以 exact 11-file scope 合并，CUS-01 formal Reader 与 versioned API 已实现，page 继续隐藏
 - S30 System：四类 deterministic issuer、key preflight 与六 adapter behavior closure 可由现有 runner/test exact 2 files 完成

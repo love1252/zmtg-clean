@@ -1,5 +1,44 @@
 # 智美天工架构文档索引
 
+<!-- SEVEN_STREAM_SYSTEM_SYS01_REBUILD_EXECUTION_READMISSION_START -->
+
+## System SYS-01 controlled local-development rebuild execution 重新准入（2026-08-15）
+
+```text
+STAGE=S32
+BASELINE=fc3353d34e77d3704fccc70546735db84a671a24
+S31_RUNTIME_PR=1229
+S31_RUNTIME_HEAD=ea3639fc8ac55c900a6bbdd2d041f1280ea29870
+S31_RUNTIME_MERGE=fc3353d34e77d3704fccc70546735db84a671a24
+S31_REQUIRED_CHECKS=passed
+S31_POST_MERGE_REVIEW_DEBT=0
+S31_FORMAL_CLOSURE=true
+
+SYSTEM_PREREQUISITE_IMPLEMENTED=true
+SYSTEM_PREREQUISITE_EXACT_FILE_COUNT=3
+DETERMINISTIC_READINESS_ISSUER_IMPLEMENTED=true
+DETERMINISTIC_APPLICATION_SMOKE_ISSUER_IMPLEMENTED=true
+BACKUP_KEY_PREFLIGHT_IMPLEMENTED=true
+LOW_LEVEL_ADAPTER_TEST_COVERAGE_SUFFICIENT=true
+
+SOURCE_PUBLIC_TABLE_COUNT=55
+SOURCE_INVENTORY_TABLE_COUNT=56
+SEMANTIC_SOURCE_DRIFT_COUNT=0
+BACKUP_ENCRYPTION_KEY_SOURCE_AVAILABLE=true
+BACKUP_ENCRYPTION_KEY_SOURCE_SAFE=true
+REBUILD_EXECUTION_ADMISSION_READY=true
+FORMAL_REBUILD_EXECUTION=false
+
+NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CONTROLLED_LOCAL_DEVELOPMENT_REBUILD_EXECUTION
+NEXT_SYSTEM_TASK_AUTHORIZED=false
+```
+
+S31 corrective exact 3-file implementation 已闭合四类 deterministic issuer、repo-external key preflight 与六类 concrete low-level adapter behavior tests；baseline manifest 只同步 runner tooling blob，schema/artifact contract 未改变。S32 在 original `127.0.0.1:55433` 的 startup read-only + repeatable-read read-only transaction 内重算 56-table set 与逐表 count，并显式 ROLLBACK；source drift 为 0。execution 已可重新准入，但本阶段没有执行 backup、restore、candidate、baseline、transfer、cutover 或 original write。
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-controlled-local-dev-rebuild-execution-readmission-20260815.md`。
+
+<!-- SEVEN_STREAM_SYSTEM_SYS01_REBUILD_EXECUTION_READMISSION_END -->
+
 <!-- SEVEN_STREAM_SYSTEM_SYS01_REBUILD_PREREQUISITE_ADMISSION_START -->
 
 ## System SYS-01 rebuild prerequisite exact implementation 准入（2026-08-15）
