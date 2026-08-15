@@ -1,0 +1,44 @@
+{
+  "artifactPath": "drizzle/baselines/sys01-local-dev-current-schema-0045-v1.sql",
+  "artifactSha256": "170bf25538acead9a8db16330df8fc2e4354c84bb30032652a0caf19cd88584c",
+  "canonicalizationVersion": "zmtg.catalog.logical-objects/v2",
+  "createdByContractVersion": "zmtg.sys01.controlled-local-dev-rebuild/v1",
+  "parentJournalTag": "0045_base02_binding_legacy_calibration",
+  "parentJournalWhen": 1785738060856,
+  "schemaFingerprintSha256": "4b93f1ce180ee48c12ded517a087fb3f6d73e7e28ff3be85f883de1d321dfb8c",
+  "schemaSource": {
+    "catalogObjectCounts": {
+      "checks": 63,
+      "columns": 853,
+      "defaults": 227,
+      "enums": 59,
+      "foreignKeys": 110,
+      "functions": 4,
+      "indexes": 136,
+      "nullability": 853,
+      "primaryKeys": 60,
+      "schemas": 1,
+      "sequences": 0,
+      "tables": 60,
+      "triggers": 7,
+      "types": 59,
+      "uniques": 51
+    },
+    "drizzleKitVersion": "0.31.10",
+    "drizzleOrmVersion": "0.45.2",
+    "generationCommand": "pnpm exec drizzle-kit export --schema ./src/server/db/schema.ts --dialect postgresql",
+    "modelSource": "src/server/db/schema.ts",
+    "reviewedHandWrittenFinalCatalog": [
+      "two_not_valid_foreign_keys",
+      "two_historical_enum_orders",
+      "four_trigger_functions",
+      "seven_enabled_triggers"
+    ]
+  },
+  "sourceBaselineCommit": "5d40cfb0e0862e2b11208918c21808571e67c6db",
+  "toolingBlobs": {
+    "scripts/db/guarded-migrate.mjs": "ee15905525284d5caa236cbfc5379bafd6556e63",
+    "scripts/db/sys01-controlled-local-dev-rebuild.mjs": "8dee92db80a7645000af96c95f51d3c07ea96e78"
+  },
+  "version": "zmtg.sys01.local-dev-current-schema-baseline/v1"
+}
