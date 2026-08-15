@@ -1,7 +1,18 @@
 import assert from 'node:assert/strict';
-import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { EventEmitter } from 'node:events';
+import {
+  chmodSync,
+  copyFileSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { PassThrough, Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
 const { afterEach, describe, test } = process.env.VITEST
@@ -16,6 +27,7 @@ import {
   SYS01_EXECUTION_CONFIRMATION,
   SYS01_IDENTITIES,
   SYS01_PARENT_JOURNAL,
+  SYS01_PREREQUISITE_ADAPTERS,
   SYS01_SOURCE_BASELINE_COMMIT,
   SYS01_TABLE_CONTRACT,
   SYS01_TARGET_ONLY_CONTRACT,
@@ -28,6 +40,7 @@ import {
   buildExecutionManifest,
   buildExpectedCatalogModel,
   buildPlan,
+  buildSys01PrerequisiteAdapterStepsV1,
   buildRollbackCapability,
   buildTransferCapability,
   canonicalCatalogRecords,
@@ -42,6 +55,11 @@ import {
   mapMembershipCalibrationRows,
   mapOwnerReconstructedRows,
   parseRunnerArguments,
+  preflightSys01BackupKeySourceV1,
+  probeSys01CandidateBoundApplicationV1,
+  issueSys01DeterministicApplicationSmokeEvidenceV1,
+  issueSys01DeterministicReadinessEvidenceV1,
+  runSys01PrerequisiteAdapterV1,
   runSys01ControlledLocalDevRebuild,
   sha256Bytes,
   validateSourceInventory,
@@ -100,6 +118,51 @@ function localIdentities(overrides = {}) {
       },
     ]),
   );
+}
+
+function privateTemporaryRoot(prefix = 'zmtg-s31-prerequisite-') {
+  const root = mkdtempSync(path.join(tmpdir(), prefix));
+  chmodSync(root, 0o700);
+  temporaryRoots.push(root);
+  return root;
+}
+
+function fakeChildProcess({
+  stdout = Buffer.alloc(0),
+  closeCode = 0,
+  closeAfterInput = false,
+  autoClose = true,
+} = {}) {
+  const child = new EventEmitter();
+  child.stdout = Readable.from([Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout, 'utf8')]);
+  child.stdin = new PassThrough();
+  child.killedWith = null;
+  child.kill = (signal = 'SIGTERM') => {
+    child.killedWith = signal;
+    return true;
+  };
+  const close = () => queueMicrotask(() => child.emit('close', closeCode));
+  if (closeAfterInput) child.stdin.once('finish', close);
+  else if (autoClose) close();
+  return child;
+}
+
+function exactArchiveList() {
+  return `${SYS01_TABLE_CONTRACT.map((entry, index) => {
+    const [schema = 'public', table = schema] = entry.table.includes('.')
+      ? entry.table.split('.')
+      : ['public', entry.table];
+    return `${index + 1}; 0 0 TABLE ${schema} ${table} owner`;
+  }).join('\n')}\n`;
+}
+
+function issuerManifest(bundle, state) {
+  return {
+    implementationHead: '1'.repeat(40),
+    baselineManifestSha256: bundle.validation.manifestSha256,
+    state: { current: state, outcomeUnknown: false },
+    phaseReceipts: [{ digest: 'ab'.repeat(32) }],
+  };
 }
 
 afterEach(() => {
@@ -998,6 +1061,554 @@ describe('S26 controlled runner guards and mapping', () => {
     assert.equal(writes[0][2].phaseReceipts[0].phase, 'preflight');
   });
 
+  test('backup key preflight accepts only a private repo-external regular file and never returns key material', async () => {
+    const root = privateTemporaryRoot();
+    const keyPath = path.join(root, 'sys01-backup.key');
+    writeFileSync(keyPath, Buffer.alloc(32, 0x5a), { mode: 0o600 });
+    chmodSync(keyPath, 0o600);
+    const result = await preflightSys01BackupKeySourceV1({
+      env: { ZMTG_SYS01_BACKUP_KEY_PATH: keyPath },
+      repositoryRoot,
+    });
+    assert.deepEqual(result, {
+      available: true,
+      formatValid: true,
+      permissionValid: true,
+      repositoryExternal: true,
+      regularFile: true,
+      symlink: false,
+      valueReadOrLogged: false,
+    });
+    assert.equal(JSON.stringify(result).includes('5a'), false);
+
+    const linkedKeyPath = path.join(root, 'linked.key');
+    symlinkSync(keyPath, linkedKeyPath);
+    await assert.rejects(
+      preflightSys01BackupKeySourceV1({
+        env: { ZMTG_SYS01_BACKUP_KEY_PATH: linkedKeyPath },
+        repositoryRoot,
+      }),
+      /runner_backup_path_or_key_invalid/,
+    );
+    chmodSync(keyPath, 0o644);
+    await assert.rejects(
+      preflightSys01BackupKeySourceV1({
+        env: { ZMTG_SYS01_BACKUP_KEY_PATH: keyPath },
+        repositoryRoot,
+      }),
+      /runner_backup_path_or_key_invalid/,
+    );
+  });
+
+  test('backup adapter executes exact pg_dump argv and produces encrypted-only evidence with no retry', async () => {
+    const root = privateTemporaryRoot();
+    const keyPath = path.join(root, 'sys01-backup.key');
+    const backupPath = path.join(root, 'sys01-backup.bin');
+    const plaintext = Buffer.from('synthetic pg_dump archive bytes', 'utf8');
+    writeFileSync(keyPath, Buffer.alloc(32, 0x31), { mode: 0o600 });
+    chmodSync(keyPath, 0o600);
+    const calls = [];
+    const env = {
+      ZMTG_SYS01_BACKUP_KEY_PATH: keyPath,
+      ZMTG_SYS01_ENCRYPTED_BACKUP_PATH: backupPath,
+      ZMTG_SYS01_POSTGRES_USER: 'postgres',
+    };
+    const result = await runSys01PrerequisiteAdapterV1({
+      adapter: 'backup',
+      env,
+      repositoryRoot,
+      runtime: {
+        execOpaque: async (command, args) => {
+          calls.push({ kind: 'execFile', command, args });
+          return { stdout: 'pg_dump (PostgreSQL) 16.14\n' };
+        },
+        spawn: (command, args) => {
+          calls.push({ kind: 'spawn', command, args });
+          return fakeChildProcess({ stdout: plaintext });
+        },
+        now: () => '2026-08-15T00:00:00.000Z',
+      },
+    });
+    assert.equal(result.status, 'succeeded');
+    assert.equal(result.postconditionVerified, true);
+    assert.equal(result.plaintextResidual, false);
+    assert.equal(result.originalMutationCount, 0);
+    assert.equal(readFileSync(backupPath).includes(plaintext), false);
+    assert.deepEqual(calls, buildSys01PrerequisiteAdapterStepsV1('backup').slice(0, 2).map(
+      ({ kind, command, args }) => ({ kind, command, args }),
+    ));
+    assert.equal(JSON.stringify({ calls, result }).includes('31313131'), false);
+
+    const failurePath = path.join(root, 'sys01-backup-failure.bin');
+    let failureSpawnCount = 0;
+    const failed = await runSys01PrerequisiteAdapterV1({
+      adapter: 'backup',
+      env: { ...env, ZMTG_SYS01_ENCRYPTED_BACKUP_PATH: failurePath },
+      repositoryRoot,
+      runtime: {
+        execOpaque: async () => ({ stdout: 'pg_dump (PostgreSQL) 16.14\n' }),
+        spawn: () => {
+          failureSpawnCount += 1;
+          return fakeChildProcess({ stdout: plaintext, closeCode: 1 });
+        },
+        now: () => '2026-08-15T00:00:00.000Z',
+      },
+    });
+    assert.equal(failed.status, 'unknown');
+    assert.equal(failureSpawnCount, 1);
+    assert.equal(classifyPhaseOutcome('backup', failed).autoRetry, false);
+
+    const encryptionFailurePath = path.join(root, 'sys01-backup-encryption-failure.bin');
+    let encryptionSpawnCount = 0;
+    const encryptionFailure = await runSys01PrerequisiteAdapterV1({
+      adapter: 'backup',
+      env: { ...env, ZMTG_SYS01_ENCRYPTED_BACKUP_PATH: encryptionFailurePath },
+      repositoryRoot,
+      runtime: {
+        execOpaque: async () => ({ stdout: 'pg_dump (PostgreSQL) 16.14\n' }),
+        spawn: () => {
+          encryptionSpawnCount += 1;
+          return fakeChildProcess({ stdout: plaintext });
+        },
+        pipeline: async () => {
+          throw new Error('synthetic encryption stream failure');
+        },
+        now: () => '2026-08-15T00:00:00.000Z',
+      },
+    });
+    assert.equal(encryptionFailure.status, 'unknown');
+    assert.equal(encryptionSpawnCount, 1);
+
+    const timeoutPath = path.join(root, 'sys01-backup-timeout.bin');
+    let timeoutChild;
+    const timedOut = await runSys01PrerequisiteAdapterV1({
+      adapter: 'backup',
+      env: { ...env, ZMTG_SYS01_ENCRYPTED_BACKUP_PATH: timeoutPath },
+      repositoryRoot,
+      runtime: {
+        execOpaque: async () => ({ stdout: 'pg_dump (PostgreSQL) 16.14\n' }),
+        spawn: () => {
+          timeoutChild = fakeChildProcess({ stdout: plaintext, autoClose: false });
+          return timeoutChild;
+        },
+        processTimeoutMs: 1,
+        now: () => '2026-08-15T00:00:00.000Z',
+      },
+    });
+    assert.equal(timedOut.status, 'unknown');
+    assert.equal(timeoutChild.killedWith, 'SIGTERM');
+    assert.equal(classifyPhaseOutcome('backup', timedOut).autoRetry, false);
+  });
+
+  test('restore adapter decrypts one frozen artifact, lists before restore and verifies opaque equality', async () => {
+    const root = privateTemporaryRoot();
+    const keyPath = path.join(root, 'sys01-backup.key');
+    const backupPath = path.join(root, 'sys01-backup.bin');
+    writeFileSync(keyPath, Buffer.alloc(32, 0x32), { mode: 0o600 });
+    chmodSync(keyPath, 0o600);
+    const env = {
+      ZMTG_SYS01_BACKUP_KEY_PATH: keyPath,
+      ZMTG_SYS01_ENCRYPTED_BACKUP_PATH: backupPath,
+      ZMTG_SYS01_POSTGRES_USER: 'postgres',
+      ZMTG_SYS01_ORIGINAL_DATABASE_URL: 'postgresql://user:secret@127.0.0.1:55433/zmtg_clean_local_dev',
+      ZMTG_SYS01_RESTORE_DRILL_DATABASE_URL: 'postgresql://user:secret@127.0.0.1:55435/zmtg_clean_local_dev_restore_drill',
+    };
+    const backup = await runSys01PrerequisiteAdapterV1({
+      adapter: 'backup',
+      env,
+      repositoryRoot,
+      runtime: {
+        execOpaque: async () => ({ stdout: 'pg_dump (PostgreSQL) 16.14\n' }),
+        spawn: () => fakeChildProcess({ stdout: Buffer.from('synthetic archive') }),
+        now: () => '2026-08-15T00:00:00.000Z',
+      },
+    });
+    const inventory = sourceInventory();
+    const aggregateFingerprint = validateSourceInventory(inventory).rowCountFingerprint;
+    const executionManifest = {
+      sourceCatalogFingerprint: '11'.repeat(32),
+      lowSensitiveAggregateFingerprint: aggregateFingerprint,
+      phaseReceipts: [{
+        phase: 'backup',
+        status: 'succeeded',
+        evidence: { ciphertextSha256: backup.ciphertextSha256 },
+      }],
+    };
+    const spawnCalls = [];
+    let databaseReads = 0;
+    const restored = await runSys01PrerequisiteAdapterV1({
+      adapter: 'restore',
+      env,
+      repositoryRoot,
+      executionManifest,
+      runtime: {
+        spawn: (command, args) => {
+          spawnCalls.push({ command, args });
+          return fakeChildProcess({
+            stdout: args.includes('--list') ? exactArchiveList() : Buffer.alloc(0),
+            closeAfterInput: true,
+          });
+        },
+        createExactPostgresContainer: async () => undefined,
+        waitForPostgresContainer: async () => undefined,
+        inspectContainer: async (expected) => ({
+          ...expected,
+          environment: 'local-development',
+          exists: true,
+          conflict: false,
+        }),
+        readDatabaseInventory: async () => {
+          databaseReads += 1;
+          return {
+            sourceInventory: inventory,
+            sourceCatalogFingerprint: executionManifest.sourceCatalogFingerprint,
+            opaqueDatabaseFingerprint: '22'.repeat(32),
+          };
+        },
+        now: () => '2026-08-15T00:00:01.000Z',
+      },
+    });
+    assert.equal(restored.status, 'succeeded');
+    assert.equal(restored.archiveTableSetVerified, true);
+    assert.equal(restored.restoredOpaqueEqualityVerified, true);
+    assert.equal(databaseReads, 2);
+    assert.deepEqual(
+      spawnCalls,
+      buildSys01PrerequisiteAdapterStepsV1('restore').slice(1, 3).map(({ command, args }) => ({ command, args })),
+    );
+    assert.equal(JSON.stringify({ spawnCalls, restored }).includes('secret'), false);
+
+    let mismatchSpawnCount = 0;
+    const archiveMismatch = await runSys01PrerequisiteAdapterV1({
+      adapter: 'restore',
+      env,
+      repositoryRoot,
+      executionManifest,
+      runtime: {
+        spawn: () => {
+          mismatchSpawnCount += 1;
+          return fakeChildProcess({
+            stdout: '1; 0 0 TABLE public unexpected_table owner\n',
+            closeAfterInput: true,
+          });
+        },
+        createExactPostgresContainer: async () => assert.fail('archive mismatch must stop before restore mutation'),
+        waitForPostgresContainer: async () => assert.fail('archive mismatch must stop before readiness wait'),
+        readDatabaseInventory: async () => assert.fail('archive mismatch must stop before DB inspection'),
+        now: () => '2026-08-15T00:00:02.000Z',
+      },
+    });
+    assert.equal(archiveMismatch.status, 'not_started');
+    assert.equal(mismatchSpawnCount, 1);
+    assert.equal(classifyPhaseOutcome('restore-drill', archiveMismatch).autoRetry, false);
+  });
+
+  test('candidate-create adapter shares exact Docker argv, rejects collisions and never retries', async () => {
+    const env = {
+      ZMTG_SYS01_POSTGRES_PASSWORD: 'synthetic-password',
+      ZMTG_SYS01_POSTGRES_USER: 'postgres',
+      ZMTG_SYS01_CANDIDATE_DATABASE_URL: 'postgresql://user:synthetic-password@127.0.0.1:55434/zmtg_clean_local_dev_candidate',
+    };
+    const calls = [];
+    const result = await runSys01PrerequisiteAdapterV1({
+      adapter: 'candidate-create',
+      env,
+      repositoryRoot,
+      runtime: {
+        execOpaque: async (command, args) => calls.push({ command, args }),
+        waitForPostgresContainer: async () => calls.push({ operation: 'wait' }),
+        inspectContainer: async (expected) => ({
+          ...expected,
+          environment: 'local-development',
+          exists: true,
+          conflict: false,
+        }),
+        inspectCandidateEmpty: async () => true,
+        now: () => '2026-08-15T00:00:00.000Z',
+      },
+    });
+    assert.equal(result.status, 'succeeded');
+    assert.deepEqual(
+      calls.slice(0, 2),
+      buildSys01PrerequisiteAdapterStepsV1('candidate-create').slice(0, 2).map(
+        ({ command, args }) => ({ command, args }),
+      ),
+    );
+    assert.equal(JSON.stringify(calls).includes('synthetic-password'), false);
+
+    let collisionCalls = 0;
+    const collision = await runSys01PrerequisiteAdapterV1({
+      adapter: 'candidate-create',
+      env,
+      repositoryRoot,
+      runtime: {
+        execOpaque: async () => {
+          collisionCalls += 1;
+          throw new Error('synthetic collision');
+        },
+        waitForPostgresContainer: async () => assert.fail('wait must not run after collision'),
+        inspectCandidateEmpty: async () => assert.fail('DB must not be inspected after collision'),
+        now: () => '2026-08-15T00:00:00.000Z',
+      },
+    });
+    assert.equal(collision.status, 'unknown');
+    assert.equal(collisionCalls, 1);
+    assert.equal(classifyPhaseOutcome('candidate-create', collision).autoRetry, false);
+  });
+
+  test('baseline, transfer and validate adapters execute fake DB seams and fail closed on partial or mismatched evidence', async () => {
+    const bundle = loadBaselineBundle(repositoryRoot);
+    const executionManifest = {
+      lowSensitiveAggregateFingerprint: '33'.repeat(32),
+    };
+    const baselineCalls = [];
+    const baseline = await runSys01PrerequisiteAdapterV1({
+      adapter: 'baseline-bootstrap',
+      bundle,
+      executionManifest,
+      runtime: {
+        bootstrapDatabase: async (context) => {
+          baselineCalls.push(context);
+          return {
+            actualSchemaFingerprintSha256: bundle.validation.schemaFingerprintSha256,
+            markerId: 1,
+            markerHash: bundle.validation.marker.hash,
+            markerCreatedAt: bundle.validation.marker.createdAt,
+            markerRowCount: 1,
+            markerShapeVerified: true,
+            originalMutationCount: 0,
+          };
+        },
+        now: () => '2026-08-15T00:00:00.000Z',
+      },
+    });
+    assert.equal(baseline.status, 'succeeded');
+    assert.equal(baselineCalls.length, 1);
+    assert.equal(baselineCalls[0].originalMutationAllowed, false);
+
+    let baselineFailureCalls = 0;
+    const baselineFailure = await runSys01PrerequisiteAdapterV1({
+      adapter: 'baseline-bootstrap',
+      bundle,
+      runtime: {
+        bootstrapDatabase: async () => {
+          baselineFailureCalls += 1;
+          throw new Error('synthetic apply failure');
+        },
+        now: () => '2026-08-15T00:00:00.000Z',
+      },
+    });
+    assert.equal(baselineFailure.status, 'unknown');
+    assert.equal(baselineFailureCalls, 1);
+    assert.equal(classifyPhaseOutcome('baseline-bootstrap', baselineFailure).autoRetry, false);
+
+    const transferFailure = await runSys01PrerequisiteAdapterV1({
+      adapter: 'transfer',
+      executionManifest,
+      runtime: {
+        transferDatabase: async ({ originalMutationAllowed }) => {
+          assert.equal(originalMutationAllowed, false);
+          throw new Error('synthetic partial transfer');
+        },
+        now: () => '2026-08-15T00:00:00.000Z',
+      },
+    });
+    assert.equal(transferFailure.status, 'unknown');
+    assert.equal(classifyPhaseOutcome('transfer', transferFailure).autoRetry, false);
+
+    const validationMismatch = await runSys01PrerequisiteAdapterV1({
+      adapter: 'validate',
+      bundle,
+      executionManifest,
+      runtime: {
+        validateDatabase: async ({ originalMutationAllowed }) => ({
+          actualSchemaFingerprintSha256: bundle.validation.schemaFingerprintSha256,
+          constraintsVerified: true,
+          primaryKeysVerified: true,
+          foreignKeysVerified: true,
+          rowCountsVerified: true,
+          businessAggregatesVerified: true,
+          mappedRowsVerified: false,
+          nullShapeVerified: true,
+          markerVerified: true,
+          originalUnchanged: true,
+          originalMutationCount: originalMutationAllowed ? 1 : 0,
+        }),
+        now: () => '2026-08-15T00:00:00.000Z',
+      },
+    });
+    assert.equal(validationMismatch.status, 'not_started');
+    assert.equal(validationMismatch.postconditionVerified, false);
+    assert.equal(classifyPhaseOutcome('validate', validationMismatch).autoRetry, false);
+  });
+
+  test('four deterministic issuers bind candidate, Head, baseline, phase state and receipt chain', async () => {
+    const bundle = loadBaselineBundle(repositoryRoot);
+    const candidateIdentity = localIdentities({ candidate: { exists: true } }).candidate;
+    const validValidation = {
+      status: 'succeeded',
+      postconditionVerified: true,
+      actualSchemaFingerprintSha256: bundle.validation.schemaFingerprintSha256,
+      markerVerified: true,
+      constraintsVerified: true,
+      primaryKeysVerified: true,
+      foreignKeysVerified: true,
+      rowCountsVerified: true,
+      mappedRowsVerified: true,
+      nullShapeVerified: true,
+    };
+    const issued = [];
+    for (const [kind, state] of [
+      ['pre_cutover_readiness', 'ROLLBACK_READY'],
+      ['post_cutover_readiness', 'CUTOVER_READY'],
+    ]) {
+      const executionManifest = issuerManifest(bundle, state);
+      issued.push(await issueSys01DeterministicReadinessEvidenceV1({
+        kind,
+        bundle,
+        executionManifest,
+        probe: async () => ({ identity: candidateIdentity, validation: validValidation }),
+      }));
+    }
+    for (const [kind, state] of [
+      ['pre_cutover_application_smoke', 'ROLLBACK_READY'],
+      ['post_cutover_application_smoke', 'CUTOVER_READY'],
+    ]) {
+      const executionManifest = issuerManifest(bundle, state);
+      issued.push(await issueSys01DeterministicApplicationSmokeEvidenceV1({
+        kind,
+        bundle,
+        executionManifest,
+        probe: async () => ({
+          status: 200,
+          route: '/api/version',
+          host: '127.0.0.1',
+          port: 5011,
+          versionCommit: executionManifest.implementationHead,
+          versionSource: 'env',
+          databaseTarget: 'candidate',
+          processDatabaseIdentityBound: true,
+        }),
+      }));
+    }
+    assert.equal(issued.length, 4);
+    assert.equal(issued.every((entry) => entry.verified), true);
+    assert.equal(new Set(issued.map((entry) => entry.receiptSha256)).size, 4);
+    await assert.rejects(
+      issueSys01DeterministicReadinessEvidenceV1({
+        kind: 'pre_cutover_readiness',
+        bundle,
+        executionManifest: issuerManifest(bundle, 'CUTOVER_READY'),
+        probe: async () => ({ identity: candidateIdentity, validation: validValidation }),
+      }),
+      /runner_cutover_evidence_issuer_context_invalid/,
+    );
+  });
+
+  test('candidate-bound application probe uses one loopback process, exact Head and bounded failure', async () => {
+    const implementationHead = '4'.repeat(40);
+    const env = {
+      ZMTG_SYS01_CANDIDATE_DATABASE_URL: 'postgresql://user:synthetic@127.0.0.1:55434/zmtg_clean_local_dev_candidate',
+      ZMTG_SYS01_BACKUP_KEY_PATH: '/private/synthetic/key',
+      ZMTG_SYS01_POSTGRES_PASSWORD: 'must-not-reach-app-process',
+    };
+    const spawnCalls = [];
+    const child = fakeChildProcess({ autoClose: false });
+    let fetchCalls = 0;
+    const result = await probeSys01CandidateBoundApplicationV1({
+      env,
+      implementationHead,
+      spawnImpl: (command, args, options) => {
+        spawnCalls.push({ command, args, options });
+        return child;
+      },
+      fetchImpl: async (url) => {
+        fetchCalls += 1;
+        if (fetchCalls === 1) throw new Error('expected unused port');
+        return {
+          status: 200,
+          json: async () => ({ commit: implementationHead, source: 'env' }),
+          url,
+        };
+      },
+      waitImpl: async () => undefined,
+      attempts: 1,
+    });
+    assert.equal(result.databaseTarget, 'candidate');
+    assert.equal(spawnCalls.length, 1);
+    assert.deepEqual(spawnCalls[0].args.slice(-4), ['--hostname', '127.0.0.1', '--port', '5011']);
+    assert.equal(spawnCalls[0].options.env.DATABASE_URL, env.ZMTG_SYS01_CANDIDATE_DATABASE_URL);
+    assert.equal(Object.hasOwn(spawnCalls[0].options.env, 'ZMTG_SYS01_BACKUP_KEY_PATH'), false);
+    assert.equal(Object.hasOwn(spawnCalls[0].options.env, 'ZMTG_SYS01_POSTGRES_PASSWORD'), false);
+    assert.equal(child.killedWith, 'SIGTERM');
+    assert.equal(fetchCalls, 2);
+
+    await assert.rejects(
+      probeSys01CandidateBoundApplicationV1({
+        env: {
+          ZMTG_SYS01_CANDIDATE_DATABASE_URL: 'postgresql://user:synthetic@localhost:55434/zmtg_clean_local_dev_candidate',
+        },
+        implementationHead,
+        spawnImpl: () => assert.fail('non-exact endpoint must fail before process start'),
+        fetchImpl: async () => assert.fail('non-exact endpoint must fail before HTTP'),
+        attempts: 1,
+      }),
+      /runner_database_url_identity_mismatch/,
+    );
+    await assert.rejects(
+      probeSys01CandidateBoundApplicationV1({
+        env,
+        implementationHead,
+        spawnImpl: () => fakeChildProcess({ autoClose: false }),
+        fetchImpl: (() => {
+          let calls = 0;
+          return async () => {
+            calls += 1;
+            if (calls === 1) throw new Error('expected unused port');
+            return {
+              status: 200,
+              json: async () => ({ commit: '5'.repeat(40), source: 'env' }),
+            };
+          };
+        })(),
+        waitImpl: async () => undefined,
+        attempts: 1,
+      }),
+      /runner_application_smoke_probe_failed/,
+    );
+    await assert.rejects(
+      probeSys01CandidateBoundApplicationV1({
+        env,
+        implementationHead,
+        spawnImpl: () => assert.fail('occupied port must fail before process start'),
+        fetchImpl: async () => ({ status: 200 }),
+        attempts: 1,
+      }),
+      /runner_application_smoke_port_conflict/,
+    );
+  });
+
+  test('prerequisite adapter inventory is exact and production dependencies dispatch through it', () => {
+    assert.deepEqual(SYS01_PREREQUISITE_ADAPTERS, [
+      'backup',
+      'restore',
+      'candidate-create',
+      'baseline-bootstrap',
+      'transfer',
+      'validate',
+    ]);
+    const source = readFileSync(
+      path.join(repositoryRoot, 'scripts/db/sys01-controlled-local-dev-rebuild.mjs'),
+      'utf8',
+    );
+    for (const adapter of SYS01_PREREQUISITE_ADAPTERS) {
+      assert.equal(source.includes(`adapter: '${adapter}'`), true);
+    }
+    assert.equal(source.includes('ZMTG_SYS01_READINESS_EVIDENCE_SHA256'), false);
+    assert.equal(source.includes('ZMTG_SYS01_APPLICATION_SMOKE_EVIDENCE_SHA256'), false);
+    assert.equal(source.includes('runSys01PrerequisiteAdapterBehaviorV1'), false);
+  });
+
   test('all future phase executors are wired while tests can still inject every destructive dependency', () => {
     const source = readFileSync(
       path.join(repositoryRoot, 'scripts/db/sys01-controlled-local-dev-rebuild.mjs'),
@@ -1005,11 +1616,12 @@ describe('S26 controlled runner guards and mapping', () => {
     );
     assert.equal(source.includes('runner_phase_executor_not_configured'), false);
     for (const adapter of [
-      'restoreEncryptedBackup(env, rootDir, executionManifest)',
-      'createCandidateDatabase(env)',
-      'bootstrapCandidateBaseline(env, bundle)',
-      'transferCandidateData(env, executionManifest)',
-      'inspectCandidateValidation(env, bundle, executionManifest)',
+      'async function createEncryptedBackup(',
+      'async function restoreEncryptedBackup(',
+      'async function createCandidateDatabase(',
+      'async function bootstrapCandidateBaseline(',
+      'async function transferCandidateData(',
+      'async function inspectCandidateValidation(',
       'inspectRollbackReadiness(env, bundle, executionManifest)',
       'inspectCutoverReadiness(env, bundle, executionManifest)',
       'verifyPostCutover(env, bundle, executionManifest)',
