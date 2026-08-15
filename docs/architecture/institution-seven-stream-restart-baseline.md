@@ -1,25 +1,34 @@
 # 机构端七条业务线重启基线
 
 - 日期：2026-08-15
-- 基线：`afea901fad078ae45bd9815d5d6513d833f3449d`
-- 来源：S27 SYS-01 controlled rebuild execution Admission
+- 基线：`73edd17666426dd4aedf304fcc7f89dd2b075369`
+- 来源：S28 Customers CUS-01 readonly Fresh Admission
 - POST-V2-R1C：正式收口
 - 七线开发入口：ready
 - 七线正式发布：0/7
 - 已发布受治理页面切片：2/26（`page_workbench`、`page_system_audit`）
 - 受控创建能力发布：0/3
 - 首选业务线：`system`（S26 baseline/rebuild tooling 已实现并经隔离 PostgreSQL 实证；S27 因 evidence issuer、backup key source 与 low-level adapter behavior tests 未闭合，rebuild execution 仍未准入）
-- 第二候选：`customers`
+- 第二候选：`customers`（CUS-01 Reader/API exact 11-file Admission ready；page 继续隐藏）
 - 本文性质：当前开发入口基线，不是 Runtime、数据库或 Migration 授权
 
-## 零、S27 SYS-01 当前入口状态
+## 零、S28 七线当前入口状态
 
 ```text
-STAGE=S27
-STREAM=system
-SLICE=SYS_01_AI_USAGE_READONLY
-COMPLETION_MODE=EXECUTION_ADMISSION_COMPLETE_BLOCKED
-BASELINE=afea901fad078ae45bd9815d5d6513d833f3449d
+STAGE=S28
+STREAM=customers
+SLICE=CUS_01_READONLY
+COMPLETION_MODE=ADMISSION_READY_READER_API_PAGE_HIDDEN
+BASELINE=73edd17666426dd4aedf304fcc7f89dd2b075369
+
+S27_PR=1225
+S27_HEAD=d9741603cff3639032fcfd8359874204dae973da
+S27_MERGE=73edd17666426dd4aedf304fcc7f89dd2b075369
+S27_REQUIRED_CHECKS=passed
+S27_ACTIONABLE_P0_P1_P2_P3=0
+S27_POST_MERGE_REVIEW_DEBT=0
+S27_COMPLETE=true
+S27_FORMAL_CLOSURE=true
 
 S26_IMPLEMENTATION_WORK_COMPLETE=true
 S26_RUNTIME_PR=1224
@@ -33,55 +42,58 @@ S26_POST_MERGE_REVIEW_DEBT=0
 S26_COMPLETE=true
 S26_FORMAL_CLOSURE=true
 
-SYS01_RUNTIME_ADMISSION_READY=false
-SYS01_DATA_READINESS=blocked
-SYS01_TENANT_ISOLATION_SAFE=true
-SYS01_INSTITUTION_ISOLATION_SAFE=false
+CUS01_FACT_OWNER=public.customers
+CUS01_COMMAND_OWNER=src/modules/customers
+CUS01_REPOSITORY_OWNER=src/modules/customers
+CUS01_READ_MODEL_OWNER=src/modules/customer-center
+CUS01_PRESENTATION_OWNER=src/modules/customer-center
+CUS01_FORMAL_LIST_READER_EXISTS=false
+CUS01_CURRENT_API=/api/institution/customers
+CUS01_VERSIONED_API_EXISTS=false
+CUS01_TARGET_VERSIONED_API=/api/v1/institution/customers
+CUS01_CANONICAL_PAGE=/hospital/customers
+CUS01_CAPABILITY_KEY=page_customer_list
 
 ORIGINAL_PUBLIC_TABLE_COUNT=55
 ORIGINAL_INVENTORY_TABLE_COUNT=56
 TABLE_CLASSIFICATION_COMPLETE=true
 UNKNOWN_TABLE_CLASSIFICATION_COUNT=0
 
-TENANT_COUNT=6
-AUTH_USER_COUNT=11
-TENANT_MEMBER_COUNT=11
-BINDING_COUNT=0
 CUSTOMER_COUNT=9
-AUDIT_ROW_COUNT=252
-AI_USAGE_ROW_COUNT=0
-TABLE_SET_MATCHES_S24_MAPPING=true
-SEMANTIC_SOURCE_DRIFT_COUNT=0
+CUSTOMER_NULL_INSTITUTION_COUNT=0
+CUSTOMER_NULL_TENANT_COUNT=0
+CUSTOMER_DISTINCT_TENANT_COUNT=2
+CUSTOMER_DISTINCT_TENANT_INSTITUTION_PAIR_COUNT=2
+CUSTOMER_TENANT_ORPHAN_COUNT=0
+CUSTOMER_DUPLICATE_PRIMARY_KEY_COUNT=0
+CUS01_DATA_READINESS=ready
 
-BASELINE_ARTIFACT_IMPLEMENTED=true
-CONTROLLED_REBUILD_TOOL_IMPLEMENTED=true
-BASELINE_SQL_ISOLATED_POSTGRES_APPLY_VERIFIED=true
-CATALOG_FINGERPRINT_EQUAL=true
+CUS01_SCHEMA_CHANGE_REQUIRED=false
+CUS01_MIGRATION_REQUIRED=false
+CUS01_READER_ADMISSION_READY=true
+CUS01_API_ADMISSION_READY=true
+CUS01_PAGE_RELEASE_ADMISSION_READY=false
+CUS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=true
+CUS01_EXACT_RUNTIME_FILE_COUNT=11
+CUS01_EXACT_PRODUCTION_FILE_COUNT=6
+CUS01_EXACT_TEST_FILE_COUNT=5
+CUS01_RUNTIME_IMPLEMENTATION=false
 
-BACKUP_ADAPTER_IMPLEMENTED=true
-RESTORE_ADAPTER_IMPLEMENTED=true
-CANDIDATE_CREATE_ADAPTER_IMPLEMENTED=true
-BASELINE_BOOTSTRAP_ADAPTER_IMPLEMENTED=true
-TRANSFER_ADAPTER_IMPLEMENTED=true
-VALIDATION_ADAPTER_IMPLEMENTED=true
-LOW_LEVEL_ADAPTER_TEST_COVERAGE_SUFFICIENT=false
-READINESS_AND_SMOKE_EVIDENCE_ISSUERS_AVAILABLE=false
-BACKUP_ENCRYPTION_KEY_SOURCE_AVAILABLE=false
-MIGRATION_CHILD_SPAWN_TOCTOU_PRESENT=true
-MIGRATION_CHILD_SPAWN_TOCTOU_BLOCKS_REBUILD_EXECUTION=false
-FUTURE_MIGRATION_HARDENING_REQUIRED=true
 REBUILD_EXECUTION_ADMISSION_READY=false
 
-PRIMARY_BLOCKING_PREREQUISITE=deterministic_readiness_and_application_smoke_evidence_issuers_plus_private_backup_key_source_and_low_level_adapter_behavior_tests
-NEXT_STAGE=UNASSIGNED
-NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEMENTATION_ADMISSION
-NEXT_TASK_AUTHORIZED=false
+NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEMENTATION_ADMISSION
+NEXT_SYSTEM_TASK_AUTHORIZED=false
+NEXT_CUSTOMERS_TASK=SEVEN_STREAM_CUSTOMERS_CUS_01_READONLY_EXACT_11_FILE_RUNTIME_IMPLEMENTATION
+NEXT_CUSTOMERS_TASK_AUTHORIZED=false
+NEXT_CARE_TASK=SEVEN_STREAM_CARE_FORMAL_FRESH_ADMISSION
+NEXT_CARE_TASK_AUTHORIZED=false
+CARE_FORMAL_RUNTIME_BLOCKED_UNTIL_CUSTOMERS_READINESS=true
 NEXT_STAGE_AUTO_EXECUTION=false
 ```
 
 S20 frozen architecture 继续有效：AI usage facts、command 与正式 read source 由 `analytics` 持有，`institution-system` 持有低敏 read model 与 presentation，cross-owner composition 位于 `src/server/orchestration/**`；canonical API 为 `/api/v1/institution/ai-service-usage`，旧 `/api/institution/ai-service-usage` 保持 capability-off compatibility-only。
 
-S21 安全启动既有 Colima/PostgreSQL 后，loopback transaction-read-only audit 成功，AI usage cohort 为 0，但缺失 `institution_scopes`。S22/S23 排除了 all-pending 与原地 phased replay。S24 fresh 枚举 55 张 public 表与 Drizzle journal，完成 56-row 唯一 classification、42 张保留/特殊表 mapping、backup/restore、side-by-side candidate、validation、cutover 与 rollback contract。S25 冻结 `DRIZZLE_JOURNAL_BASELINE_MARKER` provenance。S26 实现 exact 6-file tooling 并完成隔离 PostgreSQL apply 与 catalog fingerprint 等值实证。S27 fresh original read-only audit 证明 S24 source contract 未漂移，但 execution control plane 仍缺四类 deterministic issuer、合法 backup key source 与 low-level adapter behavior tests，故 rebuild 继续禁止。Canonical evidence：`docs/operations/seven-stream-system-sys01-controlled-local-dev-rebuild-execution-admission-20260815.md`。
+S21—S27 已从 source audit 推进到 baseline/rebuild tooling 实现与隔离 PostgreSQL 实证；System execution 仍因 deterministic issuer、backup key source 与 low-level adapter tests 缺口禁止。S28 fresh 证明 9/9 customer facts 的 persisted tenant/institution pair 完整，四机构角色均具 customer read policy，现有 schema 足以实现正式 list Reader 与 versioned API；exact 11-file Runtime slice 已冻结，page 不在 allowlist并继续 hidden。Canonical evidence：`docs/operations/seven-stream-customers-cus01-readonly-fresh-admission-20260815.md`。
 
 ## 一、统一完成尺度
 
@@ -118,7 +130,7 @@ NO_NEW_FOUNDATION_BY_DEFAULT=true
 | Rank | Stream | 当前 Runtime | 正式 API / 页面 | 权威数据与权限 | 当前 blocker | 下一有限切片 |
 |---:|---|---|---|---|---|---|
 | 1 | 管理中心 `system` | `institution-system` 36 files；Audit owner 已完成 Writer/Reader/role closure；baseline/rebuild tooling 已实现 | `/hospital/system/audit` 与 `/api/institution/audit-events` 已 admin-only release；AI usage/entitlement 仍 off | SYS-01 static Reader/role/DTO 已冻结；56-row data inventory 与 marker baseline contract 已冻结 | deterministic readiness/smoke issuers、backup key source、low-level adapter behavior tests | rebuild execution prerequisite exact Admission（未授权） |
-| 2 | 客户中心 `customers` | `customer-center` 14 + `customers` 7；command/object fact 存在 | `/api/institution/customers` 与 canonical 页面 off | `customers.institution_id` nullable；S19 未连接 DB | 正式 Reader、数据完整性、object guard 与 low-sensitive DTO | `CUS_01_READONLY_FRESH_ADMISSION`，排在 SYS-01 后 |
+| 2 | 客户中心 `customers` | `customer-center` 14 + `customers` 7；command/object fact 存在 | legacy API 503；versioned API 不存在；canonical page hidden | 9/9 persisted pair，null/orphan/duplicate=0；四角色 read policy成立 | formal list Reader 尚未实现；future candidate preservation待 System | CUS-01 exact 11-file Reader/API Runtime（未授权） |
 | 3 | 预约与随访 `care` | `care` 30；domain/command/repository/transaction 较成熟 | appointments/followups 主 API 与页面 off | institution 历史形状 nullable；read model 未闭环 | Customer 稳定引用、正式 Reader/API/page | 人工随访只读/人工闭环 fresh Admission |
 | 4 | 知识库 `knowledge` | `institution-knowledge` 8 + `knowledge` 8；旧/new runtime 并存 | items 根 API 与页面 off | 旧 preview/mock/demo 与正式事实边界未退出 | MIG-03、Reader、worker/OCR/index 与低敏授权 | 资料库只读 fresh Admission |
 | 5 | 会话工作台 `conversations` | `institution-conversations` 24；domain 状态机较强 | 无正式 conversations API/page | 无正式 persistence、assignment/identity facts | MIG-04 与真实渠道后置审批 | domain/persistence Admission，不发布页面 |
@@ -162,7 +174,7 @@ FIRST_STREAM_NEXT_ATOMIC_TASK=SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEM
 
 `system` 是唯一已有真实、持久化、角色感知并正式发布子页的业务线，复用 Foundation 的证据最强。S20 已冻结 SYS-01 的 owner、Reader、composition、API、角色与 DTO；S21 已连接 actual DB；S22 证明不是简单运行全部 pending 即可恢复；S23 排除了原地 replay。S24 已证明 6/11/11 数据、252 条 Audit 与全部 56 个 table inventory 可保留，并冻结 side-by-side safety contract；S25 已形成正式 baseline provenance 与 future lineage 表示；S26 已实现并隔离实证 baseline/rebuild tooling。S27 只读审计未发现 source drift，但 execution 因 issuer、key source 与 low-level tests 缺口保持 blocked。
 
-`customers` 无外部系统且是 Care/Workbench 上游，排第二；但主 Reader/API/data readiness 尚未闭环，不能先于当前证据更强的 `system`。
+`customers` 无外部系统且是 Care/Workbench 上游，排第二。S28 已闭合 data readiness、owner、角色、DTO、pagination 与 exact Reader/API allowlist；Runtime 尚未实施，page 继续隐藏。其 exact Runtime 可在下一轮显式授权后推进，但不得把 System rebuild 等待窗口或 Care backlog解释成当前授权。
 
 ## 六、数据与 Migration 停止线
 
@@ -190,9 +202,12 @@ FIRST_STREAM_NEXT_ATOMIC_TASK=SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEM
 ## 八、下一任务
 
 ```text
-NEXT_STAGE=UNASSIGNED
-NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEMENTATION_ADMISSION
-NEXT_TASK_AUTHORIZED=false
+NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEMENTATION_ADMISSION
+NEXT_SYSTEM_TASK_AUTHORIZED=false
+NEXT_CUSTOMERS_TASK=SEVEN_STREAM_CUSTOMERS_CUS_01_READONLY_EXACT_11_FILE_RUNTIME_IMPLEMENTATION
+NEXT_CUSTOMERS_TASK_AUTHORIZED=false
+NEXT_CARE_TASK=SEVEN_STREAM_CARE_FORMAL_FRESH_ADMISSION
+NEXT_CARE_TASK_AUTHORIZED=false
 NEXT_STAGE_AUTO_EXECUTION=false
 SEVEN_STREAM_RUNTIME_IMPLEMENTED=false
 DATABASE_WRITE_EXECUTION_AUTHORIZED=false
@@ -200,4 +215,4 @@ MIGRATION_EXECUTION_AUTHORIZED=false
 PROVISIONING_WRITE_EXECUTION_AUTHORIZED=false
 ```
 
-S27 canonical evidence：`docs/operations/seven-stream-system-sys01-controlled-local-dev-rebuild-execution-admission-20260815.md`。S26 implementation evidence：PR #1224。S25 baseline governance evidence：`docs/operations/seven-stream-system-sys01-candidate-migration-baseline-governance-admission-20260815.md`。
+S28 canonical evidence：`docs/operations/seven-stream-customers-cus01-readonly-fresh-admission-20260815.md`。S27 System execution evidence：`docs/operations/seven-stream-system-sys01-controlled-local-dev-rebuild-execution-admission-20260815.md`。

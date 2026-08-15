@@ -1,5 +1,101 @@
 # 项目重构历史
 
+<!-- SEVEN_STREAM_CUSTOMERS_CUS01_READONLY_ADMISSION_HISTORY -->
+
+## 2026-08-15：Customers CUS-01 readonly Fresh Admission 冻结 Reader/API exact scope，page 保持隐藏
+
+```text
+STAGE=S28
+STREAM=customers
+SLICE=CUS_01_READONLY
+TASK=SEVEN_STREAM_CUSTOMERS_CUS_01_READONLY_FRESH_ADMISSION
+COMPLETION_MODE=ADMISSION_READY_READER_API_PAGE_HIDDEN
+BASELINE=73edd17666426dd4aedf304fcc7f89dd2b075369
+
+S27_PR=1225
+S27_HEAD=d9741603cff3639032fcfd8359874204dae973da
+S27_MERGE=73edd17666426dd4aedf304fcc7f89dd2b075369
+S27_REQUIRED_CHECKS=passed
+S27_ACTIONABLE_P0_P1_P2_P3=0
+S27_POST_MERGE_REVIEW_DEBT=0
+S27_COMPLETE=true
+S27_FORMAL_CLOSURE=true
+
+CUS01_FACT_OWNER=public.customers
+CUS01_COMMAND_OWNER=src/modules/customers
+CUS01_REPOSITORY_OWNER=src/modules/customers
+CUS01_READ_MODEL_OWNER=src/modules/customer-center
+CUS01_PRESENTATION_OWNER=src/modules/customer-center
+CUS01_FORMAL_LIST_READER_EXISTS=false
+
+CUS01_CURRENT_API=/api/institution/customers
+CUS01_CURRENT_API_STATE=capability_off_compatibility_only_503
+CUS01_VERSIONED_API_EXISTS=false
+CUS01_TARGET_VERSIONED_API=/api/v1/institution/customers
+CUS01_CANONICAL_PAGE=/hospital/customers
+CUS01_CAPABILITY_KEY=page_customer_list
+
+TENANT_ADMIN_CUS01_ALLOWED=true
+TENANT_OPERATOR_CUS01_ALLOWED=true
+CONSULTANT_CUS01_ALLOWED=true
+CUSTOMER_SERVICE_CUS01_ALLOWED=true
+
+CUSTOMER_COUNT=9
+CUSTOMER_NULL_INSTITUTION_COUNT=0
+CUSTOMER_NULL_TENANT_COUNT=0
+CUSTOMER_DISTINCT_TENANT_COUNT=2
+CUSTOMER_DISTINCT_TENANT_INSTITUTION_PAIR_COUNT=2
+CUSTOMER_TENANT_ORPHAN_COUNT=0
+CUSTOMER_DUPLICATE_PRIMARY_KEY_COUNT=0
+CUS01_DATA_READINESS=ready
+
+CUS01_LOW_SENSITIVE_DTO=contractVersion,customerId,displayName,lifecycle,priority,updatedAt
+CUS01_SCHEMA_CHANGE_REQUIRED=false
+CUS01_MIGRATION_REQUIRED=false
+CUS01_READER_ADMISSION_READY=true
+CUS01_API_ADMISSION_READY=true
+CUS01_PAGE_RELEASE_ADMISSION_READY=false
+CUS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=true
+CUS01_EXACT_RUNTIME_FILE_COUNT=11
+CUS01_EXACT_PRODUCTION_FILE_COUNT=6
+CUS01_EXACT_TEST_FILE_COUNT=5
+CUS01_RUNTIME_IMPLEMENTATION=false
+
+DATABASE_CONNECTION=true
+DATABASE_TRANSACTION_READ_ONLY=true
+DATABASE_WRITE_ON_ORIGINAL_55433=false
+SCHEMA_CHANGE=false
+MIGRATION_EXECUTION=false
+DDL_EXECUTION=false
+DML_EXECUTION=false
+STAGING_CHANGE=false
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+
+NEXT_CUSTOMERS_TASK=SEVEN_STREAM_CUSTOMERS_CUS_01_READONLY_EXACT_11_FILE_RUNTIME_IMPLEMENTATION
+NEXT_CUSTOMERS_TASK_AUTHORIZED=false
+NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEMENTATION_ADMISSION
+NEXT_SYSTEM_TASK_AUTHORIZED=false
+NEXT_CARE_TASK=SEVEN_STREAM_CARE_FORMAL_FRESH_ADMISSION
+NEXT_CARE_TASK_AUTHORIZED=false
+CARE_FORMAL_RUNTIME_BLOCKED_UNTIL_CUSTOMERS_READINESS=true
+NEXT_STAGE_AUTO_EXECUTION=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=2
+SEVEN_STREAM_FORMAL_RELEASE_COUNT=0
+CONTROLLED_CREATE_RELEASE_COUNT=0
+```
+
+- fresh ownership 将 `public.customers` 定为 fact owner、`customers` 定为 command/repository owner、`customer-center` 定为 read model/presentation owner；legacy institution tenant-business repository 保持 compatibility-only。
+- original `127.0.0.1:55433` 只读 audit 证明 9/9 customer persisted pair 非空，2 个 distinct pairs，tenant orphan 与 duplicate PK 均为 0；所有 SQL 在 startup/transaction read-only 下执行并 ROLLBACK。
+- 四机构角色均由 current section/action policy允许 customer read；Runtime 仍须逐 request 取得 formal scope，并对每条 source row pair做 fail-closed corroboration。
+- V1 DTO、fixed sort、20 rows/page、max page 100 与 lifecycle/priority filters 已冻结；free-text search、phone/email/medical/notes/external IDs 不属于 first slice。
+- exact 11-file Runtime allowlist 为 6 production + 5 tests；独立冻结 one-shot formal authorization 与 Reader composition，再覆盖 customer repository、`/api/v1/institution/customers` GET 及 exact tests；不包含旧 API、page、Capability Authority、Schema 或 Migration。
+- 本阶段没有实施 Runtime、执行 DB write 或发布 page；`page_customer_list` 保持 hidden/not_released。
+
+Canonical evidence：`docs/operations/seven-stream-customers-cus01-readonly-fresh-admission-20260815.md`。
+
+<!-- SEVEN_STREAM_CUSTOMERS_CUS01_READONLY_ADMISSION_HISTORY_END -->
+
 <!-- SEVEN_STREAM_SYSTEM_SYS01_REBUILD_EXECUTION_ADMISSION_HISTORY -->
 
 ## 2026-08-15：System SYS-01 controlled rebuild execution Admission 正式收口，execution 继续阻断
