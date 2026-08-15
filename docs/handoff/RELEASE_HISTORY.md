@@ -1,5 +1,106 @@
 # 项目重构历史
 
+<!-- SEVEN_STREAM_SYSTEM_SYS01_CONTROLLED_REBUILD_ADMISSION_HISTORY -->
+
+## 2026-08-15：System SYS-01 controlled local-development rebuild Admission 工作完成，正式合并前仍阻断
+
+```text
+STAGE=S24
+STREAM=system
+SLICE=SYS_01_AI_USAGE_READONLY
+TASK=SEVEN_STREAM_SYSTEM_SYS_01_CONTROLLED_LOCAL_DEVELOPMENT_DATABASE_REBUILD_ADMISSION
+COMPLETION_MODE=CONTROLLED_REBUILD_ADMISSION_COMPLETE_BLOCKED
+BASELINE=e29f0373e10dbab32cb307e4c61aa984e937a9b8
+
+ORIGINAL_DB_JOURNAL_HEAD=0037_v08_05b_b3a_real_task_readiness_foundation
+ORIGINAL_PUBLIC_TABLE_COUNT=55
+ORIGINAL_INVENTORY_TABLE_COUNT=56
+TABLE_CLASSIFICATION_COMPLETE=true
+UNKNOWN_TABLE_CLASSIFICATION_COUNT=0
+
+MUST_PRESERVE_TABLE_COUNT=37
+RECONSTRUCTABLE_TABLE_COUNT=0
+DERIVED_TABLE_COUNT=5
+EPHEMERAL_TABLE_COUNT=4
+SECRET_SENSITIVE_TABLE_COUNT=3
+DO_NOT_COPY_TABLE_COUNT=1
+SPECIAL_MAPPING_TABLE_COUNT=6
+
+TENANT_COUNT=6
+AUTH_USER_COUNT=11
+TENANT_MEMBER_COUNT=11
+BINDING_COUNT=0
+AUDIT_ROW_COUNT=252
+AI_USAGE_ROW_COUNT=0
+
+OPTION_A_FEASIBLE=false
+OPTION_B_FEASIBLE=false
+OPTION_B_JOURNAL_SAFE=false
+OPTION_B_FUTURE_MIGRATION_SAFE=false
+OPTION_C_FEASIBLE=true_as_governance_design_direction_only
+OPTION_C_REQUIRES_NEW_BASELINE_ARTIFACT=true
+OPTION_D_FEASIBLE=false
+
+SELECTED_CANDIDATE_SCHEMA_STRATEGY=blocked_no_safe_candidate_schema_strategy
+CANDIDATE_MIGRATION_BASELINE_STRATEGY=not_frozen_blocked_pending_formal_baseline_governance
+SELECTED_DATA_TRANSFER_MECHANISM=controlled_application_level_table_by_table_copy
+REBUILD_VALIDATION_MATRIX_FROZEN=true
+
+CONTROLLED_REBUILD_TOOL_IMPLEMENTATION_REQUIRED=true
+CONTROLLED_REBUILD_EXACT_ALLOWLIST_FROZEN=false
+CONTROLLED_REBUILD_EXACT_FILE_COUNT=0
+REBUILD_EXECUTION_ADMISSION_READY=false
+SYS01_RUNTIME_ADMISSION_READY=false
+
+TARGETED_TEST_FILES=18
+TARGETED_TESTS=652/652 passed
+TYPECHECK=passed
+ARCHITECTURE_UNIT=148/148 passed
+ARCHITECTURE_INCREMENTAL=passed
+PRODUCTION_READINESS_DOCS=8/8 passed
+GIT_DIFF_CHECK=passed
+
+DATABASE_CONNECTION=true
+DATABASE_TRANSACTION_READ_ONLY=true
+DATABASE_QUERY_EXECUTED=true
+DATABASE_WRITE_EXECUTION=false
+DATABASE_REBUILD_EXECUTION=false
+DATABASE_CREATE=false
+DATABASE_DROP=false
+DATABASE_RESET=false
+BACKUP_EXECUTION=false
+RESTORE_EXECUTION=false
+MIGRATION_EXECUTION=false
+PROVISIONING_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+DDL_EXECUTION=false
+DML_EXECUTION=false
+SEED_EXECUTION=false
+RUNTIME_IMPLEMENTATION=false
+STAGING_CHANGE=false
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+
+PRIMARY_BLOCKING_PREREQUISITE=no_repository_supported_candidate_baseline_can_represent_current_schema_and_remain_future_migration_safe_without_falsifying_0038_0045_history
+NEXT_STAGE=UNASSIGNED
+NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CANDIDATE_MIGRATION_BASELINE_GOVERNANCE_ADMISSION
+NEXT_TASK_AUTHORIZED=false
+NEXT_STAGE_AUTO_EXECUTION=false
+S24_ADMISSION_WORK_COMPLETE=true
+S24_COMPLETE=false_pending_explicit_ready_merge_authorization
+S24_FORMAL_MERGE_CLOSURE=false
+```
+
+- strict startup/transaction read-only audit fresh 枚举 55 张 public 表与 Drizzle journal；56 张表全部唯一分类，`UNKNOWN=0`；
+- 6 Tenant、11 Auth User、11 Membership、0 Binding、252 Audit 与 0 AI usage 均有 exact preservation boundary；禁止删 Membership、猜 institution、改 Audit 历史或输出 secret；
+- 已冻结 repo 外加密 custom-format backup、isolated restore drill、localhost-only candidate、table-by-table transfer、aggregate validation、reversible `.env.local` cutover、rollback 与 stop/no-auto-retry；全部仅为设计，执行均为 0；
+- full replay、schema push bootstrap 与 restore-then-forward 均不能提供可信 candidate migration lineage；derived baseline 只是需独立治理的方向；
+- 因 candidate baseline 尚未冻结，exact rebuild tooling allowlist 不得伪造；下一任务仅处理 baseline artifact、canonical marker/journal semantics 与 future migration safety。
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-controlled-local-dev-rebuild-admission-20260815.md`。
+
+<!-- SEVEN_STREAM_SYSTEM_SYS01_CONTROLLED_REBUILD_ADMISSION_HISTORY_END -->
+
 <!-- SEVEN_STREAM_SYSTEM_SYS01_PHASED_SCHEMA_RECOVERY_ADMISSION_HISTORY -->
 
 ## 2026-08-15：System SYS-01 phased schema recovery 准入选择受控 local-development rebuild

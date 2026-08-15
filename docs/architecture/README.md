@@ -1,5 +1,55 @@
 # 智美天工架构文档索引
 
+<!-- SEVEN_STREAM_SYSTEM_SYS01_CONTROLLED_REBUILD_ADMISSION_START -->
+
+## System SYS-01 controlled local-development database rebuild 准入（2026-08-15）
+
+```text
+STAGE=S24
+STREAM=system
+SLICE=SYS_01_AI_USAGE_READONLY
+COMPLETION_MODE=CONTROLLED_REBUILD_ADMISSION_COMPLETE_BLOCKED
+BASELINE=e29f0373e10dbab32cb307e4c61aa984e937a9b8
+
+ORIGINAL_DB_JOURNAL_HEAD=0037_v08_05b_b3a_real_task_readiness_foundation
+ORIGINAL_PUBLIC_TABLE_COUNT=55
+ORIGINAL_INVENTORY_TABLE_COUNT=56
+TABLE_CLASSIFICATION_COMPLETE=true
+UNKNOWN_TABLE_CLASSIFICATION_COUNT=0
+
+MUST_PRESERVE_TABLE_COUNT=37
+RECONSTRUCTABLE_TABLE_COUNT=0
+DERIVED_TABLE_COUNT=5
+EPHEMERAL_TABLE_COUNT=4
+SECRET_SENSITIVE_TABLE_COUNT=3
+DO_NOT_COPY_TABLE_COUNT=1
+SPECIAL_MAPPING_TABLE_COUNT=6
+
+SELECTED_CANDIDATE_SCHEMA_STRATEGY=blocked_no_safe_candidate_schema_strategy
+CANDIDATE_MIGRATION_BASELINE_STRATEGY=not_frozen_blocked_pending_formal_baseline_governance
+SELECTED_DATA_TRANSFER_MECHANISM=controlled_application_level_table_by_table_copy
+REBUILD_VALIDATION_MATRIX_FROZEN=true
+
+CONTROLLED_REBUILD_TOOL_IMPLEMENTATION_REQUIRED=true
+CONTROLLED_REBUILD_EXACT_ALLOWLIST_FROZEN=false
+CONTROLLED_REBUILD_EXACT_FILE_COUNT=0
+REBUILD_EXECUTION_ADMISSION_READY=false
+SYS01_RUNTIME_ADMISSION_READY=false
+
+PRIMARY_BLOCKING_PREREQUISITE=no_repository_supported_candidate_baseline_can_represent_current_schema_and_remain_future_migration_safe_without_falsifying_0038_0045_history
+NEXT_STAGE=UNASSIGNED
+NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CANDIDATE_MIGRATION_BASELINE_GOVERNANCE_ADMISSION
+NEXT_TASK_AUTHORIZED=false
+```
+
+S24 在 `127.0.0.1:55433` 的 startup/transaction read-only session 内枚举全部 55 张 public 表与 Drizzle journal，完成 56-row 唯一 classification、42 张保留/特殊表 exact mapping、secret/file boundary、加密 backup、隔离 restore drill、side-by-side candidate、validation、cutover、rollback 与 unknown-outcome contract。original 仍是唯一 canonical DB，未执行 backup/restore/create/rebuild/Migration/DDL/DML。
+
+`FULL_CURRENT_MIGRATION_REPLAY` 会撞上 `0039` checkpoint 与 `0041/0043` historical guards；repository 也没有 journal-safe、future-migration-safe 的 current-schema baseline。derived baseline 仅是需要独立治理的方向，不得先伪冻 tooling allowlist。因此 S24 Admission 工作已完成但尚未经过 Ready/Merge 正式收口，execution 仍 blocked；下一原子任务只决定 candidate baseline artifact、canonical marker/journal semantics 与 future migration lineage。
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-controlled-local-dev-rebuild-admission-20260815.md`。
+
+<!-- SEVEN_STREAM_SYSTEM_SYS01_CONTROLLED_REBUILD_ADMISSION_END -->
+
 <!-- SEVEN_STREAM_SYSTEM_SYS01_PHASED_SCHEMA_RECOVERY_ADMISSION_START -->
 
 ## System SYS-01 local-development phased schema recovery 准入（2026-08-15）
