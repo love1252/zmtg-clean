@@ -1,5 +1,61 @@
 # 机构端七条业务线重启基线
 
+## S34 当前入口：SYS-01 controlled rebuild 与 local cutover 已完成
+
+- 初始基线：`2c9c6fdf209c9e5598d8ddea35922ad8ed6e01e1`
+- execution Head：`cf0be4480020dcc4e22e086cb1ba11e924cc78c9`
+- corrective Runtime：PR #1240，Required Check 与 post-merge sweep 通过
+- 结果：十个 phase 全部 `succeeded`，active local database 已切到 candidate
+- 下一阶段：S35 只读重审 formal Scope/Context/Binding 与 SYS-01 Runtime readiness
+
+```text
+STAGE=S34
+TASK=SEVEN_STREAM_SYSTEM_SYS_01_CONTROLLED_LOCAL_DEVELOPMENT_REBUILD_EXECUTION
+S34_EXECUTION_HEAD=cf0be4480020dcc4e22e086cb1ba11e924cc78c9
+S34_CORRECTIVE_RUNTIME_PR=1240
+S34_CORRECTIVE_RUNTIME_HEAD=5a6621c9a0b8c3597c8018c96e53469a4e4fa078
+S34_CORRECTIVE_RUNTIME_MERGE=cf0be4480020dcc4e22e086cb1ba11e924cc78c9
+S34_DOCS_PR=1241
+S34_DOCS_REQUIRED_CHECK=passed
+S34_ACTIONABLE_P0_P1_P2_P3=0
+S34_POST_MERGE_REVIEW_DEBT=0
+
+PREFLIGHT_STATUS=succeeded
+BACKUP_STATUS=succeeded
+RESTORE_DRILL_STATUS=succeeded
+CANDIDATE_CREATE_STATUS=succeeded
+BASELINE_BOOTSTRAP_STATUS=succeeded
+TRANSFER_STATUS=succeeded
+VALIDATE_STATUS=succeeded
+ROLLBACK_READINESS_STATUS=succeeded
+CUTOVER_READINESS_STATUS=succeeded
+POST_CUTOVER_VERIFY_STATUS=succeeded
+
+SOURCE_SCHEMA_FINGERPRINT=3e58d6d2e3e59af776fc81983cd9edd20b26ae9c3e0c59d50545c64594bc2379
+CANDIDATE_SCHEMA_FINGERPRINT=4b93f1ce180ee48c12ded517a087fb3f6d73e7e28ff3be85f883de1d321dfb8c
+SOURCE_AGGREGATE_FINGERPRINT=ee875486fe9d0c21127dcd4fe16ac9c7c9867a1df4fd178b4b257953e10edcce
+CANDIDATE_AGGREGATE_FINGERPRINT=e9945f739627caf69d484b50899534b55058a3dd1b43b6b2b13c0c3d17f3370c
+ORIGINAL_MUTATION_COUNT=0
+
+ACTIVE_LOCAL_DATABASE=candidate
+ORIGINAL_RETAINED=true
+RESTORE_DRILL_RETAINED=true
+CANDIDATE_RETAINED=true
+ENCRYPTED_BACKUP_RETAINED=true
+POST_CUTOVER_VERIFIED=true
+S34_COMPLETE=true
+S34_FORMAL_CLOSURE=true
+
+NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_POST_REBUILD_DATA_AND_RUNTIME_READMISSION
+NEXT_SYSTEM_TASK_AUTHORIZED=true_by_current_ultra_goal_after_S34_merge
+NEXT_STAGE=S35
+NEXT_STAGE_AUTO_EXECUTION=false
+```
+
+初次 `restore-drill` 因双重等价 cast canonicalization false mismatch 按 fail-closed contract 进入 outcome unknown 并停止；PR #1240 以 exact 3-file scope 修复正反 contract，旧 manifest/backup 保留，旧 restore resource 在 merge 后按授权清理。fresh execution 使用新 Head、新 repo-external manifest，从 `preflight` 重新开始。S34 不证明 formal Scope/Context/Binding ready，也没有实施 SYS-01/Care/Knowledge Runtime 或发布新页面。
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-controlled-local-dev-rebuild-execution-20260815.md`。
+
 ## S33 当前入口：Care 首切片已选，data readiness 等待 SYS-01 rebuild
 
 - S33 基线：`5b7023aa78a78ead98c25071cda99c2df978bb89`

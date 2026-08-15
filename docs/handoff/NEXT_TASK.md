@@ -1,5 +1,41 @@
 # 下一任务
 
+## S34 controlled rebuild closure 后的下一原子任务
+
+```text
+S34_COMPLETION_MODE=CONTROLLED_REBUILD_EXECUTION_COMPLETE
+S34_EXECUTION_HEAD=cf0be4480020dcc4e22e086cb1ba11e924cc78c9
+S34_CORRECTIVE_RUNTIME_PR=1240
+S34_CORRECTIVE_RUNTIME_MERGE=cf0be4480020dcc4e22e086cb1ba11e924cc78c9
+S34_DOCS_PR=1241
+S34_DOCS_REQUIRED_CHECK=passed
+S34_POST_MERGE_REVIEW_DEBT=0
+S34_PHASE_SUCCEEDED_COUNT=10
+S34_EXECUTION_MANIFEST_STATE=POST_CUTOVER_VERIFIED
+S34_ORIGINAL_MUTATION_COUNT=0
+S34_ACTIVE_LOCAL_DATABASE=candidate
+S34_POST_CUTOVER_VERIFIED=true
+S34_COMPLETE=true
+S34_FORMAL_CLOSURE=true
+
+NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_POST_REBUILD_DATA_AND_RUNTIME_READMISSION
+NEXT_SYSTEM_TASK_AUTHORIZED=true_by_current_ultra_goal_after_S34_merge
+NEXT_SYSTEM_TASK_MODE=docs_only_plus_candidate_transaction_read_only_audit
+NEXT_SYSTEM_TASK_RUNTIME_IMPLEMENTATION=false
+
+NEXT_CARE_TASK=SEVEN_STREAM_CARE_APPOINTMENTS_READONLY_FRESH_READMISSION_AFTER_SYSTEM_REBUILD
+NEXT_CARE_TASK_AUTHORIZED=true_by_current_ultra_goal_after_S35_merge
+NEXT_KNOWLEDGE_TASK=SEVEN_STREAM_KNOWLEDGE_FORMAL_FRESH_ADMISSION
+NEXT_KNOWLEDGE_TASK_AUTHORIZED=true_by_current_ultra_goal_after_S36_merge
+
+NEXT_STAGE=S35
+NEXT_STAGE_AUTO_EXECUTION=false
+```
+
+S35 必须在 active candidate 内以 transaction-read-only fresh 读取 formal Scope、Context、Binding、membership、AI usage 与 attribution aggregate。controlled rebuild 成功只证明 catalog/data transfer/cutover 闭合；如果 target-only formal facts 仍为空，S35 必须冻结 exact prerequisite，并保持 Runtime allowlist 为 0，不能从 membership、customer pair 或默认机构制造 Scope/Binding。
+
+Canonical S34 evidence：`docs/operations/seven-stream-system-sys01-controlled-local-dev-rebuild-execution-20260815.md`。
+
 ## S33 formal blocker closure 后的下一原子任务
 
 ```text
