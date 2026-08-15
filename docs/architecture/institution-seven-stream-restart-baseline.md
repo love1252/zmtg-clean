@@ -1,5 +1,39 @@
 # 机构端七条业务线重启基线
 
+## S37 当前入口：Knowledge 首切片已选，formal facts 与 scope 均为空
+
+- S36：PR #1243 已合并，Care mapping ready、formal scope blocker 正式记录
+- S37 首切片：`KNOWLEDGE_DOCUMENT_METADATA_LIST_BY_FORMAL_INSTITUTION_SCOPE`
+- candidate：Knowledge 13 个数据 cohort、formal Scope 与 active Binding 均为 0
+- 结论：document metadata 不依赖 AI/OCR/worker；authoritative provenance 与 formal authority 未闭合，Runtime allowlist=0
+
+```text
+STAGE=S37
+BASELINE=ab5b4b12bac381d4eb62c554a35ff476657f7901
+S36_PR=1243
+S36_HEAD=a3d8f2f7c624f2eee50ac2cef94631bae813cdc5
+S36_MERGE=ab5b4b12bac381d4eb62c554a35ff476657f7901
+S36_FORMAL_CLOSURE=true
+
+KNOWLEDGE_SELECTED_FIRST_SLICE=KNOWLEDGE_DOCUMENT_METADATA_LIST_BY_FORMAL_INSTITUTION_SCOPE
+KNOWLEDGE_DATA_READINESS=blocked_authoritative_fact_and_formal_scope_cohorts_empty
+KNOWLEDGE_SCHEMA_CHANGE_REQUIRED=true
+KNOWLEDGE_MIGRATION_REQUIRED=true
+KNOWLEDGE_EXTERNAL_SYSTEM_REQUIRED_FOR_SELECTED_SLICE=false
+KNOWLEDGE_FORMAL_READER_API_AUTH_CHAIN_READY=false
+KNOWLEDGE_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
+KNOWLEDGE_EXACT_RUNTIME_FILE_COUNT=0
+
+NEXT_KNOWLEDGE_TASK=SEVEN_STREAM_KNOWLEDGE_DOCUMENT_METADATA_FORMAL_FACT_PROVENANCE_AND_SCOPE_PROVISIONING_FRESH_ADMISSION
+NEXT_KNOWLEDGE_TASK_AUTHORIZED=false
+NEXT_STAGE=UNASSIGNED
+NEXT_STAGE_AUTO_EXECUTION=false
+```
+
+current source kind 只能表达 `mock|seed|demo`，不能作为正式 Reader provenance；active candidate 又没有 Knowledge rows、formal Scope 或 Binding。`src/modules/knowledge-base/**` 与 legacy institution/open-platform Knowledge 只保持 compatibility，不得成为第二套 formal owner。Canonical fact/repository/read-model/presentation owner 均冻结到 `src/modules/knowledge/**`，cross-owner composition 归 orchestration。
+
+Canonical evidence：`docs/operations/seven-stream-knowledge-formal-fresh-admission-20260815.md`。
+
 ## S36 当前入口：appointments pair 已重建，formal authority 仍为空
 
 - S35：PR #1242 已合并，candidate 上的 formal Scope/Context/Binding cohort 均为空
