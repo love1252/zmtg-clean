@@ -11,8 +11,18 @@ NEXT_STAGE_AUTO_EXECUTION=false
 S25_COMPLETION_MODE=CANDIDATE_BASELINE_GOVERNANCE_ADMISSION_COMPLETE
 S25_BASELINE_GOVERNANCE_ADMISSION=passed
 S25_ADMISSION_WORK_COMPLETE=true
-S25_COMPLETE=false_pending_explicit_ready_merge_authorization
-S25_FORMAL_CLOSURE=false
+S25_TECHNICAL_ADMISSION_ACCEPTED=true
+S25_PR=1222
+S25_HEAD=fb3d28ebb5526b28e168b337754e1722e2db830a
+S25_MERGE=859b35273518d701d1c49b4ed910faba3987f024
+S25_REQUIRED_CHECKS=passed
+S25_ACTIONABLE_P0_P1=0
+S25_ACTIONABLE_P0_P1_P2_P3=0
+S25_UNRESOLVED_REVIEW_THREAD_COUNT=0
+S25_POST_MERGE_REVIEW_DEBT=0
+POST_MERGE_REVIEW_DEBT=0
+S25_COMPLETE=true
+S25_FORMAL_CLOSURE=true
 CURRENT_REPOSITORY_JOURNAL_HEAD=0045_base02_binding_legacy_calibration
 CURRENT_REPOSITORY_SNAPSHOT_HEAD=0026_snapshot
 CURRENT_SCHEMA_TABLE_COUNT=60
@@ -37,6 +47,16 @@ CONTROLLED_REBUILD_EXACT_ALLOWLIST_FROZEN=true
 CONTROLLED_REBUILD_EXACT_FILE_COUNT=6
 REBUILD_EXECUTION_ADMISSION_READY=false
 PRIMARY_BLOCKING_PREREQUISITE=baseline_and_controlled_rebuild_tooling_not_implemented
+S26_AUTHORIZED=false
+S26_RUNTIME_TOOL_IMPLEMENTATION_AUTHORIZED=false
+BASELINE_ARTIFACT_IMPLEMENTATION=false
+REBUILD_TOOL_IMPLEMENTATION=false
+RUNTIME_IMPLEMENTATION=false
+REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=2
+RELEASED_GOVERNED_PAGES=page_workbench,page_system_audit
+PAGE_SYSTEM_AI_USAGE=hidden/not_released
+SEVEN_STREAM_FORMAL_RELEASE_COUNT=0
+CONTROLLED_CREATE_RELEASE_COUNT=0
 S24_COMPLETION_MODE=CONTROLLED_REBUILD_ADMISSION_COMPLETE_BLOCKED
 S24_CONTROLLED_REBUILD_ADMISSION=passed
 S24_ADMISSION_WORK_COMPLETE=true
@@ -149,7 +169,7 @@ PAGE_SYSTEM_AUDIT_RUNTIME_RELEASE_COMPLETE=true
 
 S24 已通过 PR #1221 正式收口：final Head `c0f5ea8d8de3cf1689f64404cbc450389336f24f`，Merge `369ed0724566b2ed83ac3dd95caff9cadcae7a20`，post-merge review debt 为 0。其 56-row inventory、preservation、backup/restore、side-by-side candidate、validation、cutover、rollback 与 unknown-outcome contract 保持有效。
 
-S25 已唯一冻结 `DRIZZLE_JOURNAL_BASELINE_MARKER`：reviewed current-schema SQL artifact、immutable manifest 与 marker-only journal provenance；不写 46 条伪历史、不复用 `0045` SQL hash，legacy-chain DB 不改写，两种 origin 消费同一 future common tail。baseline/rebuild exact 6-file allowlist 已冻结。下一原子任务只可在显式授权下实现这 6 个文件；不得自动生成 artifact、实现 tooling、执行 create/backup/restore/Migration/DDL/DML 或进入 SYS-01 Runtime。
+S25 已唯一冻结 `DRIZZLE_JOURNAL_BASELINE_MARKER`：reviewed current-schema SQL artifact、immutable manifest 与 marker-only journal provenance；不写 46 条伪历史、不复用 `0045` SQL hash，legacy-chain DB 不改写，两种 origin 消费同一 future common tail。Admission PR #1222 已合并且 post-merge Review debt 为 0，S25 正式收口；baseline/rebuild exact 6-file allowlist 保持不变。下一原子任务只可在显式授权下实现这 6 个文件；不得自动生成 artifact、实现 tooling、执行 create/backup/restore/Migration/DDL/DML 或进入 SYS-01 Runtime。
 
 S25 canonical evidence：`docs/operations/seven-stream-system-sys01-candidate-migration-baseline-governance-admission-20260815.md`。
 

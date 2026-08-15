@@ -2,7 +2,7 @@
 
 ## 结论
 
-S25 在 `369ed0724566b2ed83ac3dd95caff9cadcae7a20` 上完成纯仓库审计。唯一准入策略是 `DRIZZLE_JOURNAL_BASELINE_MARKER`：以一份受审查的 current-schema schema-only SQL artifact、不可变 manifest 和 `drizzle.__drizzle_migrations` 中一条明确标识为 baseline 的 marker，表达 side-by-side local-development candidate 的合法 current-schema 起点。
+S25 在 `369ed0724566b2ed83ac3dd95caff9cadcae7a20` 上完成纯仓库审计。唯一准入策略是 `DRIZZLE_JOURNAL_BASELINE_MARKER`：以一份受审查的 current-schema schema-only SQL artifact、不可变 manifest 和 `drizzle.__drizzle_migrations` 中一条明确标识为 baseline 的 marker，表达 side-by-side local-development candidate 的合法 current-schema 起点。Admission PR #1222 已以 Head `fb3d28ebb5526b28e168b337754e1722e2db830a` 合并为 `859b35273518d701d1c49b4ed910faba3987f024`，Required Check 通过且 post-merge Review debt 为 0；S25 已正式收口。
 
 marker 不是 `0000..0045` 中任何 Migration 的执行记录：candidate 不写入 46 条伪历史，不复用 `0045` SQL hash，也不声明 `0038..0045 applied=true`。它只以 `0045` journal entry 的 `when` 作为 future common-tail 的 parent 高水位；自 parent 之后的未来 Migration 仍使用仓库唯一 journal 和原 SQL hash。已有 legacy-chain 数据库不加 marker、不 rebase、不改 journal。
 
@@ -31,11 +31,23 @@ CONTROLLED_REBUILD_EXACT_ALLOWLIST_FROZEN=true
 REBUILD_EXECUTION_ADMISSION_READY=false
 
 S25_ADMISSION_WORK_COMPLETE=true
-S25_COMPLETE=false_pending_explicit_ready_merge_authorization
-S25_FORMAL_CLOSURE=false
+S25_TECHNICAL_ADMISSION_ACCEPTED=true
+S25_PR=1222
+S25_HEAD=fb3d28ebb5526b28e168b337754e1722e2db830a
+S25_MERGE=859b35273518d701d1c49b4ed910faba3987f024
+S25_REQUIRED_CHECKS=passed
+S25_ACTIONABLE_P0_P1=0
+S25_ACTIONABLE_P0_P1_P2_P3=0
+S25_UNRESOLVED_REVIEW_THREAD_COUNT=0
+S25_POST_MERGE_REVIEW_DEBT=0
+POST_MERGE_REVIEW_DEBT=0
+S25_COMPLETE=true
+S25_FORMAL_CLOSURE=true
 NEXT_STAGE=S26
 NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CANDIDATE_BASELINE_AND_CONTROLLED_REBUILD_TOOL_EXACT_IMPLEMENTATION
 NEXT_TASK_AUTHORIZED=false
+S26_AUTHORIZED=false
+S26_RUNTIME_TOOL_IMPLEMENTATION_AUTHORIZED=false
 NEXT_STAGE_AUTO_EXECUTION=false
 ```
 
@@ -299,6 +311,7 @@ SCHEMA_CHANGE=false
 DDL_EXECUTION=false
 DML_EXECUTION=false
 SEED_EXECUTION=false
+BASELINE_ARTIFACT_IMPLEMENTATION=false
 REBUILD_TOOL_IMPLEMENTATION=false
 RUNTIME_IMPLEMENTATION=false
 STAGING_CHANGE=false
@@ -310,11 +323,14 @@ SYS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
 SYS01_RUNTIME_IMPLEMENTED=false
 PAGE_SYSTEM_AI_USAGE=hidden/not_released
 REVIEW_ACCEPTED_GOVERNED_PAGE_RELEASE_COUNT=2
+RELEASED_GOVERNED_PAGES=page_workbench,page_system_audit
 SEVEN_STREAM_FORMAL_RELEASE_COUNT=0
 CONTROLLED_CREATE_RELEASE_COUNT=0
 
 NEXT_STAGE=S26
 NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CANDIDATE_BASELINE_AND_CONTROLLED_REBUILD_TOOL_EXACT_IMPLEMENTATION
 NEXT_TASK_AUTHORIZED=false
+S26_AUTHORIZED=false
+S26_RUNTIME_TOOL_IMPLEMENTATION_AUTHORIZED=false
 NEXT_STAGE_AUTO_EXECUTION=false
 ```
