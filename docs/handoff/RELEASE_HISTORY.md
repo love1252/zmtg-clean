@@ -1,5 +1,92 @@
 # 项目重构历史
 
+<!-- SEVEN_STREAM_SYSTEM_SYS01_AI_USAGE_DB_READINESS_REAUDIT_HISTORY -->
+
+## 2026-08-15：System SYS-01 AI 使用只读 DB readiness 复审完成但 schema parity 阻断
+
+```text
+STAGE=S21
+STREAM=system
+SLICE=SYS_01_AI_USAGE_READONLY
+COMPLETION_MODE=READINESS_REAUDIT_COMPLETE_BLOCKED
+BASELINE=d8293ee64c1d051b123d022a6764b0c191084ca1
+
+LOCAL_RUNTIME_TYPE=colima/docker
+LOCAL_RUNTIME_PROFILE=default
+LOCAL_RUNTIME_WAS_RUNNING_BEFORE=false
+LOCAL_RUNTIME_START_EXECUTED=true
+LOCAL_POSTGRES_SERVICE=zmtg-local-dev-pg
+LOCAL_POSTGRES_EXISTED=true
+LOCAL_POSTGRES_WAS_RUNNING_BEFORE=false
+LOCAL_POSTGRES_START_EXECUTED=true
+
+DATABASE_CONNECTION=true
+DATABASE_TRANSACTION_READ_ONLY=true
+DATABASE_QUERY_EXECUTED=true
+DATABASE_WRITE_EXECUTION=false
+
+ACTUAL_SOURCE_TABLES=public.ai_call_usage_records,public.tenants
+MISSING_REQUIRED_SOURCE_TABLES=public.institution_scopes
+SCHEMA_MATCHES_CURRENT_CODE=false
+TENANT_ROW_COUNT=6
+AI_USAGE_TOTAL_ROW_COUNT=0
+
+PRODUCTION_AI_USAGE_WRITER_COUNT=1
+PRODUCTION_AI_USAGE_ATTRIBUTED_WRITER_COUNT=1
+PRODUCTION_AI_USAGE_LEGACY_WRITER_COUNT=0
+PRODUCTION_AI_USAGE_UNSCOPED_WRITER_COUNT=0
+
+SYS01_DATA_READINESS=blocked
+SYS01_HISTORICAL_COVERAGE_COMPLETE=false
+SYS01_PARTIAL_COVERAGE_SAFE=false
+SYS01_TENANT_ISOLATION_SAFE=true
+SYS01_INSTITUTION_ISOLATION_SAFE=false
+SYS01_READER_LIMIT_SAFE=true
+
+SYS01_SCHEMA_CHANGE_REQUIRED=false
+SYS01_MIGRATION_REQUIRED=true
+SYS01_DML_BACKFILL_REQUIRED=false
+SYS01_RUNTIME_ADMISSION_READY=false
+SYS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
+SYS01_EXACT_RUNTIME_FILE_COUNT=0
+
+TARGETED_TEST_FILES=11
+TARGETED_TESTS=331/331 passed
+TYPECHECK=passed
+ARCHITECTURE_UNIT=148/148 passed
+ARCHITECTURE_INCREMENTAL=passed
+PRODUCTION_READINESS_DOCS=8/8 passed
+GIT_DIFF_CHECK=passed
+
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+MIGRATION=false
+DDL_EXECUTION=false
+DML_EXECUTION=false
+SEED_EXECUTION=false
+RUNTIME_IMPLEMENTATION=false
+STAGING_CHANGE=false
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+
+PRIMARY_BLOCKING_PREREQUISITE=local_development_schema_parity_missing_public_institution_scopes_requires_separately_authorized_migration_admission
+NEXT_STAGE=UNASSIGNED
+NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_LOCAL_DEVELOPMENT_SCHEMA_PARITY_MIGRATION_ADMISSION
+NEXT_TASK_AUTHORIZED=false
+NEXT_STAGE_AUTO_EXECUTION=false
+```
+
+- S21 只启动既有 Colima profile、既有 local-development PostgreSQL container 与既有 volume；没有创建或重建环境；
+- 所有 SQL 先证明 `transaction_read_only=on`，只执行 metadata/aggregate SELECT，并显式 ROLLBACK；数据库写入为 0；
+- actual `ai_call_usage_records` 表与 Reader 必需列齐全，cohort 为 0；`tenants` 为 6 行且 AI usage orphan tenant 为 0；
+- actual DB 缺失 current code schema 已定义的 `institution_scopes`，因此无法证明 formal institution pair authority；readiness 为 blocked，不是 unavailable、partial-safe 或 complete；
+- current canonical writer 是唯一显式 scope writer，legacy writer 已 fail-closed；但 writer 安全与空 cohort 都不能替代 actual schema parity；
+- S21 不执行 Migration、Schema、DDL/DML、Seed 或 Runtime，不冻结 Runtime allowlist；下一任务仅为独立 schema parity Migration Admission。
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-ai-usage-readonly-db-readiness-reaudit-20260815.md`。
+
+<!-- SEVEN_STREAM_SYSTEM_SYS01_AI_USAGE_DB_READINESS_REAUDIT_HISTORY_END -->
+
 <!-- SEVEN_STREAM_SYSTEM_SYS01_AI_USAGE_READONLY_ADMISSION_HISTORY -->
 
 ## 2026-08-15：System SYS-01 AI 使用只读 fresh Admission 完成但 Runtime 准入阻断

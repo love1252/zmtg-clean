@@ -1,5 +1,47 @@
 # 智美天工架构文档索引
 
+<!-- SEVEN_STREAM_SYSTEM_SYS01_AI_USAGE_DB_READINESS_REAUDIT_START -->
+
+## System SYS-01 AI 使用只读 DB readiness 复审（2026-08-15）
+
+```text
+STAGE=S21
+STREAM=system
+SLICE=SYS_01_AI_USAGE_READONLY
+COMPLETION_MODE=READINESS_REAUDIT_COMPLETE_BLOCKED
+BASELINE=d8293ee64c1d051b123d022a6764b0c191084ca1
+
+DATABASE_CONNECTION=true
+DATABASE_TRANSACTION_READ_ONLY=true
+DATABASE_QUERY_EXECUTED=true
+DATABASE_WRITE_EXECUTION=false
+
+ACTUAL_SOURCE_TABLES=public.ai_call_usage_records,public.tenants
+MISSING_REQUIRED_SOURCE_TABLES=public.institution_scopes
+SCHEMA_MATCHES_CURRENT_CODE=false
+AI_USAGE_TOTAL_ROW_COUNT=0
+
+SYS01_DATA_READINESS=blocked
+SYS01_TENANT_ISOLATION_SAFE=true
+SYS01_INSTITUTION_ISOLATION_SAFE=false
+SYS01_SCHEMA_CHANGE_REQUIRED=false
+SYS01_MIGRATION_REQUIRED=true
+SYS01_DML_BACKFILL_REQUIRED=false
+SYS01_RUNTIME_ADMISSION_READY=false
+SYS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
+SYS01_EXACT_RUNTIME_FILE_COUNT=0
+
+PRIMARY_BLOCKING_PREREQUISITE=local_development_schema_parity_missing_public_institution_scopes_requires_separately_authorized_migration_admission
+NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_LOCAL_DEVELOPMENT_SCHEMA_PARITY_MIGRATION_ADMISSION
+NEXT_TASK_AUTHORIZED=false
+```
+
+S21 只启动既有 Colima profile 与既有 local-development PostgreSQL container；所有 metadata/cohort SQL 均在 startup read-only + `BEGIN TRANSACTION READ ONLY` 内执行并 ROLLBACK。实际 AI usage cohort 为 0，但 `public.institution_scopes` 缺失，不能证明 formal institution pair authority，也不能把空表改写为 Runtime ready。
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-ai-usage-readonly-db-readiness-reaudit-20260815.md`。
+
+<!-- SEVEN_STREAM_SYSTEM_SYS01_AI_USAGE_DB_READINESS_REAUDIT_END -->
+
 <!-- SEVEN_STREAM_SYSTEM_SYS01_AI_USAGE_READONLY_ADMISSION_START -->
 
 ## System SYS-01 AI 使用只读 fresh Admission（2026-08-15）

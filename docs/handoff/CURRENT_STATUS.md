@@ -1,5 +1,76 @@
 # 智美天工当前项目状态
 
+<!-- SEVEN_STREAM_SYSTEM_SYS01_AI_USAGE_DB_READINESS_STATUS_START -->
+
+## S21 System SYS-01 AI 使用只读 DB readiness 复审
+
+- 更新日期：2026-08-15
+- local environment：既有 Colima `default` 与 `zmtg-local-dev-pg` 已安全启动并保持运行
+- DB audit：loopback `127.0.0.1:55433`；startup/transaction read-only；aggregate SELECT-only；全部 ROLLBACK
+- actual cohort：`ai_call_usage_records=0`、`tenants=6`
+- schema blocker：actual DB 缺失 `public.institution_scopes`，无法证明 formal institution pair authority
+- Runtime allowlist：未冻结；Migration、Runtime、数据库写入、Staging、Production 均未执行
+
+```text
+STAGE=S21
+STREAM=system
+SLICE=SYS_01_AI_USAGE_READONLY
+COMPLETION_MODE=READINESS_REAUDIT_COMPLETE_BLOCKED
+BASELINE=d8293ee64c1d051b123d022a6764b0c191084ca1
+
+DATABASE_CONNECTION=true
+DATABASE_TRANSACTION_READ_ONLY=true
+DATABASE_QUERY_EXECUTED=true
+DATABASE_WRITE_EXECUTION=false
+
+ACTUAL_SOURCE_TABLES=public.ai_call_usage_records,public.tenants
+MISSING_REQUIRED_SOURCE_TABLES=public.institution_scopes
+SCHEMA_MATCHES_CURRENT_CODE=false
+AI_USAGE_TOTAL_ROW_COUNT=0
+
+SYS01_DATA_READINESS=blocked
+SYS01_HISTORICAL_COVERAGE_COMPLETE=false
+SYS01_PARTIAL_COVERAGE_SAFE=false
+SYS01_TENANT_ISOLATION_SAFE=true
+SYS01_INSTITUTION_ISOLATION_SAFE=false
+SYS01_READER_LIMIT_SAFE=true
+
+SYS01_SCHEMA_CHANGE_REQUIRED=false
+SYS01_MIGRATION_REQUIRED=true
+SYS01_DML_BACKFILL_REQUIRED=false
+SYS01_RUNTIME_ADMISSION_READY=false
+SYS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
+SYS01_EXACT_RUNTIME_FILE_COUNT=0
+
+TARGETED_TEST_FILES=11
+TARGETED_TESTS=331/331 passed
+TYPECHECK=passed
+ARCHITECTURE_UNIT=148/148 passed
+ARCHITECTURE_INCREMENTAL=passed
+PRODUCTION_READINESS_DOCS=8/8 passed
+GIT_DIFF_CHECK=passed
+
+SCHEMA_CHANGE=false
+MIGRATION=false
+DDL_EXECUTION=false
+DML_EXECUTION=false
+SEED_EXECUTION=false
+RUNTIME_IMPLEMENTATION=false
+STAGING_CHANGE=false
+PRODUCTION_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+
+PRIMARY_BLOCKING_PREREQUISITE=local_development_schema_parity_missing_public_institution_scopes_requires_separately_authorized_migration_admission
+NEXT_STAGE=UNASSIGNED
+NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_LOCAL_DEVELOPMENT_SCHEMA_PARITY_MIGRATION_ADMISSION
+NEXT_TASK_AUTHORIZED=false
+NEXT_STAGE_AUTO_EXECUTION=false
+```
+
+Canonical evidence：`docs/operations/seven-stream-system-sys01-ai-usage-readonly-db-readiness-reaudit-20260815.md`。
+
+<!-- SEVEN_STREAM_SYSTEM_SYS01_AI_USAGE_DB_READINESS_STATUS_END -->
+
 <!-- SEVEN_STREAM_SYSTEM_SYS01_AI_USAGE_READONLY_STATUS_START -->
 
 ## S20 System SYS-01 AI 使用只读 fresh Admission
