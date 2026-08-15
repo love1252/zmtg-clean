@@ -428,10 +428,44 @@ describe('S26 static baseline artifact', () => {
       ),
     );
     assert.equal(
+      canonicalJson(
+        canonicalCatalogRecords(
+          checkRecord(
+            "source IN('official_wecom_self_built','official_wecom_third_party','official_wecom_service_provider')",
+          ),
+        ),
+      ),
+      canonicalJson(
+        canonicalCatalogRecords(
+          checkRecord(
+            "source=ANY(ARRAY['official_wecom_self_built'::character varying::text," +
+              "'official_wecom_third_party'::character varying::text," +
+              "'official_wecom_service_provider'::character varying::text])",
+          ),
+        ),
+      ),
+    );
+    assert.notEqual(
+      catalogFingerprintFromRecords(checkRecord("source IN('01')")),
+      catalogFingerprintFromRecords(
+        checkRecord("source=ANY(ARRAY['01'::integer::text])"),
+      ),
+    );
+    assert.equal(
       canonicalJson(canonicalCatalogRecords(checkRecord("status NOT IN('a','b')"))),
       canonicalJson(
         canonicalCatalogRecords(
           checkRecord("status <> ALL (ARRAY['a'::text, 'b'::text])"),
+        ),
+      ),
+    );
+    assert.equal(
+      canonicalJson(canonicalCatalogRecords(checkRecord("status NOT IN('a','b')"))),
+      canonicalJson(
+        canonicalCatalogRecords(
+          checkRecord(
+            "status<>ALL(ARRAY['a'::character varying::text,'b'::character varying::text])",
+          ),
         ),
       ),
     );
