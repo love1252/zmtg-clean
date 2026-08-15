@@ -3,11 +3,34 @@
 ## 下一任务选择状态
 
 ```text
-NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CONTROLLED_LOCAL_DEVELOPMENT_DATABASE_REBUILD_ADMISSION
+NEXT_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CANDIDATE_MIGRATION_BASELINE_GOVERNANCE_ADMISSION
 NEXT_STAGE=UNASSIGNED
 NEXT_TASK_AUTHORIZED=false
 NEXT_TASK_SELECTION_REQUIRED=false
 NEXT_STAGE_AUTO_EXECUTION=false
+S24_COMPLETION_MODE=CONTROLLED_REBUILD_ADMISSION_COMPLETE_BLOCKED
+S24_CONTROLLED_REBUILD_ADMISSION=passed
+S24_COMPLETE=true
+S24_FORMAL_MERGE_CLOSURE=false
+ORIGINAL_PUBLIC_TABLE_COUNT=55
+ORIGINAL_INVENTORY_TABLE_COUNT=56
+TABLE_CLASSIFICATION_COMPLETE=true
+UNKNOWN_TABLE_CLASSIFICATION_COUNT=0
+MUST_PRESERVE_TABLE_COUNT=37
+RECONSTRUCTABLE_TABLE_COUNT=0
+DERIVED_TABLE_COUNT=5
+EPHEMERAL_TABLE_COUNT=4
+SECRET_SENSITIVE_TABLE_COUNT=3
+DO_NOT_COPY_TABLE_COUNT=1
+SPECIAL_MAPPING_TABLE_COUNT=6
+SELECTED_CANDIDATE_SCHEMA_STRATEGY=blocked_no_safe_candidate_schema_strategy
+CANDIDATE_MIGRATION_BASELINE_STRATEGY=not_frozen_blocked_pending_formal_baseline_governance
+SELECTED_DATA_TRANSFER_MECHANISM=controlled_application_level_table_by_table_copy
+CONTROLLED_REBUILD_TOOL_IMPLEMENTATION_REQUIRED=true
+CONTROLLED_REBUILD_EXACT_ALLOWLIST_FROZEN=false
+CONTROLLED_REBUILD_EXACT_FILE_COUNT=0
+REBUILD_VALIDATION_MATRIX_FROZEN=true
+REBUILD_EXECUTION_ADMISSION_READY=false
 S23_COMPLETION_MODE=PHASED_RECOVERY_ADMISSION_COMPLETE_BLOCKED_IN_PLACE
 S23_PHASED_RECOVERY_ADMISSION=passed
 SELECTED_SCHEMA_RECOVERY_STRATEGY=controlled_local_dev_rebuild
@@ -67,7 +90,7 @@ SYS01_RUNTIME_ADMISSION_READY=false
 SYS01_DATA_READINESS=blocked
 SYS01_EXACT_RUNTIME_ALLOWLIST_FROZEN=false
 SYS01_EXACT_RUNTIME_FILE_COUNT=0
-PRIMARY_BLOCKING_PREREQUISITE=current_11_membership_local_dev_cannot_replay_consumed_single_membership_0041_0043_chain_and_no_repository_supported_data_preserving_rebuild_mechanism_exists
+PRIMARY_BLOCKING_PREREQUISITE=no_repository_supported_candidate_baseline_can_represent_current_schema_and_remain_future_migration_safe_without_falsifying_0038_0045_history
 S19_COMPLETE=true
 POST_V2_R1C_COMPLETE=true
 POST_V2_R1C_FORMAL_CLOSURE=true
@@ -90,11 +113,11 @@ DATABASE_WRITE_EXECUTION_AUTHORIZED=false
 PAGE_SYSTEM_AUDIT_RUNTIME_RELEASE_COMPLETE=true
 ```
 
-S23 已确认 local-development DB 的 actual 6 Tenant、11 Auth User、11 Membership 与 0 Binding 是需要保留的事实。现有正式 migrator 没有 target/stop-after；现有 A2 Provisioning runner 只产生 Scope、Context Version 与 Context Head，不会创建 0039 要求的 Binding。
+S24 已在 strict read-only session 中 fresh 枚举 local-development DB 的 55 张 public 表与 Drizzle journal，完成 56-row 唯一 classification、42 张保留/特殊表 mapping、secret/files boundary、backup/restore drill、side-by-side candidate、validation、cutover、rollback 与 unknown-outcome contract。actual 6 Tenant、11 Auth User、11 Membership、0 Binding、252 Audit 与 0 AI usage 均已进入 preservation boundary；本阶段没有执行任何 rebuild/write。
 
-更关键的是 consumed `0041/0043` 冻结为历史单 Membership acceptance shape，无法合法消费 current 11 Membership；targeted runner 即使能单独执行 0038，也不能形成可达 0045 的原地链。因此唯一推荐方向是受控、数据保留的 side-by-side local-development rebuild。下一原子任务只允许 fresh Admission，冻结 backup/restore proof、candidate schema build、data-preservation mapping、unknown-outcome handling 与 exact boundaries；不得自动执行 Migration、Provisioning write、create/drop/reset/restore、Schema、DDL/DML、Seed 或 Runtime。
+当前唯一先决条件不再是调查原库数据，而是建立正式 candidate migration baseline governance：repository 既没有 current-schema baseline，又不能借 `drizzle push`、手填 journal 或跳过历史 guards 来假装 `0038..0045` 已执行。下一原子任务只允许冻结 baseline artifact、canonical marker/journal semantics、future migration lineage 与由此决定的 exact tooling allowlist；不得自动生成 artifact、实现 rebuild tool、执行 create/backup/restore/Migration/DDL/DML 或进入 SYS-01 Runtime。
 
-S23 canonical evidence：`docs/operations/seven-stream-system-sys01-local-dev-phased-schema-recovery-admission-20260815.md`。
+S24 canonical evidence：`docs/operations/seven-stream-system-sys01-controlled-local-dev-rebuild-admission-20260815.md`。
 
 ## S18 exact 5-file Runtime 最终发布闭环
 
