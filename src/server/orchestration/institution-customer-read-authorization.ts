@@ -1,6 +1,6 @@
 import { isProxy } from 'node:util/types';
 
-import { cookies } from 'next/headers';
+import { headers } from 'next/headers';
 
 import { createAccessControlAuthoritativeMembershipFactReaderV1 } from '@/modules/access-control/application/authoritative-membership-reader';
 import { createIdentityAuthoritativeFormalSessionIdentityFactReaderV1 } from '@/modules/auth/application/authoritative-formal-session-identity-reader';
@@ -11,7 +11,6 @@ import {
 } from '@/modules/auth/application/formal-institution-session-context';
 import {
   consumeFormalServerSessionVerifiedClaimsV1,
-  FORMAL_SERVER_SESSION_COOKIE_V1,
   verifyFormalServerSessionCookieClaimsV1,
   type FormalServerSessionKeyRingV1,
 } from '@/modules/auth/server/formal-server-session-provenance-owner';
@@ -54,7 +53,6 @@ const RUNTIME_CONFIG_KEYS = Object.freeze([
   'institutionGuardReferenceKeyRing',
 ] as const);
 const VERIFIED_RESOLUTION_KEYS = Object.freeze(['kind', 'verifiedClaims'] as const);
-const COOKIE_KEYS = Object.freeze(['name', 'value'] as const);
 const CLAIMS_KEYS = Object.freeze(['accountId', 'tenantId', 'institutionId'] as const);
 const CONTEXT_KEYS = Object.freeze(['kind', 'snapshot', 'membershipAudit'] as const);
 const USER_KEYS = Object.freeze([
@@ -157,21 +155,14 @@ export async function resolveInstitutionCustomerReadAuthorizationV1(): Promise<I
     const verificationEpochMs = readEpochMs();
     if (verificationEpochMs === null) return UNAVAILABLE;
 
-    const cookieStore = await cookies();
-    const cookie = snapshot(
-      cookieStore.get(FORMAL_SERVER_SESSION_COOKIE_V1),
-      COOKIE_KEYS,
-    );
-    if (
-      !cookie ||
-      cookie.name !== FORMAL_SERVER_SESSION_COOKIE_V1 ||
-      typeof cookie.value !== 'string' ||
-      cookie.value.length === 0
-    ) return UNAVAILABLE;
+    const cookieHeader = (await headers()).get('cookie');
+    if (typeof cookieHeader !== 'string' || cookieHeader.length === 0) {
+      return UNAVAILABLE;
+    }
 
     const verified = snapshot(
       verifyFormalServerSessionCookieClaimsV1({
-        cookieHeader: `${FORMAL_SERVER_SESSION_COOKIE_V1}=${cookie.value}`,
+        cookieHeader,
         sessionKeyRing:
           runtimeConfig.formalServerSessionKeyRing as FormalServerSessionKeyRingV1,
         now: () => new Date(verificationEpochMs),

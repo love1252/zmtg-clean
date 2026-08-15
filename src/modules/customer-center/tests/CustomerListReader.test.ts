@@ -164,6 +164,25 @@ describe('Customers CUS-01 formal list Reader', () => {
     ).resolves.toEqual({ kind: 'unavailable' });
   });
 
+  it('displayName 按 PostgreSQL 字符语义计算 varchar(120)，不按 UTF-16 code unit', async () => {
+    const validEmojiName = '😀'.repeat(120);
+    const validResult = await read(
+      createReader([{ ...baseRow, displayName: validEmojiName }]).reader,
+    );
+    expect(validResult).toMatchObject({
+      kind: 'ready',
+      records: [{ displayName: validEmojiName }],
+    });
+
+    await expect(
+      read(
+        createReader([
+          { ...baseRow, displayName: '😀'.repeat(121) },
+        ]).reader,
+      ),
+    ).resolves.toEqual({ kind: 'unavailable' });
+  });
+
   it('返回 records/pageInfo 及其成员均冻结', async () => {
     const result = await read(createReader().reader);
     if (result.kind !== 'ready') throw new Error('expected ready');
