@@ -63,12 +63,13 @@ S30_COMPLETION_MODE=PREREQUISITE_IMPLEMENTATION_ADMISSION_READY
 S30_BASELINE=707c378afffb3e3b96790a26a0de8a17a8364f3c
 SYSTEM_PREREQUISITE_IMPLEMENTATION_ADMISSION_READY=true
 SYSTEM_PREREQUISITE_EXACT_ALLOWLIST_FROZEN=true
-SYSTEM_PREREQUISITE_EXACT_FILE_COUNT=2
-SYSTEM_PREREQUISITE_EXACT_ALLOWLIST=scripts/db/sys01-controlled-local-dev-rebuild.mjs,scripts/db/sys01-controlled-local-dev-rebuild.test.mjs
+SYSTEM_PREREQUISITE_ORIGINAL_EXACT_FILE_COUNT=2
+SYSTEM_PREREQUISITE_CORRECTIVE_EXACT_FILE_COUNT=3
+SYSTEM_PREREQUISITE_CORRECTIVE_EXACT_ALLOWLIST=scripts/db/sys01-controlled-local-dev-rebuild.mjs,scripts/db/sys01-controlled-local-dev-rebuild.test.mjs,drizzle/baselines/sys01-local-dev-current-schema-0045-v1.json
 
 NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_REBUILD_EXECUTION_PREREQUISITE_EXACT_IMPLEMENTATION
 NEXT_STAGE=S31
-NEXT_SYSTEM_TASK_AUTHORIZED=true_conditionally_by_current_ultra_goal
+NEXT_SYSTEM_TASK_AUTHORIZED=false
 
 BACKUP_KEY_SOURCE_AVAILABLE=true
 BACKUP_KEY_VALUE_READ_OR_LOGGED=false
@@ -80,7 +81,7 @@ MIGRATION_EXECUTION=false
 NEXT_STAGE_AUTO_EXECUTION=false
 ```
 
-S31 只允许修改冻结的 runner/test 两文件：由受审查代码 fresh 生成四类 readiness/application smoke evidence，补 key metadata preflight 与六类 concrete adapter fake-executor behavior tests。不得加入第 3 个 Runtime/Test file；不得执行 backup、restore、candidate create、baseline bootstrap、transfer、cutover、Schema 或 Migration。S31 合并后才进入 S32 docs-only/read-only re-admission；若 S31 停止，则直接转 S33 Care Admission 并记录 System blocker。
+S30 原始 Admission 冻结 runner/test 两文件；review 发现 manifest tooling identity 也必须同步后，用户另行明确 re-admit exact 3 files。corrective PR #1233 仅更新 runner、同名 test 与 baseline manifest runner blob；baseline SQL、artifact SHA、schema fingerprint 与 catalog contract 未改变。任何正式 rebuild execution 仍须独立授权。
 
 Canonical evidence：`docs/operations/seven-stream-system-sys01-rebuild-execution-prerequisite-implementation-admission-20260815.md`。
 
