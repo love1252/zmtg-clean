@@ -58,7 +58,7 @@ S34_COMPLETE=true
 S34_FORMAL_CLOSURE=true
 ```
 
-S34 只操作用户授权的 local-development resources。original `127.0.0.1:55433` 始终由 read-only transaction、before/after fingerprint 与 runner invariant 保护；所有业务数据写入只发生在 candidate。没有执行 repository migration、`drizzle-kit migrate`、`db:generate`、snapshot generation、seed、Staging 或 Production 变更。
+S34 只操作用户授权的 local-development resources。original `127.0.0.1:55433` 始终由 read-only transaction、before/after fingerprint 与 runner invariant 保护且没有写入；业务数据写入仅发生在隔离的 restore drill 与 candidate。没有执行 repository migration、`drizzle-kit migrate`、`db:generate`、snapshot generation、seed、Staging 或 Production 变更。
 
 ## 二、首次停止与 corrective closure
 
