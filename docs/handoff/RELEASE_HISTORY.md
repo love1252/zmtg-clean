@@ -18,6 +18,30 @@ S32_ACTIONABLE_P0_P1_P2_P3=0
 S32_POST_MERGE_REVIEW_DEBT=0
 S32_FORMAL_CLOSURE=true
 
+S29_CORRECTIVE_PR=1232
+S29_CORRECTIVE_HEAD=1d1719f82afb9959c22e5ba6d5f8df0d65fae3c4
+S29_CORRECTIVE_MERGE=00e9b91382538f29764853d9fdd67ae42a9872af
+S30_CORRECTIVE_DOCS_PR=1234
+S30_CORRECTIVE_DOCS_HEAD=357661bf1646296174de714deee47de8abf5aa0d
+S30_CORRECTIVE_DOCS_MERGE=23b1784ca61c0cdbb950cc6291fc83302b8f83a2
+S31_CORRECTIVE_RUNTIME_PR=1233
+S31_CORRECTIVE_RUNTIME_HEAD=dc1524cc4b3d7656bf60b3aaf10be5ab7cf85ca5
+S31_CORRECTIVE_RUNTIME_MERGE=f7eefd101d05b8c07468de677d5013658816972a
+S32_CORRECTIVE_DOCS_PR=1235
+S32_CORRECTIVE_DOCS_HEAD=a4f07114a97fece89312cfccc166daa179f6b345
+S32_CORRECTIVE_DOCS_MERGE=f981c6c06448eed2fa63edd0a8a38f9cfc3b5b1d
+
+S29_POST_MERGE_P2_RESOLVED=2
+S30_POST_MERGE_P1_RESOLVED=2
+S31_POST_MERGE_P1_RESOLVED=3
+S32_POST_MERGE_P2_RESOLVED=1
+ULTRA_GOAL_CORRECTIVE_REVIEW_THREAD_COUNT=8
+ULTRA_GOAL_ACTIONABLE_P0_P1_P2_P3=0
+ULTRA_GOAL_POST_MERGE_REVIEW_DEBT=0
+S33_ACTIONABLE_P0_P1_P2_P3=0
+POST_MERGE_REVIEW_DEBT=0
+S33_FORMAL_CLOSURE=true
+
 CARE_SELECTED_FIRST_SLICE=APPOINTMENTS_LIST_BY_CURRENT_INSTITUTION
 APPOINTMENT_COUNT=5
 APPOINTMENT_CUSTOMER_PAIR_UNIQUE_MATCH_COUNT=5
@@ -35,7 +59,8 @@ NEXT_SYSTEM_TASK=SEVEN_STREAM_SYSTEM_SYS_01_CONTROLLED_LOCAL_DEVELOPMENT_REBUILD
 NEXT_SYSTEM_TASK_AUTHORIZED=false
 ```
 
-- S32 docs-only PR #1230 Required Check 通过、review thread=0，并 squash merge 为 `5b7023aa`；System execution Admission ready，但 execution 未授权、未发生。
+- S32 docs-only PR #1230 合并后的 1 条 P2 已由 corrective PR #1235 修复并解决；System execution Admission ready，但 execution 未授权、未发生。
+- S29–S31 的其余 7 条 post-merge review thread 已分别由 PR #1232、#1233、#1234 修复并解决；四个 corrective PR 的 Required Checks 均通过。
 - S33 比较 appointments、follow-up tasks 与 treatment summaries，选择 capability complexity 最低的 appointments list；四个机构角色的 `care_task/read` 正式 policy 均允许。
 - original `55433` read-only audit 证明 5/5 appointment customer pair exact-one，但 source table 无 `institution_id`。这只证明 rebuild reconstruction 有安全来源，不允许 runtime 临时跨 owner join。
 - 因 SYS-01 rebuild 尚未执行，Care data readiness blocked；没有冻结 Runtime allowlist，也没有实施 Reader/API/page 或发布能力。
