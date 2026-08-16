@@ -1,5 +1,26 @@
 # 下一任务
 
+<!-- ANALYTICS_OVERVIEW_FRESH_READMISSION_NEXT_20260817 -->
+
+## Analytics Fresh Re-admission 后的下一任务
+
+```text
+CURRENT_COMPLETE_TARGET=ANALYTICS_OVERVIEW_FORMAL_RUNTIME_FRESH_READMISSION
+NEXT_TASK=ANALYTICS_AN02_FORMAL_FACT_PERSISTENCE_SCHEMA_MIGRATION_ADMISSION
+NEXT_TASK_AUTHORIZED=false
+NEXT_STAGE_AUTO_EXECUTION=false
+
+PRIMARY_BLOCKER=authoritative_institution_scoped_consumption_payment_refund_persistence_missing
+SECONDARY_BLOCKER=formal_analytics_read_authorization_not_yet_defined
+
+SCHEMA_CHANGE_REQUIRED=true
+MIGRATION_REQUIRED=true
+STAGING_AUTHORIZED=false
+PRODUCTION_AUTHORIZED=false
+```
+
+下一任务进入 Schema/Migration 硬边界，必须重新授权。
+
 <!-- KNOWLEDGE_DOCUMENT_METADATA_NEXT_20260816 -->
 
 ## Knowledge Runtime Release 后的下一候选任务

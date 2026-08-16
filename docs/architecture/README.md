@@ -1,5 +1,22 @@
 # 智美天工架构文档索引
 
+<!-- ANALYTICS_OVERVIEW_FRESH_READMISSION_20260817 -->
+
+## Analytics Overview Fresh Re-admission（2026-08-17）
+
+```text
+FIRST_SLICE=ANALYTICS_OVERVIEW_CURRENT_MONTH_VS_PREVIOUS_MONTH
+DOMAIN_CONTRACT_READY=true
+FORMAL_SCOPE_READY=true
+OPERATING_CONTEXT_READY=true
+AUTHORITATIVE_FACT_PERSISTENCE_READY=false
+SCHEMA_CHANGE_REQUIRED=true
+MIGRATION_REQUIRED=true
+RUNTIME_ADMISSION_READY=false
+```
+
+经营总览已完成 Fresh Re-admission，但正式机构消费/支付/退款 persistence 尚不存在，因此不发布 `/hospital/analytics`。
+
 <!-- KNOWLEDGE_DOCUMENT_METADATA_RUNTIME_RELEASE_20260816 -->
 
 ## Knowledge Document Metadata Formal Runtime Release（2026-08-16）
