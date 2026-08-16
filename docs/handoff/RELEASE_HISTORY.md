@@ -1,5 +1,17 @@
 # 项目重构历史
 
+<!-- ANALYTICS_AN02_FORMAL_PERSISTENCE_HISTORY_20260817 -->
+
+## 2026-08-17：Analytics AN-02 Formal Fact Persistence Closure
+
+- 新增 `0048_analytics_formal_fact_persistence`。
+- 建立正式 source、ingestion batch、immutable consumption fact persistence。
+- exact tenant + institution 与 attribution/refund/event 约束完成。
+- local candidate guarded migration 已执行。
+- source/batch/fact 均为 0 行可信空状态。
+- 未 Seed、未 Backfill、未复制平台商业记录。
+- 未实施 Analytics Reader/API/Page；未触碰 Staging/Production。
+
 <!-- ANALYTICS_OVERVIEW_FRESH_READMISSION_HISTORY_20260817 -->
 
 ## 2026-08-17：Analytics Overview Formal Runtime Fresh Re-admission

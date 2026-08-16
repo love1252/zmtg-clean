@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  bigint,
   boolean,
   check,
   date,
@@ -3534,6 +3535,273 @@ export const homepageBrandAuditLogs = pgTable(
     actorCreatedIdx: index('homepage_brand_audit_logs_actor_created_idx').on(
       table.actorId,
       table.createdAt,
+    ),
+  }),
+);
+
+export const analyticsFormalSourceKindEnum = pgEnum(
+  'analytics_formal_source_kind',
+  [
+    'approved_import_manifest',
+    'approved_integration_registration',
+  ],
+);
+
+export const analyticsConsumptionEventFamilyEnum = pgEnum(
+  'analytics_consumption_event_family',
+  ['payment', 'refund'],
+);
+
+export const analyticsConsumptionEventTypeEnum = pgEnum(
+  'analytics_consumption_event_type',
+  [
+    'payment_succeeded',
+    'payment_pending',
+    'payment_failed',
+    'payment_cancelled',
+    'refund_confirmed',
+    'refund_pending',
+    'refund_failed',
+    'refund_cancelled',
+  ],
+);
+
+export const analyticsCustomerAttributionStatusEnum = pgEnum(
+  'analytics_customer_attribution_status',
+  ['matched', 'unmatched', 'pending_review'],
+);
+
+export const analyticsProjectAttributionStatusEnum = pgEnum(
+  'analytics_project_attribution_status',
+  ['mapped', 'unmapped', 'pending_review'],
+);
+
+export const analyticsRefundLinkStatusEnum = pgEnum(
+  'analytics_refund_link_status',
+  ['not_applicable', 'linked', 'orphan_verified'],
+);
+
+export const analyticsFormalSources = pgTable(
+  'analytics_formal_sources',
+  {
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    id: varchar('id', { length: 64 }).notNull(),
+    sourceLabel: varchar('source_label', { length: 160 }).notNull(),
+    sourceKind: analyticsFormalSourceKindEnum('source_kind').notNull(),
+    provenanceReferenceDigest: varchar(
+      'provenance_reference_digest',
+      { length: 64 },
+    ).notNull(),
+    approvedBy: varchar('approved_by', { length: 96 }).notNull(),
+    approvedAt: timestamp('approved_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    primaryKey: primaryKey({
+      name: 'analytics_sources_pk',
+      columns: [table.tenantId, table.institutionId, table.id],
+    }),
+    scopeFk: foreignKey({
+      name: 'analytics_sources_scope_fk',
+      columns: [table.tenantId, table.institutionId],
+      foreignColumns: [institutionScopes.tenantId, institutionScopes.institutionId],
+    }),
+    scopeIdx: index('analytics_sources_scope_idx').on(
+      table.tenantId,
+      table.institutionId,
+    ),
+    labelCheck: check(
+      'analytics_sources_label_check',
+      sql`length(trim(${table.sourceLabel})) > 0`,
+    ),
+    digestCheck: check(
+      'analytics_sources_digest_check',
+      sql`length(${table.provenanceReferenceDigest}) = 64`,
+    ),
+  }),
+);
+
+export const analyticsFormalIngestionBatches = pgTable(
+  'analytics_formal_ingestion_batches',
+  {
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    sourceId: varchar('source_id', { length: 64 }).notNull(),
+    batchOrConnectionRef: varchar('batch_or_connection_ref', { length: 256 }).notNull(),
+    provenanceReferenceDigest: varchar(
+      'provenance_reference_digest',
+      { length: 64 },
+    ).notNull(),
+    receivedAt: timestamp('received_at', { withTimezone: true }).notNull(),
+    approvedBy: varchar('approved_by', { length: 96 }).notNull(),
+    approvedAt: timestamp('approved_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    primaryKey: primaryKey({
+      name: 'analytics_batches_pk',
+      columns: [
+        table.tenantId,
+        table.institutionId,
+        table.sourceId,
+        table.batchOrConnectionRef,
+      ],
+    }),
+    sourceFk: foreignKey({
+      name: 'analytics_batches_source_fk',
+      columns: [table.tenantId, table.institutionId, table.sourceId],
+      foreignColumns: [
+        analyticsFormalSources.tenantId,
+        analyticsFormalSources.institutionId,
+        analyticsFormalSources.id,
+      ],
+    }),
+    scopeReceivedIdx: index('analytics_batches_scope_received_idx').on(
+      table.tenantId,
+      table.institutionId,
+      table.receivedAt,
+    ),
+    referenceCheck: check(
+      'analytics_batches_reference_check',
+      sql`length(trim(${table.batchOrConnectionRef})) > 0`,
+    ),
+    digestCheck: check(
+      'analytics_batches_digest_check',
+      sql`length(${table.provenanceReferenceDigest}) = 64`,
+    ),
+  }),
+);
+
+export const analyticsConsumptionFacts = pgTable(
+  'analytics_consumption_facts',
+  {
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    sourceId: varchar('source_id', { length: 64 }).notNull(),
+    batchOrConnectionRef: varchar('batch_or_connection_ref', { length: 256 }).notNull(),
+    sourceRecordRef: varchar('source_record_ref', { length: 256 }).notNull(),
+    eventFamily: analyticsConsumptionEventFamilyEnum('event_family').notNull(),
+    sourceRevision: varchar('source_revision', { length: 256 }).notNull(),
+    supersedesSourceRevision: varchar('supersedes_source_revision', { length: 256 }),
+    eventType: analyticsConsumptionEventTypeEnum('event_type').notNull(),
+    eventAt: timestamp('event_at', { withTimezone: true }).notNull(),
+    receivedAt: timestamp('received_at', { withTimezone: true }).notNull(),
+    amountMinor: bigint('amount_minor', { mode: 'number' }).notNull(),
+    currency: varchar('currency', { length: 3 }).notNull(),
+    stableConsumptionRecordRef: varchar(
+      'stable_consumption_record_ref',
+      { length: 256 },
+    ),
+    customerAttributionStatus: analyticsCustomerAttributionStatusEnum(
+      'customer_attribution_status',
+    ).notNull(),
+    customerId: varchar('customer_id', { length: 64 }),
+    customerCandidateReference: varchar('customer_candidate_reference', { length: 256 }),
+    projectAttributionStatus: analyticsProjectAttributionStatusEnum(
+      'project_attribution_status',
+    ).notNull(),
+    hisDirectoryVersion: varchar('his_directory_version', { length: 256 }),
+    canonicalProjectId: varchar('canonical_project_id', { length: 64 }),
+    projectCandidateReference: varchar('project_candidate_reference', { length: 256 }),
+    refundLinkStatus: analyticsRefundLinkStatusEnum('refund_link_status').notNull(),
+    recordedBy: varchar('recorded_by', { length: 96 }).notNull(),
+    recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    primaryKey: primaryKey({
+      name: 'analytics_facts_pk',
+      columns: [
+        table.tenantId,
+        table.institutionId,
+        table.sourceId,
+        table.sourceRecordRef,
+        table.eventType,
+        table.sourceRevision,
+      ],
+    }),
+    groupRevisionUnique: unique('analytics_facts_group_revision_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.sourceId,
+      table.sourceRecordRef,
+      table.eventFamily,
+      table.sourceRevision,
+    ),
+    batchFk: foreignKey({
+      name: 'analytics_facts_batch_fk',
+      columns: [
+        table.tenantId,
+        table.institutionId,
+        table.sourceId,
+        table.batchOrConnectionRef,
+      ],
+      foreignColumns: [
+        analyticsFormalIngestionBatches.tenantId,
+        analyticsFormalIngestionBatches.institutionId,
+        analyticsFormalIngestionBatches.sourceId,
+        analyticsFormalIngestionBatches.batchOrConnectionRef,
+      ],
+    }),
+    customerFk: foreignKey({
+      name: 'analytics_facts_customer_fk',
+      columns: [table.tenantId, table.institutionId, table.customerId],
+      foreignColumns: [customers.tenantId, customers.institutionId, customers.id],
+    }),
+    periodIdx: index('analytics_facts_period_idx').on(
+      table.tenantId,
+      table.institutionId,
+      table.eventAt,
+      table.eventType,
+    ),
+    chainIdx: index('analytics_facts_chain_idx').on(
+      table.tenantId,
+      table.institutionId,
+      table.sourceId,
+      table.sourceRecordRef,
+      table.eventFamily,
+    ),
+    stableIdx: index('analytics_facts_stable_idx').on(
+      table.tenantId,
+      table.institutionId,
+      table.sourceId,
+      table.stableConsumptionRecordRef,
+    ),
+    requiredRefCheck: check(
+      'analytics_facts_required_ref_check',
+      sql`length(trim(${table.sourceRecordRef})) > 0 AND length(trim(${table.sourceRevision})) > 0 AND length(trim(${table.recordedBy})) > 0`,
+    ),
+    correctionCheck: check(
+      'analytics_facts_correction_check',
+      sql`${table.supersedesSourceRevision} IS NULL OR (length(trim(${table.supersedesSourceRevision})) > 0 AND ${table.supersedesSourceRevision} <> ${table.sourceRevision})`,
+    ),
+    eventFamilyCheck: check(
+      'analytics_facts_event_family_check',
+      sql`(${table.eventFamily} = 'payment' AND ${table.eventType} IN ('payment_succeeded', 'payment_pending', 'payment_failed', 'payment_cancelled')) OR (${table.eventFamily} = 'refund' AND ${table.eventType} IN ('refund_confirmed', 'refund_pending', 'refund_failed', 'refund_cancelled'))`,
+    ),
+    amountCheck: check(
+      'analytics_facts_amount_check',
+      sql`${table.amountMinor} BETWEEN 1 AND 9007199254740991`,
+    ),
+    currencyCheck: check(
+      'analytics_facts_currency_check',
+      sql`length(${table.currency}) = 3 AND ${table.currency} = upper(${table.currency}) AND ${table.currency} ~ '^[A-Z]{3}$'`,
+    ),
+    stableRefCheck: check(
+      'analytics_facts_stable_ref_check',
+      sql`${table.stableConsumptionRecordRef} IS NULL OR length(trim(${table.stableConsumptionRecordRef})) > 0`,
+    ),
+    customerAttributionCheck: check(
+      'analytics_facts_customer_attribution_check',
+      sql`(${table.customerAttributionStatus} = 'matched' AND ${table.customerId} IS NOT NULL AND length(trim(${table.customerId})) > 0 AND ${table.customerCandidateReference} IS NULL) OR (${table.customerAttributionStatus} = 'unmatched' AND ${table.customerId} IS NULL AND ${table.customerCandidateReference} IS NULL) OR (${table.customerAttributionStatus} = 'pending_review' AND ${table.customerId} IS NULL AND ${table.customerCandidateReference} ~ '^[A-Za-z0-9][A-Za-z0-9_-]{0,255}$')`,
+    ),
+    projectAttributionCheck: check(
+      'analytics_facts_project_attribution_check',
+      sql`(${table.projectAttributionStatus} = 'mapped' AND ${table.hisDirectoryVersion} IS NOT NULL AND length(trim(${table.hisDirectoryVersion})) > 0 AND ${table.canonicalProjectId} IS NOT NULL AND length(trim(${table.canonicalProjectId})) > 0 AND ${table.projectCandidateReference} IS NULL) OR (${table.projectAttributionStatus} = 'unmapped' AND ${table.hisDirectoryVersion} IS NULL AND ${table.canonicalProjectId} IS NULL AND ${table.projectCandidateReference} IS NULL) OR (${table.projectAttributionStatus} = 'pending_review' AND ${table.hisDirectoryVersion} IS NULL AND ${table.canonicalProjectId} IS NULL AND ${table.projectCandidateReference} ~ '^[A-Za-z0-9][A-Za-z0-9_-]{0,255}$')`,
+    ),
+    refundLinkCheck: check(
+      'analytics_facts_refund_link_check',
+      sql`(${table.eventFamily} = 'payment' AND ${table.refundLinkStatus} = 'not_applicable') OR (${table.eventFamily} = 'refund' AND ${table.refundLinkStatus} IN ('linked', 'orphan_verified'))`,
     ),
   }),
 );

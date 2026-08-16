@@ -1,5 +1,18 @@
 # 智美天工架构文档索引
 
+<!-- ANALYTICS_AN02_FORMAL_PERSISTENCE_20260817 -->
+
+## Analytics AN-02 Formal Fact Persistence（2026-08-17）
+
+```text
+analytics_formal_sources
+→ analytics_formal_ingestion_batches
+→ analytics_consumption_facts
+→ deterministic institution-analytics domain
+```
+
+正式 source/batch/fact 均绑定 exact tenant + institution，并使用 immutable append-only persistence。当前 cohort 为 `ready_empty`。
+
 <!-- ANALYTICS_OVERVIEW_FRESH_READMISSION_20260817 -->
 
 ## Analytics Overview Fresh Re-admission（2026-08-17）

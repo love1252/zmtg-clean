@@ -1,5 +1,22 @@
 # 智美天工当前项目状态
 
+<!-- ANALYTICS_AN02_FORMAL_PERSISTENCE_CURRENT_20260817 -->
+
+## 2026-08-17 Analytics AN-02 正式事实持久化闭环
+
+```text
+ANALYTICS_FORMAL_FACT_MODEL=ready
+ANALYTICS_FORMAL_PROVENANCE=ready
+ANALYTICS_IMMUTABLE_FACT_MODEL=ready
+ANALYTICS_DATA_READINESS=ready_empty
+MIGRATION_0048=applied_local_candidate
+BUSINESS_DML_EXECUTION=false
+ANALYTICS_RUNTIME_IMPLEMENTATION=false
+ANALYTICS_PAGE_RELEASE=false
+```
+
+Schema/Migration 前置已闭合；下一目标进入经营总览 Formal Runtime Release。
+
 <!-- ANALYTICS_OVERVIEW_FRESH_READMISSION_CURRENT_20260817 -->
 
 ## 2026-08-17 Analytics Overview Fresh Re-admission

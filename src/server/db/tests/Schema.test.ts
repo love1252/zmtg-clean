@@ -5271,7 +5271,7 @@ describe('S43 Membership legacy adoption physical constraint', () => {
     );
   });
 
-  it('0046 保持冻结历史首个 common-tail 后继，0047 作为唯一新后继且二者无 snapshot', () => {
+  it('0046/0047 保持冻结历史 common-tail，0048 作为当前后继且 0046/0047 无 snapshot', () => {
     const drizzleDir = join(process.cwd(), 'drizzle');
     const journal = JSON.parse(
       readFileSync(join(drizzleDir, 'meta/_journal.json'), 'utf8'),
@@ -5286,9 +5286,9 @@ describe('S43 Membership legacy adoption physical constraint', () => {
     };
     const frozenEntries = journal.entries.slice(0, 46);
 
-    expect(journal.entries).toHaveLength(48);
+    expect(journal.entries).toHaveLength(49);
     expect(journal.entries.map((entry) => entry.idx)).toEqual(
-      Array.from({ length: 48 }, (_, index) => index),
+      Array.from({ length: 49 }, (_, index) => index),
     );
     expect(
       createHash('sha256').update(JSON.stringify(frozenEntries)).digest('hex'),

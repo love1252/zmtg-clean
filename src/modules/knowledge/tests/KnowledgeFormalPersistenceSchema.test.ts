@@ -85,7 +85,7 @@ describe('Knowledge formal persistence prerequisite', () => {
     expect(migrationSource).toContain(
       'expected_predecessor_when CONSTANT bigint := 1786867010908',
     );
-    expect(journal.entries.at(-1)).toEqual({
+    expect(journal.entries[47]).toEqual({
       idx: 47,
       version: '7',
       when: 1786886640000,
