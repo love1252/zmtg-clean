@@ -323,6 +323,13 @@
       "when": 1785738060856,
       "tag": "0045_base02_binding_legacy_calibration",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1786867010908,
+      "tag": "0046_base02_membership_legacy_adoption_refresh",
+      "breakpoints": true
     }
   ]
 }

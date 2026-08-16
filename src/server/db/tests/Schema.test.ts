@@ -1007,8 +1007,14 @@ describe('数据库结构', () => {
       expect(lifecycleCheckSql).toContain(transition);
     }
     expect(lifecycleCheckSql?.match(/from_lifecycle_status"? is not null/gu)).toHaveLength(4);
-    expect(transitionChecks.get('tenant_membership_transitions_role_shape_check')).toMatch(
-      /refresh.*from_role.*to_role/su,
+    const roleCheckSql = transitionChecks
+      .get('tenant_membership_transitions_role_shape_check')
+      ?.replaceAll('"tenant_membership_transitions".', '')
+      .replaceAll('"', '')
+      .replace(/\s+/gu, ' ')
+      .trim();
+    expect(roleCheckSql).toBe(
+      "( transition_type in ('create', 'legacy_calibration') and from_role is null ) or ( transition_type = 'refresh' and from_role is not null and ( from_role <> to_role or ( from_role = to_role and source = 'access_control_command' and reason_code = 'post_rebuild_formal_identity_adoption' and from_revision = 1 and to_revision = 2 ) ) ) or ( transition_type in ('revoke', 'reactivate', 'delete') and from_role is not null and from_role = to_role )",
     );
     expect(transitionChecks.get('tenant_membership_transitions_provenance_shape_check')).toMatch(
       /legacy_calibration.*legacy_unknown.*formal_onboarding.*access_control_command/su,
@@ -5090,7 +5096,7 @@ describe('BASE-B2 Binding transition evidence Expand Schema', () => {
 });
 
 describe('BASE-B2 deterministic legacy Binding calibration Migration', () => {
-  it('将 0045 作为 0044 的唯一后继', () => {
+  it('冻结 0045 及其以前的 journal 历史', () => {
     const journal = JSON.parse(
       readFileSync(join(process.cwd(), 'drizzle/meta/_journal.json'), 'utf8'),
     ) as {
@@ -5103,18 +5109,20 @@ describe('BASE-B2 deterministic legacy Binding calibration Migration', () => {
       }>;
     };
 
-    expect(journal.entries).toHaveLength(46);
-    expect(journal.entries.map((entry) => entry.idx)).toEqual(
+    const frozenEntries = journal.entries.slice(0, 46);
+
+    expect(frozenEntries).toHaveLength(46);
+    expect(frozenEntries.map((entry) => entry.idx)).toEqual(
       Array.from({ length: 46 }, (_, index) => index),
     );
-    expect(journal.entries.at(-2)).toEqual({
+    expect(frozenEntries.at(-2)).toEqual({
       idx: 44,
       version: '7',
       when: 1785681660893,
       tag: '0044_base02_binding_transition_expand',
       breakpoints: true,
     });
-    expect(journal.entries.at(-1)).toMatchObject({
+    expect(frozenEntries.at(-1)).toMatchObject({
       idx: 45,
       version: '7',
       tag: '0045_base02_binding_legacy_calibration',
@@ -5187,5 +5195,117 @@ describe('BASE-B2 deterministic legacy Binding calibration Migration', () => {
     expect(migrationSql).toContain('conflict_count <> 0');
     expect(migrationSql).toContain('unexpected_count <> 0');
     expect(migrationSql).toContain('post_transition_count <> pre_transition_count + created_count');
+  });
+});
+
+describe('S43 Membership legacy adoption physical constraint', () => {
+  it('保持 Membership transition enum 不变', () => {
+    expect(schema.membershipTransitionTypeEnum.enumValues).toEqual([
+      'create',
+      'refresh',
+      'revoke',
+      'reactivate',
+      'delete',
+      'legacy_calibration',
+    ]);
+  });
+
+  it('0046 仅以受限的 same-role refresh 接纳 legacy adoption evidence', () => {
+    const drizzleDir = join(process.cwd(), 'drizzle');
+    const migrationFile = '0046_base02_membership_legacy_adoption_refresh.sql';
+    const migrationSql = readFileSync(join(drizzleDir, migrationFile), 'utf8').toLowerCase();
+    const sqlWithoutStringLiterals = migrationSql.replace(/'(?:''|[^'])*'/gu, "''");
+
+    expect(
+      readdirSync(drizzleDir).filter((fileName) =>
+        /^0046_base02_membership_legacy_adoption_refresh\.sql$/u.test(fileName),
+      ),
+    ).toEqual([migrationFile]);
+    expect(migrationSql).toContain("set local lock_timeout = '1s';");
+    expect(migrationSql).toContain("set local statement_timeout = '5s';");
+    expect(migrationSql).toContain('set local search_path = pg_catalog, public;');
+    expect(migrationSql).toContain(
+      'lock table "public"."tenant_membership_transitions" in access exclusive mode;',
+    );
+    expect(migrationSql).toContain('expected_predecessor_when constant bigint := 1785738060856');
+    expect(migrationSql).toMatch(
+      /max\(created_at\) is distinct from expected_predecessor_when\s+or count\(\*\) filter \(where created_at = expected_predecessor_when\) <> 1/su,
+    );
+    expect(migrationSql).not.toContain('expected_predecessor_count');
+    expect(migrationSql).not.toContain('expected_predecessor_hash');
+
+    expect(migrationSql).toContain(
+      '8563ca26c2662fd0a4b177ab2019c556dafe79035e74d8e5796c39e0480c2d97',
+    );
+    expect(migrationSql).toContain("constraint_row.contype = 'c'");
+    expect(migrationSql).toContain('constraint_row.convalidated');
+    expect(migrationSql).toContain('pg_catalog.pg_get_constraintdef');
+    expect(migrationSql).toContain('s43_0046_role_shape_predecessor_drift');
+    expect(
+      migrationSql.match(
+        /alter table "public"\."tenant_membership_transitions"\s+drop constraint "tenant_membership_transitions_role_shape_check";/gu,
+      ),
+    ).toHaveLength(1);
+    expect(
+      migrationSql.match(
+        /alter table "public"\."tenant_membership_transitions"\s+add constraint "tenant_membership_transitions_role_shape_check" check/gu,
+      ),
+    ).toHaveLength(1);
+    expect(sqlWithoutStringLiterals.match(/\balter table\b/gu)).toHaveLength(2);
+
+    expect(migrationSql).toMatch(
+      /transition_type = 'refresh'\s+and from_role is not null\s+and \(\s*from_role <> to_role\s+or \(\s*from_role = to_role\s+and source = 'access_control_command'\s+and reason_code = 'post_rebuild_formal_identity_adoption'\s+and from_revision = 1\s+and to_revision = 2/su,
+    );
+    expect(migrationSql).toMatch(
+      /transition_type in \('create', 'legacy_calibration'\)\s+and from_role is null/su,
+    );
+    expect(migrationSql).toMatch(
+      /transition_type in \('revoke', 'reactivate', 'delete'\)\s+and from_role is not null\s+and from_role = to_role/su,
+    );
+
+    expect(sqlWithoutStringLiterals).not.toMatch(
+      /\b(?:insert\s+into|update|delete\s+from)\s+(?:"?public"?\.)?"?(?:tenant_members|tenant_membership_transitions)"?\b/iu,
+    );
+    expect(sqlWithoutStringLiterals).not.toMatch(
+      /\b(?:truncate(?:\s+table)?|alter\s+type|create\s+type|drop\s+table)\b/iu,
+    );
+  });
+
+  it('0046 journal entry 是冻结历史的唯一 common-tail 后继且无 snapshot', () => {
+    const drizzleDir = join(process.cwd(), 'drizzle');
+    const journal = JSON.parse(
+      readFileSync(join(drizzleDir, 'meta/_journal.json'), 'utf8'),
+    ) as {
+      entries: Array<{
+        idx: number;
+        version: string;
+        when: number;
+        tag: string;
+        breakpoints: boolean;
+      }>;
+    };
+    const frozenEntries = journal.entries.slice(0, 46);
+
+    expect(journal.entries).toHaveLength(47);
+    expect(journal.entries.map((entry) => entry.idx)).toEqual(
+      Array.from({ length: 47 }, (_, index) => index),
+    );
+    expect(
+      createHash('sha256').update(JSON.stringify(frozenEntries)).digest('hex'),
+    ).toBe('45af982921803f53cb989ca11cae55a9a3437d9454355c9e6b699b9dca031052');
+    expect(journal.entries[46]).toEqual({
+      idx: 46,
+      version: '7',
+      when: 1786867010908,
+      tag: '0046_base02_membership_legacy_adoption_refresh',
+      breakpoints: true,
+    });
+    expect(Number.isInteger(journal.entries[46]?.when)).toBe(true);
+    expect(journal.entries[46]?.when).toBeGreaterThan(frozenEntries.at(-1)?.when ?? 0);
+    expect(
+      readdirSync(join(drizzleDir, 'meta')).filter((fileName) =>
+        /^0046_snapshot\.json$/u.test(fileName),
+      ),
+    ).toEqual([]);
   });
 });
