@@ -1,5 +1,16 @@
 # 项目重构历史
 
+<!-- ANALYTICS_OVERVIEW_FRESH_READMISSION_HISTORY_20260817 -->
+
+## 2026-08-17：Analytics Overview Formal Runtime Fresh Re-admission
+
+- 选择 current month vs previous month 为第一经营总览切片。
+- AN-01 领域契约、Formal Scope、Binding、Operating Context 均 ready。
+- candidate 未发现正式机构消费/支付/退款 persistence。
+- 未创建 Runtime Reader/API/Page。
+- 未修改 Schema/Migration，未执行数据库写入。
+- 下一硬边界：AN-02 formal fact persistence Schema/Migration Admission。
+
 <!-- KNOWLEDGE_DOCUMENT_METADATA_HISTORY_20260816 -->
 
 ## 2026-08-16：Knowledge document metadata formal readonly pilot release
