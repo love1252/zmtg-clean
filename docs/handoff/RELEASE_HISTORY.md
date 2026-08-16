@@ -1,5 +1,16 @@
 # 项目重构历史
 
+<!-- KNOWLEDGE_DOCUMENT_METADATA_HISTORY_20260816 -->
+
+## 2026-08-16：Knowledge document metadata formal readonly pilot release
+
+- 发布 `GET /api/v1/institution/knowledge-documents`。
+- 发布 `/hospital/knowledge`。
+- `page_knowledge_library` 加入 Capability Authority。
+- Reader 只读取 formal current publication、immutable version 与 formal source。
+- formal cohort 保持 `ready_empty`。
+- 无数据库写入、Schema、Migration、Staging 或 Production deployment。
+
 <!-- KNOWLEDGE_FORMAL_FACT_SCOPE_HISTORY_20260816 -->
 
 ## 2026-08-16：Knowledge formal fact + Scope provisioning prerequisite 闭环
