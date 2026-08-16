@@ -1,5 +1,21 @@
 # 智美天工架构文档索引
 
+<!-- KNOWLEDGE_FORMAL_FACT_SCOPE_CLOSURE_20260816 -->
+
+## Knowledge formal fact + Scope provisioning 闭环（2026-08-16）
+
+```text
+KNOWLEDGE_FORMAL_FACT_MODEL=ready
+KNOWLEDGE_FORMAL_PROVENANCE=expressible
+KNOWLEDGE_IMMUTABLE_PUBLICATION_MODEL=ready
+KNOWLEDGE_DATA_READINESS=ready_empty
+TARGET_ACTIVE_FORMAL_SCOPE_COUNT=1
+TARGET_ACTIVE_BINDING_COUNT=1
+MIGRATION_0047=applied_local_candidate
+```
+
+Canonical persistence：`knowledge_formal_sources` → immutable `knowledge_formal_document_versions` → current `knowledge_formal_document_publications`。`mock|seed|demo` 不进入 formal provenance。
+
 <!-- SYS01_AI_USAGE_READONLY_RUNTIME_RELEASE_20260816 -->
 
 ## SYS-01 AI 使用只读 Runtime Release（2026-08-16）
