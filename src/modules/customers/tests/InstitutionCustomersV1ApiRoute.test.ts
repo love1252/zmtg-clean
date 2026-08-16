@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -84,7 +84,7 @@ describe('GET /api/v1/institution/customers', () => {
     expect(source).not.toMatch(/export\s+(?:async\s+)?function\s+(?:POST|PATCH|DELETE)/u);
   });
 
-  it('legacy API 继续 503 capability_disabled，page/capability 不在 Runtime scope', () => {
+  it('legacy API 继续 503 capability_disabled，page release 由独立 page test 验证', () => {
     const legacy = readFileSync(
       resolve(process.cwd(), 'src/app/api/institution/customers/route.ts'),
       'utf8',
@@ -92,23 +92,5 @@ describe('GET /api/v1/institution/customers', () => {
     expect(legacy).toContain("code: 'capability_disabled'");
     expect(legacy).toContain('status: 503');
     expect(legacy).not.toContain('readCurrentInstitutionCustomersV1');
-
-    expect(
-      existsSync(
-        resolve(process.cwd(), 'src/app/hospital/customers/page.tsx'),
-      ),
-    ).toBe(false);
-    const authority = readFileSync(
-      resolve(
-        process.cwd(),
-        'src/server/orchestration/institution-capability-authority.ts',
-      ),
-      'utf8',
-    );
-    expect(authority).toContain("definition.key === 'page_workbench'");
-    expect(authority).toContain("definition.key === 'page_system_audit'");
-    expect(authority).not.toContain(
-      "definition.key === 'page_customer_list'",
-    );
   });
 });

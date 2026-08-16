@@ -12,10 +12,12 @@ import {
 } from '@/modules/institution/server/institution-server-runtime';
 
 export const INSTITUTION_CAPABILITY_AUTHORITY_REVISION_V1 =
-  'r1c-page-system-audit-admin-only-readonly-pilot-v2' as const;
+  'r2-institution-read-release-wave01-customers-care-readonly-v1' as const;
 
 const AUTHORITY_STATUS_FRESHNESS_WINDOW_MS = 5_000;
 const WORKBENCH_READONLY_SUMMARY = '工作台仅供查看' as const;
+const CUSTOMER_LIST_READONLY_SUMMARY = '客户列表仅供查看' as const;
+const CARE_APPOINTMENTS_READONLY_SUMMARY = '预约管理仅供查看' as const;
 const AUDIT_READONLY_SUMMARY = '审计与安全仅供查看' as const;
 
 function buildCapabilityStatus(
@@ -40,8 +42,15 @@ function buildCapabilityStatus(
     INSTITUTION_CAPABILITY_REGISTRY_V1.map((definition) => {
       const institutionAuthorized = availableSections.has(definition.sectionId);
       const workbenchReadonlyPilot = definition.key === 'page_workbench';
+      const customerListReadonlyPilot = definition.key === 'page_customer_list';
+      const careAppointmentsReadonlyPilot =
+        definition.key === 'page_care_appointments';
       const auditReadonlyPilot = definition.key === 'page_system_audit';
-      const readonlyPilot = workbenchReadonlyPilot || auditReadonlyPilot;
+      const readonlyPilot =
+        workbenchReadonlyPilot ||
+        customerListReadonlyPilot ||
+        careAppointmentsReadonlyPilot ||
+        auditReadonlyPilot;
 
       return Object.freeze({
         key: definition.key,
@@ -55,7 +64,11 @@ function buildCapabilityStatus(
             ? 'authorized'
             : 'not_authorized',
           connectionAvailability: 'not_required',
-          dataReadiness: auditReadonlyPilot ? 'partial' : 'not_required',
+          dataReadiness: auditReadonlyPilot
+            ? 'partial'
+            : customerListReadonlyPilot || careAppointmentsReadonlyPilot
+              ? 'ready'
+              : 'not_required',
           productionRelease: readonlyPilot
             ? 'pilot_released'
             : 'not_released',
@@ -64,7 +77,11 @@ function buildCapabilityStatus(
           readonlyPilot && institutionAuthorized
             ? auditReadonlyPilot
               ? AUDIT_READONLY_SUMMARY
-              : WORKBENCH_READONLY_SUMMARY
+              : customerListReadonlyPilot
+                ? CUSTOMER_LIST_READONLY_SUMMARY
+                : careAppointmentsReadonlyPilot
+                  ? CARE_APPOINTMENTS_READONLY_SUMMARY
+                  : WORKBENCH_READONLY_SUMMARY
             : null,
         diagnosticTargetKey:
           systemAvailable &&
