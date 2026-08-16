@@ -74,6 +74,15 @@ function command<K extends Exclude<MembershipOwnerCommand['kind'], 'create'>>(
     reasonCode: `membership_${kind}`,
     occurredAt: OCCURRED_AT,
     ...(kind === 'refresh' ? { role: 'consultant' as const } : {}),
+    ...(kind === 'adopt_legacy'
+      ? {
+          expectedRevision: 1,
+          expectedDisplayName: '演示管理员',
+          displayName: '系统管理员',
+          role: 'tenant_admin' as const,
+          reasonCode: 'post_rebuild_formal_identity_adoption',
+        }
+      : {}),
     ...overrides,
   };
   return base as Extract<MembershipOwnerCommand, { kind: K }>;
@@ -252,6 +261,103 @@ describe('Access Control Membership 生命周期状态机', () => {
         code: 'membership_transition_not_allowed',
       });
     }
+  });
+
+  it('adopt_legacy 只采用精确校准 legacy，并以 refresh evidence 落为 revision 2', () => {
+    const legacy = Object.freeze(current({
+      membershipId: 'member-demo-admin',
+      tenantId: 'growth-tenant-chengxing',
+      userId: 'demo-user-admin',
+      displayName: '演示管理员',
+      revision: 1,
+      lifecycleStatus: 'active',
+      provenanceSource: 'legacy_calibration',
+      provenanceActorId: null,
+      provenanceReasonCode: 'legacy_unknown',
+      provenanceCommandId: `mcal1_${'a'.repeat(64)}`,
+      provenanceOccurredAt: null,
+      provenanceRecordedAt: '2026-08-01T07:00:01.000Z',
+      revokedAt: null,
+      deletedAt: null,
+    }));
+    const before = structuredClone(legacy);
+    const adoption = command('adopt_legacy', {
+      membershipId: legacy.membershipId,
+      tenantId: legacy.tenantId,
+      actorId: legacy.userId,
+    });
+
+    const result = decide({ current: legacy, command: adoption });
+
+    expect(legacy).toEqual(before);
+    expect(result).toMatchObject({
+      kind: 'apply',
+      bindingAction: { kind: 'none' },
+      nextCurrent: {
+        membershipId: legacy.membershipId,
+        tenantId: legacy.tenantId,
+        userId: legacy.userId,
+        role: legacy.role,
+        displayName: '系统管理员',
+        revision: 2,
+        lifecycleStatus: 'active',
+        provenanceSource: 'access_control_command',
+        provenanceActorId: legacy.userId,
+        provenanceReasonCode: 'post_rebuild_formal_identity_adoption',
+        provenanceCommandId: SECOND_COMMAND_ID,
+        provenanceOccurredAt: OCCURRED_AT,
+        provenanceRecordedAt: RECORDED_AT,
+        revokedAt: null,
+        deletedAt: null,
+        createdAt: legacy.createdAt,
+      },
+      transition: {
+        transitionType: 'refresh',
+        source: 'access_control_command',
+        reasonCode: 'post_rebuild_formal_identity_adoption',
+        fromRevision: 1,
+        toRevision: 2,
+      },
+    });
+  });
+
+  it.each([
+    ['wrong display', { displayName: '其他旧名称' }, {},
+      'membership_transition_not_allowed'],
+    ['wrong provenance', { provenanceSource: 'access_control_command' }, {},
+      'membership_current_envelope_invalid'],
+    ['wrong revision', {}, { expectedRevision: 2 },
+      'membership_revision_future'],
+    ['wrong role', {}, { role: 'consultant' },
+      'membership_transition_not_allowed'],
+  ] as const)('adopt_legacy 对 %s fail-closed', (
+    _label,
+    currentOverrides,
+    commandOverrides,
+    code,
+  ) => {
+    const legacy = current({
+      membershipId: 'member-demo-admin',
+      tenantId: 'growth-tenant-chengxing',
+      userId: 'demo-user-admin',
+      displayName: '演示管理员',
+      revision: 1,
+      provenanceSource: 'legacy_calibration',
+      provenanceActorId: null,
+      provenanceReasonCode: 'legacy_unknown',
+      provenanceCommandId: `mcal1_${'b'.repeat(64)}`,
+      provenanceOccurredAt: null,
+      ...currentOverrides,
+    });
+    expect(decide({
+      current: legacy,
+      command: command('adopt_legacy', {
+        membershipId: legacy.membershipId,
+        tenantId: legacy.tenantId,
+        actorId: legacy.userId,
+        ...commandOverrides,
+      }),
+    })).toEqual({ kind: 'blocked', code });
   });
 
   it('revoke、reactivate 与 delete 固定状态、时间和 Binding 动作', () => {

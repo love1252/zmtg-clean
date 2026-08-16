@@ -26,7 +26,7 @@ const manifest: CurrentDemoAdminAuthorityManifest = Object.freeze({
   tenantName: '澄星医疗美容',
   institutionId: 'growth-inst-chengxing',
   institutionName: '澄星医疗美容',
-  membershipId: 'membership-chengxing-admin',
+  membershipId: 'member-demo-admin',
   bindingId: 'binding-chengxing-admin',
   timezone: 'Asia/Shanghai',
   currency: 'CNY',
@@ -66,6 +66,33 @@ const exactMembership = Object.freeze({
   provenanceSource: 'formal_onboarding',
   provenanceActorId: 'demo-user-admin',
   provenanceReasonCode: 'formal_onboarding',
+  provenanceCommandId: `mcmd1_${'A'.repeat(43)}`,
+  provenanceOccurredAt: '2026-08-16T00:00:00.000Z',
+  provenanceRecordedAt: '2026-08-16T00:00:01.000Z',
+  revokedAt: null,
+  deletedAt: null,
+});
+
+const legacyAccount = Object.freeze({
+  ...exactAccount,
+  username: 'legacy_seed_demo_admin_anchor',
+  displayName: '演示管理员',
+  passwordResetRequired: true,
+  status: 'disabled',
+  createdBy: 'legacy-demo-seed-actor',
+  updatedBy: 'legacy-demo-seed-actor',
+});
+
+const legacyMembership = Object.freeze({
+  ...exactMembership,
+  displayName: '演示管理员',
+  revision: 1,
+  provenanceSource: 'legacy_calibration',
+  provenanceActorId: null,
+  provenanceReasonCode: 'legacy_unknown',
+  provenanceCommandId: `mcal1_${'a'.repeat(64)}`,
+  provenanceOccurredAt: null,
+  provenanceRecordedAt: '2026-08-01T00:00:00.000Z',
 });
 
 const exactBinding = Object.freeze({
@@ -110,6 +137,29 @@ describe('current demo admin formalization semantic decisions', () => {
     expect(classifyCurrentDemoAccount(exactAccount)).toBe('reused');
   });
 
+  it('classifies only the exact legacy Auth account as candidate', () => {
+    expect(classifyCurrentDemoAccount(legacyAccount)).toBe('candidate');
+    expect(classifyCurrentDemoAccount({
+      ...legacyAccount,
+      updatedBy: 'unexpected-actor',
+    })).toBe('conflict');
+  });
+
+  it('accepts both clean-create and adopted historical createdBy as formal reused', () => {
+    expect(classifyCurrentDemoAccount(exactAccount)).toBe('reused');
+    expect(classifyCurrentDemoAccount({
+      ...exactAccount,
+      createdBy: 'legacy-demo-seed-actor',
+    })).toBe('reused');
+  });
+
+  it('rejects a competing account occupying the formal username', () => {
+    expect(classifyCurrentDemoAccount({
+      ...exactAccount,
+      id: 'other-account',
+    })).toBe('conflict');
+  });
+
   it('rejects generic password-reset account semantics', () => {
     expect(classifyCurrentDemoAccount({
       ...exactAccount,
@@ -147,6 +197,31 @@ describe('current demo admin formalization semantic decisions', () => {
   it('classifies missing and exact formal Membership', () => {
     expect(classifyCurrentDemoMembership(null, manifest)).toBe('missing');
     expect(classifyCurrentDemoMembership(exactMembership, manifest)).toBe('reused');
+  });
+
+  it('classifies exact calibrated legacy Membership as candidate', () => {
+    expect(classifyCurrentDemoMembership(legacyMembership, manifest))
+      .toBe('candidate');
+    expect(classifyCurrentDemoMembership({
+      ...legacyMembership,
+      displayName: '其他演示身份',
+    }, manifest)).toBe('conflict');
+  });
+
+  it('accepts only clean onboarding or adopted legacy as formal reused', () => {
+    expect(classifyCurrentDemoMembership(exactMembership, manifest)).toBe('reused');
+    expect(classifyCurrentDemoMembership({
+      ...exactMembership,
+      revision: 2,
+      provenanceSource: 'access_control_command',
+      provenanceReasonCode: 'post_rebuild_formal_identity_adoption',
+    }, manifest)).toBe('reused');
+    expect(classifyCurrentDemoMembership({
+      ...exactMembership,
+      revision: 2,
+      provenanceSource: 'access_control_command',
+      provenanceReasonCode: 'membership_refresh',
+    }, manifest)).toBe('conflict');
   });
 
   it.each([
@@ -216,12 +291,12 @@ describe('current demo admin formalization semantic decisions', () => {
     }, manifest)).toBe('conflict');
   });
 
-  it('allows account exact plus Membership missing', () => {
+  it('fails closed on account exact plus Membership missing', () => {
     expect(decideCurrentDemoPhaseA({
       mode: 'dry-run',
       accountState: 'reused',
       membershipState: 'missing',
-    })).toBe('candidate');
+    })).toBe('conflict');
   });
 
   it('rejects account missing plus Membership existing', () => {
@@ -246,9 +321,186 @@ describe('current demo admin formalization semantic decisions', () => {
       passwordVerified: true,
     })).toBe('reused');
   });
+
+  it('allows only missing/missing, candidate/candidate, and reused/reused pairs', () => {
+    expect(decideCurrentDemoPhaseA({
+      mode: 'dry-run',
+      accountState: 'missing',
+      membershipState: 'missing',
+    })).toBe('candidate');
+    expect(decideCurrentDemoPhaseA({
+      mode: 'dry-run',
+      accountState: 'candidate',
+      membershipState: 'candidate',
+    })).toBe('candidate');
+    expect(decideCurrentDemoPhaseA({
+      mode: 'dry-run',
+      accountState: 'reused',
+      membershipState: 'reused',
+    })).toBe('reused');
+
+    const mixed = [
+      ['missing', 'candidate'],
+      ['missing', 'reused'],
+      ['candidate', 'missing'],
+      ['candidate', 'reused'],
+      ['reused', 'missing'],
+      ['reused', 'candidate'],
+    ] as const;
+    for (const [accountState, membershipState] of mixed) {
+      expect(decideCurrentDemoPhaseA({
+        mode: 'dry-run',
+        accountState,
+        membershipState,
+      })).toBe('conflict');
+    }
+  });
 });
 
 describe('current demo admin formalization state machine', () => {
+  it.each([
+    ['missing/candidate', 'missing', 'candidate'],
+    ['candidate/missing', 'candidate', 'missing'],
+  ] as const)('rejects malformed Phase A candidate pair %s at orchestration boundary',
+    async (_label, accountState, membershipState) => {
+      const port = phases({
+        runPhaseA: vi.fn(async () => ({
+          phase: 'candidate',
+          accountState,
+          membershipState,
+          databaseWriteExecuted: false,
+        } as const)),
+      });
+
+      const result = await orchestrateCurrentDemoAdminFormalization({
+        mode: 'execute',
+        manifest,
+        password: 'not-logged',
+        now: new Date('2026-08-16T01:00:00.000Z'),
+        phases: port,
+      });
+
+      expect(result).toMatchObject({
+        phaseA: 'unexpected',
+        phaseB: 'not_run',
+        phaseC: 'not_run',
+        databaseWriteExecuted: false,
+      });
+      expect(port.runPhaseB).not.toHaveBeenCalled();
+      expect(port.runPhaseC).not.toHaveBeenCalled();
+    });
+
+  it('rejects malformed applied/conflict Phase A and preserves may-have-write',
+    async () => {
+      const port = phases({
+        runPhaseA: vi.fn(async () => ({
+          phase: 'applied',
+          accountState: 'applied',
+          membershipState: 'conflict',
+          databaseWriteExecuted: true,
+        } as const)),
+      });
+
+      const result = await orchestrateCurrentDemoAdminFormalization({
+        mode: 'execute',
+        manifest,
+        password: 'not-logged',
+        now: new Date('2026-08-16T01:00:00.000Z'),
+        phases: port,
+      });
+
+      expect(result).toMatchObject({
+        phaseA: 'unexpected',
+        phaseB: 'not_run',
+        phaseC: 'not_run',
+        databaseWriteExecuted: true,
+      });
+      expect(port.runPhaseB).not.toHaveBeenCalled();
+      expect(port.runPhaseC).not.toHaveBeenCalled();
+    });
+
+  it('accepts only the three valid Phase A boundary pairs', async () => {
+    const validCases = [
+      {
+        mode: 'dry-run',
+        outcome: {
+          phase: 'candidate',
+          accountState: 'missing',
+          membershipState: 'missing',
+          databaseWriteExecuted: false,
+        },
+      },
+      {
+        mode: 'dry-run',
+        outcome: {
+          phase: 'candidate',
+          accountState: 'candidate',
+          membershipState: 'candidate',
+          databaseWriteExecuted: false,
+        },
+      },
+      {
+        mode: 'execute',
+        outcome: {
+          phase: 'reused',
+          accountState: 'reused',
+          membershipState: 'reused',
+          databaseWriteExecuted: false,
+        },
+      },
+    ] as const;
+
+    for (const validCase of validCases) {
+      const port = phases({
+        runPhaseA: vi.fn(async () => validCase.outcome),
+      });
+      const result = await orchestrateCurrentDemoAdminFormalization({
+        mode: validCase.mode,
+        manifest,
+        password: validCase.mode === 'execute' ? 'not-logged' : null,
+        now: new Date('2026-08-16T01:00:00.000Z'),
+        phases: port,
+      });
+
+      expect(result.phaseA).toBe(validCase.outcome.phase);
+      expect(port.runPhaseB).toHaveBeenCalledOnce();
+      expect(port.runPhaseC).toHaveBeenCalledOnce();
+    }
+  });
+
+  it('continues an exact legacy candidate pair through all dry-run phases', async () => {
+    const port = phases({
+      runPhaseA: vi.fn(async () => ({
+        phase: 'candidate',
+        accountState: 'candidate',
+        membershipState: 'candidate',
+        databaseWriteExecuted: false,
+      } as const)),
+    });
+
+    const result = await orchestrateCurrentDemoAdminFormalization({
+      mode: 'dry-run',
+      manifest,
+      password: null,
+      now: new Date('2026-08-16T01:00:00.000Z'),
+      phases: port,
+    });
+
+    expect(result).toMatchObject({
+      accountState: 'candidate',
+      membershipState: 'candidate',
+      scopeState: 'missing',
+      contextState: 'missing',
+      bindingState: 'missing',
+      phaseA: 'candidate',
+      phaseB: 'candidate',
+      phaseC: 'candidate',
+      databaseWriteExecuted: false,
+    });
+    expect(port.runPhaseB).toHaveBeenCalledOnce();
+    expect(port.runPhaseC).toHaveBeenCalledOnce();
+  });
+
   it('models all missing as three dry-run candidates without writes', async () => {
     const result = await orchestrateCurrentDemoAdminFormalization({
       mode: 'dry-run',

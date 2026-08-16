@@ -192,38 +192,52 @@ describe('Access Control Membership transaction repository', () => {
     ]);
   });
 
-  it('Membership CAS 条件包含 tenant/id/user/revision/lifecycle 并精确 returning', async () => {
+  it('Membership adoption CAS 同步写入 displayName/revision/provenance 且不改 identity', async () => {
     let condition: SQL | undefined;
     const returning = vi.fn(async () => [{ id: 'member-001' }]);
     const where = vi.fn((value: SQL) => {
       condition = value;
       return { returning };
     });
-    const set = vi.fn(() => ({ where }));
+    const set = vi.fn((_values: unknown) => ({ where }));
     const update = vi.fn(() => ({ set }));
     const unitOfWork = createTransactionBoundMembershipCommandUnitOfWork({
       update,
     } as unknown as MembershipCommandTransactionDatabase, () => true);
-    const previous = current();
+    const previous = current({
+      displayName: '演示管理员',
+      revision: 1,
+      provenanceSource: 'legacy_calibration',
+      provenanceActorId: null,
+      provenanceReasonCode: 'legacy_unknown',
+      provenanceCommandId: `mcal1_${'a'.repeat(64)}`,
+      provenanceOccurredAt: null,
+    });
     const next = current({
-      role: 'consultant',
-      revision: 5,
+      displayName: '系统管理员',
+      revision: 2,
+      provenanceReasonCode: 'post_rebuild_formal_identity_adoption',
       provenanceCommandId: `mcmd1_${'M'.repeat(43)}`,
     });
 
     await expect(unitOfWork.updateMembershipByCas({
       previous,
       next,
-      expectedRevision: 4,
+      expectedRevision: 1,
       expectedLifecycleStatus: 'active',
     })).resolves.toBe(1);
     expect(update).toHaveBeenCalledWith(tenantMembers);
     expect(set).toHaveBeenCalledWith(expect.objectContaining({
-      role: 'consultant',
-      revision: 5,
+      role: 'tenant_admin',
+      displayName: '系统管理员',
+      revision: 2,
       lifecycleStatus: 'active',
       currentProvenanceCommandId: next.provenanceCommandId,
     }));
+    const mutation = set.mock.calls[0]?.[0];
+    expect(mutation).not.toHaveProperty('id');
+    expect(mutation).not.toHaveProperty('tenantId');
+    expect(mutation).not.toHaveProperty('userId');
     const compiled = new PgDialect().sqlToQuery(condition!);
     expect(compiled.sql).toContain('"tenant_id" =');
     expect(compiled.sql).toContain('"id" =');

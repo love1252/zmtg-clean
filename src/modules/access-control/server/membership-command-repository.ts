@@ -385,6 +385,7 @@ export function createTransactionBoundMembershipCommandUnitOfWork(
           .update(tenantMembers)
           .set({
             role: input.next.role,
+            displayName: input.next.displayName,
             revision: input.next.revision,
             lifecycleStatus: input.next.lifecycleStatus,
             currentProvenanceSource: input.next.provenanceSource,
