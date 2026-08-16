@@ -1,5 +1,17 @@
 # 项目重构历史
 
+<!-- KNOWLEDGE_FORMAL_FACT_SCOPE_HISTORY_20260816 -->
+
+## 2026-08-16：Knowledge formal fact + Scope provisioning prerequisite 闭环
+
+- 新增 formal source provenance persistence。
+- 新增 immutable document version persistence 与 DB-level UPDATE/DELETE guard。
+- 新增 current publication pointer。
+- 复用已存在的 exact formal Scope + active Binding。
+- `0047_knowledge_formal_fact_provenance_scope` 已仅在 local candidate 执行。
+- formal facts 保持 0 行，形成 `ready_empty` authoritative cohort。
+- 无业务 DML、无 staging、无 production deployment。
+
 <!-- SYS01_AI_USAGE_READONLY_RELEASE_HISTORY_20260816 -->
 
 ## 2026-08-16：SYS-01 AI 使用只读业务切片完成正式 Runtime pilot release
