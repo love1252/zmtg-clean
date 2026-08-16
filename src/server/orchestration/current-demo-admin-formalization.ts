@@ -1,3 +1,8 @@
+import {
+  isLegacyMembershipCalibrationCommandId,
+  isRuntimeMembershipCommandId,
+} from '@/modules/access-control/domain/membership-lifecycle';
+
 export const CURRENT_DEMO_ADMIN_FORMALIZATION_TASK =
   'S39_CURRENT_DEMO_ADMIN_FORMALIZATION_AND_INSTITUTION_PROVISIONING_CONTROL_PLANE';
 export const CURRENT_DEMO_ADMIN_FORMALIZATION_VERSION =
@@ -19,6 +24,19 @@ export const CURRENT_DEMO_ADMIN_IDENTITY = Object.freeze({
   assignmentSource: 'manual_admin',
   provenanceSource: 'access_control_command',
   reasonCode: 'post_rebuild_formal_provisioning',
+} as const);
+
+export const CURRENT_DEMO_ADMIN_LEGACY_IDENTITY = Object.freeze({
+  accountId: 'demo-user-admin',
+  username: 'legacy_seed_demo_admin_anchor',
+  accountDisplayName: '演示管理员',
+  membershipId: 'member-demo-admin',
+  tenantId: 'growth-tenant-chengxing',
+  institutionId: 'growth-inst-chengxing',
+  createdBy: 'legacy-demo-seed-actor',
+  role: 'tenant_admin',
+  provenanceReasonCode: 'legacy_unknown',
+  adoptionReasonCode: 'post_rebuild_formal_identity_adoption',
 } as const);
 
 export type CurrentDemoAdminFormalizationMode = 'dry-run' | 'execute';
@@ -90,6 +108,11 @@ export type CurrentDemoMembershipSnapshot = Readonly<{
   provenanceSource: string | null;
   provenanceActorId: string | null;
   provenanceReasonCode: string | null;
+  provenanceCommandId: string | null;
+  provenanceOccurredAt: string | null;
+  provenanceRecordedAt: string | null;
+  revokedAt: string | null;
+  deletedAt: string | null;
 }>;
 
 export type CurrentDemoBindingSnapshot = Readonly<{
@@ -218,7 +241,11 @@ function isValidPhaseOutcome(
   }
   if (phase === 'conflict') return states.includes('conflict');
   if (phase === 'unexpected') return states.includes('unexpected');
-  if (phase === 'candidate') return states.some((state) => state === 'missing');
+  if (phase === 'candidate') {
+    return states.length > 0 && states.every(
+      (state) => state === 'missing' || state === 'candidate',
+    );
+  }
   if (phase === 'reused') return states.every((state) => state === 'reused');
   if (phase === 'applied') {
     return mode === 'execute' && databaseWriteExecuted &&
@@ -227,11 +254,68 @@ function isValidPhaseOutcome(
   return false;
 }
 
+function isValidPhaseAOutcome(
+  mode: CurrentDemoAdminFormalizationMode,
+  outcome: CurrentDemoPhaseAOutcome,
+): boolean {
+  if (
+    !PHASE_STATES.has(outcome.phase) ||
+    !COMPONENT_STATES.has(outcome.accountState) ||
+    !COMPONENT_STATES.has(outcome.membershipState) ||
+    (mode === 'dry-run' && outcome.databaseWriteExecuted)
+  ) {
+    return false;
+  }
+  if (outcome.phase === 'candidate') {
+    const exactCandidatePair =
+      (outcome.accountState === 'missing' &&
+        outcome.membershipState === 'missing') ||
+      (outcome.accountState === 'candidate' &&
+        outcome.membershipState === 'candidate');
+    return exactCandidatePair && !outcome.databaseWriteExecuted;
+  }
+  if (outcome.phase === 'reused') {
+    return outcome.accountState === 'reused' &&
+      outcome.membershipState === 'reused' &&
+      !outcome.databaseWriteExecuted;
+  }
+  if (outcome.phase === 'applied') {
+    return mode === 'execute' &&
+      outcome.accountState === 'applied' &&
+      outcome.membershipState === 'applied' &&
+      outcome.databaseWriteExecuted;
+  }
+  if (outcome.phase === 'conflict') {
+    return (
+      outcome.accountState === 'conflict' ||
+      outcome.membershipState === 'conflict'
+    ) && !outcome.databaseWriteExecuted;
+  }
+  return false;
+}
+
 export function classifyCurrentDemoAccount(
   actual: CurrentDemoAccountSnapshot | null,
-): 'missing' | 'reused' | 'conflict' {
+): 'missing' | 'candidate' | 'reused' | 'conflict' {
   if (actual === null) return 'missing';
   const expected = CURRENT_DEMO_ADMIN_IDENTITY;
+  const legacy = CURRENT_DEMO_ADMIN_LEGACY_IDENTITY;
+  if (
+    actual.id === legacy.accountId &&
+    actual.username === legacy.username &&
+    actual.displayName === legacy.accountDisplayName &&
+    actual.phone === null &&
+    actual.email === null &&
+    actual.passwordResetRequired === true &&
+    actual.status === 'disabled' &&
+    actual.lastLoginAt === null &&
+    actual.failedLoginCount === 0 &&
+    actual.lockedUntil === null &&
+    actual.createdBy === legacy.createdBy &&
+    actual.updatedBy === legacy.createdBy
+  ) {
+    return 'candidate';
+  }
   return actual.id === expected.accountId &&
       actual.username === expected.username &&
       actual.displayName === expected.accountDisplayName &&
@@ -240,29 +324,68 @@ export function classifyCurrentDemoAccount(
       actual.passwordResetRequired === false &&
       actual.status === 'active' &&
       actual.lockedUntil === null &&
-      actual.createdBy === expected.accountId
+      (actual.createdBy === expected.accountId ||
+        actual.createdBy === legacy.createdBy)
     ? 'reused'
     : 'conflict';
+}
+
+function isCanonicalInstant(value: string | null): value is string {
+  return value !== null &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value) &&
+    !Number.isNaN(Date.parse(value)) &&
+    new Date(value).toISOString() === value;
 }
 
 export function classifyCurrentDemoMembership(
   actual: CurrentDemoMembershipSnapshot | null,
   manifest: Pick<CurrentDemoAdminAuthorityManifest, 'membershipId'>,
-): 'missing' | 'reused' | 'conflict' {
+): 'missing' | 'candidate' | 'reused' | 'conflict' {
   if (actual === null) return 'missing';
   const expected = CURRENT_DEMO_ADMIN_IDENTITY;
-  return actual.membershipId === manifest.membershipId &&
-      actual.tenantId === expected.tenantId &&
-      actual.userId === expected.accountId &&
-      actual.role === expected.role &&
-      actual.displayName === expected.accountDisplayName &&
-      actual.revision === 1 &&
-      actual.lifecycleStatus === 'active' &&
-      actual.provenanceSource === 'formal_onboarding' &&
-      actual.provenanceActorId === expected.accountId &&
-      actual.provenanceReasonCode === 'formal_onboarding'
-    ? 'reused'
-    : 'conflict';
+  const legacy = CURRENT_DEMO_ADMIN_LEGACY_IDENTITY;
+  const exactIdentity = manifest.membershipId === legacy.membershipId &&
+    actual.membershipId === manifest.membershipId &&
+    actual.tenantId === expected.tenantId &&
+    actual.userId === expected.accountId &&
+    actual.role === expected.role;
+  if (
+    exactIdentity &&
+    actual.displayName === legacy.accountDisplayName &&
+    actual.revision === 1 &&
+    actual.lifecycleStatus === 'active' &&
+    actual.provenanceSource === 'legacy_calibration' &&
+    actual.provenanceActorId === null &&
+    actual.provenanceReasonCode === legacy.provenanceReasonCode &&
+    isLegacyMembershipCalibrationCommandId(actual.provenanceCommandId) &&
+    actual.provenanceOccurredAt === null &&
+    isCanonicalInstant(actual.provenanceRecordedAt) &&
+    actual.revokedAt === null &&
+    actual.deletedAt === null
+  ) {
+    return 'candidate';
+  }
+  if (
+    !exactIdentity ||
+    actual.displayName !== expected.accountDisplayName ||
+    actual.lifecycleStatus !== 'active' ||
+    actual.provenanceActorId !== expected.accountId ||
+    !isRuntimeMembershipCommandId(actual.provenanceCommandId) ||
+    !isCanonicalInstant(actual.provenanceOccurredAt) ||
+    !isCanonicalInstant(actual.provenanceRecordedAt) ||
+    actual.provenanceRecordedAt < actual.provenanceOccurredAt ||
+    actual.revokedAt !== null ||
+    actual.deletedAt !== null
+  ) {
+    return 'conflict';
+  }
+  const cleanFormalOnboarding = actual.revision === 1 &&
+    actual.provenanceSource === 'formal_onboarding' &&
+    actual.provenanceReasonCode === 'formal_onboarding';
+  const adoptedLegacy = actual.revision === 2 &&
+    actual.provenanceSource === 'access_control_command' &&
+    actual.provenanceReasonCode === legacy.adoptionReasonCode;
+  return cleanFormalOnboarding || adoptedLegacy ? 'reused' : 'conflict';
 }
 
 export function classifyCurrentDemoProvisioning(
@@ -305,14 +428,11 @@ export function classifyCurrentDemoBinding(
 
 export function decideCurrentDemoPhaseA(input: Readonly<{
   mode: CurrentDemoAdminFormalizationMode;
-  accountState: 'missing' | 'reused' | 'conflict';
-  membershipState: 'missing' | 'reused' | 'conflict';
+  accountState: 'missing' | 'candidate' | 'reused' | 'conflict';
+  membershipState: 'missing' | 'candidate' | 'reused' | 'conflict';
   passwordVerified?: boolean;
 }>): CurrentDemoAdminPhaseState {
   if (input.accountState === 'conflict' || input.membershipState === 'conflict') {
-    return 'conflict';
-  }
-  if (input.accountState === 'missing' && input.membershipState === 'reused') {
     return 'conflict';
   }
   if (
@@ -325,7 +445,14 @@ export function decideCurrentDemoPhaseA(input: Readonly<{
   if (input.accountState === 'reused' && input.membershipState === 'reused') {
     return 'reused';
   }
-  return 'candidate';
+  if (
+    (input.accountState === 'missing' && input.membershipState === 'missing') ||
+    (input.accountState === 'candidate' &&
+      input.membershipState === 'candidate')
+  ) {
+    return 'candidate';
+  }
+  return 'conflict';
 }
 
 function unexpectedA(databaseWriteExecuted = false): CurrentDemoPhaseAOutcome {
@@ -406,10 +533,7 @@ export async function orchestrateCurrentDemoAdminFormalization(input: Readonly<{
   } catch (error) {
     phaseA = unexpectedA(writeMayHaveExecuted(input.mode, 'phase_a', error));
   }
-  if (!isValidPhaseOutcome(input.mode, phaseA.phase, [
-    phaseA.accountState,
-    phaseA.membershipState,
-  ], phaseA.databaseWriteExecuted)) {
+  if (!isValidPhaseAOutcome(input.mode, phaseA)) {
     phaseA = unexpectedA(
       input.mode === 'execute' && phaseA.databaseWriteExecuted === true,
     );

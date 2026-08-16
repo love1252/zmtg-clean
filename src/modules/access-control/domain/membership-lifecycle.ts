@@ -125,6 +125,14 @@ export interface RefreshMembershipCommand extends MembershipCommandContext {
   readonly role: MembershipRole;
 }
 
+export interface AdoptLegacyMembershipCommand extends MembershipCommandContext {
+  readonly kind: 'adopt_legacy';
+  readonly expectedRevision: number;
+  readonly expectedDisplayName: string;
+  readonly displayName: string;
+  readonly role: MembershipRole;
+}
+
 export interface RevokeMembershipCommand extends MembershipCommandContext {
   readonly kind: 'revoke';
   readonly expectedRevision: number;
@@ -143,6 +151,7 @@ export interface DeleteMembershipCommand extends MembershipCommandContext {
 export type MembershipOwnerCommand =
   | CreateMembershipCommand
   | RefreshMembershipCommand
+  | AdoptLegacyMembershipCommand
   | RevokeMembershipCommand
   | ReactivateMembershipCommand
   | DeleteMembershipCommand;
@@ -203,6 +212,19 @@ const COMMAND_KEYS = {
   refresh: [
     'actorId',
     'commandId',
+    'expectedRevision',
+    'kind',
+    'membershipId',
+    'occurredAt',
+    'reasonCode',
+    'role',
+    'tenantId',
+  ],
+  adopt_legacy: [
+    'actorId',
+    'commandId',
+    'displayName',
+    'expectedDisplayName',
     'expectedRevision',
     'kind',
     'membershipId',
@@ -374,6 +396,14 @@ export function validateMembershipOwnerCommand(
   if (command.kind === 'refresh' && !isRole(command.role)) {
     return 'membership_command_shape_invalid';
   }
+  if (
+    command.kind === 'adopt_legacy' &&
+    (!isRole(command.role) ||
+      !isCanonicalText(command.expectedDisplayName, 120) ||
+      !isCanonicalText(command.displayName, 120))
+  ) {
+    return 'membership_command_shape_invalid';
+  }
   return null;
 }
 
@@ -510,12 +540,14 @@ function createTransition(input: {
   current: CompleteMembershipCurrent | null;
   next: CompleteMembershipCurrent;
 }): MembershipTransition {
+  const transitionType: MembershipTransitionType =
+    input.command.kind === 'adopt_legacy' ? 'refresh' : input.command.kind;
   return Object.freeze({
     transitionId: input.transitionId,
     tenantId: input.next.tenantId,
     membershipId: input.next.membershipId,
     commandId: input.command.commandId,
-    transitionType: input.command.kind,
+    transitionType,
     source: input.command.kind === 'create'
       ? input.command.source
       : 'access_control_command',
@@ -537,6 +569,7 @@ function createNextCurrent(input: {
   command: Exclude<MembershipOwnerCommand, CreateMembershipCommand>;
   recordedAt: string;
   role: MembershipRole;
+  displayName: string;
   status: MembershipLifecycleStatus;
   revokedAt: string | null;
   deletedAt: string | null;
@@ -544,6 +577,7 @@ function createNextCurrent(input: {
   return Object.freeze({
     ...input.current,
     role: input.role,
+    displayName: input.displayName,
     revision: input.current.revision + 1,
     lifecycleStatus: input.status,
     provenanceSource: 'access_control_command',
@@ -678,6 +712,35 @@ export function decideMembershipLifecycle(input: Readonly<{
   let nextCurrent: CompleteMembershipCurrent;
   let bindingAction: MembershipBindingAction = { kind: 'none' };
   switch (input.command.kind) {
+    case 'adopt_legacy':
+      if (
+        current.revision !== 1 ||
+        current.lifecycleStatus !== 'active' ||
+        current.provenanceSource !== 'legacy_calibration' ||
+        current.provenanceActorId !== null ||
+        current.provenanceReasonCode !== 'legacy_unknown' ||
+        !isLegacyMembershipCalibrationCommandId(
+          current.provenanceCommandId,
+        ) ||
+        current.provenanceOccurredAt !== null ||
+        current.revokedAt !== null ||
+        current.deletedAt !== null ||
+        current.role !== input.command.role ||
+        current.displayName !== input.command.expectedDisplayName
+      ) {
+        return blocked('membership_transition_not_allowed');
+      }
+      nextCurrent = createNextCurrent({
+        current,
+        command: input.command,
+        recordedAt: input.recordedAt,
+        role: current.role,
+        displayName: input.command.displayName,
+        status: 'active',
+        revokedAt: null,
+        deletedAt: null,
+      });
+      break;
     case 'refresh':
       if (current.lifecycleStatus !== 'active') {
         return blocked('membership_transition_not_allowed');
@@ -687,6 +750,7 @@ export function decideMembershipLifecycle(input: Readonly<{
         command: input.command,
         recordedAt: input.recordedAt,
         role: input.command.role,
+        displayName: current.displayName,
         status: 'active',
         revokedAt: null,
         deletedAt: null,
@@ -701,6 +765,7 @@ export function decideMembershipLifecycle(input: Readonly<{
         command: input.command,
         recordedAt: input.recordedAt,
         role: current.role,
+        displayName: current.displayName,
         status: 'revoked',
         revokedAt: input.command.occurredAt,
         deletedAt: null,
@@ -716,6 +781,7 @@ export function decideMembershipLifecycle(input: Readonly<{
         command: input.command,
         recordedAt: input.recordedAt,
         role: current.role,
+        displayName: current.displayName,
         status: 'active',
         revokedAt: null,
         deletedAt: null,
@@ -739,6 +805,7 @@ export function decideMembershipLifecycle(input: Readonly<{
         command: input.command,
         recordedAt: input.recordedAt,
         role: current.role,
+        displayName: current.displayName,
         status: 'deleted',
         revokedAt: current.revokedAt,
         deletedAt: input.command.occurredAt,

@@ -4,6 +4,10 @@ import {
   createBindingCommandId,
   executeBindingCommandWithUnitOfWork,
 } from '@/modules/access-control/application/binding-command-service';
+import {
+  createMembershipCommandId,
+  executeMembershipCommandWithUnitOfWork,
+} from '@/modules/access-control/application/membership-command-service';
 import type { MembershipCurrent } from '@/modules/access-control/domain/membership-lifecycle';
 import { createMembershipCommandExternalTransactionAdapter } from '@/modules/access-control/server/membership-command-external-transaction';
 import {
@@ -18,7 +22,6 @@ import {
 import type { AuthAccountRecord } from '@/modules/auth/domain/auth-account';
 import {
   createAuthAccountRepository,
-  type AuthAccountRepository,
 } from '@/modules/auth/server/auth-account-repository';
 import {
   hashPasswordScrypt,
@@ -47,6 +50,7 @@ import { createProvisioningWritePostgresAdapter } from '@/modules/tenancy/provis
 import { createTransactionBoundInstitutionScopeAssertion } from '@/modules/tenancy/server/transaction-bound-institution-scope';
 import {
   CURRENT_DEMO_ADMIN_IDENTITY,
+  CURRENT_DEMO_ADMIN_LEGACY_IDENTITY,
   CurrentDemoAdminPhaseExecutionError,
   classifyCurrentDemoAccount,
   classifyCurrentDemoBinding,
@@ -79,16 +83,53 @@ const READONLY_TRANSACTION_OPTIONS = Object.freeze({
 
 type PostgresClient = ReturnType<typeof createPostgresClient>;
 
+export type CurrentDemoPhaseADryRunDependencies = Readonly<{
+  createAuthRepository: typeof createAuthAccountRepository;
+  createMembershipRepository:
+    typeof createAuthoritativeInstitutionMembershipFactRepositoryV1;
+}>;
+
+export type CurrentDemoPhaseAExecuteDependencies = Readonly<{
+  createAuthRepository: typeof createAuthAccountRepository;
+  createMembershipUnitOfWork:
+    typeof createTransactionBoundMembershipCommandUnitOfWork;
+  createMembershipAdapter:
+    typeof createMembershipCommandExternalTransactionAdapter;
+  createMembershipCommandId: typeof createMembershipCommandId;
+  executeMembershipCommand: typeof executeMembershipCommandWithUnitOfWork;
+  hashPassword: typeof hashPasswordScrypt;
+  verifyPassword: typeof verifyPasswordScrypt;
+}>;
+
+const PHASE_A_DRY_RUN_DEPENDENCIES: CurrentDemoPhaseADryRunDependencies =
+  Object.freeze({
+    createAuthRepository: createAuthAccountRepository,
+    createMembershipRepository:
+      createAuthoritativeInstitutionMembershipFactRepositoryV1,
+  });
+
+const PHASE_A_EXECUTE_DEPENDENCIES: CurrentDemoPhaseAExecuteDependencies =
+  Object.freeze({
+    createAuthRepository: createAuthAccountRepository,
+    createMembershipUnitOfWork:
+      createTransactionBoundMembershipCommandUnitOfWork,
+    createMembershipAdapter: createMembershipCommandExternalTransactionAdapter,
+    createMembershipCommandId,
+    executeMembershipCommand: executeMembershipCommandWithUnitOfWork,
+    hashPassword: hashPasswordScrypt,
+    verifyPassword: verifyPasswordScrypt,
+  });
+
 function phaseAConflict(
   accountState: CurrentDemoPhaseAOutcome['accountState'],
   membershipState: CurrentDemoPhaseAOutcome['membershipState'],
 ): CurrentDemoPhaseAOutcome {
+  const alreadyConflict = accountState === 'conflict' ||
+    membershipState === 'conflict';
   return Object.freeze({
     phase: 'conflict',
-    accountState:
-      accountState === 'conflict' ? 'conflict' : accountState,
-    membershipState:
-      membershipState === 'conflict' ? 'conflict' : membershipState,
+    accountState: alreadyConflict ? accountState : 'conflict',
+    membershipState: alreadyConflict ? membershipState : 'conflict',
     databaseWriteExecuted: false,
   });
 }
@@ -134,6 +175,11 @@ function asMembershipSnapshot(value: MembershipCurrent | null) {
     provenanceSource: value.provenanceSource,
     provenanceActorId: value.provenanceActorId,
     provenanceReasonCode: value.provenanceReasonCode,
+    provenanceCommandId: value.provenanceCommandId,
+    provenanceOccurredAt: value.provenanceOccurredAt,
+    provenanceRecordedAt: value.provenanceRecordedAt,
+    revokedAt: value.revokedAt,
+    deletedAt: value.deletedAt,
   });
 }
 
@@ -152,7 +198,42 @@ function asReadonlyMembershipSnapshot(
     provenanceSource: value.membershipProvenanceSource,
     provenanceActorId: value.membershipProvenanceActorId,
     provenanceReasonCode: value.membershipProvenanceReasonCode,
+    provenanceCommandId: value.membershipProvenanceCommandId,
+    provenanceOccurredAt:
+      value.membershipProvenanceOccurredAt?.toISOString() ?? null,
+    provenanceRecordedAt:
+      value.membershipProvenanceRecordedAt?.toISOString() ?? null,
+    revokedAt: value.membershipRevokedAt?.toISOString() ?? null,
+    deletedAt: value.membershipDeletedAt?.toISOString() ?? null,
   });
+}
+
+function resolveCurrentDemoAccount(input: Readonly<{
+  byFormalUsername: AuthAccountRecord | null;
+  byAccountId: AuthAccountRecord | null;
+  accountId: string;
+}>): Readonly<{
+  account: AuthAccountRecord | null;
+  state: ReturnType<typeof classifyCurrentDemoAccount>;
+}> {
+  const { byFormalUsername, byAccountId, accountId } = input;
+  if (
+    (byFormalUsername !== null && byFormalUsername.id !== accountId) ||
+    (byFormalUsername !== null && byAccountId === null) ||
+    (byFormalUsername !== null && byAccountId !== null &&
+      byFormalUsername.id !== byAccountId.id)
+  ) {
+    return Object.freeze({ account: null, state: 'conflict' });
+  }
+  const account = byAccountId ?? byFormalUsername;
+  const state = classifyCurrentDemoAccount(account);
+  if (
+    (state === 'candidate' && byFormalUsername !== null) ||
+    (state === 'reused' && byFormalUsername === null)
+  ) {
+    return Object.freeze({ account, state: 'conflict' });
+  }
+  return Object.freeze({ account, state });
 }
 
 function asReadonlyBindingSnapshot(
@@ -315,26 +396,34 @@ async function insertMissingProvisioningTriplet(input: Readonly<{
   }
 }
 
-async function runPhaseADryRun(
+export async function runPhaseADryRun(
   database: TenantDatabase,
   input: Readonly<{
     manifest: CurrentDemoAdminAuthorityManifest;
   }>,
+  dependencies: CurrentDemoPhaseADryRunDependencies =
+    PHASE_A_DRY_RUN_DEPENDENCIES,
 ): Promise<CurrentDemoPhaseAOutcome> {
   return database.transaction(async (transactionDatabase) => {
     const transaction = transactionDatabase as unknown as TenantDatabase;
-    const accountRepository = createAuthAccountRepository(transaction);
+    const accountRepository = dependencies.createAuthRepository(transaction);
     const membershipRepository =
-      createAuthoritativeInstitutionMembershipFactRepositoryV1(transaction);
-    const [account, rows] = await Promise.all([
+      dependencies.createMembershipRepository(transaction);
+    const [accountByUsername, accountById, rows] = await Promise.all([
       accountRepository.findAccountByUsername(input.manifest.username),
+      accountRepository.findAccountById(input.manifest.accountId),
       membershipRepository.findCurrentInstitutionMembershipFacts({
         accountId: input.manifest.accountId,
         tenantId: input.manifest.tenantId,
         institutionId: input.manifest.institutionId,
       }),
     ]);
-    const accountState = classifyCurrentDemoAccount(account);
+    const accountResolution = resolveCurrentDemoAccount({
+      byFormalUsername: accountByUsername,
+      byAccountId: accountById,
+      accountId: input.manifest.accountId,
+    });
+    const accountState = accountResolution.state;
     const membershipState = rows.length > 1
       ? 'conflict'
       : classifyCurrentDemoMembership(
@@ -349,9 +438,7 @@ async function runPhaseADryRun(
     if (decision === 'conflict') {
       return phaseAConflict(
         accountState,
-        accountState === 'missing' && membershipState === 'reused'
-          ? 'conflict'
-          : membershipState,
+        membershipState,
       );
     }
     return Object.freeze({
@@ -363,13 +450,15 @@ async function runPhaseADryRun(
   }, READONLY_TRANSACTION_OPTIONS);
 }
 
-async function runPhaseAExecute(
+export async function runPhaseAExecute(
   database: TenantDatabase,
   input: Readonly<{
     manifest: CurrentDemoAdminAuthorityManifest;
     password: string | null;
     now: Date;
   }>,
+  dependencies: CurrentDemoPhaseAExecuteDependencies =
+    PHASE_A_EXECUTE_DEPENDENCIES,
 ): Promise<CurrentDemoPhaseAOutcome> {
   let writeAttempted = false;
   try {
@@ -378,27 +467,35 @@ async function runPhaseAExecute(
       await setPhaseATransactionLimits(transaction);
       let active = true;
       try {
-        const repository: AuthAccountRepository =
-          createAuthAccountRepository(transaction);
-        const unitOfWork = createTransactionBoundMembershipCommandUnitOfWork(
+        const repository = dependencies.createAuthRepository(transaction);
+        const unitOfWork = dependencies.createMembershipUnitOfWork(
           transaction as unknown as MembershipCommandTransactionDatabase,
           () => active,
         );
-        const account = await repository.findAccountByUsername(
-          input.manifest.username,
-        );
+        const [accountByUsername, accountById] = await Promise.all([
+          repository.findAccountByUsername(input.manifest.username),
+          repository.findAccountById(input.manifest.accountId),
+        ]);
         const membership = await unitOfWork.lockMembershipByTenantUser({
           tenantId: input.manifest.tenantId,
           userId: input.manifest.accountId,
         });
-        const accountState = classifyCurrentDemoAccount(account);
+        const accountResolution = resolveCurrentDemoAccount({
+          byFormalUsername: accountByUsername,
+          byAccountId: accountById,
+          accountId: input.manifest.accountId,
+        });
+        const accountState = accountResolution.state;
         const membershipState = classifyCurrentDemoMembership(
           asMembershipSnapshot(membership),
           input.manifest,
         );
         const passwordVerified = accountState === 'reused'
           ? input.password !== null &&
-            await verifyPasswordScrypt(input.password, account!.passwordHash)
+            await dependencies.verifyPassword(
+              input.password,
+              accountResolution.account!.passwordHash,
+            )
           : undefined;
         const decision = decideCurrentDemoPhaseA({
           mode: 'execute',
@@ -412,9 +509,7 @@ async function runPhaseAExecute(
                 (accountState === 'reused' && passwordVerified === false)
               ? 'conflict'
               : accountState,
-            accountState === 'missing' && membershipState === 'reused'
-              ? 'conflict'
-              : membershipState,
+            membershipState,
           );
         }
         if (decision === 'reused') {
@@ -429,19 +524,39 @@ async function runPhaseAExecute(
           throw new Error('current_demo_admin_password_unavailable');
         }
 
-        const membershipAdapter =
-          createMembershipCommandExternalTransactionAdapter();
         let accountWritten = false;
         let membershipWritten = false;
         if (accountState === 'missing') {
-          const passwordHash = await hashPasswordScrypt(input.password);
+          const passwordHash = await dependencies.hashPassword(input.password);
           writeAttempted = true;
           await repository.createAccount(
             createFormalAccountRecord(passwordHash, input.now),
           );
           accountWritten = true;
+        } else if (accountState === 'candidate') {
+          const passwordHash = await dependencies.hashPassword(input.password);
+          writeAttempted = true;
+          const result = await repository.adoptLegacyAccount({
+            accountId: input.manifest.accountId,
+            expected: accountResolution.account!,
+            username: input.manifest.username,
+            displayName: input.manifest.accountDisplayName,
+            passwordHash,
+            passwordUpdatedAt: input.now,
+            passwordResetRequired: false,
+            status: 'active',
+            failedLoginCount: 0,
+            lockedUntil: null,
+            updatedAt: input.now,
+            updatedBy: input.manifest.accountId,
+          });
+          if (result !== 'recorded') {
+            throw new Error('current_demo_auth_adoption_state_changed');
+          }
+          accountWritten = true;
         }
         if (membershipState === 'missing') {
+          const membershipAdapter = dependencies.createMembershipAdapter();
           writeAttempted = true;
           await membershipAdapter.run(transaction, async (commands) => {
             await commands.createMembership({
@@ -455,23 +570,69 @@ async function runPhaseAExecute(
             });
           });
           membershipWritten = true;
+        } else if (membershipState === 'candidate') {
+          const result = await dependencies.executeMembershipCommand({
+            unitOfWork,
+            command: Object.freeze({
+              kind: 'adopt_legacy' as const,
+              commandId: dependencies.createMembershipCommandId(),
+              tenantId: input.manifest.tenantId,
+              membershipId: input.manifest.membershipId,
+              expectedRevision: 1,
+              expectedDisplayName:
+                CURRENT_DEMO_ADMIN_LEGACY_IDENTITY.accountDisplayName,
+              displayName: input.manifest.accountDisplayName,
+              role: 'tenant_admin' as const,
+              actorId: input.manifest.accountId,
+              reasonCode:
+                CURRENT_DEMO_ADMIN_LEGACY_IDENTITY.adoptionReasonCode,
+              occurredAt: input.now.toISOString(),
+            }),
+            now: () => input.now,
+          });
+          if (
+            result.status !== 'applied' ||
+            result.membershipId !== input.manifest.membershipId ||
+            result.revision !== 2 ||
+            result.lifecycleStatus !== 'active' ||
+            result.role !== 'tenant_admin' ||
+            result.binding.kind !== 'unchanged'
+          ) {
+            throw new Error('current_demo_membership_adoption_failed');
+          }
+          membershipWritten = true;
         }
 
-        const accountAfter = await repository.findAccountByUsername(
-          input.manifest.username,
-        );
-        const membershipAfter = await unitOfWork.lockMembershipByTenantUser({
+        const [accountAfterByUsername, accountAfterById] = await Promise.all([
+          repository.findAccountByUsername(input.manifest.username),
+          repository.findAccountById(input.manifest.accountId),
+        ]);
+        const accountAfter = resolveCurrentDemoAccount({
+          byFormalUsername: accountAfterByUsername,
+          byAccountId: accountAfterById,
+          accountId: input.manifest.accountId,
+        });
+        const membershipAfter = await unitOfWork.lockMembershipById({
           tenantId: input.manifest.tenantId,
-          userId: input.manifest.accountId,
+          membershipId: input.manifest.membershipId,
         });
         if (
-          classifyCurrentDemoAccount(accountAfter) !== 'reused' ||
+          accountAfter.state !== 'reused' ||
           classifyCurrentDemoMembership(
             asMembershipSnapshot(membershipAfter),
             input.manifest,
           ) !== 'reused'
         ) {
           throw new Error('current_demo_phase_a_recheck_failed');
+        }
+        if (
+          accountAfter.account === null ||
+          !await dependencies.verifyPassword(
+            input.password,
+            accountAfter.account.passwordHash,
+          )
+        ) {
+          throw new Error('current_demo_phase_a_password_recheck_failed');
         }
         return Object.freeze({
           phase: 'applied',
@@ -599,7 +760,8 @@ async function runPhaseCDryRun(
         : phaseCConflict();
     }
     const anticipatedMembership =
-      input.phaseA.phase === 'candidate' && membershipState === 'missing';
+      input.phaseA.phase === 'candidate' &&
+      (membershipState === 'missing' || membershipState === 'candidate');
     if (membershipState !== 'reused' && !anticipatedMembership) {
       return phaseCConflict();
     }
@@ -667,7 +829,7 @@ async function runPhaseCExecute(
         bindingId: input.manifest.bindingId,
       });
       if (priorTargetBinding !== null || membershipState !== 'reused' ||
-          membership?.revision !== 1) {
+          membership === null || membership.revision === null) {
         return phaseCConflict();
       }
 

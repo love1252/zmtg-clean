@@ -19,6 +19,21 @@ export type ExpectedLoginAccountState = Readonly<{
 
 export type LoginAccountStateWriteResult = 'recorded' | 'state_changed';
 
+export type AdoptLegacyAccountInput = Readonly<{
+  accountId: string;
+  expected: AuthAccountRecord;
+  username: string;
+  displayName: string;
+  passwordHash: string;
+  passwordUpdatedAt: Date;
+  passwordResetRequired: boolean;
+  status: AuthAccountStatus;
+  failedLoginCount: number;
+  lockedUntil: Date | null;
+  updatedAt: Date;
+  updatedBy: string;
+}>;
+
 function loginAccountStateCondition(
   accountId: string,
   expectedState: ExpectedLoginAccountState,
@@ -47,6 +62,37 @@ function loginAccountStateWriteResult(
   return rows.length === 1 && rows[0]?.accountId === accountId
     ? 'recorded'
     : 'state_changed';
+}
+
+function legacyAccountAdoptionCondition(input: AdoptLegacyAccountInput) {
+  const expected = input.expected;
+  return and(
+    eq(authUsers.id, input.accountId),
+    eq(authUsers.id, expected.id),
+    eq(authUsers.username, expected.username),
+    eq(authUsers.displayName, expected.displayName),
+    expected.phone === null
+      ? isNull(authUsers.phone)
+      : eq(authUsers.phone, expected.phone),
+    expected.email === null
+      ? isNull(authUsers.email)
+      : eq(authUsers.email, expected.email),
+    eq(authUsers.passwordHash, expected.passwordHash),
+    eq(authUsers.passwordUpdatedAt, expected.passwordUpdatedAt),
+    eq(authUsers.passwordResetRequired, expected.passwordResetRequired),
+    eq(authUsers.status, expected.status),
+    expected.lastLoginAt === null
+      ? isNull(authUsers.lastLoginAt)
+      : eq(authUsers.lastLoginAt, expected.lastLoginAt),
+    eq(authUsers.failedLoginCount, expected.failedLoginCount),
+    expected.lockedUntil === null
+      ? isNull(authUsers.lockedUntil)
+      : eq(authUsers.lockedUntil, expected.lockedUntil),
+    eq(authUsers.createdBy, expected.createdBy),
+    eq(authUsers.updatedBy, expected.updatedBy),
+    eq(authUsers.createdAt, expected.createdAt),
+    eq(authUsers.updatedAt, expected.updatedAt),
+  );
 }
 
 export type AuthAccountRepository = {
@@ -86,13 +132,30 @@ export type AuthAccountRepository = {
   }): Promise<void>;
 };
 
+export type AuthAccountLegacyAdoptionRepository = Readonly<{
+  findAccountById(accountId: string): Promise<AuthAccountRecord | null>;
+  adoptLegacyAccount(
+    input: AdoptLegacyAccountInput,
+  ): Promise<LoginAccountStateWriteResult>;
+}>;
+
 export function createAuthAccountRepository(
   database: TenantDatabase,
-): AuthAccountRepository {
+): AuthAccountRepository & AuthAccountLegacyAdoptionRepository {
   return {
     async createAccount(record) {
       const rows = await database.insert(authUsers).values(record).returning();
       return (rows[0] ?? record) as AuthAccountRecord;
+    },
+
+    async findAccountById(accountId) {
+      const rows = await database
+        .select()
+        .from(authUsers)
+        .where(eq(authUsers.id, accountId))
+        .limit(1);
+
+      return (rows[0] as AuthAccountRecord | undefined) ?? null;
     },
 
     async findAccountByUsername(username) {
@@ -103,6 +166,27 @@ export function createAuthAccountRepository(
         .limit(1);
 
       return (rows[0] as AuthAccountRecord | undefined) ?? null;
+    },
+
+    async adoptLegacyAccount(input) {
+      const rows = await database
+        .update(authUsers)
+        .set({
+          username: input.username,
+          displayName: input.displayName,
+          passwordHash: input.passwordHash,
+          passwordUpdatedAt: input.passwordUpdatedAt,
+          passwordResetRequired: input.passwordResetRequired,
+          status: input.status,
+          failedLoginCount: input.failedLoginCount,
+          lockedUntil: input.lockedUntil,
+          updatedAt: input.updatedAt,
+          updatedBy: input.updatedBy,
+        })
+        .where(legacyAccountAdoptionCondition(input))
+        .returning({ accountId: authUsers.id });
+
+      return loginAccountStateWriteResult(rows, input.accountId);
     },
 
     async recordLoginFailure(input) {

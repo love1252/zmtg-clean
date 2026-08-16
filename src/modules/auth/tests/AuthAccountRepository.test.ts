@@ -57,6 +57,40 @@ const accountRow: AuthAccountRecord = {
 
 const loginTimestamp = new Date('2026-06-25T08:00:00.000Z');
 
+const legacyAccount: AuthAccountRecord = {
+  ...accountRow,
+  id: 'demo-user-admin',
+  username: 'legacy_seed_demo_admin_anchor',
+  displayName: '演示管理员',
+  phone: null,
+  email: null,
+  passwordHash: 'legacy-password-hash',
+  passwordUpdatedAt: new Date('2025-01-01T00:00:00.000Z'),
+  status: 'disabled',
+  createdBy: 'legacy-demo-seed-actor',
+  updatedBy: 'legacy-demo-seed-actor',
+  createdAt: new Date('2025-01-01T00:00:00.000Z'),
+  updatedAt: new Date('2025-01-01T00:00:00.000Z'),
+};
+
+function legacyAdoptionInput() {
+  const adoptedAt = new Date('2026-08-16T01:00:00.000Z');
+  return {
+    accountId: legacyAccount.id,
+    expected: legacyAccount,
+    username: 'admin',
+    displayName: '系统管理员',
+    passwordHash: 'new-password-hash',
+    passwordUpdatedAt: adoptedAt,
+    passwordResetRequired: false,
+    status: 'active' as const,
+    failedLoginCount: 0,
+    lockedUntil: null,
+    updatedAt: adoptedAt,
+    updatedBy: legacyAccount.id,
+  };
+}
+
 function expectedLoginAccountState(
   overrides: Partial<Pick<
     AuthAccountRecord,
@@ -170,6 +204,21 @@ beforeEach(() => {
 });
 
 describe('正式账号 repository', () => {
+  it('按精确 account id 查询完整内部账号记录', async () => {
+    const query = createDatabase({ selectRows: [[legacyAccount]] });
+
+    const result = await createAuthAccountRepository(query.database)
+      .findAccountById(legacyAccount.id);
+
+    expect(query.selectChains[0].where).toHaveBeenCalledWith({
+      column: authUsers.id,
+      operator: 'eq',
+      value: legacyAccount.id,
+    });
+    expect(query.selectChains[0].limit).toHaveBeenCalledWith(1);
+    expect(result).toEqual(legacyAccount);
+  });
+
   it('按标准化账号查询 auth_users 并返回完整内部账号记录', async () => {
     const query = createDatabase({
       selectRows: [[accountRow]],
@@ -402,5 +451,84 @@ describe('正式账号 repository', () => {
     });
 
     await expect(result).rejects.toBe(databaseError);
+  });
+
+  it('以完整历史状态 CAS 采用 legacy 账号且只更新获准字段', async () => {
+    const query = createDatabase({
+      updateRows: [{ accountId: legacyAccount.id }],
+    });
+    const input = legacyAdoptionInput();
+
+    await expect(createAuthAccountRepository(query.database).adoptLegacyAccount(input))
+      .resolves.toBe('recorded');
+
+    expect(query.updateChain.set).toHaveBeenCalledWith({
+      username: 'admin',
+      displayName: '系统管理员',
+      passwordHash: 'new-password-hash',
+      passwordUpdatedAt: input.passwordUpdatedAt,
+      passwordResetRequired: false,
+      status: 'active',
+      failedLoginCount: 0,
+      lockedUntil: null,
+      updatedAt: input.updatedAt,
+      updatedBy: legacyAccount.id,
+    });
+    const mutation = query.updateChain.set.mock.calls[0]?.[0];
+    for (const preserved of [
+      'id',
+      'phone',
+      'email',
+      'lastLoginAt',
+      'createdBy',
+      'createdAt',
+    ]) {
+      expect(mutation).not.toHaveProperty(preserved);
+    }
+    for (const [column, value] of [
+      [authUsers.id, legacyAccount.id],
+      [authUsers.username, legacyAccount.username],
+      [authUsers.displayName, legacyAccount.displayName],
+      [authUsers.passwordHash, legacyAccount.passwordHash],
+      [authUsers.passwordUpdatedAt, legacyAccount.passwordUpdatedAt],
+      [authUsers.passwordResetRequired, true],
+      [authUsers.status, 'disabled'],
+      [authUsers.failedLoginCount, 0],
+      [authUsers.createdBy, legacyAccount.createdBy],
+      [authUsers.updatedBy, legacyAccount.updatedBy],
+      [authUsers.createdAt, legacyAccount.createdAt],
+      [authUsers.updatedAt, legacyAccount.updatedAt],
+    ] as const) {
+      expect(eqMock).toHaveBeenCalledWith(column, value);
+    }
+    expect(isNullMock).toHaveBeenCalledWith(authUsers.phone);
+    expect(isNullMock).toHaveBeenCalledWith(authUsers.email);
+    expect(isNullMock).toHaveBeenCalledWith(authUsers.lastLoginAt);
+    expect(isNullMock).toHaveBeenCalledWith(authUsers.lockedUntil);
+  });
+
+  it.each([
+    ['零行', []],
+    ['多行', [
+      { accountId: legacyAccount.id },
+      { accountId: legacyAccount.id },
+    ]],
+    ['错误账号行', [{ accountId: 'demo-user-other' }]],
+  ])('legacy adoption CAS 返回%s时报告 state_changed', async (_label, updateRows) => {
+    const query = createDatabase({ updateRows });
+
+    await expect(createAuthAccountRepository(query.database).adoptLegacyAccount(
+      legacyAdoptionInput(),
+    )).resolves.toBe('state_changed');
+  });
+
+  it('legacy adoption repository 异常原样向上传播', async () => {
+    const databaseError = new Error('legacy adoption returning failed');
+    const query = createDatabase();
+    query.updateChain.returning.mockRejectedValueOnce(databaseError);
+
+    await expect(createAuthAccountRepository(query.database).adoptLegacyAccount(
+      legacyAdoptionInput(),
+    )).rejects.toBe(databaseError);
   });
 });
