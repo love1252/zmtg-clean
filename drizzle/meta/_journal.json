@@ -330,6 +330,13 @@
       "when": 1786867010908,
       "tag": "0046_base02_membership_legacy_adoption_refresh",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1786886640000,
+      "tag": "0047_knowledge_formal_fact_provenance_scope",
+      "breakpoints": true
     }
   ]
 }

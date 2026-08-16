@@ -354,6 +354,14 @@ export const knowledgeBaseRuntimeReadonlyStatusEnum = pgEnum(
   'knowledge_base_runtime_readonly_status',
   ['readonly', 'blocked'],
 );
+export const knowledgeFormalProvenanceSourceEnum = pgEnum(
+  'knowledge_formal_provenance_source',
+  ['formal_onboarding', 'approved_migration_manifest'],
+);
+export const knowledgeFormalPublicationStatusEnum = pgEnum(
+  'knowledge_formal_publication_status',
+  ['published', 'retired'],
+);
 export const knowledgeIndexingJobTypeEnum = pgEnum('knowledge_indexing_job_type', [
   'parse_file',
   'ocr_file',
@@ -1518,6 +1526,141 @@ export const hisConnectionCredentialCompensationJobs = pgTable(
       table.jobState,
       table.lockedUntil,
       table.claimVersion,
+    ),
+  }),
+);
+
+export const knowledgeFormalSources = pgTable(
+  'knowledge_formal_sources',
+  {
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    id: varchar('id', { length: 64 }).notNull(),
+    sourceLabel: varchar('source_label', { length: 160 }).notNull(),
+    provenanceSource: knowledgeFormalProvenanceSourceEnum('provenance_source').notNull(),
+    provenanceReferenceDigest: varchar('provenance_reference_digest', {
+      length: 64,
+    }).notNull(),
+    approvedBy: varchar('approved_by', { length: 96 }).notNull(),
+    approvedAt: timestamp('approved_at', { withTimezone: true }).notNull(),
+    ...timestamps,
+  },
+  (table) => ({
+    primaryKey: primaryKey({
+      name: 'knowledge_formal_sources_pk',
+      columns: [table.tenantId, table.institutionId, table.id],
+    }),
+    scopeFk: foreignKey({
+      name: 'knowledge_formal_sources_scope_fk',
+      columns: [table.tenantId, table.institutionId],
+      foreignColumns: [institutionScopes.tenantId, institutionScopes.institutionId],
+    }),
+    provenanceDigestCheck: check(
+      'knowledge_formal_sources_digest_check',
+      sql`length(${table.provenanceReferenceDigest}) = 64`,
+    ),
+    scopeIdx: index('knowledge_formal_sources_scope_idx').on(
+      table.tenantId,
+      table.institutionId,
+    ),
+  }),
+);
+
+export const knowledgeFormalDocumentVersions = pgTable(
+  'knowledge_formal_document_versions',
+  {
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    documentId: varchar('document_id', { length: 64 }).notNull(),
+    version: integer('version').notNull(),
+    sourceId: varchar('source_id', { length: 64 }).notNull(),
+    title: varchar('title', { length: 200 }).notNull(),
+    documentReferenceDigest: varchar('document_reference_digest', {
+      length: 64,
+    }).notNull(),
+    publishedBy: varchar('published_by', { length: 96 }).notNull(),
+    publishedAt: timestamp('published_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    primaryKey: primaryKey({
+      name: 'knowledge_formal_document_versions_pk',
+      columns: [
+        table.tenantId,
+        table.institutionId,
+        table.documentId,
+        table.version,
+      ],
+    }),
+    sourceFk: foreignKey({
+      name: 'knowledge_formal_document_versions_source_fk',
+      columns: [table.tenantId, table.institutionId, table.sourceId],
+      foreignColumns: [
+        knowledgeFormalSources.tenantId,
+        knowledgeFormalSources.institutionId,
+        knowledgeFormalSources.id,
+      ],
+    }),
+    versionPositiveCheck: check(
+      'knowledge_formal_document_versions_version_check',
+      sql`${table.version} > 0`,
+    ),
+    documentDigestCheck: check(
+      'knowledge_formal_document_versions_digest_check',
+      sql`length(${table.documentReferenceDigest}) = 64`,
+    ),
+    scopeDocumentIdx: index('knowledge_formal_document_versions_scope_document_idx').on(
+      table.tenantId,
+      table.institutionId,
+      table.documentId,
+    ),
+  }),
+);
+
+export const knowledgeFormalDocumentPublications = pgTable(
+  'knowledge_formal_document_publications',
+  {
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    documentId: varchar('document_id', { length: 64 }).notNull(),
+    currentVersion: integer('current_version').notNull(),
+    status: knowledgeFormalPublicationStatusEnum('status').notNull(),
+    revision: integer('revision').notNull(),
+    updatedBy: varchar('updated_by', { length: 96 }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    primaryKey: primaryKey({
+      name: 'knowledge_formal_document_publications_pk',
+      columns: [table.tenantId, table.institutionId, table.documentId],
+    }),
+    currentVersionFk: foreignKey({
+      name: 'knowledge_formal_document_publications_version_fk',
+      columns: [
+        table.tenantId,
+        table.institutionId,
+        table.documentId,
+        table.currentVersion,
+      ],
+      foreignColumns: [
+        knowledgeFormalDocumentVersions.tenantId,
+        knowledgeFormalDocumentVersions.institutionId,
+        knowledgeFormalDocumentVersions.documentId,
+        knowledgeFormalDocumentVersions.version,
+      ],
+    }),
+    currentVersionPositiveCheck: check(
+      'knowledge_formal_document_publications_current_version_check',
+      sql`${table.currentVersion} > 0`,
+    ),
+    revisionPositiveCheck: check(
+      'knowledge_formal_document_publications_revision_check',
+      sql`${table.revision} > 0`,
+    ),
+    scopeStatusIdx: index('knowledge_formal_document_publications_scope_status_idx').on(
+      table.tenantId,
+      table.institutionId,
+      table.status,
     ),
   }),
 );
