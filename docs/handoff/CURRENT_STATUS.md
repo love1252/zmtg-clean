@@ -1,5 +1,27 @@
 # 智美天工当前项目状态
 
+<!-- KNOWLEDGE_DOCUMENT_METADATA_CURRENT_20260816 -->
+
+## 2026-08-16 Knowledge document metadata 正式只读发布
+
+```text
+CURRENT_BASELINE=c78de12759d10bb40a1aecc7dec0f65cf8fc110a
+KNOWLEDGE_DATA_READINESS=ready_empty
+KNOWLEDGE_RUNTIME_IMPLEMENTATION=passed
+PAGE_KNOWLEDGE_LIBRARY=read_only/pilot_released
+
+GOVERNED_READONLY_PAGE_COUNT=6
+CONTROLLED_CREATE_RELEASE_COUNT=0
+
+DATABASE_WRITE_EXECUTION=false
+SCHEMA_CHANGE=false
+MIGRATION_EXECUTION=false
+STAGING_CHANGE=false
+PRODUCTION_DEPLOYMENT=false
+```
+
+正式页面只展示当前机构已发布文档的低敏元数据；上传、下载、解析、OCR、Embedding、Index Worker 与 QA/AI 继续关闭。
+
 <!-- KNOWLEDGE_FORMAL_FACT_SCOPE_CURRENT_20260816 -->
 
 ## 2026-08-16 Knowledge formal prerequisites 已闭合

@@ -1,5 +1,20 @@
 # 智美天工架构文档索引
 
+<!-- KNOWLEDGE_DOCUMENT_METADATA_RUNTIME_RELEASE_20260816 -->
+
+## Knowledge Document Metadata Formal Runtime Release（2026-08-16）
+
+```text
+knowledge_formal_document_publications
+→ knowledge_formal_document_versions
+→ knowledge_formal_sources
+→ dedicated formal Knowledge authorization
+→ GET /api/v1/institution/knowledge-documents
+→ /hospital/knowledge
+```
+
+`page_knowledge_library` 已作为第六个 governed readonly pilot page 发布。formal cohort 当前为 `ready_empty`，不使用 `mock|seed|demo`。
+
 <!-- KNOWLEDGE_FORMAL_FACT_SCOPE_CLOSURE_20260816 -->
 
 ## Knowledge formal fact + Scope provisioning 闭环（2026-08-16）
