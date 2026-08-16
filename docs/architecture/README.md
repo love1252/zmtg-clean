@@ -1,5 +1,31 @@
 # 智美天工架构文档索引
 
+<!-- SYS01_AI_USAGE_READONLY_RUNTIME_RELEASE_20260816 -->
+
+## SYS-01 AI 使用只读 Runtime Release（2026-08-16）
+
+当前正式 System AI usage 只读链已收敛为：
+
+```text
+Analytics fact/source
+→ server orchestration formal authorization/composition
+→ institution-system authoritative Reader
+→ /api/v1/institution/ai-service-usage
+→ /hospital/system/ai-usage
+```
+
+`page_system_ai_usage` 作为第五个 governed readonly pilot page 发布。Fresh candidate cohort 当前为 0 行，正式 Scope=1；0 行按 `ready_empty` 处理，页面显示可信空状态，不 Seed、不 Backfill、不制造假数据。
+
+当前 governed readonly pages：
+
+- `page_workbench`
+- `page_customer_list`
+- `page_care_appointments`
+- `page_system_ai_usage`
+- `page_system_audit`
+
+Controlled Create release count 仍为 0。
+
 <!-- SEVEN_STREAM_KNOWLEDGE_FORMAL_FRESH_ADMISSION_START -->
 
 ## Knowledge formal Fresh Admission（2026-08-16）

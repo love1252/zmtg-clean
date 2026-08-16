@@ -385,11 +385,11 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
       ReturnType<typeof resolveInstitutionCapabilityAuthorityStatusV1>
     >().toEqualTypeOf<Promise<CapabilityStatusV1 | null>>();
     expect(INSTITUTION_CAPABILITY_AUTHORITY_REVISION_V1).toBe(
-      'r2-institution-read-release-wave01-customers-care-readonly-v1',
+      'r3-sys01-ai-usage-readonly-v1',
     );
   });
 
-  it('tenant_admin returns exactly four governed read_only pilots and keeps the other 32 hidden', async () => {
+  it('tenant_admin returns exactly five governed read_only pilots and keeps the other 31 hidden', async () => {
     const status = await resolveInstitutionCapabilityAuthorityStatusV1();
 
     expect(status).toMatchObject({
@@ -415,6 +415,9 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
       (item) => item.key === 'page_care_appointments',
     );
     const audit = capabilities.find((item) => item.key === 'page_system_audit');
+    const aiUsage = capabilities.find(
+      (item) => item.key === 'page_system_ai_usage',
+    );
 
     expect(workbench).toEqual({
       key: 'page_workbench',
@@ -472,6 +475,20 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
       diagnosticTargetKey: 'page_system_audit',
     });
 
+    expect(aiUsage).toEqual({
+      key: 'page_system_ai_usage',
+      decision: 'read_only',
+      dimensions: {
+        codeMaturity: 'verified',
+        institutionAuthorization: 'authorized',
+        connectionAvailability: 'not_required',
+        dataReadiness: 'ready',
+        productionRelease: 'pilot_released',
+      },
+      safeSummary: 'AI 使用统计仅供查看',
+      diagnosticTargetKey: 'page_system_ai_usage',
+    });
+
     const releasedGovernedPageKeys = capabilities
       .filter(
         (item) =>
@@ -483,6 +500,7 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
       'page_workbench',
       'page_customer_list',
       'page_care_appointments',
+      'page_system_ai_usage',
       'page_system_audit',
     ]);
 
@@ -491,9 +509,10 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
         item.key !== 'page_workbench' &&
         item.key !== 'page_customer_list' &&
         item.key !== 'page_care_appointments' &&
+        item.key !== 'page_system_ai_usage' &&
         item.key !== 'page_system_audit',
     );
-    expect(remaining).toHaveLength(32);
+    expect(remaining).toHaveLength(31);
     for (const item of remaining) {
       expect(item.decision).toBe('hidden');
       expect(item.dimensions.productionRelease).toBe('not_released');

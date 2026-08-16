@@ -1,5 +1,33 @@
 # 项目重构历史
 
+<!-- SYS01_AI_USAGE_READONLY_RELEASE_HISTORY_20260816 -->
+
+## 2026-08-16：SYS-01 AI 使用只读业务切片完成正式 Runtime pilot release
+
+基线：
+
+`ac6506edaf2d97fabe59b132ca6ea6f119f6b19d`
+
+完成：
+
+- Analytics owner-specific institution AI usage read source
+- dedicated formal AI usage read authorization
+- exact tenant/institution pair orchestration
+- canonical V1 GET API
+- `/hospital/system/ai-usage` readonly page
+- `page_system_ai_usage` Capability Authority release
+- empty cohort `serviceUnits=null` 语义修正
+
+Fresh candidate 数据：
+
+```text
+AI_USAGE_TOTAL_ROW_COUNT=0
+TARGET_ACTIVE_FORMAL_SCOPE_COUNT=1
+SYS01_DATA_READINESS=ready_empty
+```
+
+没有数据库写入、Schema、Migration、Staging 或 Production deployment。
+
 <!-- SEVEN_STREAM_KNOWLEDGE_FORMAL_FRESH_ADMISSION_HISTORY -->
 
 ## 2026-08-16：S37 Knowledge 首切片完成选择，formal fact/source prerequisites 正式冻结

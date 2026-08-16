@@ -12,12 +12,13 @@ import {
 } from '@/modules/institution/server/institution-server-runtime';
 
 export const INSTITUTION_CAPABILITY_AUTHORITY_REVISION_V1 =
-  'r2-institution-read-release-wave01-customers-care-readonly-v1' as const;
+  'r3-sys01-ai-usage-readonly-v1' as const;
 
 const AUTHORITY_STATUS_FRESHNESS_WINDOW_MS = 5_000;
 const WORKBENCH_READONLY_SUMMARY = '工作台仅供查看' as const;
 const CUSTOMER_LIST_READONLY_SUMMARY = '客户列表仅供查看' as const;
 const CARE_APPOINTMENTS_READONLY_SUMMARY = '预约管理仅供查看' as const;
+const AI_USAGE_READONLY_SUMMARY = 'AI 使用统计仅供查看' as const;
 const AUDIT_READONLY_SUMMARY = '审计与安全仅供查看' as const;
 
 function buildCapabilityStatus(
@@ -45,11 +46,14 @@ function buildCapabilityStatus(
       const customerListReadonlyPilot = definition.key === 'page_customer_list';
       const careAppointmentsReadonlyPilot =
         definition.key === 'page_care_appointments';
+      const aiUsageReadonlyPilot =
+        definition.key === 'page_system_ai_usage';
       const auditReadonlyPilot = definition.key === 'page_system_audit';
       const readonlyPilot =
         workbenchReadonlyPilot ||
         customerListReadonlyPilot ||
         careAppointmentsReadonlyPilot ||
+        aiUsageReadonlyPilot ||
         auditReadonlyPilot;
 
       return Object.freeze({
@@ -66,7 +70,9 @@ function buildCapabilityStatus(
           connectionAvailability: 'not_required',
           dataReadiness: auditReadonlyPilot
             ? 'partial'
-            : customerListReadonlyPilot || careAppointmentsReadonlyPilot
+            : customerListReadonlyPilot
+                || careAppointmentsReadonlyPilot
+                || aiUsageReadonlyPilot
               ? 'ready'
               : 'not_required',
           productionRelease: readonlyPilot
@@ -81,7 +87,9 @@ function buildCapabilityStatus(
                 ? CUSTOMER_LIST_READONLY_SUMMARY
                 : careAppointmentsReadonlyPilot
                   ? CARE_APPOINTMENTS_READONLY_SUMMARY
-                  : WORKBENCH_READONLY_SUMMARY
+                  : aiUsageReadonlyPilot
+                    ? AI_USAGE_READONLY_SUMMARY
+                    : WORKBENCH_READONLY_SUMMARY
             : null,
         diagnosticTargetKey:
           systemAvailable &&
