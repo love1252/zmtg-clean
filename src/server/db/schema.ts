@@ -1096,7 +1096,16 @@ export const tenantMembershipTransitions = pgTable(
       ) OR (
         ${table.transitionType} = 'refresh'
         AND ${table.fromRole} IS NOT NULL
-        AND ${table.fromRole} <> ${table.toRole}
+        AND (
+          ${table.fromRole} <> ${table.toRole}
+          OR (
+            ${table.fromRole} = ${table.toRole}
+            AND ${table.source} = 'access_control_command'
+            AND ${table.reasonCode} = 'post_rebuild_formal_identity_adoption'
+            AND ${table.fromRevision} = 1
+            AND ${table.toRevision} = 2
+          )
+        )
       ) OR (
         ${table.transitionType} IN ('revoke', 'reactivate', 'delete')
         AND ${table.fromRole} IS NOT NULL
