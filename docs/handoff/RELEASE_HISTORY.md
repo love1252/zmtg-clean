@@ -1,5 +1,17 @@
 # 项目重构历史
 
+<!-- ANALYTICS_OVERVIEW_RUNTIME_RELEASE_HISTORY_20260817 -->
+
+## 2026-08-17：Analytics Overview Formal Runtime Release
+
+- 发布 `/hospital/analytics` 与 `/api/v1/institution/analytics`。
+- `page_analytics_overview` 进入 `read_only/pilot_released`。
+- 正式 Analytics authorization、Repository、Reader 完成。
+- 服务端固定本月截至今日 vs 上一等长周期；不开放 custom 时间窗。
+- 当前正式 source/batch/fact 为 0，页面显示可信空态。
+- governed readonly page count `6 → 7`；Controlled Create 仍为 0。
+- 未执行 DB 写入、Schema/Migration、Staging 或 Production。
+
 <!-- ANALYTICS_AN02_FORMAL_PERSISTENCE_HISTORY_20260817 -->
 
 ## 2026-08-17：Analytics AN-02 Formal Fact Persistence Closure
