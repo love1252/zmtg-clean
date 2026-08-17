@@ -715,32 +715,36 @@ describe('BASE-WIRE-01 /hospital server navigation authorization', () => {
 
   it.each([
     {
-      name: 'page_workbench 后出现第二个 governed summary',
+      name: 'page_workbench 后出现已发布的审计 summary',
       entries: [
         { key: 'page_workbench' },
         { key: 'page_system_audit' },
       ],
+      visibleSummary: '审计与安全仅供查看',
     },
     {
-      name: '第二个 governed summary 位于 page_workbench 之前',
+      name: '已发布的审计 summary 位于 page_workbench 之前',
       entries: [
         { key: 'page_system_audit' },
         { key: 'page_workbench' },
       ],
+      visibleSummary: '审计与安全仅供查看',
     },
     {
-      name: '存在无关的第二个 governed summary',
+      name: '未纳入 Phase 1 的系统概览继续被过滤',
       entries: [
         { key: 'page_workbench' },
         { key: 'page_system_overview' },
       ],
+      visibleSummary: null,
     },
     {
-      name: '存在无关的 hidden capability',
+      name: 'hidden capability 不进入重聚合',
       entries: [
         { key: 'page_workbench' },
         { key: 'page_system_audit', decision: 'hidden' },
       ],
+      visibleSummary: null,
     },
   ] satisfies readonly {
     name: string;
@@ -748,7 +752,8 @@ describe('BASE-WIRE-01 /hospital server navigation authorization', () => {
       key: WorkbenchFixtureCapabilityKey;
       decision?: 'hidden' | 'read_only';
     }>[];
-  }[])('按 capability key 稳定选择 Workbench：$name', async ({ entries }) => {
+    visibleSummary: string | null;
+  }[])('按 Phase 1 governed readonly key 重聚合：$name', async ({ entries, visibleSummary }) => {
     const created = authorizationFixture('tenant_admin');
     vi.spyOn(Date, 'now').mockReturnValue(NOW.getTime());
     serverRuntimeMocks.resolveInstitutionServerAuthorizationV1.mockResolvedValueOnce(
@@ -761,12 +766,13 @@ describe('BASE-WIRE-01 /hospital server navigation authorization', () => {
     render(await HospitalPage());
 
     const main = screen.getByRole('main');
-    expect(
-      main.querySelector('[data-capability-state="readonly-pilot"]'),
-    ).toBeInTheDocument();
+    expect(main.querySelector('[data-capability-state="readonly-pilot"]')).toBeInTheDocument();
     expect(screen.getByText('工作台仅供查看')).toBeInTheDocument();
-    expect(screen.queryByText('审计与安全仅供查看')).not.toBeInTheDocument();
+    if (visibleSummary) expect(screen.getByText(visibleSummary)).toBeInTheDocument();
+    else expect(screen.queryByText('审计与安全仅供查看')).not.toBeInTheDocument();
     expect(screen.queryByText('系统概览仅供查看')).not.toBeInTheDocument();
+    expect(within(main).queryAllByRole('button')).toHaveLength(0);
+    expect(within(main).queryAllByRole('link')).toHaveLength(0);
   });
 
   it.each([

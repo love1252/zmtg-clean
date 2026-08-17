@@ -89,6 +89,11 @@ const SAFE_SUMMARY_GENERIC_PREFIXES = Object.freeze([
   '当前',
 ] as const);
 
+const SAFE_SUMMARY_EXACT_ALIASES = Object.freeze({
+  page_knowledge_library: Object.freeze(['知识库资料仅供查看'] as const),
+  page_system_ai_usage: Object.freeze(['AI 使用统计仅供查看'] as const),
+} as const);
+
 const BUSINESS_PAYLOAD_FORBIDDEN_FAILURE_CODES = Object.freeze([
   'scope_mismatch',
   'permission_denied',
@@ -427,7 +432,10 @@ function isBusinessPayloadForbiddenFailureCode(value: unknown): boolean {
   );
 }
 
-function isSafeBusinessSummary(value: unknown, capabilityLabel: string): value is string | null {
+function isSafeBusinessSummary(
+  value: unknown,
+  definition: InstitutionCapabilityDefinitionV1,
+): value is string | null {
   if (value === null) {
     return true;
   }
@@ -455,11 +463,21 @@ function isSafeBusinessSummary(value: unknown, capabilityLabel: string): value i
     return false;
   }
 
+  const exactAliases =
+    definition.key === 'page_knowledge_library'
+      ? SAFE_SUMMARY_EXACT_ALIASES.page_knowledge_library
+      : definition.key === 'page_system_ai_usage'
+        ? SAFE_SUMMARY_EXACT_ALIASES.page_system_ai_usage
+        : Object.freeze([] as const);
+  if (exactAliases.some((alias) => value === alias)) {
+    return true;
+  }
+
   const allowedPrefixes = [
-    capabilityLabel,
-    `${capabilityLabel}业务`,
-    `${capabilityLabel}能力`,
-    `${capabilityLabel}业务数据`,
+    definition.label,
+    `${definition.label}业务`,
+    `${definition.label}能力`,
+    `${definition.label}业务数据`,
     ...SAFE_SUMMARY_GENERIC_PREFIXES,
   ];
 
@@ -490,7 +508,7 @@ function isValidCapabilityItem(value: unknown): value is CapabilityStatusItemV1 
     definition !== null &&
     isCapabilityStatusDecisionV1(value.decision) &&
     isValidDimensions(value.dimensions) &&
-    isSafeBusinessSummary(value.safeSummary, definition.label) &&
+    isSafeBusinessSummary(value.safeSummary, definition) &&
     (value.diagnosticTargetKey === null ||
       isInstitutionDiagnosticTargetCapabilityKeyV1(value.diagnosticTargetKey))
   );
