@@ -1,5 +1,14 @@
 # 智美天工架构文档索引
 
+<!-- CONVERSATIONS_CONV02_FORMAL_PERSISTENCE_20260817 -->
+
+## Conversations CONV-02 Formal Persistence（2026-08-17）
+
+0049 已建立 exact institution-scoped Conversation Formal Fact Persistence：
+formal source、conversation current root、segment current state、message、assignment、
+risk 与 message-result。current root/segment 由 revision trigger 保护，event facts
+append-only；当前正式 cohort 为可信空集。
+
 <!-- CONVERSATIONS_QUEUE_FRESH_READMISSION_20260817 -->
 
 ## Conversations Queue Formal Runtime Fresh Re-admission（2026-08-17）

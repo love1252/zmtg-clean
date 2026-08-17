@@ -1,5 +1,15 @@
 # 项目重构历史
 
+<!-- CONVERSATIONS_CONV02_FORMAL_PERSISTENCE_HISTORY_20260817 -->
+
+## 2026-08-17：Conversations CONV-02 Formal Fact Persistence
+
+- 新增 migration `0049_conversations_formal_fact_persistence`。
+- 建立 7 张 exact institution-scoped Conversation 正式持久化表。
+- root/segment 采用 revision CAS guard；source/message/assignment/risk/result append-only。
+- local candidate 已受控执行 0049，正式 Conversation cohort 保持 0。
+- 未执行业务 DML、seed/backfill、真实发送、Staging 或 Production。
+
 <!-- CONVERSATIONS_QUEUE_FRESH_READMISSION_HISTORY_20260817 -->
 
 ## 2026-08-17：Conversations Queue Formal Runtime Fresh Re-admission
