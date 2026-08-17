@@ -5271,7 +5271,7 @@ describe('S43 Membership legacy adoption physical constraint', () => {
     );
   });
 
-  it('0046/0047 保持冻结历史 common-tail，0048 作为当前后继且 0046/0047 无 snapshot', () => {
+  it('0046/0047 保持冻结历史 common-tail，0048/0049 按序后继且 0046/0047 无 snapshot', () => {
     const drizzleDir = join(process.cwd(), 'drizzle');
     const journal = JSON.parse(
       readFileSync(join(drizzleDir, 'meta/_journal.json'), 'utf8'),
@@ -5286,9 +5286,9 @@ describe('S43 Membership legacy adoption physical constraint', () => {
     };
     const frozenEntries = journal.entries.slice(0, 46);
 
-    expect(journal.entries).toHaveLength(49);
+    expect(journal.entries).toHaveLength(50);
     expect(journal.entries.map((entry) => entry.idx)).toEqual(
-      Array.from({ length: 49 }, (_, index) => index),
+      Array.from({ length: 50 }, (_, index) => index),
     );
     expect(
       createHash('sha256').update(JSON.stringify(frozenEntries)).digest('hex'),
@@ -5305,6 +5305,20 @@ describe('S43 Membership legacy adoption physical constraint', () => {
       version: '7',
       when: 1786886640000,
       tag: '0047_knowledge_formal_fact_provenance_scope',
+      breakpoints: true,
+    });
+    expect(journal.entries[48]).toEqual({
+      idx: 48,
+      version: '7',
+      when: 1786900800000,
+      tag: '0048_analytics_formal_fact_persistence',
+      breakpoints: true,
+    });
+    expect(journal.entries[49]).toEqual({
+      idx: 49,
+      version: '7',
+      when: 1786938000000,
+      tag: '0049_conversations_formal_fact_persistence',
       breakpoints: true,
     });
     expect(Number.isInteger(journal.entries[46]?.when)).toBe(true);

@@ -3805,3 +3805,602 @@ export const analyticsConsumptionFacts = pgTable(
     ),
   }),
 );
+
+export const conversationFormalSourceKindEnum = pgEnum(
+  'conversation_formal_source_kind',
+  ['approved_channel_connection', 'approved_internal_operation'],
+);
+
+export const conversationRootIdentityStateEnum = pgEnum(
+  'conversation_root_identity_state',
+  ['matched', 'pending_review', 'unmatched', 'conflict'],
+);
+
+export const conversationSegmentStateEnum = pgEnum(
+  'conversation_segment_state',
+  ['ai_handling', 'awaiting_human', 'human_handling', 'waiting_customer', 'closed'],
+);
+
+export const conversationSegmentCloseKindEnum = pgEnum(
+  'conversation_segment_close_kind',
+  ['open', 'normal', 'forced'],
+);
+
+export const conversationSegmentResolutionStateEnum = pgEnum(
+  'conversation_segment_resolution_state',
+  ['open', 'resolved'],
+);
+
+export const conversationMessageDirectionEnum = pgEnum(
+  'conversation_message_direction',
+  ['inbound', 'outbound', 'system'],
+);
+
+export const conversationMessageSenderKindEnum = pgEnum(
+  'conversation_message_sender_kind',
+  ['customer', 'human', 'ai', 'system'],
+);
+
+export const conversationAssignmentStatusEnum = pgEnum(
+  'conversation_assignment_status',
+  ['assigned', 'accepted', 'rejected', 'released'],
+);
+
+export const conversationAssignmentReasonCodeEnum = pgEnum(
+  'conversation_assignment_reason_code',
+  [
+    'manual_assign',
+    'manual_reassign',
+    'manual_fallback',
+    'assignee_reject',
+    'handler_release',
+  ],
+);
+
+export const conversationRiskEventKindEnum = pgEnum(
+  'conversation_risk_event_kind',
+  ['risk_unconfirmed', 'risk_confirmed', 'risk_resolved'],
+);
+
+export const conversationRiskDomainEnum = pgEnum(
+  'conversation_risk_domain',
+  ['clinical', 'non_clinical'],
+);
+
+export const conversationMessageResultStageEnum = pgEnum(
+  'conversation_message_result_stage',
+  ['message_transport', 'provider_acceptance', 'channel_delivery'],
+);
+
+export const conversationMessageResultStatusEnum = pgEnum(
+  'conversation_message_result_status',
+  [
+    'inbound_received',
+    'outbound_created',
+    'outbound_submitted',
+    'outbound_failed',
+    'outbound_skipped',
+    'outbound_unknown',
+    'provider_accepted',
+    'provider_rejected',
+    'provider_unknown',
+    'delivery_not_reported',
+    'channel_delivered',
+    'channel_failed',
+    'channel_unknown',
+  ],
+);
+
+export const conversationMessageResultFailureCodeEnum = pgEnum(
+  'conversation_message_result_failure_code',
+  [
+    'outbound_submission_failed',
+    'outbound_submission_skipped',
+    'outbound_submission_timeout',
+    'outbound_submission_indeterminate',
+    'provider_rejected',
+    'provider_timeout',
+    'provider_unavailable',
+    'provider_indeterminate',
+    'channel_failed',
+    'channel_receipt_timeout',
+    'channel_receipt_unavailable',
+    'channel_receipt_indeterminate',
+  ],
+);
+
+export const conversationFormalSources = pgTable(
+  'conversation_formal_sources',
+  {
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    id: varchar('id', { length: 64 }).notNull(),
+    sourceKind: conversationFormalSourceKindEnum('source_kind').notNull(),
+    sourceLabel: varchar('source_label', { length: 160 }).notNull(),
+    channelType: varchar('channel_type', { length: 64 }).notNull(),
+    serviceProviderType: varchar('service_provider_type', { length: 64 }).notNull(),
+    connectionInstanceId: varchar('connection_instance_id', { length: 128 }).notNull(),
+    provenanceReferenceDigest: varchar('provenance_reference_digest', { length: 64 }).notNull(),
+    approvedBy: varchar('approved_by', { length: 96 }).notNull(),
+    approvedAt: timestamp('approved_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    primaryKey: primaryKey({
+      name: 'conversation_formal_sources_pk',
+      columns: [table.tenantId, table.institutionId, table.id],
+    }),
+    scopeFk: foreignKey({
+      name: 'conversation_formal_sources_scope_fk',
+      columns: [table.tenantId, table.institutionId],
+      foreignColumns: [institutionScopes.tenantId, institutionScopes.institutionId],
+    }),
+    connectionUnique: unique('conversation_formal_sources_connection_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.channelType,
+      table.serviceProviderType,
+      table.connectionInstanceId,
+    ),
+    scopeIdx: index('conversation_formal_sources_scope_idx').on(
+      table.tenantId,
+      table.institutionId,
+    ),
+    requiredCheck: check(
+      'conversation_formal_sources_required_check',
+      sql`length(trim(${table.sourceLabel})) > 0 AND length(trim(${table.channelType})) > 0 AND length(trim(${table.serviceProviderType})) > 0 AND length(trim(${table.connectionInstanceId})) > 0 AND length(trim(${table.approvedBy})) > 0`,
+    ),
+    digestCheck: check(
+      'conversation_formal_sources_digest_check',
+      sql`length(${table.provenanceReferenceDigest}) = 64 AND ${table.provenanceReferenceDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+  }),
+);
+
+export const conversations = pgTable(
+  'conversations',
+  {
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    id: varchar('id', { length: 64 }).notNull(),
+    sourceId: varchar('source_id', { length: 64 }).notNull(),
+    channelConversationRef: varchar('channel_conversation_ref', { length: 128 }).notNull(),
+    customerId: varchar('customer_id', { length: 64 }),
+    identityState: conversationRootIdentityStateEnum('identity_state').notNull(),
+    activeSegmentId: varchar('active_segment_id', { length: 64 }),
+    latestCustomerInboundMessageId: varchar('latest_customer_inbound_message_id', { length: 64 }),
+    latestCustomerInboundAt: timestamp('latest_customer_inbound_at', { withTimezone: true }),
+    latestCustomerInboundRevision: integer('latest_customer_inbound_revision'),
+    lastClosedSegmentId: varchar('last_closed_segment_id', { length: 64 }),
+    lastSegmentClosedAt: timestamp('last_segment_closed_at', { withTimezone: true }),
+    lastClosedSegmentInboundMessageId: varchar('last_closed_segment_inbound_message_id', { length: 64 }),
+    lastClosedSegmentInboundAt: timestamp('last_closed_segment_inbound_at', { withTimezone: true }),
+    lastClosedSegmentInboundRevision: integer('last_closed_segment_inbound_revision'),
+    identityUpdatedAt: timestamp('identity_updated_at', { withTimezone: true }).notNull(),
+    segmentUpdatedAt: timestamp('segment_updated_at', { withTimezone: true }).notNull(),
+    revision: integer('revision').notNull().default(1),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    primaryKey: primaryKey({
+      name: 'conversations_pk',
+      columns: [table.tenantId, table.institutionId, table.id],
+    }),
+    sourceFk: foreignKey({
+      name: 'conversations_source_fk',
+      columns: [table.tenantId, table.institutionId, table.sourceId],
+      foreignColumns: [
+        conversationFormalSources.tenantId,
+        conversationFormalSources.institutionId,
+        conversationFormalSources.id,
+      ],
+    }),
+    customerFk: foreignKey({
+      name: 'conversations_customer_fk',
+      columns: [table.tenantId, table.institutionId, table.customerId],
+      foreignColumns: [customers.tenantId, customers.institutionId, customers.id],
+    }),
+    sourceChannelRefUnique: unique('conversations_source_channel_ref_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.sourceId,
+      table.channelConversationRef,
+    ),
+    queueIdx: index('conversations_queue_idx').on(
+      table.tenantId,
+      table.institutionId,
+      table.updatedAt,
+      table.id,
+    ),
+    identityIdx: index('conversations_identity_idx').on(
+      table.tenantId,
+      table.institutionId,
+      table.identityState,
+      table.updatedAt,
+    ),
+    requiredCheck: check(
+      'conversations_required_check',
+      sql`length(trim(${table.channelConversationRef})) > 0 AND ${table.revision} > 0 AND ${table.updatedAt} >= ${table.createdAt} AND ${table.identityUpdatedAt} >= ${table.createdAt} AND ${table.segmentUpdatedAt} >= ${table.createdAt}`,
+    ),
+    identityCustomerCheck: check(
+      'conversations_identity_customer_check',
+      sql`(${table.identityState} = 'matched' AND ${table.customerId} IS NOT NULL) OR (${table.identityState} <> 'matched' AND ${table.customerId} IS NULL)`,
+    ),
+    latestInboundShapeCheck: check(
+      'conversations_latest_inbound_shape_check',
+      sql`(${table.latestCustomerInboundMessageId} IS NULL AND ${table.latestCustomerInboundAt} IS NULL AND ${table.latestCustomerInboundRevision} IS NULL) OR (${table.latestCustomerInboundMessageId} IS NOT NULL AND ${table.latestCustomerInboundAt} IS NOT NULL AND ${table.latestCustomerInboundRevision} > 0)`,
+    ),
+    lastClosedShapeCheck: check(
+      'conversations_last_closed_shape_check',
+      sql`(${table.lastClosedSegmentId} IS NULL AND ${table.lastSegmentClosedAt} IS NULL AND ${table.lastClosedSegmentInboundMessageId} IS NULL AND ${table.lastClosedSegmentInboundAt} IS NULL AND ${table.lastClosedSegmentInboundRevision} IS NULL) OR (${table.lastClosedSegmentId} IS NOT NULL AND ${table.lastSegmentClosedAt} IS NOT NULL AND ${table.lastClosedSegmentInboundMessageId} IS NOT NULL AND ${table.lastClosedSegmentInboundAt} IS NOT NULL AND ${table.lastClosedSegmentInboundRevision} > 0)`,
+    ),
+  }),
+);
+
+export const conversationSegments = pgTable(
+  'conversation_segments',
+  {
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    id: varchar('id', { length: 64 }).notNull(),
+    conversationId: varchar('conversation_id', { length: 64 }).notNull(),
+    sequenceNo: integer('sequence_no').notNull(),
+    state: conversationSegmentStateEnum('state').notNull(),
+    currentHandlerId: varchar('current_handler_id', { length: 96 }),
+    everHumanHandled: boolean('ever_human_handled').notNull().default(false),
+    openedByCustomerMessageId: varchar('opened_by_customer_message_id', { length: 64 }).notNull(),
+    openedAt: timestamp('opened_at', { withTimezone: true }).notNull(),
+    lastCustomerMessageId: varchar('last_customer_message_id', { length: 64 }).notNull(),
+    lastCustomerMessageAt: timestamp('last_customer_message_at', { withTimezone: true }).notNull(),
+    latestInboundRevision: integer('latest_inbound_revision').notNull(),
+    waitingAfterCustomerMessageId: varchar('waiting_after_customer_message_id', { length: 64 }),
+    waitingAfterCustomerMessageAt: timestamp('waiting_after_customer_message_at', { withTimezone: true }),
+    waitingAfterInboundRevision: integer('waiting_after_inbound_revision'),
+    stateChangedAt: timestamp('state_changed_at', { withTimezone: true }).notNull(),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    segmentCloseKind: conversationSegmentCloseKindEnum('segment_close_kind').notNull(),
+    resolutionState: conversationSegmentResolutionStateEnum('resolution_state').notNull(),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    blockingReasonCodes: jsonb('blocking_reason_codes').$type<readonly string[]>().notNull().default(sql`'[]'::jsonb`),
+    revision: integer('revision').notNull().default(1),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    primaryKey: primaryKey({
+      name: 'conversation_segments_pk',
+      columns: [table.tenantId, table.institutionId, table.id],
+    }),
+    conversationFk: foreignKey({
+      name: 'conversation_segments_conversation_fk',
+      columns: [table.tenantId, table.institutionId, table.conversationId],
+      foreignColumns: [conversations.tenantId, conversations.institutionId, conversations.id],
+    }),
+    sequenceUnique: unique('conversation_segments_sequence_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.conversationId,
+      table.sequenceNo,
+    ),
+    targetUnique: unique('conversation_segments_target_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.conversationId,
+      table.id,
+    ),
+    queueIdx: index('conversation_segments_queue_idx').on(
+      table.tenantId,
+      table.institutionId,
+      table.state,
+      table.stateChangedAt,
+    ),
+    revisionCheck: check(
+      'conversation_segments_revision_check',
+      sql`${table.sequenceNo} > 0 AND ${table.latestInboundRevision} > 0 AND ${table.revision} > 0 AND ${table.updatedAt} >= ${table.createdAt} AND jsonb_typeof(${table.blockingReasonCodes}) = 'array'`,
+    ),
+    waitingShapeCheck: check(
+      'conversation_segments_waiting_shape_check',
+      sql`(${table.waitingAfterCustomerMessageId} IS NULL AND ${table.waitingAfterCustomerMessageAt} IS NULL AND ${table.waitingAfterInboundRevision} IS NULL) OR (${table.waitingAfterCustomerMessageId} IS NOT NULL AND ${table.waitingAfterCustomerMessageAt} IS NOT NULL AND ${table.waitingAfterInboundRevision} > 0)`,
+    ),
+    closeShapeCheck: check(
+      'conversation_segments_close_shape_check',
+      sql`(${table.state} = 'closed' AND ${table.closedAt} IS NOT NULL AND ${table.segmentCloseKind} IN ('normal', 'forced')) OR (${table.state} <> 'closed' AND ${table.closedAt} IS NULL AND ${table.segmentCloseKind} = 'open')`,
+    ),
+    resolutionShapeCheck: check(
+      'conversation_segments_resolution_shape_check',
+      sql`(${table.resolutionState} = 'open' AND ${table.resolvedAt} IS NULL) OR (${table.resolutionState} = 'resolved' AND ${table.resolvedAt} IS NOT NULL)`,
+    ),
+  }),
+);
+
+export const conversationMessages = pgTable(
+  'conversation_messages',
+  {
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    id: varchar('id', { length: 64 }).notNull(),
+    conversationId: varchar('conversation_id', { length: 64 }).notNull(),
+    segmentId: varchar('segment_id', { length: 64 }).notNull(),
+    direction: conversationMessageDirectionEnum('direction').notNull(),
+    senderKind: conversationMessageSenderKindEnum('sender_kind').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+    receivedAt: timestamp('received_at', { withTimezone: true }).notNull(),
+    authorizedContentReference: varchar('authorized_content_reference', { length: 128 }).notNull(),
+    safeSummaryCode: varchar('safe_summary_code', { length: 64 }),
+    sourceMessageRef: varchar('source_message_ref', { length: 128 }),
+    idempotencyKey: varchar('idempotency_key', { length: 128 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    primaryKey: primaryKey({
+      name: 'conversation_messages_pk',
+      columns: [table.tenantId, table.institutionId, table.id],
+    }),
+    conversationFk: foreignKey({
+      name: 'conversation_messages_conversation_fk',
+      columns: [table.tenantId, table.institutionId, table.conversationId],
+      foreignColumns: [conversations.tenantId, conversations.institutionId, conversations.id],
+    }),
+    segmentFk: foreignKey({
+      name: 'conversation_messages_segment_fk',
+      columns: [
+        table.tenantId,
+        table.institutionId,
+        table.conversationId,
+        table.segmentId,
+      ],
+      foreignColumns: [
+        conversationSegments.tenantId,
+        conversationSegments.institutionId,
+        conversationSegments.conversationId,
+        conversationSegments.id,
+      ],
+    }),
+    sourceRefUnique: unique('conversation_messages_source_ref_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.sourceMessageRef,
+    ),
+    idempotencyUnique: unique('conversation_messages_idempotency_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.idempotencyKey,
+    ),
+    timelineIdx: index('conversation_messages_timeline_idx').on(
+      table.tenantId,
+      table.institutionId,
+      table.conversationId,
+      table.occurredAt,
+      table.id,
+    ),
+    timestampCheck: check(
+      'conversation_messages_timestamp_check',
+      sql`${table.receivedAt} >= ${table.occurredAt}`,
+    ),
+    senderDirectionCheck: check(
+      'conversation_messages_sender_direction_check',
+      sql`(${table.direction} = 'inbound' AND ${table.senderKind} = 'customer') OR (${table.direction} = 'outbound' AND ${table.senderKind} IN ('human', 'ai')) OR (${table.direction} = 'system' AND ${table.senderKind} = 'system')`,
+    ),
+    referenceShapeCheck: check(
+      'conversation_messages_reference_shape_check',
+      sql`${table.authorizedContentReference} ~ '^content:authorized:ref_[a-f][0-9a-f]{15,63}$' AND ((${table.direction} = 'inbound' AND ${table.sourceMessageRef} ~ '^source:message:ref_[a-f][0-9a-f]{15,63}$' AND ${table.idempotencyKey} ~ '^[A-Za-z0-9_-]{16,128}$') OR (${table.direction} <> 'inbound' AND ${table.sourceMessageRef} IS NULL AND ${table.idempotencyKey} IS NULL))`,
+    ),
+    safeSummaryCheck: check(
+      'conversation_messages_safe_summary_check',
+      sql`${table.safeSummaryCode} IS NULL OR ${table.safeSummaryCode} IN ('customer_message_received', 'human_message_recorded', 'ai_message_recorded', 'system_event_recorded')`,
+    ),
+  }),
+);
+
+export const conversationAssignments = pgTable(
+  'conversation_assignments',
+  {
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    eventId: varchar('event_id', { length: 64 }).notNull(),
+    assignmentId: varchar('assignment_id', { length: 64 }).notNull(),
+    conversationId: varchar('conversation_id', { length: 64 }).notNull(),
+    segmentId: varchar('segment_id', { length: 64 }).notNull(),
+    revision: integer('revision').notNull(),
+    status: conversationAssignmentStatusEnum('status').notNull(),
+    assigneeUserId: varchar('assignee_user_id', { length: 96 }).notNull(),
+    assigneeRole: authRoleEnum('assignee_role').notNull(),
+    actorUserId: varchar('actor_user_id', { length: 96 }).notNull(),
+    actorRole: authRoleEnum('actor_role').notNull(),
+    reasonCode: conversationAssignmentReasonCodeEnum('reason_code').notNull(),
+    sourceSegmentState: conversationSegmentStateEnum('source_segment_state').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+    idempotencyKey: varchar('idempotency_key', { length: 128 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    primaryKey: primaryKey({
+      name: 'conversation_assignments_pk',
+      columns: [table.tenantId, table.institutionId, table.eventId],
+    }),
+    segmentFk: foreignKey({
+      name: 'conversation_assignments_segment_fk',
+      columns: [
+        table.tenantId,
+        table.institutionId,
+        table.conversationId,
+        table.segmentId,
+      ],
+      foreignColumns: [
+        conversationSegments.tenantId,
+        conversationSegments.institutionId,
+        conversationSegments.conversationId,
+        conversationSegments.id,
+      ],
+    }),
+    revisionUnique: unique('conversation_assignments_revision_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.segmentId,
+      table.revision,
+    ),
+    segmentIdx: index('conversation_assignments_segment_idx').on(
+      table.tenantId,
+      table.institutionId,
+      table.segmentId,
+      table.revision,
+    ),
+    idempotencyIdx: index('conversation_assignments_idempotency_idx').on(
+      table.tenantId,
+      table.institutionId,
+      table.idempotencyKey,
+    ),
+    revisionCheck: check(
+      'conversation_assignments_revision_check',
+      sql`${table.revision} > 0`,
+    ),
+    roleCheck: check(
+      'conversation_assignments_role_check',
+      sql`${table.assigneeRole} IN ('tenant_admin', 'tenant_operator', 'consultant', 'customer_service') AND ${table.actorRole} IN ('tenant_admin', 'tenant_operator', 'consultant', 'customer_service')`,
+    ),
+    requiredCheck: check(
+      'conversation_assignments_required_check',
+      sql`length(trim(${table.assignmentId})) > 0 AND length(trim(${table.conversationId})) > 0 AND length(trim(${table.assigneeUserId})) > 0 AND length(trim(${table.actorUserId})) > 0 AND ${table.idempotencyKey} ~ '^idem_[a-f][a-f0-9]{31,63}$'`,
+    ),
+  }),
+);
+
+export const conversationRisks = pgTable(
+  'conversation_risks',
+  {
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    eventId: varchar('event_id', { length: 64 }).notNull(),
+    riskId: varchar('risk_id', { length: 64 }).notNull(),
+    conversationId: varchar('conversation_id', { length: 64 }).notNull(),
+    segmentId: varchar('segment_id', { length: 64 }).notNull(),
+    sourceMessageId: varchar('source_message_id', { length: 64 }).notNull(),
+    eventKind: conversationRiskEventKindEnum('event_kind').notNull(),
+    riskDomain: conversationRiskDomainEnum('risk_domain').notNull(),
+    riskCode: varchar('risk_code', { length: 64 }).notNull(),
+    actorId: varchar('actor_id', { length: 96 }),
+    clinicalClosureReferenceId: varchar('clinical_closure_reference_id', { length: 128 }),
+    clinicalClosureVerifiedAt: timestamp('clinical_closure_verified_at', { withTimezone: true }),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    primaryKey: primaryKey({
+      name: 'conversation_risks_pk',
+      columns: [table.tenantId, table.institutionId, table.eventId],
+    }),
+    segmentFk: foreignKey({
+      name: 'conversation_risks_segment_fk',
+      columns: [
+        table.tenantId,
+        table.institutionId,
+        table.conversationId,
+        table.segmentId,
+      ],
+      foreignColumns: [
+        conversationSegments.tenantId,
+        conversationSegments.institutionId,
+        conversationSegments.conversationId,
+        conversationSegments.id,
+      ],
+    }),
+    messageFk: foreignKey({
+      name: 'conversation_risks_message_fk',
+      columns: [table.tenantId, table.institutionId, table.sourceMessageId],
+      foreignColumns: [
+        conversationMessages.tenantId,
+        conversationMessages.institutionId,
+        conversationMessages.id,
+      ],
+    }),
+    kindUnique: unique('conversation_risks_kind_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.riskId,
+      table.eventKind,
+    ),
+    segmentIdx: index('conversation_risks_segment_idx').on(
+      table.tenantId,
+      table.institutionId,
+      table.segmentId,
+      table.occurredAt,
+    ),
+    codeCheck: check(
+      'conversation_risks_code_check',
+      sql`${table.riskCode} ~ '^[a-z][a-z0-9._-]{0,63}$'`,
+    ),
+    eventShapeCheck: check(
+      'conversation_risks_event_shape_check',
+      sql`(${table.eventKind} = 'risk_unconfirmed' AND ${table.actorId} IS NULL AND ${table.clinicalClosureReferenceId} IS NULL AND ${table.clinicalClosureVerifiedAt} IS NULL) OR (${table.eventKind} = 'risk_confirmed' AND ${table.actorId} IS NOT NULL AND ${table.clinicalClosureReferenceId} IS NULL AND ${table.clinicalClosureVerifiedAt} IS NULL) OR (${table.eventKind} = 'risk_resolved' AND ${table.actorId} IS NOT NULL AND ((${table.riskDomain} = 'clinical' AND ${table.clinicalClosureReferenceId} IS NOT NULL AND ${table.clinicalClosureVerifiedAt} IS NOT NULL) OR (${table.riskDomain} = 'non_clinical' AND ${table.clinicalClosureReferenceId} IS NULL AND ${table.clinicalClosureVerifiedAt} IS NULL)))`,
+    ),
+  }),
+);
+
+export const conversationMessageResults = pgTable(
+  'conversation_message_results',
+  {
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    resultId: varchar('result_id', { length: 64 }).notNull(),
+    messageId: varchar('message_id', { length: 64 }).notNull(),
+    stage: conversationMessageResultStageEnum('stage').notNull(),
+    status: conversationMessageResultStatusEnum('status').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+    attemptNo: integer('attempt_no').notNull(),
+    dedupeKey: varchar('dedupe_key', { length: 128 }).notNull(),
+    providerMessageRef: varchar('provider_message_ref', { length: 128 }),
+    failureCode: conversationMessageResultFailureCodeEnum('failure_code'),
+    channelReceiptReferenceId: varchar('channel_receipt_reference_id', { length: 128 }),
+    channelReceiptVerifiedAt: timestamp('channel_receipt_verified_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    primaryKey: primaryKey({
+      name: 'conversation_message_results_pk',
+      columns: [table.tenantId, table.institutionId, table.resultId],
+    }),
+    messageFk: foreignKey({
+      name: 'conversation_message_results_message_fk',
+      columns: [table.tenantId, table.institutionId, table.messageId],
+      foreignColumns: [
+        conversationMessages.tenantId,
+        conversationMessages.institutionId,
+        conversationMessages.id,
+      ],
+    }),
+    dedupeUnique: unique('conversation_message_results_dedupe_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.messageId,
+      table.dedupeKey,
+    ),
+    messageIdx: index('conversation_message_results_message_idx').on(
+      table.tenantId,
+      table.institutionId,
+      table.messageId,
+      table.attemptNo,
+      table.occurredAt,
+    ),
+    attemptCheck: check(
+      'conversation_message_results_attempt_check',
+      sql`${table.attemptNo} > 0`,
+    ),
+    stageStatusCheck: check(
+      'conversation_message_results_stage_status_check',
+      sql`(${table.stage} = 'message_transport' AND ${table.status} IN ('inbound_received', 'outbound_created', 'outbound_submitted', 'outbound_failed', 'outbound_skipped', 'outbound_unknown')) OR (${table.stage} = 'provider_acceptance' AND ${table.status} IN ('provider_accepted', 'provider_rejected', 'provider_unknown')) OR (${table.stage} = 'channel_delivery' AND ${table.status} IN ('delivery_not_reported', 'channel_delivered', 'channel_failed', 'channel_unknown'))`,
+    ),
+    failureCheck: check(
+      'conversation_message_results_failure_check',
+      sql`(${table.status} IN ('inbound_received', 'outbound_created', 'outbound_submitted', 'provider_accepted', 'delivery_not_reported', 'channel_delivered') AND ${table.failureCode} IS NULL) OR (${table.status} = 'outbound_failed' AND ${table.failureCode} = 'outbound_submission_failed') OR (${table.status} = 'outbound_skipped' AND ${table.failureCode} = 'outbound_submission_skipped') OR (${table.status} = 'outbound_unknown' AND ${table.failureCode} IN ('outbound_submission_timeout', 'outbound_submission_indeterminate')) OR (${table.status} = 'provider_rejected' AND ${table.failureCode} = 'provider_rejected') OR (${table.status} = 'provider_unknown' AND ${table.failureCode} IN ('provider_timeout', 'provider_unavailable', 'provider_indeterminate')) OR (${table.status} = 'channel_failed' AND ${table.failureCode} = 'channel_failed') OR (${table.status} = 'channel_unknown' AND ${table.failureCode} IN ('channel_receipt_timeout', 'channel_receipt_unavailable', 'channel_receipt_indeterminate'))`,
+    ),
+    providerRefCheck: check(
+      'conversation_message_results_provider_ref_check',
+      sql`${table.providerMessageRef} IS NULL OR ${table.providerMessageRef} ~ '^provider:message:ref_[a-f][0-9a-f]{15,63}$'`,
+    ),
+    receiptCheck: check(
+      'conversation_message_results_receipt_check',
+      sql`(${table.status} = 'channel_delivered' AND ${table.channelReceiptReferenceId} ~ '^channel:receipt:ref_[a-f][0-9a-f]{15,63}$' AND ${table.channelReceiptVerifiedAt} IS NOT NULL) OR (${table.status} <> 'channel_delivered' AND ${table.channelReceiptReferenceId} IS NULL AND ${table.channelReceiptVerifiedAt} IS NULL)`,
+    ),
+  }),
+);
