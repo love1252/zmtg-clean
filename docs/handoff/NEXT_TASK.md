@@ -1,5 +1,24 @@
 # 下一任务
 
+<!-- CONVERSATIONS_QUEUE_FRESH_READMISSION_NEXT_20260817 -->
+
+## Conversations Queue Fresh Re-admission 后的下一任务
+
+```text
+CURRENT_COMPLETE_TARGET=CONVERSATIONS_QUEUE_FORMAL_RUNTIME_FRESH_READMISSION
+NEXT_TASK=CONVERSATIONS_CONV02_FORMAL_FACT_PERSISTENCE_SCHEMA_MIGRATION_CLOSURE
+NEXT_TASK_AUTHORIZED=false
+NEXT_STAGE_AUTO_EXECUTION=false
+PRIMARY_BLOCKER=authoritative_institution_scoped_conversation_persistence_missing
+SECONDARY_BLOCKER=formal_conversation_read_authorization_not_yet_defined
+SCHEMA_CHANGE_REQUIRED=true
+MIGRATION_REQUIRED=true
+STAGING_AUTHORIZED=false
+PRODUCTION_AUTHORIZED=false
+```
+
+下一任务是完整 Schema/Migration closure，不再拆成设计/Admission/Execution 小支线；但该硬边界必须显式授权。
+
 <!-- ANALYTICS_OVERVIEW_RUNTIME_RELEASE_NEXT_20260817 -->
 
 ## Analytics Overview 发布后的下一任务

@@ -1,5 +1,11 @@
 # 智美天工架构文档索引
 
+<!-- CONVERSATIONS_QUEUE_FRESH_READMISSION_20260817 -->
+
+## Conversations Queue Formal Runtime Fresh Re-admission（2026-08-17）
+
+会话领域契约与公共 capability/action 声明已存在，但当前正式 candidate 不存在会话持久化事实模型；Runtime Release 保持关闭。
+
 <!-- ANALYTICS_OVERVIEW_RUNTIME_RELEASE_20260817 -->
 
 ## Analytics Overview Formal Runtime Release（2026-08-17）
