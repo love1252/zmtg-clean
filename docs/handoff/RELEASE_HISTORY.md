@@ -2,7 +2,7 @@
 
 <!-- WORKBENCH_SEVEN_STREAM_FINAL_READONLY_ACCEPTANCE_HISTORY_20260817 -->
 
-## 2026-08-17：Workbench Seven-Stream Reaggregation Final Readonly Acceptance
+## 2026-08-17：工作台七线重聚合最终只读验收
 
 - `/hospital` 从仅展示 `page_workbench` 摘要收敛为 Phase 1 八个 governed readonly page 重聚合。
 - 唯一聚合输入为正式 `CapabilityStatusV1`；工作台不直接读取业务 repository/table。

@@ -857,6 +857,28 @@ describe('WorkbenchCapabilityProjection', () => {
     });
   });
 
+
+  it('正式摘要兼容只接受两个获准完整字符串，不放宽别名前缀与状态短语组合', () => {
+    for (const [key, safeSummary] of [
+      ['page_knowledge_library', '知识库资料状态异常'],
+      ['page_system_ai_usage', 'AI 使用统计可用'],
+    ] as const) {
+      const result = buildWorkbenchCapabilityProjection({
+        capabilities: capabilitySource([
+          {
+            key,
+            decision: 'read_only',
+            safeSummary,
+          },
+        ]),
+        referenceTime,
+      });
+
+      expect(result).toEqual(blockedProjection());
+      expect(JSON.stringify(result)).not.toContain(safeSummary);
+    }
+  });
+
   it('接受当前 Phase 1 八个 governed readonly page 的 Authority 安全摘要并保持 Controlled Create 关闭', () => {
     const dims = (
       dataReadiness: CapabilityStatusDimensionsV1['dataReadiness'],

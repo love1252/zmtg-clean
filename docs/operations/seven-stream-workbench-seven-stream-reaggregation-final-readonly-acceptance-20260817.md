@@ -1,4 +1,4 @@
-# Workbench Seven-Stream Reaggregation Final Readonly Acceptance
+# 工作台七线重聚合最终只读验收
 
 - 日期：2026-08-17
 - 基线：`81d9726d5ae287928c6cf4bcac37704e4f7b696a`

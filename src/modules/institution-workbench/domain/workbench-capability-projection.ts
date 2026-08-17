@@ -89,9 +89,9 @@ const SAFE_SUMMARY_GENERIC_PREFIXES = Object.freeze([
   '当前',
 ] as const);
 
-const SAFE_SUMMARY_PREFIX_ALIASES = Object.freeze({
-  page_knowledge_library: Object.freeze(['知识库资料'] as const),
-  page_system_ai_usage: Object.freeze(['AI 使用统计'] as const),
+const SAFE_SUMMARY_EXACT_ALIASES = Object.freeze({
+  page_knowledge_library: Object.freeze(['知识库资料仅供查看'] as const),
+  page_system_ai_usage: Object.freeze(['AI 使用统计仅供查看'] as const),
 } as const);
 
 const BUSINESS_PAYLOAD_FORBIDDEN_FAILURE_CODES = Object.freeze([
@@ -463,18 +463,21 @@ function isSafeBusinessSummary(
     return false;
   }
 
-  const aliasPrefixes =
+  const exactAliases =
     definition.key === 'page_knowledge_library'
-      ? SAFE_SUMMARY_PREFIX_ALIASES.page_knowledge_library
+      ? SAFE_SUMMARY_EXACT_ALIASES.page_knowledge_library
       : definition.key === 'page_system_ai_usage'
-        ? SAFE_SUMMARY_PREFIX_ALIASES.page_system_ai_usage
+        ? SAFE_SUMMARY_EXACT_ALIASES.page_system_ai_usage
         : Object.freeze([] as const);
+  if (exactAliases.some((alias) => value === alias)) {
+    return true;
+  }
+
   const allowedPrefixes = [
     definition.label,
     `${definition.label}业务`,
     `${definition.label}能力`,
     `${definition.label}业务数据`,
-    ...aliasPrefixes,
     ...SAFE_SUMMARY_GENERIC_PREFIXES,
   ];
 
