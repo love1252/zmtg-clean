@@ -12,11 +12,12 @@ import {
 } from '@/modules/institution/server/institution-server-runtime';
 
 export const INSTITUTION_CAPABILITY_AUTHORITY_REVISION_V1 =
-  'r5-analytics-overview-readonly-v1' as const;
+  'r6-conversations-queue-readonly-v1' as const;
 
 const AUTHORITY_STATUS_FRESHNESS_WINDOW_MS = 5_000;
 const WORKBENCH_READONLY_SUMMARY = '工作台仅供查看' as const;
 const CUSTOMER_LIST_READONLY_SUMMARY = '客户列表仅供查看' as const;
+const CONVERSATION_QUEUE_READONLY_SUMMARY = '会话队列仅供查看' as const;
 const CARE_APPOINTMENTS_READONLY_SUMMARY = '预约管理仅供查看' as const;
 const KNOWLEDGE_LIBRARY_READONLY_SUMMARY = '知识库资料仅供查看' as const;
 const ANALYTICS_OVERVIEW_READONLY_SUMMARY = '经营总览仅供查看' as const;
@@ -46,6 +47,8 @@ function buildCapabilityStatus(
       const institutionAuthorized = availableSections.has(definition.sectionId);
       const workbenchReadonlyPilot = definition.key === 'page_workbench';
       const customerListReadonlyPilot = definition.key === 'page_customer_list';
+      const conversationQueueReadonlyPilot =
+        definition.key === 'page_conversation_queue';
       const careAppointmentsReadonlyPilot =
         definition.key === 'page_care_appointments';
       const knowledgeLibraryReadonlyPilot =
@@ -58,6 +61,7 @@ function buildCapabilityStatus(
       const readonlyPilot =
         workbenchReadonlyPilot ||
         customerListReadonlyPilot ||
+        conversationQueueReadonlyPilot ||
         careAppointmentsReadonlyPilot ||
         knowledgeLibraryReadonlyPilot ||
         analyticsOverviewReadonlyPilot ||
@@ -79,6 +83,7 @@ function buildCapabilityStatus(
           dataReadiness: auditReadonlyPilot
             ? 'partial'
             : customerListReadonlyPilot
+                || conversationQueueReadonlyPilot
                 || careAppointmentsReadonlyPilot
                 || knowledgeLibraryReadonlyPilot
                 || analyticsOverviewReadonlyPilot
@@ -95,6 +100,8 @@ function buildCapabilityStatus(
               ? AUDIT_READONLY_SUMMARY
               : customerListReadonlyPilot
                 ? CUSTOMER_LIST_READONLY_SUMMARY
+                : conversationQueueReadonlyPilot
+                  ? CONVERSATION_QUEUE_READONLY_SUMMARY
                 : careAppointmentsReadonlyPilot
                   ? CARE_APPOINTMENTS_READONLY_SUMMARY
                   : knowledgeLibraryReadonlyPilot
