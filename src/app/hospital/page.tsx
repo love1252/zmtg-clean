@@ -14,36 +14,47 @@ import { resolveInstitutionCapabilityAuthorityStatusV1 } from '@/server/orchestr
 const TARGET_SECTION_ID = 'workbench' as const;
 const TARGET_CAPABILITY_KEY = 'page_workbench' as const;
 const EMPTY_SECTION_IDS = Object.freeze([]) as readonly InstitutionNavigationSectionIdV1[];
+const PHASE1_GOVERNED_READONLY_PAGE_KEYS = Object.freeze([
+  'page_workbench',
+  'page_customer_list',
+  'page_conversation_queue',
+  'page_care_appointments',
+  'page_knowledge_library',
+  'page_analytics_overview',
+  'page_system_ai_usage',
+  'page_system_audit',
+] as const);
 
-function selectExactReadonlyWorkbenchProjection(
+function selectPhase1ReadonlyWorkbenchProjection(
   projection: WorkbenchCapabilityProjection,
 ): WorkbenchCapabilityProjection | null {
-  if (
-    projection.status !== 'projected' ||
-    projection.quickCreateMenu !== null
-  ) {
+  if (projection.status !== 'projected' || projection.quickCreateMenu !== null) {
     return null;
   }
 
-  const workbenchSummaries = projection.summaries.filter(
+  const summaries = projection.summaries.filter((summary) =>
+    PHASE1_GOVERNED_READONLY_PAGE_KEYS.some((key) => key === summary.key),
+  );
+  const workbenchSummaries = summaries.filter(
     (summary) => summary.key === TARGET_CAPABILITY_KEY,
   );
   if (workbenchSummaries.length !== 1) return null;
 
-  const summary = workbenchSummaries[0];
-  if (!(
-    summary?.key === TARGET_CAPABILITY_KEY &&
-    summary.kind === 'page' &&
-    summary.decision === 'read_only' &&
-    summary.safeSummary === '工作台仅供查看'
-  )) {
-    return null;
-  }
+  const workbenchSummary = workbenchSummaries[0];
+  if (
+    !workbenchSummary ||
+    workbenchSummary.kind !== 'page' ||
+    workbenchSummary.decision !== 'read_only' ||
+    workbenchSummary.safeSummary !== '工作台仅供查看' ||
+    summaries.some(
+      (summary) => summary.kind !== 'page' || summary.decision !== 'read_only',
+    )
+  ) return null;
 
   return Object.freeze({
     status: 'projected',
     sourceReadiness: projection.sourceReadiness,
-    summaries: Object.freeze([summary]),
+    summaries: Object.freeze(summaries),
     quickCreateMenu: null,
   });
 }
@@ -87,7 +98,7 @@ export default async function HospitalPage() {
           referenceTime: capabilityStatus.freshness?.observedAt ?? '',
         });
         const workbenchProjection =
-          selectExactReadonlyWorkbenchProjection(projection);
+          selectPhase1ReadonlyWorkbenchProjection(projection);
         if (workbenchProjection) {
           capabilityProjection = workbenchProjection;
         }

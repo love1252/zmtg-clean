@@ -1,5 +1,14 @@
 # 项目重构历史
 
+<!-- WORKBENCH_SEVEN_STREAM_FINAL_READONLY_ACCEPTANCE_HISTORY_20260817 -->
+
+## 2026-08-17：Workbench Seven-Stream Reaggregation Final Readonly Acceptance
+
+- `/hospital` 从仅展示 `page_workbench` 摘要收敛为 Phase 1 八个 governed readonly page 重聚合。
+- 唯一聚合输入为正式 `CapabilityStatusV1`；工作台不直接读取业务 repository/table。
+- Care/Conversation action、Customer lifecycle 与 Controlled Create 继续关闭。
+- Phase 1 最终只读验收后，下一硬边界为 Controlled Write；尚未授权。
+
 <!-- CONVERSATIONS_QUEUE_RUNTIME_RELEASE_HISTORY_20260817 -->
 
 ## 2026-08-17：Conversations Queue Formal Runtime Release

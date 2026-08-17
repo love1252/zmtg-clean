@@ -856,4 +856,44 @@ describe('WorkbenchCapabilityProjection', () => {
       quickCreateMenu: null,
     });
   });
+
+  it('接受当前 Phase 1 八个 governed readonly page 的 Authority 安全摘要并保持 Controlled Create 关闭', () => {
+    const dims = (
+      dataReadiness: CapabilityStatusDimensionsV1['dataReadiness'],
+    ): CapabilityStatusDimensionsV1 => ({
+      codeMaturity: 'verified',
+      institutionAuthorization: 'authorized',
+      connectionAvailability: 'not_required',
+      dataReadiness,
+      productionRelease: 'pilot_released',
+    });
+    const result = buildWorkbenchCapabilityProjection({
+      capabilities: capabilitySource([
+        { key: 'page_workbench', dimensions: dims('not_required'), safeSummary: '工作台仅供查看' },
+        { key: 'page_customer_list', dimensions: dims('ready'), safeSummary: '客户列表仅供查看' },
+        { key: 'page_conversation_queue', dimensions: dims('ready'), safeSummary: '会话队列仅供查看' },
+        { key: 'page_care_appointments', dimensions: dims('ready'), safeSummary: '预约管理仅供查看' },
+        { key: 'page_knowledge_library', dimensions: dims('ready'), safeSummary: '知识库资料仅供查看' },
+        { key: 'page_analytics_overview', dimensions: dims('ready'), safeSummary: '经营总览仅供查看' },
+        { key: 'page_system_ai_usage', dimensions: dims('ready'), safeSummary: 'AI 使用统计仅供查看' },
+        { key: 'page_system_audit', dimensions: dims('partial'), safeSummary: '审计与安全仅供查看' },
+      ]),
+      referenceTime,
+    });
+    expect(result.status).toBe('projected');
+    if (result.status !== 'projected') return;
+    expect(result.summaries.map((summary) => summary.key)).toEqual([
+      'page_workbench',
+      'page_customer_list',
+      'page_conversation_queue',
+      'page_care_appointments',
+      'page_knowledge_library',
+      'page_analytics_overview',
+      'page_system_ai_usage',
+      'page_system_audit',
+    ]);
+    expect(result.summaries.every((summary) => summary.decision === 'read_only')).toBe(true);
+    expect(result.quickCreateMenu).toBeNull();
+  });
+
 });
