@@ -1,5 +1,15 @@
 # 项目重构历史
 
+<!-- CONVERSATIONS_QUEUE_FRESH_READMISSION_HISTORY_20260817 -->
+
+## 2026-08-17：Conversations Queue Formal Runtime Fresh Re-admission
+
+- 冻结第一正式只读切片 `CONVERSATION_QUEUE_LIST_BY_CURRENT_INSTITUTION`。
+- Formal Scope/Binding/Operating Context ready。
+- CONV-01 domain、Capability Registry 与 `conversation:read` policy ready。
+- candidate 未发现已准入 Conversation persistence。
+- 未创建 Repository/API/Page；未执行 DB 写入、Schema/Migration、真实发送、Staging 或 Production。
+
 <!-- ANALYTICS_OVERVIEW_RUNTIME_RELEASE_HISTORY_20260817 -->
 
 ## 2026-08-17：Analytics Overview Formal Runtime Release
