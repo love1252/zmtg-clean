@@ -1,5 +1,22 @@
 # 智美天工架构文档索引
 
+<!-- ANALYTICS_OVERVIEW_RUNTIME_RELEASE_20260817 -->
+
+## Analytics Overview Formal Runtime Release（2026-08-17）
+
+```text
+formal session
+→ membership + scope/binding
+→ analytics read authorization
+→ current operating context
+→ analytics_consumption_facts
+→ deterministic domain aggregation
+→ /api/v1/institution/analytics
+→ /hospital/analytics
+```
+
+经营总览按币种独立展示本月截至今日与上一等长周期的五项只读指标；正式 cohort 为空时发布权威 empty，不补造 0。
+
 <!-- ANALYTICS_AN02_FORMAL_PERSISTENCE_20260817 -->
 
 ## Analytics AN-02 Formal Fact Persistence（2026-08-17）
