@@ -1,5 +1,13 @@
 # 智美天工架构文档索引
 
+<!-- CONVERSATIONS_QUEUE_RUNTIME_RELEASE_20260817 -->
+
+## Conversations Queue Formal Runtime Release（2026-08-17）
+
+`/hospital/conversations` 与 `/api/v1/institution/conversations` 已发布第一正式只读会话队列。
+formal authorization、exact institution-scoped Repository/Reader 与 0049 formal persistence
+组成唯一读取链；真实入站/发送、AI 接待、自动触达和 Controlled Create 继续关闭。
+
 <!-- CONVERSATIONS_CONV02_FORMAL_PERSISTENCE_20260817 -->
 
 ## Conversations CONV-02 Formal Persistence（2026-08-17）

@@ -1,5 +1,17 @@
 # 项目重构历史
 
+<!-- CONVERSATIONS_QUEUE_RUNTIME_RELEASE_HISTORY_20260817 -->
+
+## 2026-08-17：Conversations Queue Formal Runtime Release
+
+- 发布 `page_conversation_queue=read_only/pilot_released`。
+- canonical API `/api/v1/institution/conversations`。
+- canonical page `/hospital/conversations`。
+- 四个机构角色通过 formal session + authoritative context + `conversation/read`。
+- exact tenant/institution Repository/Reader；当前 authoritative cohort 为可信 empty。
+- governed readonly page count `7 → 8`；Controlled Create 仍为 0。
+- 未执行 DB 写入、Schema/Migration、真实发送、Staging 或 Production。
+
 <!-- CONVERSATIONS_CONV02_FORMAL_PERSISTENCE_HISTORY_20260817 -->
 
 ## 2026-08-17：Conversations CONV-02 Formal Fact Persistence

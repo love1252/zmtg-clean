@@ -385,11 +385,11 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
       ReturnType<typeof resolveInstitutionCapabilityAuthorityStatusV1>
     >().toEqualTypeOf<Promise<CapabilityStatusV1 | null>>();
     expect(INSTITUTION_CAPABILITY_AUTHORITY_REVISION_V1).toBe(
-      'r5-analytics-overview-readonly-v1',
+      'r6-conversations-queue-readonly-v1',
     );
   });
 
-  it('tenant_admin returns exactly seven governed read_only pilots and keeps the other 29 hidden', async () => {
+  it('tenant_admin returns exactly eight governed read_only pilots and keeps the other 28 hidden', async () => {
     const status = await resolveInstitutionCapabilityAuthorityStatusV1();
 
     expect(status).toMatchObject({
@@ -411,6 +411,9 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
     const capabilities = status?.data?.capabilities ?? [];
     const workbench = capabilities.find((item) => item.key === 'page_workbench');
     const customers = capabilities.find((item) => item.key === 'page_customer_list');
+    const conversations = capabilities.find(
+      (item) => item.key === 'page_conversation_queue',
+    );
     const appointments = capabilities.find(
       (item) => item.key === 'page_care_appointments',
     );
@@ -450,6 +453,20 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
         productionRelease: 'pilot_released',
       },
       safeSummary: '客户列表仅供查看',
+      diagnosticTargetKey: null,
+    });
+
+    expect(conversations).toEqual({
+      key: 'page_conversation_queue',
+      decision: 'read_only',
+      dimensions: {
+        codeMaturity: 'verified',
+        institutionAuthorization: 'authorized',
+        connectionAvailability: 'not_required',
+        dataReadiness: 'ready',
+        productionRelease: 'pilot_released',
+      },
+      safeSummary: '会话队列仅供查看',
       diagnosticTargetKey: null,
     });
 
@@ -533,6 +550,7 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
     expect(releasedGovernedPageKeys).toEqual([
       'page_workbench',
       'page_customer_list',
+      'page_conversation_queue',
       'page_care_appointments',
       'page_knowledge_library',
       'page_analytics_overview',
@@ -544,13 +562,14 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
       (item) =>
         item.key !== 'page_workbench' &&
         item.key !== 'page_customer_list' &&
+        item.key !== 'page_conversation_queue' &&
         item.key !== 'page_care_appointments' &&
         item.key !== 'page_knowledge_library' &&
         item.key !== 'page_analytics_overview' &&
         item.key !== 'page_system_ai_usage' &&
         item.key !== 'page_system_audit',
     );
-    expect(remaining).toHaveLength(29);
+    expect(remaining).toHaveLength(28);
     for (const item of remaining) {
       expect(item.decision).toBe('hidden');
       expect(item.dimensions.productionRelease).toBe('not_released');
@@ -608,6 +627,18 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
           productionRelease: 'pilot_released',
         },
         safeSummary: '客户列表仅供查看',
+      });
+
+      expect(
+        capabilities.find((item) => item.key === 'page_conversation_queue'),
+      ).toMatchObject({
+        decision: 'read_only',
+        dimensions: {
+          institutionAuthorization: 'authorized',
+          dataReadiness: 'ready',
+          productionRelease: 'pilot_released',
+        },
+        safeSummary: '会话队列仅供查看',
       });
 
       expect(
