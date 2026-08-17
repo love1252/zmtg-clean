@@ -227,6 +227,47 @@ export const followUpCustomerTimelineEventTypeEnum = pgEnum('follow_up_customer_
   'message_draft_marked_sent',
   'manual_feedback_recorded',
 ]);
+
+export const careFormalFollowUpStateEnum = pgEnum('care_formal_follow_up_state', [
+  'pending',
+  'in_progress',
+  'waiting_customer',
+  'escalated',
+  'completed',
+  'cancelled',
+]);
+export const careFormalFollowUpRiskLevelEnum = pgEnum('care_formal_follow_up_risk_level', [
+  'none',
+  'high',
+]);
+export const careFormalFollowUpRiskKindEnum = pgEnum('care_formal_follow_up_risk_kind', [
+  'clinical',
+  'complaint',
+  'refund_dispute',
+  'privacy_request',
+  'opt_out',
+]);
+export const careFormalFollowUpCompletionCodeEnum = pgEnum(
+  'care_formal_follow_up_completion_code',
+  ['contact_completed','no_response_closed','his_appointment_linked','customer_declined','invalid_or_duplicate'],
+);
+export const careFormalFollowUpCancellationReasonEnum = pgEnum(
+  'care_formal_follow_up_cancellation_reason',
+  ['created_in_error','duplicate_task','source_invalidated','superseded','customer_requested_stop'],
+);
+export const careFormalFollowUpAssignmentKindEnum = pgEnum(
+  'care_formal_follow_up_assignment_kind',
+  ['user', 'role_pool'],
+);
+export const careFormalFollowUpSourceKindEnum = pgEnum(
+  'care_formal_follow_up_source_kind',
+  ['manual_controlled_create'],
+);
+export const careFormalFollowUpEventTypeEnum = pgEnum(
+  'care_formal_follow_up_event_type',
+  ['created','claimed','reassigned','unclaimed','state_changed','risk_escalated','completed','cancelled'],
+);
+
 export const auditResultEnum = pgEnum('audit_result', ['allowed', 'denied', 'transitioned']);
 export const tenantPlanStatusEnum = pgEnum('tenant_plan_status', ['active', 'retired']);
 export const tenantPlanAssignmentStatusEnum = pgEnum('tenant_plan_assignment_status', [
@@ -3064,6 +3105,177 @@ export const treatmentSummaries = pgTable(
       table.tenantId,
       table.voidedAt,
       table.treatmentDate,
+    ),
+  }),
+);
+
+
+export const careFormalFollowUpTasks = pgTable(
+  'care_formal_follow_up_tasks',
+  {
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    id: varchar('id', { length: 64 }).notNull(),
+    customerId: varchar('customer_id', { length: 64 }).notNull(),
+    customerDisplayName: varchar('customer_display_name', { length: 120 }).notNull(),
+    customerMaskedReference: varchar('customer_masked_reference', { length: 160 }),
+    stageCode: varchar('stage_code', { length: 64 }).notNull(),
+    actionCode: varchar('action_code', { length: 64 }).notNull(),
+    dueAt: timestamp('due_at', { withTimezone: true }).notNull(),
+    state: careFormalFollowUpStateEnum('state').notNull().default('pending'),
+    revision: integer('revision').notNull().default(1),
+    riskLevel: careFormalFollowUpRiskLevelEnum('risk_level').notNull().default('none'),
+    riskKind: careFormalFollowUpRiskKindEnum('risk_kind'),
+    riskEventId: varchar('risk_event_id', { length: 128 }),
+    completionCode: careFormalFollowUpCompletionCodeEnum('completion_code'),
+    completionFeedback: varchar('completion_feedback', { length: 240 }),
+    cancellationReason: careFormalFollowUpCancellationReasonEnum('cancellation_reason'),
+    assigneeKind: careFormalFollowUpAssignmentKindEnum('assignee_kind').notNull(),
+    assigneeUserId: varchar('assignee_user_id', { length: 96 }),
+    assigneeDisplayName: varchar('assignee_display_name', { length: 120 }),
+    assigneeRole: authRoleEnum('assignee_role'),
+    claimedFromRolePool: authRoleEnum('claimed_from_role_pool'),
+    idempotencyKey: varchar('idempotency_key', { length: 128 }).notNull(),
+    requestDigest: varchar('request_digest', { length: 64 }).notNull(),
+    sourceKind: careFormalFollowUpSourceKindEnum('source_kind').notNull().default('manual_controlled_create'),
+    createdBy: varchar('created_by', { length: 96 }).notNull(),
+    updatedBy: varchar('updated_by', { length: 96 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    primaryKey: primaryKey({
+      name: 'care_formal_follow_up_tasks_pk',
+      columns: [table.tenantId, table.institutionId, table.id],
+    }),
+    scopeFk: foreignKey({
+      name: 'care_formal_follow_up_tasks_scope_fk',
+      columns: [table.tenantId, table.institutionId],
+      foreignColumns: [institutionScopes.tenantId, institutionScopes.institutionId],
+    }),
+    customerFk: foreignKey({
+      name: 'care_formal_follow_up_tasks_customer_fk',
+      columns: [table.tenantId, table.institutionId, table.customerId],
+      foreignColumns: [customers.tenantId, customers.institutionId, customers.id],
+    }),
+    idempotencyUnique: unique('care_formal_follow_up_tasks_idempotency_unique').on(
+      table.tenantId, table.institutionId, table.idempotencyKey,
+    ),
+    queueIdx: index('care_formal_follow_up_tasks_queue_idx').on(
+      table.tenantId, table.institutionId, table.state, table.dueAt, table.id,
+    ),
+    assigneeIdx: index('care_formal_follow_up_tasks_assignee_idx').on(
+      table.tenantId, table.institutionId, table.assigneeKind, table.assigneeUserId, table.assigneeRole,
+    ),
+    revisionCheck: check('care_formal_follow_up_tasks_revision_check', sql`${table.revision} > 0`),
+    digestCheck: check(
+      'care_formal_follow_up_tasks_request_digest_check',
+      sql`length(${table.requestDigest}) = 64 AND ${table.requestDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    requiredTextCheck: check(
+      'care_formal_follow_up_tasks_required_text_check',
+      sql`length(trim(${table.customerDisplayName})) > 0
+        AND length(trim(${table.stageCode})) > 0
+        AND length(trim(${table.actionCode})) > 0
+        AND length(trim(${table.idempotencyKey})) > 0
+        AND length(trim(${table.createdBy})) > 0
+        AND length(trim(${table.updatedBy})) > 0
+        AND ${table.updatedAt} >= ${table.createdAt}`,
+    ),
+    assignmentShapeCheck: check(
+      'care_formal_follow_up_tasks_assignment_shape_check',
+      sql`(
+        ${table.assigneeKind} = 'user'
+        AND ${table.assigneeUserId} IS NOT NULL
+        AND ${table.assigneeDisplayName} IS NOT NULL
+        AND ${table.assigneeRole} IS NULL
+        AND (${table.claimedFromRolePool} IS NULL
+          OR ${table.claimedFromRolePool} IN ('tenant_admin','tenant_operator','consultant','customer_service'))
+      ) OR (
+        ${table.assigneeKind} = 'role_pool'
+        AND ${table.assigneeUserId} IS NULL
+        AND ${table.assigneeDisplayName} IS NULL
+        AND ${table.assigneeRole} IN ('tenant_admin','tenant_operator','consultant','customer_service')
+        AND ${table.claimedFromRolePool} IS NULL
+      )`,
+    ),
+    stateShapeCheck: check(
+      'care_formal_follow_up_tasks_state_shape_check',
+      sql`(
+        ${table.state} IN ('pending','in_progress','waiting_customer')
+        AND ${table.riskLevel} = 'none'
+        AND ${table.riskKind} IS NULL
+        AND ${table.riskEventId} IS NULL
+        AND ${table.completionCode} IS NULL
+        AND ${table.completionFeedback} IS NULL
+        AND ${table.cancellationReason} IS NULL
+      ) OR (
+        ${table.state} = 'escalated'
+        AND ${table.riskLevel} = 'high'
+        AND ${table.riskKind} IS NOT NULL
+        AND ${table.riskEventId} IS NOT NULL
+        AND ${table.completionCode} IS NULL
+        AND ${table.completionFeedback} IS NULL
+        AND ${table.cancellationReason} IS NULL
+      ) OR (
+        ${table.state} = 'completed'
+        AND ${table.riskLevel} = 'none'
+        AND ${table.riskKind} IS NULL
+        AND ${table.riskEventId} IS NULL
+        AND ${table.completionCode} IS NOT NULL
+        AND ${table.cancellationReason} IS NULL
+      ) OR (
+        ${table.state} = 'cancelled'
+        AND ${table.riskLevel} = 'none'
+        AND ${table.riskKind} IS NULL
+        AND ${table.riskEventId} IS NULL
+        AND ${table.completionCode} IS NULL
+        AND ${table.completionFeedback} IS NULL
+        AND ${table.cancellationReason} IS NOT NULL
+      )`,
+    ),
+  }),
+);
+
+export const careFormalFollowUpEvents = pgTable(
+  'care_formal_follow_up_events',
+  {
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    id: varchar('id', { length: 64 }).notNull(),
+    taskId: varchar('task_id', { length: 64 }).notNull(),
+    taskRevision: integer('task_revision').notNull(),
+    eventType: careFormalFollowUpEventTypeEnum('event_type').notNull(),
+    actorId: varchar('actor_id', { length: 96 }).notNull(),
+    actorRole: authRoleEnum('actor_role').notNull(),
+    fromState: careFormalFollowUpStateEnum('from_state'),
+    toState: careFormalFollowUpStateEnum('to_state'),
+    reasonCode: varchar('reason_code', { length: 96 }).notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    primaryKey: primaryKey({
+      name: 'care_formal_follow_up_events_pk',
+      columns: [table.tenantId, table.institutionId, table.id],
+    }),
+    taskFk: foreignKey({
+      name: 'care_formal_follow_up_events_task_fk',
+      columns: [table.tenantId, table.institutionId, table.taskId],
+      foreignColumns: [careFormalFollowUpTasks.tenantId, careFormalFollowUpTasks.institutionId, careFormalFollowUpTasks.id],
+    }),
+    taskRevisionUnique: unique('care_formal_follow_up_events_task_revision_unique').on(
+      table.tenantId, table.institutionId, table.taskId, table.taskRevision,
+    ),
+    taskIdx: index('care_formal_follow_up_events_task_idx').on(
+      table.tenantId, table.institutionId, table.taskId, table.occurredAt,
+    ),
+    revisionCheck: check('care_formal_follow_up_events_revision_check', sql`${table.taskRevision} > 0`),
+    textCheck: check(
+      'care_formal_follow_up_events_text_check',
+      sql`length(trim(${table.actorId})) > 0
+        AND length(trim(${table.reasonCode})) > 0
+        AND ${table.createdAt} >= ${table.occurredAt}`,
     ),
   }),
 );
