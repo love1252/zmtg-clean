@@ -29,21 +29,25 @@ function pageHref(page: number, status: AppointmentListStatusV1 | null) {
 export function AppointmentListReadonlyShell({
   result,
   status,
+  operational,
 }: Readonly<{
   result: AppointmentListReadyResultV1;
   status: AppointmentListStatusV1 | null;
+  operational: boolean;
 }>) {
   return (
     <section className="space-y-5" aria-labelledby="appointment-list-title">
       <header className="rounded-[28px] border border-white/80 bg-white/90 px-6 py-6 shadow-xl shadow-slate-200/50">
         <p className="text-xs font-semibold tracking-[0.16em] text-cyan-700">
-          READ ONLY
+          {operational ? 'CONTROLLED WRITE' : 'READ ONLY'}
         </p>
         <h1 id="appointment-list-title" className="mt-2 text-2xl font-bold text-slate-950">
           预约管理
         </h1>
         <p className="mt-2 text-sm text-slate-600">
-          当前共展示 {result.records.length} 条低敏预约记录，仅供查看。
+          {operational
+            ? `当前共展示 ${result.records.length} 条低敏预约记录；具备权限的账号可进入详情执行受控操作。`
+            : `当前共展示 ${result.records.length} 条低敏预约记录，仅供查看。`}
         </p>
       </header>
 
@@ -52,7 +56,10 @@ export function AppointmentListReadonlyShell({
           当前页暂无预约记录
         </div>
       ) : (
-        <ul className="grid gap-3" aria-label="预约只读记录">
+        <ul
+          className="grid gap-3"
+          aria-label={operational ? '预约记录' : '预约只读记录'}
+        >
           {result.records.map((record) => (
             <li
               key={record.appointmentId}
@@ -67,9 +74,21 @@ export function AppointmentListReadonlyShell({
                     预约时间 {record.scheduledAt}
                   </time>
                 </div>
-                <time className="text-xs text-slate-500" dateTime={record.updatedAt}>
-                  更新于 {record.updatedAt}
-                </time>
+                <div className="flex flex-col items-end gap-2">
+                  <time className="text-xs text-slate-500" dateTime={record.updatedAt}>
+                    更新于 {record.updatedAt}
+                  </time>
+                  {operational ? (
+                    <Link
+                      href={`/hospital/care/appointments/${encodeURIComponent(
+                        record.appointmentId,
+                      )}`}
+                      className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-800"
+                    >
+                      查看 / 操作
+                    </Link>
+                  ) : null}
+                </div>
               </div>
             </li>
           ))}

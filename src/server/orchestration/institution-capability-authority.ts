@@ -12,13 +12,13 @@ import {
 } from '@/modules/institution/server/institution-server-runtime';
 
 export const INSTITUTION_CAPABILITY_AUTHORITY_REVISION_V1 =
-  'r7-care-followup-controlled-write-v1' as const;
+  'r8-care-appointment-controlled-write-v1' as const;
 
 const AUTHORITY_STATUS_FRESHNESS_WINDOW_MS = 5_000;
 const WORKBENCH_READONLY_SUMMARY = '工作台仅供查看' as const;
 const CUSTOMER_LIST_READONLY_SUMMARY = '客户列表仅供查看' as const;
 const CONVERSATION_QUEUE_READONLY_SUMMARY = '会话队列仅供查看' as const;
-const CARE_APPOINTMENTS_READONLY_SUMMARY = '预约管理仅供查看' as const;
+const CARE_APPOINTMENTS_OPERATIONAL_SUMMARY = '预约管理可用' as const;
 const KNOWLEDGE_LIBRARY_READONLY_SUMMARY = '知识库资料仅供查看' as const;
 const ANALYTICS_OVERVIEW_READONLY_SUMMARY = '经营总览仅供查看' as const;
 const AI_USAGE_READONLY_SUMMARY = 'AI 使用统计仅供查看' as const;
@@ -50,8 +50,10 @@ function buildCapabilityStatus(
       const customerListReadonlyPilot = definition.key === 'page_customer_list';
       const conversationQueueReadonlyPilot =
         definition.key === 'page_conversation_queue';
-      const careAppointmentsReadonlyPilot =
+      const careAppointmentsOperationalPilot =
         definition.key === 'page_care_appointments';
+      const careAppointmentCreateOperationalPilot =
+        definition.key === 'action_care_appointment_create';
       const knowledgeLibraryReadonlyPilot =
         definition.key === 'page_knowledge_library';
       const analyticsOverviewReadonlyPilot =
@@ -67,14 +69,15 @@ function buildCapabilityStatus(
         workbenchReadonlyPilot ||
         customerListReadonlyPilot ||
         conversationQueueReadonlyPilot ||
-        careAppointmentsReadonlyPilot ||
         knowledgeLibraryReadonlyPilot ||
         analyticsOverviewReadonlyPilot ||
         aiUsageReadonlyPilot ||
         auditReadonlyPilot;
       const operationalPilot =
-        careFollowupsOperationalPilot ||
-        careFollowupCreateOperationalPilot;
+        careAppointmentsOperationalPilot
+        || careAppointmentCreateOperationalPilot
+        || careFollowupsOperationalPilot
+        || careFollowupCreateOperationalPilot;
       const releasedPilot = readonlyPilot || operationalPilot;
 
       return Object.freeze({
@@ -95,7 +98,6 @@ function buildCapabilityStatus(
             ? 'partial'
             : customerListReadonlyPilot
                 || conversationQueueReadonlyPilot
-                || careAppointmentsReadonlyPilot
                 || knowledgeLibraryReadonlyPilot
                 || analyticsOverviewReadonlyPilot
                 || aiUsageReadonlyPilot
@@ -107,19 +109,21 @@ function buildCapabilityStatus(
             : 'not_released',
         }),
         safeSummary:
-          careFollowupsOperationalPilot && institutionAuthorized
-            ? CARE_FOLLOWUPS_OPERATIONAL_SUMMARY
-            : careFollowupCreateOperationalPilot && institutionAuthorized
+          careAppointmentsOperationalPilot && institutionAuthorized
+            ? CARE_APPOINTMENTS_OPERATIONAL_SUMMARY
+            : careAppointmentCreateOperationalPilot && institutionAuthorized
               ? null
-              : readonlyPilot && institutionAuthorized
+              : careFollowupsOperationalPilot && institutionAuthorized
+                ? CARE_FOLLOWUPS_OPERATIONAL_SUMMARY
+                : careFollowupCreateOperationalPilot && institutionAuthorized
+                  ? null
+                  : readonlyPilot && institutionAuthorized
             ? auditReadonlyPilot
               ? AUDIT_READONLY_SUMMARY
               : customerListReadonlyPilot
                 ? CUSTOMER_LIST_READONLY_SUMMARY
                 : conversationQueueReadonlyPilot
                   ? CONVERSATION_QUEUE_READONLY_SUMMARY
-                : careAppointmentsReadonlyPilot
-                  ? CARE_APPOINTMENTS_READONLY_SUMMARY
                   : knowledgeLibraryReadonlyPilot
                     ? KNOWLEDGE_LIBRARY_READONLY_SUMMARY
                     : analyticsOverviewReadonlyPilot

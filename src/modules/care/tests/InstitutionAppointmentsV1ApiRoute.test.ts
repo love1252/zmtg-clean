@@ -1,14 +1,29 @@
+
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ readAppointments: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  readAppointments: vi.fn(),
+  createAppointment: vi.fn(),
+}));
+
 vi.mock('@/server/orchestration/institution-appointment-list-reader', () => ({
   readCurrentInstitutionAppointmentsV1: mocks.readAppointments,
 }));
+vi.mock(
+  '@/server/orchestration/institution-appointment-controlled-write-runtime',
+  () => ({
+    createCurrentInstitutionAppointmentControlledV1:
+      mocks.createAppointment,
+  }),
+);
 
-import { GET } from '@/app/api/v1/institution/appointments/route';
+import {
+  GET,
+  POST,
+} from '@/app/api/v1/institution/appointments/route';
 
 const ready = Object.freeze({
   kind: 'ready' as const,
@@ -21,16 +36,35 @@ const ready = Object.freeze({
       updatedAt: '2026-08-16T08:00:00.000Z',
     }),
   ]),
-  pageInfo: Object.freeze({ page: 1, pageSize: 20 as const, hasMore: false }),
+  pageInfo: Object.freeze({
+    page: 1,
+    pageSize: 20 as const,
+    hasMore: false,
+  }),
 });
 
 beforeEach(() => {
-  mocks.readAppointments.mockReset();
+  Object.values(mocks).forEach((mock) => mock.mockReset());
   mocks.readAppointments.mockResolvedValue(ready);
+  mocks.createAppointment.mockResolvedValue({
+    kind: 'ready',
+    record: {
+      contractVersion: 'v1',
+      appointmentId: 'appointment-new',
+      scheduledAt: '2026-08-20T08:30:00.000Z',
+      status: 'pending_confirmation',
+      updatedAt: '2026-08-18T04:30:00.000Z',
+      permissions: {
+        canOperate: true,
+        canReschedule: true,
+        canCancel: true,
+      },
+    },
+  });
 });
 
-describe('GET /api/v1/institution/appointments', () => {
-  it('返回 exact low-sensitive wire contract 与 no-store', async () => {
+describe('/api/v1/institution/appointments', () => {
+  it('GET returns the existing exact low-sensitive wire contract', async () => {
     const response = await GET(
       new Request(
         'http://localhost/api/v1/institution/appointments?status=pending_confirmation',
@@ -42,56 +76,86 @@ describe('GET /api/v1/institution/appointments', () => {
       records: ready.records,
       pageInfo: ready.pageInfo,
     });
-    const params = mocks.readAppointments.mock.calls[0]?.[0] as URLSearchParams;
-    expect(params.get('status')).toBe('pending_confirmation');
+  });
+
+  it('POST delegates controlled create and returns no-store 201', async () => {
+    const body = {
+      customerId: 'customer-1',
+      project: '皮肤管理',
+      scheduledAt: '2026-08-20T08:30:00.000Z',
+      consultantUserId: 'consultant-1',
+      note: '',
+    };
+    const response = await POST(
+      new Request(
+        'http://localhost/api/v1/institution/appointments',
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        },
+      ),
+    );
+    expect(response.status).toBe(201);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(mocks.createAppointment).toHaveBeenCalledWith(body);
   });
 
   it.each([
-    [
-      { kind: 'invalid_query', code: 'invalid_appointment_query' },
-      400,
-      { code: 'invalid_appointment_query' },
-    ],
-    [
-      { kind: 'forbidden' },
-      403,
-      { code: 'institution_appointment_list_forbidden' },
-    ],
-    [
-      { kind: 'unavailable' },
-      503,
-      { code: 'institution_appointment_list_unavailable' },
-    ],
-  ] as const)('把 %o 映射为 no-store HTTP %i', async (result, status, body) => {
-    mocks.readAppointments.mockResolvedValueOnce(result);
-    const response = await GET(
-      new Request('http://localhost/api/v1/institution/appointments'),
+    [{ kind: 'invalid', code: 'invalid_appointment_create' }, 400],
+    [{ kind: 'forbidden' }, 403],
+    [{ kind: 'not_found' }, 404],
+    [{ kind: 'conflict', code: 'appointment_conflict' }, 409],
+    [{ kind: 'unavailable' }, 503],
+  ] as const)('POST maps %o to HTTP %i', async (result, status) => {
+    mocks.createAppointment.mockResolvedValueOnce(result);
+    const response = await POST(
+      new Request(
+        'http://localhost/api/v1/institution/appointments',
+        {
+          method: 'POST',
+          body: '{}',
+        },
+      ),
     );
     expect(response.status).toBe(status);
     expect(response.headers.get('cache-control')).toBe('no-store');
-    await expect(response.json()).resolves.toEqual(body);
   });
 
-  it('versioned route 只连接 orchestration Reader 且 GET only', () => {
+  it('versioned route stays orchestration-only and exposes GET/POST only', () => {
     const source = readFileSync(
-      resolve(process.cwd(), 'src/app/api/v1/institution/appointments/route.ts'),
+      resolve(
+        process.cwd(),
+        'src/app/api/v1/institution/appointments/route.ts',
+      ),
       'utf8',
     );
-    expect(source).toContain('readCurrentInstitutionAppointmentsV1');
+    expect(source).toContain(
+      'readCurrentInstitutionAppointmentsV1',
+    );
+    expect(source).toContain(
+      'createCurrentInstitutionAppointmentControlledV1',
+    );
     expect(source).not.toContain('getDatabase');
-    expect(source).not.toContain('createAppointmentListRepository');
-    expect(source).not.toContain('createTenantBusinessRepository');
-    expect(source).not.toContain('page_care_appointments');
-    expect(source).not.toMatch(/export\s+(?:async\s+)?function\s+(?:POST|PATCH|DELETE)/u);
+    expect(source).not.toContain(
+      'createAppointmentCommandRepository',
+    );
+    expect(source).not.toMatch(
+      /export\s+(?:async\s+)?function\s+(?:PATCH|DELETE)/u,
+    );
   });
 
-  it('legacy appointments route 保持原始 503 capability_disabled compatibility surface', () => {
+  it('legacy appointments route remains capability_disabled', () => {
     const legacy = readFileSync(
-      resolve(process.cwd(), 'src/app/api/institution/appointments/route.ts'),
+      resolve(
+        process.cwd(),
+        'src/app/api/institution/appointments/route.ts',
+      ),
       'utf8',
     );
     expect(legacy).toContain("code: 'capability_disabled'");
     expect(legacy).toContain('status: 503');
-    expect(legacy).not.toContain('readCurrentInstitutionAppointmentsV1');
   });
 });

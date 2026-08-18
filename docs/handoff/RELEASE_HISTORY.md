@@ -1,5 +1,18 @@
 # 项目重构历史
 
+<!-- CARE_APPOINTMENT_CONTROLLED_WRITE_HISTORY_20260818 -->
+
+## 2026-08-18：预约受控写完整闭环
+
+- 复用既有 `appointments` authoritative persistence，不新增 Migration。
+- `/api/v1/institution/appointments` 发布 management-only controlled create。
+- 新增 appointment detail GET/PATCH 与 `/hospital/care/appointments/[appointmentId]`。
+- 状态更新、改期、取消使用 exact tenant/institution scope + `updatedAt` CAS。
+- 顾问必须由当前机构正式 Membership 证明；写操作仅管理员/运营或当前预约顾问。
+- `page_care_appointments` 与 `action_care_appointment_create` 进入 operational pilot release。
+- Workbench 新建菜单对管理员/运营同时开放预约与随访；Capability Authority 仍不充当角色权限来源。
+- Controlled Create 从 1 增至 2；真实发送、HIS、Staging、Production 保持关闭。
+
 <!-- CARE_MANUAL_FOLLOWUP_CONTROLLED_WRITE_HISTORY_20260817 -->
 
 ## 2026-08-17：人工随访受控写完整闭环
