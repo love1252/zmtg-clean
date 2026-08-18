@@ -1,3 +1,18 @@
+<!-- CUSTOMER_CONTROLLED_WRITE_HISTORY_20260818 -->
+
+## 2026-08-18：客户受控写完整闭环
+
+- 复用既有 `customers` authoritative persistence，不新增 Migration。
+- `/api/v1/institution/customers` 发布 management-only controlled create。
+- 新增 customer detail GET/PATCH 与 `/hospital/customers/[customerId]`。
+- 客户资料、生命周期、优先级更新使用 exact tenant/institution scope + `updatedAt` CAS。
+- 负责人调整仅管理员/运营，目标负责人必须通过当前机构正式 Membership。
+- Customer create 经过 tenant customers quota，并在 tenant-scoped transaction advisory lock 下串行化配额检查与创建。
+- Customer `updatedAt` CAS 使用毫秒 token 对 PostgreSQL 既有微秒值做等价区间匹配，且每次受控更新后的 token 必须严格前进。
+- `page_customer_list` 与 `action_customer_create` 进入 operational pilot release。
+- Workbench 新建菜单对管理员/运营开放客户、预约、随访三类受控创建；页面投影与最终展示门禁同时校验 canonical key/href/order，避免合法多项菜单回退到 authorized-boundary。
+- Controlled Create 从 2 增至 3；真实发送、HIS、Staging、Production 保持关闭。
+
 # 项目重构历史
 
 <!-- CARE_APPOINTMENT_CONTROLLED_WRITE_HISTORY_20260818 -->

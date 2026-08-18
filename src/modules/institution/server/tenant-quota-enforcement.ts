@@ -399,6 +399,21 @@ async function getCurrentUsageForResource(input: {
   }
 }
 
+export const CUSTOMER_CREATE_QUOTA_LOCK_NAMESPACE =
+  'customer-controlled-create-quota-v1';
+
+export async function lockTenantCustomerCreateQuotaV1(input: {
+  database: TenantDatabase;
+  tenantId: string;
+}): Promise<void> {
+  await input.database.execute(sql`
+    SELECT pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtext(${CUSTOMER_CREATE_QUOTA_LOCK_NAMESPACE}),
+      pg_catalog.hashtext(${input.tenantId})
+    )
+  `);
+}
+
 export async function checkTenantQuotaForCreate(input: {
   database: TenantDatabase;
   resource: TenantQuotaResource;

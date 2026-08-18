@@ -22,6 +22,59 @@ const capabilityOffCapabilityProjection: WorkbenchCapabilityProjection = {
   quickCreateMenu: null,
 };
 
+const governedQuickCreateTargets = Object.freeze([
+  Object.freeze({
+    key: 'action_customer_create' as const,
+    href: '/hospital/customers?create=1',
+  }),
+  Object.freeze({
+    key: 'action_care_appointment_create' as const,
+    href: '/hospital/care/appointments?create=1',
+  }),
+  Object.freeze({
+    key: 'action_care_followup_create' as const,
+    href: '/hospital/care/followups?create=1',
+  }),
+]);
+
+function isGovernedQuickCreateMenu(
+  menu: WorkbenchCapabilityProjection['quickCreateMenu'],
+): boolean {
+  if (menu === null) return true;
+
+  if (
+    menu.label !== '新建'
+    || menu.items.length < 1
+    || menu.items.length > governedQuickCreateTargets.length
+  ) {
+    return false;
+  }
+
+  const seen = new Set<string>();
+  let lastIndex = -1;
+
+  for (const item of menu.items) {
+    const index = governedQuickCreateTargets.findIndex(
+      (target) =>
+        target.key === item.key
+        && target.href === item.href,
+    );
+
+    if (
+      index < 0
+      || index <= lastIndex
+      || seen.has(item.key)
+    ) {
+      return false;
+    }
+
+    seen.add(item.key);
+    lastIndex = index;
+  }
+
+  return true;
+}
+
 export function InstitutionWorkbenchCapabilityOff({
   genuineAllowed = false,
   capabilityProjection = null,
@@ -34,16 +87,8 @@ export function InstitutionWorkbenchCapabilityOff({
   if (
     genuineAllowed &&
     capabilityProjection?.status === 'projected' &&
-    (
-      capabilityProjection.quickCreateMenu === null
-      || (
-        capabilityProjection.quickCreateMenu.label === '新建'
-        && capabilityProjection.quickCreateMenu.items.length === 1
-        && capabilityProjection.quickCreateMenu.items[0]?.key
-          === 'action_care_followup_create'
-        && capabilityProjection.quickCreateMenu.items[0]?.href
-          === '/hospital/care/followups?create=1'
-      )
+    isGovernedQuickCreateMenu(
+      capabilityProjection.quickCreateMenu,
     )
   ) {
     return (

@@ -1,3 +1,16 @@
+<!-- CUSTOMER_CONTROLLED_WRITE_ARCH_20260818 -->
+
+## 客户受控写正式闭环（2026-08-18）
+
+客户继续复用现有 `customers` authoritative persistence 与 Customers owner
+`customer-command-repository`，不新增第二套 customer table。正式写链为：
+formal session → identity/membership/scope → Customer write authorization →
+Capability release → exact tenant/institution writer → updatedAt CAS →
+institution-attributed audit。创建额外经过 tenant customer quota；负责人调整仅
+management role，且目标账号必须是当前机构正式 Membership。
+`page_customer_list` 从 read-only 升级为 operational，
+`action_customer_create` 正式发布。
+
 # 智美天工架构文档索引
 
 <!-- CARE_APPOINTMENT_CONTROLLED_WRITE_ARCH_20260818 -->
