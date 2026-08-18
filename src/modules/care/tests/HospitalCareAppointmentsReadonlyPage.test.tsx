@@ -165,6 +165,10 @@ describe('/hospital/care/appointments readonly release page', () => {
     expect(screen.getByRole('heading', { name: '预约管理' })).toBeInTheDocument();
     expect(screen.getByText('待确认')).toBeInTheDocument();
     expect(screen.getByText(/预约时间 2026-08-16/u)).toBeInTheDocument();
+    expect(screen.getByText('READ ONLY')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: '查看 / 操作' }),
+    ).not.toBeInTheDocument();
     expect(mocks.authorizeNavigation).toHaveBeenCalledWith({
       targetSectionId: 'care',
     });
@@ -198,6 +202,16 @@ describe('/hospital/care/appointments readonly release page', () => {
     expect(
       screen.getByRole('heading', { name: '新建预约' }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText('CONTROLLED WRITE'),
+    ).toBeInTheDocument();
+    const detailLink = screen.getByRole('link', {
+      name: '查看 / 操作',
+    });
+    expect(detailLink).toHaveAttribute(
+      'href',
+      '/hospital/care/appointments/appointment-001',
+    );
     const params =
       mocks.readAppointments.mock.calls[0]?.[0] as URLSearchParams;
     expect(params.has('create')).toBe(false);

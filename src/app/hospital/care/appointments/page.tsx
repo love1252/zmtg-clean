@@ -191,6 +191,9 @@ export default async function HospitalCareAppointmentsPage({
           <AppointmentListReadonlyShell
             result={result}
             status={status}
+            operational={
+              capabilityState === 'operational_released'
+            }
           />
         </div>
       ) : genuineBlocked || result?.kind === 'forbidden' ? (
