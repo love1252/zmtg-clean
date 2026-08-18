@@ -12,8 +12,8 @@ Owner / UI / Workbench 支线：
 
 - management-only 新建客户；
 - exact tenant + institution scope；
-- tenant customer quota；
-- `updatedAt` CAS；
+- tenant customer quota，create 在 tenant-scoped transaction advisory lock 后检查并写入；
+- `updatedAt` CAS：兼容 PostgreSQL 既有微秒值与 V1 毫秒 token，并保证受控更新后的 token 严格前进；
 - 客户低敏资料更新；
 - 生命周期更新；
 - 优先级更新；

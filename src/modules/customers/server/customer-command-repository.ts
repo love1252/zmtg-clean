@@ -1,5 +1,5 @@
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, gte, lt } from 'drizzle-orm';
 
 import type {
   CustomerCommandRecord,
@@ -111,18 +111,27 @@ export function createCustomerCommandRepository(
     },
 
     async update(input: CustomerRepositoryUpdateInput): Promise<CustomerCommandRecord | null> {
+      const expectedUpdatedAt = new Date(input.expectedUpdatedAt);
+      const expectedUpperBound = new Date(
+        expectedUpdatedAt.getTime() + 1,
+      );
+      const nextUpdatedAt = new Date(
+        Math.max(Date.now(), expectedUpperBound.getTime()),
+      );
+
       const [row] = await database
         .update(customers)
         .set({
           ...pickUpdateChanges(input.changes),
-          updatedAt: new Date(),
+          updatedAt: nextUpdatedAt,
         })
         .where(
           and(
             eq(customers.tenantId, input.tenantId),
             eq(customers.institutionId, input.institutionId),
             eq(customers.id, input.id),
-            eq(customers.updatedAt, new Date(input.expectedUpdatedAt)),
+            gte(customers.updatedAt, expectedUpdatedAt),
+            lt(customers.updatedAt, expectedUpperBound),
           ),
         )
         .returning();

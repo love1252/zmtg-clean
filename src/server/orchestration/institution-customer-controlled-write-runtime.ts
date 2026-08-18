@@ -21,7 +21,10 @@ import {
 } from '@/modules/customers/server/customer-command-repository';
 import type { CapabilityStatusV1 } from '@/modules/institution-contracts/v1/institution-capability';
 import { isInstitutionRoleV1 } from '@/modules/institution-contracts/v1/institution-navigation';
-import { checkTenantQuotaForCreate } from '@/modules/institution/server/tenant-quota-enforcement';
+import {
+  checkTenantQuotaForCreate,
+  lockTenantCustomerCreateQuotaV1,
+} from '@/modules/institution/server/tenant-quota-enforcement';
 import { getDatabase, type TenantDatabase } from '@/server/db/client';
 import { resolveInstitutionAuditWriterVerifiedAttributionV1 } from '@/server/orchestration/institution-audit-writer-scope';
 import { resolveInstitutionCapabilityAuthorityStatusV1 } from '@/server/orchestration/institution-capability-authority';
@@ -551,6 +554,11 @@ export async function createCurrentInstitutionCustomerControlledV1(
   try {
     return await database.transaction(async (transactionDatabase) => {
       const transactionDb = transactionDatabase as unknown as TenantDatabase;
+
+      await lockTenantCustomerCreateQuotaV1({
+        database: transactionDb,
+        tenantId: actor.tenantId,
+      });
 
       const quota = await checkTenantQuotaForCreate({
         database: transactionDb,

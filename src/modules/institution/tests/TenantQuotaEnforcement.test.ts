@@ -13,6 +13,8 @@ import type { TenantDatabase } from '@/server/db/client';
 import {
   checkTenantQuotaForCreate,
   createTenantQuotaEnforcementRepository,
+  CUSTOMER_CREATE_QUOTA_LOCK_NAMESPACE,
+  lockTenantCustomerCreateQuotaV1,
 } from '@/modules/institution/server/tenant-quota-enforcement';
 
 const andMock = vi.hoisted(() =>
@@ -219,6 +221,22 @@ beforeEach(() => {
 });
 
 describe('租户套餐配额 enforcement helper', () => {
+  it('客户 Controlled Create 使用 tenant-scoped transaction advisory lock', async () => {
+    const execute = vi.fn(async (_statement: unknown) => undefined);
+    const database = { execute } as unknown as TenantDatabase;
+
+    await lockTenantCustomerCreateQuotaV1({
+      database,
+      tenantId: 'demo-tenant-001',
+    });
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(sqlMock.mock.calls.at(-1)?.slice(1)).toEqual([
+      CUSTOMER_CREATE_QUOTA_LOCK_NAMESPACE,
+      'demo-tenant-001',
+    ]);
+  });
+
   it('员工席位只统计 active Membership 与 active 账号', async () => {
     const where = vi.fn(async () => [{ value: 2 }]);
     const innerJoin = vi.fn(() => ({ where }));

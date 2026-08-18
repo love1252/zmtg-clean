@@ -12,6 +12,20 @@ const eqMock = vi.hoisted(() =>
     value,
   })),
 );
+const gteMock = vi.hoisted(() =>
+  vi.fn((column: unknown, value: unknown) => ({
+    column,
+    operator: 'gte',
+    value,
+  })),
+);
+const ltMock = vi.hoisted(() =>
+  vi.fn((column: unknown, value: unknown) => ({
+    column,
+    operator: 'lt',
+    value,
+  })),
+);
 const andMock = vi.hoisted(() =>
   vi.fn((...conditions: unknown[]) => ({ conditions, operator: 'and' })),
 );
@@ -19,6 +33,8 @@ const andMock = vi.hoisted(() =>
 vi.mock('drizzle-orm', async (importOriginal) => ({
   ...(await importOriginal<typeof import('drizzle-orm')>()),
   eq: eqMock,
+  gte: gteMock,
+  lt: ltMock,
   and: andMock,
 }));
 
@@ -96,7 +112,7 @@ describe('CustomerCommandRepository', () => {
     expect(record.updatedAt).toBe(UPDATED_AT.toISOString());
   });
 
-  it('update WHERE binds tenant + institution + customer + updatedAt CAS', async () => {
+  it('update CAS accepts the exact client millisecond bucket for PostgreSQL microseconds', async () => {
     const mutation = createMutationDatabase(null);
     const repository = createCustomerCommandRepository(mutation.database);
 
@@ -112,7 +128,31 @@ describe('CustomerCommandRepository', () => {
       { column: customers.tenantId, operator: 'eq', value: 'tenant_001' },
       { column: customers.institutionId, operator: 'eq', value: 'inst_002' },
       { column: customers.id, operator: 'eq', value: 'cust_001' },
-      { column: customers.updatedAt, operator: 'eq', value: UPDATED_AT },
+      { column: customers.updatedAt, operator: 'gte', value: UPDATED_AT },
+      {
+        column: customers.updatedAt,
+        operator: 'lt',
+        value: new Date(UPDATED_AT.getTime() + 1),
+      },
+    );
+  });
+
+  it('controlled update advances updatedAt strictly beyond the prior client token', async () => {
+    const mutation = createMutationDatabase();
+    const repository = createCustomerCommandRepository(mutation.database);
+
+    await repository.update({
+      tenantId: 'tenant_001',
+      institutionId: 'inst_001',
+      id: 'cust_001',
+      expectedUpdatedAt: UPDATED_AT.toISOString(),
+      changes: { priority: 'medium' },
+    });
+
+    const values = mutation.set.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(values.updatedAt).toBeInstanceOf(Date);
+    expect((values.updatedAt as Date).getTime()).toBeGreaterThan(
+      UPDATED_AT.getTime(),
     );
   });
 

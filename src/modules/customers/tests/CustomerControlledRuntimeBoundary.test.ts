@@ -29,11 +29,17 @@ describe('Customer controlled-write runtime boundary', () => {
     );
 
     expect(runtime).toContain('resolveInstitutionCustomerWriteAuthorizationV1');
+    expect(runtime).toContain('lockTenantCustomerCreateQuotaV1');
     expect(runtime).toContain('checkTenantQuotaForCreate');
+    expect(runtime.indexOf('lockTenantCustomerCreateQuotaV1({')).toBeLessThan(
+      runtime.indexOf('checkTenantQuotaForCreate({'),
+    );
     expect(runtime).toContain("resource: 'customers'");
     expect(runtime).toContain('resolveCurrentOwner');
     expect(runtime).toContain('resolveInstitutionAuditWriterVerifiedAttributionV1');
-    expect(repo).toContain('eq(customers.updatedAt, new Date(input.expectedUpdatedAt))');
+    expect(repo).toContain('gte(customers.updatedAt, expectedUpdatedAt)');
+    expect(repo).toContain('lt(customers.updatedAt, expectedUpperBound)');
+    expect(repo).toContain('Math.max(Date.now(), expectedUpperBound.getTime())');
     expect(dto).not.toMatch(/notes|birthDate|gender|referralSource|maskedPhone|maskedMedicalRecordNo/u);
     expect(`${runtime}\n${repo}`).not.toMatch(
       /wecom|real[_-]?send|his[_/-].*write|integrations\//iu,
