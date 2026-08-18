@@ -8,6 +8,14 @@
       "owner": "care",
       "reviewCondition": "legacy Institution compatibility delegate 退出时删除该 exception。",
       "path": "src/modules/institution/server/followup-path-enrollment-transaction.ts"
+    },
+    {
+      "ruleId": "AQ004_FROZEN_INSTITUTION_MODULE_NEW_FILE",
+      "taskId": "CARE_MANUAL_FOLLOWUP_CONTROLLED_WRITE_CLOSED_LOOP_RELEASE",
+      "reason": "人工随访 Controlled Write 闭环需要 Institution operating context exact-scoped reader，按冻结模块规则登记单文件例外。",
+      "owner": "care",
+      "reviewCondition": "该 operating context reader 迁出冻结 institution 模块或由正式 owner provider 取代时删除该 exception。",
+      "path": "src/modules/institution/server/institution-operating-context-reader.ts"
     }
   ]
 }

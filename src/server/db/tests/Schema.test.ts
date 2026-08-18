@@ -5286,9 +5286,9 @@ describe('S43 Membership legacy adoption physical constraint', () => {
     };
     const frozenEntries = journal.entries.slice(0, 46);
 
-    expect(journal.entries).toHaveLength(50);
+    expect(journal.entries).toHaveLength(51);
     expect(journal.entries.map((entry) => entry.idx)).toEqual(
-      Array.from({ length: 50 }, (_, index) => index),
+      Array.from({ length: 51 }, (_, index) => index),
     );
     expect(
       createHash('sha256').update(JSON.stringify(frozenEntries)).digest('hex'),

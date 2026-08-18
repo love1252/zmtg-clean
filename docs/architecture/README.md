@@ -1,5 +1,16 @@
 # 智美天工架构文档索引
 
+<!-- CARE_MANUAL_FOLLOWUP_CONTROLLED_WRITE_ARCH_20260817 -->
+
+## 人工随访受控写正式闭环（2026-08-17）
+
+Care 以独立 `care_formal_follow_up_tasks` / `care_formal_follow_up_events`
+持有第一个正式 Controlled Write 事实；Customer Center 只提供
+`CustomerReferenceV1` owner-side exact-pair provider，Workbench 只消费
+`CareActionSourceV1`。Capability Authority 负责 release metadata，不承担角色权限判断；
+目标 API / 页面通过 formal write authorization 重新校验 actor、scope 和 task visibility。
+旧 `follow_up_tasks` 不作为该正式写能力的事实源，也不 backfill。
+
 <!-- WORKBENCH_SEVEN_STREAM_FINAL_READONLY_ACCEPTANCE_20260817 -->
 
 ## 工作台七线重聚合最终只读验收（2026-08-17）

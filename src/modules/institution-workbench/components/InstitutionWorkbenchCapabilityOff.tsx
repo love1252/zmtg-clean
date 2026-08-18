@@ -25,19 +25,43 @@ const capabilityOffCapabilityProjection: WorkbenchCapabilityProjection = {
 export function InstitutionWorkbenchCapabilityOff({
   genuineAllowed = false,
   capabilityProjection = null,
+  actionProjection = null,
 }: Readonly<{
   genuineAllowed?: boolean;
   capabilityProjection?: WorkbenchCapabilityProjection | null;
+  actionProjection?: WorkbenchActionProjection | null;
 }>) {
   if (
     genuineAllowed &&
     capabilityProjection?.status === 'projected' &&
-    capabilityProjection.quickCreateMenu === null
+    (
+      capabilityProjection.quickCreateMenu === null
+      || (
+        capabilityProjection.quickCreateMenu.label === '新建'
+        && capabilityProjection.quickCreateMenu.items.length === 1
+        && capabilityProjection.quickCreateMenu.items[0]?.key
+          === 'action_care_followup_create'
+        && capabilityProjection.quickCreateMenu.items[0]?.href
+          === '/hospital/care/followups?create=1'
+      )
+    )
   ) {
     return (
-      <div data-capability-state="readonly-pilot" className="min-w-0">
+      <div
+        data-capability-state={
+          capabilityProjection.quickCreateMenu !== null
+          || actionProjection?.status === 'projected'
+            ? 'controlled-write-pilot'
+            : 'readonly-pilot'
+        }
+        className="min-w-0"
+      >
         <InstitutionWorkbenchShell
-          actionProjection={capabilityOffActionProjection}
+          actionProjection={
+            actionProjection?.status === 'projected'
+              ? actionProjection
+              : capabilityOffActionProjection
+          }
           lifecycleProjection={capabilityOffLifecycleProjection}
           capabilityProjection={capabilityProjection}
         />

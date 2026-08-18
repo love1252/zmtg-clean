@@ -351,6 +351,13 @@
       "when": 1786938000000,
       "tag": "0049_conversations_formal_fact_persistence",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1786982400000,
+      "tag": "0050_care_formal_follow_up_controlled_write",
+      "breakpoints": true
     }
   ]
 }
