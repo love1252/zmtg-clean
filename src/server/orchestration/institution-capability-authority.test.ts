@@ -377,7 +377,7 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
     vi.restoreAllMocks();
   });
 
-  it('exposes no-input readonly-pilot authority resolver and frozen Wave 01 revision', () => {
+  it('exposes no-input authority resolver and frozen Care controlled-write revision', () => {
     expectTypeOf<
       Parameters<typeof resolveInstitutionCapabilityAuthorityStatusV1>
     >().toEqualTypeOf<[]>();
@@ -385,11 +385,11 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
       ReturnType<typeof resolveInstitutionCapabilityAuthorityStatusV1>
     >().toEqualTypeOf<Promise<CapabilityStatusV1 | null>>();
     expect(INSTITUTION_CAPABILITY_AUTHORITY_REVISION_V1).toBe(
-      'r6-conversations-queue-readonly-v1',
+      'r7-care-followup-controlled-write-v1',
     );
   });
 
-  it('tenant_admin returns exactly eight governed read_only pilots and keeps the other 28 hidden', async () => {
+  it('tenant_admin keeps eight governed readonly pages, releases formal Care followups/create, and hides the remaining capabilities', async () => {
     const status = await resolveInstitutionCapabilityAuthorityStatusV1();
 
     expect(status).toMatchObject({
@@ -416,6 +416,12 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
     );
     const appointments = capabilities.find(
       (item) => item.key === 'page_care_appointments',
+    );
+    const careFollowups = capabilities.find(
+      (item) => item.key === 'page_care_followups',
+    );
+    const careFollowupCreate = capabilities.find(
+      (item) => item.key === 'action_care_followup_create',
     );
     const knowledge = capabilities.find(
       (item) => item.key === 'page_knowledge_library',
@@ -481,6 +487,34 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
         productionRelease: 'pilot_released',
       },
       safeSummary: '预约管理仅供查看',
+      diagnosticTargetKey: null,
+    });
+
+    expect(careFollowups).toEqual({
+      key: 'page_care_followups',
+      decision: 'operational',
+      dimensions: {
+        codeMaturity: 'verified',
+        institutionAuthorization: 'authorized',
+        connectionAvailability: 'not_required',
+        dataReadiness: 'ready',
+        productionRelease: 'pilot_released',
+      },
+      safeSummary: '随访任务可用',
+      diagnosticTargetKey: null,
+    });
+
+    expect(careFollowupCreate).toEqual({
+      key: 'action_care_followup_create',
+      decision: 'operational',
+      dimensions: {
+        codeMaturity: 'verified',
+        institutionAuthorization: 'authorized',
+        connectionAvailability: 'not_required',
+        dataReadiness: 'ready',
+        productionRelease: 'pilot_released',
+      },
+      safeSummary: null,
       diagnosticTargetKey: null,
     });
 
@@ -552,6 +586,7 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
       'page_customer_list',
       'page_conversation_queue',
       'page_care_appointments',
+      'page_care_followups',
       'page_knowledge_library',
       'page_analytics_overview',
       'page_system_ai_usage',
@@ -564,12 +599,14 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
         item.key !== 'page_customer_list' &&
         item.key !== 'page_conversation_queue' &&
         item.key !== 'page_care_appointments' &&
+        item.key !== 'page_care_followups' &&
+        item.key !== 'action_care_followup_create' &&
         item.key !== 'page_knowledge_library' &&
         item.key !== 'page_analytics_overview' &&
         item.key !== 'page_system_ai_usage' &&
         item.key !== 'page_system_audit',
     );
-    expect(remaining).toHaveLength(28);
+    expect(remaining).toHaveLength(26);
     for (const item of remaining) {
       expect(item.decision).toBe('hidden');
       expect(item.dimensions.productionRelease).toBe('not_released');
@@ -594,7 +631,7 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
   });
 
   it.each(['consultant', 'customer_service'] as const)(
-    '%s receives only readonly pilots from availableSectionIds',
+    '%s receives Care release metadata without making Capability Authority the target-role permission source',
     async (role) => {
       runtimeMocks.membershipRead.mockResolvedValue([
         {
@@ -651,6 +688,34 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
           productionRelease: 'pilot_released',
         },
         safeSummary: '预约管理仅供查看',
+      });
+
+      expect(
+        capabilities.find((item) => item.key === 'page_care_followups'),
+      ).toMatchObject({
+        decision: 'operational',
+        dimensions: {
+          codeMaturity: 'verified',
+          institutionAuthorization: 'authorized',
+          dataReadiness: 'ready',
+          productionRelease: 'pilot_released',
+        },
+        safeSummary: '随访任务可用',
+      });
+
+      expect(
+        capabilities.find(
+          (item) => item.key === 'action_care_followup_create',
+        ),
+      ).toMatchObject({
+        decision: 'operational',
+        dimensions: {
+          codeMaturity: 'verified',
+          institutionAuthorization: 'authorized',
+          dataReadiness: 'ready',
+          productionRelease: 'pilot_released',
+        },
+        safeSummary: null,
       });
 
       expect(
@@ -728,18 +793,15 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
     });
   });
 
-  it('keeps all three controlled-create actions hidden and not released', async () => {
+  it('releases only the formal follow-up controlled-create capability while customer and appointment create remain closed', async () => {
     const status = await resolveInstitutionCapabilityAuthorityStatusV1();
     const byKey = new Map(
       (status?.data?.capabilities ?? []).map((item) => [item.key, item]),
     );
-    const controlledCreateKeys = [
+    for (const key of [
       'action_customer_create',
       'action_care_appointment_create',
-      'action_care_followup_create',
-    ] as const;
-
-    for (const key of controlledCreateKeys) {
+    ] as const) {
       expect(byKey.get(key)).toMatchObject({
         decision: 'hidden',
         dimensions: {
@@ -748,11 +810,31 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
         safeSummary: null,
       });
     }
+
+    expect(byKey.get('action_care_followup_create')).toMatchObject({
+      decision: 'operational',
+      dimensions: {
+        codeMaturity: 'verified',
+        institutionAuthorization: 'authorized',
+        dataReadiness: 'ready',
+        productionRelease: 'pilot_released',
+      },
+      safeSummary: null,
+    });
+
+    const controlledCreateKeys = [
+      'action_customer_create',
+      'action_care_appointment_create',
+      'action_care_followup_create',
+    ] as const;
+
     expect(
       controlledCreateKeys.filter(
-        (key) => byKey.get(key)?.dimensions.productionRelease !== 'not_released',
+        (key) =>
+          byKey.get(key)?.dimensions.productionRelease
+            === 'pilot_released',
       ),
-    ).toHaveLength(0);
+    ).toHaveLength(1);
   });
 
   it('invalid formal cookie fails before identity, membership, anchor, or business-object persistence', async () => {

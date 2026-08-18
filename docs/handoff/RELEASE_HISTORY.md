@@ -1,5 +1,16 @@
 # 项目重构历史
 
+<!-- CARE_MANUAL_FOLLOWUP_CONTROLLED_WRITE_HISTORY_20260817 -->
+
+## 2026-08-17：人工随访受控写完整闭环
+
+- 新增 `0050_care_formal_follow_up_controlled_write`，建立正式 task/event persistence，无 legacy backfill。
+- 首个创建词汇冻结为 `manual_followup / manual_contact`，不开放自由动作文本。
+- 发布正式人工随访列表、详情、创建、认领、改派、撤销认领、状态流转、结构化完成和风险升级。
+- `page_care_followups` 与 `action_care_followup_create` 进入 pilot release；实际创建仍由目标 runtime 限制为管理员/运营。
+- `CareActionSourceV1` 接入 Workbench；Conversation action 与 Workbench quick-create 仅对正式管理员/运营开放。
+- Controlled Create 从 0 增至 1；真实发送、HIS、Staging、Production 仍关闭。
+
 <!-- WORKBENCH_SEVEN_STREAM_FINAL_READONLY_ACCEPTANCE_HISTORY_20260817 -->
 
 ## 2026-08-17：工作台七线重聚合最终只读验收

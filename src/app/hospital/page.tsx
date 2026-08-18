@@ -1,7 +1,10 @@
 import { InstitutionNavigationShell } from '@/modules/institution/components/InstitutionNavigationShell';
+import type { ConversationActionSourceV1 } from '@/modules/institution-contracts/v1/conversation-action';
 import type { InstitutionNavigationSectionIdV1 } from '@/modules/institution-contracts/v1/institution-navigation';
 import { resolveInstitutionServerAuthorizationV1 } from '@/modules/institution/server/institution-server-runtime';
 import { InstitutionWorkbenchCapabilityOff } from '@/modules/institution-workbench/components/InstitutionWorkbenchCapabilityOff';
+import { buildWorkbenchActionProjection } from '@/modules/institution-workbench/domain/workbench-action-aggregation';
+import type { WorkbenchActionProjection } from '@/modules/institution-workbench/domain/workbench-action-view-models';
 import { buildWorkbenchCapabilityProjection } from '@/modules/institution-workbench/domain/workbench-capability-projection';
 import type { WorkbenchCapabilityProjection } from '@/modules/institution-workbench/domain/workbench-capability-view-models';
 import { isInstitutionRequestAuthorizationV1 } from '@/modules/security/server/institution-request-authorization';
@@ -10,30 +13,47 @@ import {
   type InstitutionNavigationAuthorizationV1,
 } from '@/modules/security/server/institution-section-guard';
 import { resolveInstitutionCapabilityAuthorityStatusV1 } from '@/server/orchestration/institution-capability-authority';
+import { readCurrentInstitutionCareActionSourceV1 } from '@/server/orchestration/institution-care-action-source';
+import { canCurrentInstitutionCreateFormalFollowUpV1 } from '@/server/orchestration/institution-care-create-availability';
 
 const TARGET_SECTION_ID = 'workbench' as const;
 const TARGET_CAPABILITY_KEY = 'page_workbench' as const;
 const EMPTY_SECTION_IDS = Object.freeze([]) as readonly InstitutionNavigationSectionIdV1[];
-const PHASE1_GOVERNED_READONLY_PAGE_KEYS = Object.freeze([
+const GOVERNED_WORKBENCH_PAGE_KEYS = Object.freeze([
   'page_workbench',
   'page_customer_list',
   'page_conversation_queue',
   'page_care_appointments',
+  'page_care_followups',
   'page_knowledge_library',
   'page_analytics_overview',
   'page_system_ai_usage',
   'page_system_audit',
 ] as const);
 
-function selectPhase1ReadonlyWorkbenchProjection(
+function selectGovernedWorkbenchProjection(
   projection: WorkbenchCapabilityProjection,
+  allowCareCreate: boolean,
 ): WorkbenchCapabilityProjection | null {
-  if (projection.status !== 'projected' || projection.quickCreateMenu !== null) {
+  if (projection.status !== 'projected') {
+    return null;
+  }
+
+  const quickCreate = projection.quickCreateMenu;
+  if (
+    quickCreate !== null
+    && (
+      quickCreate.label !== '新建'
+      || quickCreate.items.length !== 1
+      || quickCreate.items[0]?.key !== 'action_care_followup_create'
+      || quickCreate.items[0]?.href !== '/hospital/care/followups?create=1'
+    )
+  ) {
     return null;
   }
 
   const summaries = projection.summaries.filter((summary) =>
-    PHASE1_GOVERNED_READONLY_PAGE_KEYS.some((key) => key === summary.key),
+    GOVERNED_WORKBENCH_PAGE_KEYS.some((key) => key === summary.key),
   );
   const workbenchSummaries = summaries.filter(
     (summary) => summary.key === TARGET_CAPABILITY_KEY,
@@ -46,17 +66,59 @@ function selectPhase1ReadonlyWorkbenchProjection(
     workbenchSummary.kind !== 'page' ||
     workbenchSummary.decision !== 'read_only' ||
     workbenchSummary.safeSummary !== '工作台仅供查看' ||
-    summaries.some(
-      (summary) => summary.kind !== 'page' || summary.decision !== 'read_only',
-    )
+    summaries.some((summary) => {
+      if (summary.kind !== 'page') return true;
+      if (summary.key === 'page_care_followups') {
+        return (
+          summary.decision !== 'operational'
+          || summary.safeSummary !== '随访任务可用'
+        );
+      }
+      return summary.decision !== 'read_only';
+    })
   ) return null;
+
+  const careFollowupSummaries = summaries.filter(
+    (summary) => summary.key === 'page_care_followups',
+  );
+  if (careFollowupSummaries.length > 1) return null;
+  if (quickCreate !== null && careFollowupSummaries.length !== 1) return null;
 
   return Object.freeze({
     status: 'projected',
     sourceReadiness: projection.sourceReadiness,
     summaries: Object.freeze(summaries),
-    quickCreateMenu: null,
+    quickCreateMenu:
+      allowCareCreate ? quickCreate : null,
   });
+}
+
+function disabledConversationActionSource(
+  tenantId: string,
+  institutionId: string,
+): ConversationActionSourceV1 {
+  return {
+    contractVersion: 'v1',
+    scope: { tenantId, institutionId },
+    readiness: 'disabled',
+    freshness: null,
+    partitions: [
+      {
+        key: 'waiting_human',
+        readiness: 'disabled',
+        freshness: null,
+        failureCode: 'not_released',
+      },
+      {
+        key: 'unresolved_risk',
+        readiness: 'disabled',
+        freshness: null,
+        failureCode: 'not_released',
+      },
+    ],
+    data: null,
+    failureCode: 'not_released',
+  };
 }
 
 export default async function HospitalPage() {
@@ -88,6 +150,7 @@ export default async function HospitalPage() {
     exactNavigationAuthorization?.targetAccess === 'allowed';
 
   let capabilityProjection: WorkbenchCapabilityProjection | null = null;
+  let actionProjection: WorkbenchActionProjection | null = null;
   if (genuineAllowed) {
     try {
       const capabilityStatus =
@@ -97,14 +160,49 @@ export default async function HospitalPage() {
           capabilities: capabilityStatus,
           referenceTime: capabilityStatus.freshness?.observedAt ?? '',
         });
+        const allowCareCreate =
+          projection.status === 'projected'
+          && projection.quickCreateMenu !== null
+            ? await canCurrentInstitutionCreateFormalFollowUpV1()
+            : false;
         const workbenchProjection =
-          selectPhase1ReadonlyWorkbenchProjection(projection);
+          selectGovernedWorkbenchProjection(
+            projection,
+            allowCareCreate,
+          );
         if (workbenchProjection) {
           capabilityProjection = workbenchProjection;
         }
       }
     } catch {
       capabilityProjection = null;
+    }
+  }
+
+  const followupsOperational =
+    capabilityProjection?.status === 'projected'
+    && capabilityProjection.summaries.some(
+      (summary) =>
+        summary.key === 'page_care_followups'
+        && summary.decision === 'operational'
+        && summary.safeSummary === '随访任务可用',
+    );
+
+  if (genuineAllowed && followupsOperational) {
+    try {
+      const care = await readCurrentInstitutionCareActionSourceV1();
+      if (care) {
+        actionProjection = buildWorkbenchActionProjection({
+          care,
+          conversation: disabledConversationActionSource(
+            care.scope.tenantId,
+            care.scope.institutionId,
+          ),
+          filter: 'all',
+        });
+      }
+    } catch {
+      actionProjection = null;
     }
   }
 
@@ -116,6 +214,7 @@ export default async function HospitalPage() {
       <InstitutionWorkbenchCapabilityOff
         genuineAllowed={genuineAllowed}
         capabilityProjection={capabilityProjection}
+        actionProjection={actionProjection}
       />
     </InstitutionNavigationShell>
   );

@@ -12,7 +12,7 @@ import {
 } from '@/modules/institution/server/institution-server-runtime';
 
 export const INSTITUTION_CAPABILITY_AUTHORITY_REVISION_V1 =
-  'r6-conversations-queue-readonly-v1' as const;
+  'r7-care-followup-controlled-write-v1' as const;
 
 const AUTHORITY_STATUS_FRESHNESS_WINDOW_MS = 5_000;
 const WORKBENCH_READONLY_SUMMARY = '工作台仅供查看' as const;
@@ -23,6 +23,7 @@ const KNOWLEDGE_LIBRARY_READONLY_SUMMARY = '知识库资料仅供查看' as cons
 const ANALYTICS_OVERVIEW_READONLY_SUMMARY = '经营总览仅供查看' as const;
 const AI_USAGE_READONLY_SUMMARY = 'AI 使用统计仅供查看' as const;
 const AUDIT_READONLY_SUMMARY = '审计与安全仅供查看' as const;
+const CARE_FOLLOWUPS_OPERATIONAL_SUMMARY = '随访任务可用' as const;
 
 function buildCapabilityStatus(
   context: NonNullable<
@@ -58,6 +59,10 @@ function buildCapabilityStatus(
       const aiUsageReadonlyPilot =
         definition.key === 'page_system_ai_usage';
       const auditReadonlyPilot = definition.key === 'page_system_audit';
+      const careFollowupsOperationalPilot =
+        definition.key === 'page_care_followups';
+      const careFollowupCreateOperationalPilot =
+        definition.key === 'action_care_followup_create';
       const readonlyPilot =
         workbenchReadonlyPilot ||
         customerListReadonlyPilot ||
@@ -67,15 +72,21 @@ function buildCapabilityStatus(
         analyticsOverviewReadonlyPilot ||
         aiUsageReadonlyPilot ||
         auditReadonlyPilot;
+      const operationalPilot =
+        careFollowupsOperationalPilot ||
+        careFollowupCreateOperationalPilot;
+      const releasedPilot = readonlyPilot || operationalPilot;
 
       return Object.freeze({
         key: definition.key,
         decision:
-          readonlyPilot && institutionAuthorized
-            ? 'read_only'
-            : 'hidden',
+          operationalPilot && institutionAuthorized
+            ? 'operational'
+            : readonlyPilot && institutionAuthorized
+              ? 'read_only'
+              : 'hidden',
         dimensions: Object.freeze({
-          codeMaturity: readonlyPilot ? 'verified' : 'unverified',
+          codeMaturity: releasedPilot ? 'verified' : 'unverified',
           institutionAuthorization: institutionAuthorized
             ? 'authorized'
             : 'not_authorized',
@@ -88,14 +99,19 @@ function buildCapabilityStatus(
                 || knowledgeLibraryReadonlyPilot
                 || analyticsOverviewReadonlyPilot
                 || aiUsageReadonlyPilot
+                || operationalPilot
               ? 'ready'
               : 'not_required',
-          productionRelease: readonlyPilot
+          productionRelease: releasedPilot
             ? 'pilot_released'
             : 'not_released',
         }),
         safeSummary:
-          readonlyPilot && institutionAuthorized
+          careFollowupsOperationalPilot && institutionAuthorized
+            ? CARE_FOLLOWUPS_OPERATIONAL_SUMMARY
+            : careFollowupCreateOperationalPilot && institutionAuthorized
+              ? null
+              : readonlyPilot && institutionAuthorized
             ? auditReadonlyPilot
               ? AUDIT_READONLY_SUMMARY
               : customerListReadonlyPilot

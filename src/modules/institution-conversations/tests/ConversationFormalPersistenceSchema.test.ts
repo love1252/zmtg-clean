@@ -281,6 +281,6 @@ describe('Conversation formal persistence', () => {
       tag: '0049_conversations_formal_fact_persistence',
       breakpoints: true,
     });
-    expect(journal.entries).toHaveLength(50);
+    expect(journal.entries).toHaveLength(51);
   });
 });
