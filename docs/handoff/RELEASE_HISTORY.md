@@ -10,7 +10,7 @@
 - Customer create 经过 tenant customers quota，并在 tenant-scoped transaction advisory lock 下串行化配额检查与创建。
 - Customer `updatedAt` CAS 使用毫秒 token 对 PostgreSQL 既有微秒值做等价区间匹配，且每次受控更新后的 token 必须严格前进。
 - `page_customer_list` 与 `action_customer_create` 进入 operational pilot release。
-- Workbench 新建菜单对管理员/运营开放客户、预约、随访三类受控创建。
+- Workbench 新建菜单对管理员/运营开放客户、预约、随访三类受控创建；页面投影与最终展示门禁同时校验 canonical key/href/order，避免合法多项菜单回退到 authorized-boundary。
 - Controlled Create 从 2 增至 3；真实发送、HIS、Staging、Production 保持关闭。
 
 # 项目重构历史

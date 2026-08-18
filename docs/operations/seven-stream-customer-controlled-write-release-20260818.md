@@ -23,7 +23,7 @@ Owner / UI / Workbench 支线：
 - canonical V1 POST / detail GET+PATCH；
 - canonical list/detail page；
 - Capability Authority release；
-- Workbench management-only customer/appointment/follow-up quick create。
+- Workbench management-only customer/appointment/follow-up quick create；下游 `InstitutionWorkbenchCapabilityOff` 同步校验并接受授权过滤后的 canonical 多项菜单。
 
 ## V1 Controlled Write 字段
 
