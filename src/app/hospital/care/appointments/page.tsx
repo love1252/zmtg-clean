@@ -1,3 +1,5 @@
+
+import { AppointmentCreateControlledShell } from '@/modules/care/components/AppointmentCreateControlledShell';
 import { AppointmentListReadonlyShell } from '@/modules/care/components/AppointmentListReadonlyShell';
 import type { AppointmentListStatusV1 } from '@/modules/care/ports/appointment-list-source';
 import {
@@ -16,6 +18,7 @@ import {
 } from '@/modules/security/server/institution-section-guard';
 import { readCurrentInstitutionAppointmentsV1 } from '@/server/orchestration/institution-appointment-list-reader';
 import { resolveInstitutionCapabilityAuthorityStatusV1 } from '@/server/orchestration/institution-capability-authority';
+import { canCurrentInstitutionCreateFormalAppointmentV1 } from '@/server/orchestration/institution-care-create-availability';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,16 +30,22 @@ const CAPABILITY_OFF_ROUTE = resolveInstitutionCapabilityOffRouteV1([
   'appointments',
 ]);
 
-type PageCapabilityState = 'released' | 'capability_off' | 'unavailable';
+type PageCapabilityState =
+  | 'read_only_released'
+  | 'operational_released'
+  | 'capability_off'
+  | 'unavailable';
 type SearchParamsInput = Readonly<Record<string, string | string[] | undefined>>;
 
-function resolveExactCapabilityState(status: CapabilityStatusV1 | null): PageCapabilityState {
+function resolveExactCapabilityState(
+  status: CapabilityStatusV1 | null,
+): PageCapabilityState {
   if (
-    !status ||
-    status.contractVersion !== 'v1' ||
-    status.readiness !== 'ready' ||
-    status.failureCode !== null ||
-    !status.data
+    !status
+    || status.contractVersion !== 'v1'
+    || status.readiness !== 'ready'
+    || status.failureCode !== null
+    || !status.data
   ) return 'unavailable';
 
   const capabilities = status.data.capabilities.filter(
@@ -52,18 +61,30 @@ function resolveExactCapabilityState(status: CapabilityStatusV1 | null): PageCap
   const capability = capabilities[0];
   const partition = partitions[0];
   if (
-    capability?.decision !== 'read_only' ||
-    capability.dimensions.codeMaturity !== 'verified' ||
-    capability.dimensions.institutionAuthorization !== 'authorized' ||
-    capability.dimensions.connectionAvailability !== 'not_required' ||
-    capability.dimensions.dataReadiness !== 'ready' ||
-    capability.dimensions.productionRelease !== 'pilot_released' ||
-    capability.safeSummary !== '预约管理仅供查看' ||
-    partition?.readiness !== 'ready' ||
-    partition.failureCode !== null
+    capability?.dimensions.codeMaturity !== 'verified'
+    || capability.dimensions.institutionAuthorization !== 'authorized'
+    || capability.dimensions.connectionAvailability !== 'not_required'
+    || capability.dimensions.dataReadiness !== 'ready'
+    || capability.dimensions.productionRelease !== 'pilot_released'
+    || partition?.readiness !== 'ready'
+    || partition.failureCode !== null
   ) return 'capability_off';
 
-  return 'released';
+  if (
+    capability.decision === 'operational'
+    && capability.safeSummary === '预约管理可用'
+  ) {
+    return 'operational_released';
+  }
+
+  if (
+    capability.decision === 'read_only'
+    && capability.safeSummary === '预约管理仅供查看'
+  ) {
+    return 'read_only_released';
+  }
+
+  return 'capability_off';
 }
 
 function toUrlSearchParams(input: SearchParamsInput | undefined): URLSearchParams {
@@ -82,8 +103,18 @@ export default async function HospitalCareAppointmentsPage({
   searchParams,
 }: Readonly<{ searchParams?: Promise<SearchParamsInput> }>) {
   let resolvedSearchParams: URLSearchParams | null = null;
+  let createRequested = false;
+
   try {
     resolvedSearchParams = toUrlSearchParams(await searchParams);
+    const createValues = resolvedSearchParams.getAll('create');
+    if (
+      createValues.length === 1
+      && createValues[0] === '1'
+    ) {
+      createRequested = true;
+      resolvedSearchParams.delete('create');
+    }
   } catch {
     resolvedSearchParams = null;
   }
@@ -103,8 +134,8 @@ export default async function HospitalCareAppointmentsPage({
 
   let exactNavigationAuthorization: InstitutionNavigationAuthorizationV1 | null = null;
   if (
-    isInstitutionNavigationAuthorizationV1(navigationAuthorization) &&
-    navigationAuthorization.targetSectionId === TARGET_SECTION_ID
+    isInstitutionNavigationAuthorizationV1(navigationAuthorization)
+    && navigationAuthorization.targetSectionId === TARGET_SECTION_ID
   ) exactNavigationAuthorization = navigationAuthorization;
 
   const availableSectionIds = exactNavigationAuthorization
@@ -124,12 +155,23 @@ export default async function HospitalCareAppointmentsPage({
     }
   }
 
+  const released =
+    capabilityState === 'read_only_released'
+    || capabilityState === 'operational_released';
+
   const result =
-    genuineAllowed && capabilityState === 'released' && resolvedSearchParams
+    genuineAllowed && released && resolvedSearchParams
       ? await readCurrentInstitutionAppointmentsV1(resolvedSearchParams).catch(() => ({
           kind: 'unavailable' as const,
         }))
       : null;
+
+  const canCreate =
+    genuineAllowed
+    && capabilityState === 'operational_released'
+      ? await canCurrentInstitutionCreateFormalAppointmentV1().catch(() => false)
+      : false;
+
   const status =
     result?.kind === 'ready'
       ? (resolvedSearchParams?.get('status') as AppointmentListStatusV1 | null)
@@ -141,7 +183,16 @@ export default async function HospitalCareAppointmentsPage({
       availableSectionIds={availableSectionIds}
     >
       {result?.kind === 'ready' ? (
-        <AppointmentListReadonlyShell result={result} status={status} />
+        <div className="space-y-5">
+          <AppointmentCreateControlledShell
+            canCreate={canCreate}
+            open={createRequested}
+          />
+          <AppointmentListReadonlyShell
+            result={result}
+            status={status}
+          />
+        </div>
       ) : genuineBlocked || result?.kind === 'forbidden' ? (
         <InstitutionPageState
           kind="forbidden"
@@ -163,7 +214,7 @@ export default async function HospitalCareAppointmentsPage({
         <InstitutionPageState
           kind="unavailable"
           title="预约管理暂时不可用"
-          description="当前未获得可信的只读预约列表结果；预约数据和操作入口保持隐藏。"
+          description="当前未获得可信的预约管理结果；预约数据和写操作保持 fail-closed。"
         />
       )}
     </InstitutionNavigationShell>

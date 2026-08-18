@@ -1,3 +1,4 @@
+
 import {
   beforeEach,
   describe,
@@ -30,9 +31,15 @@ vi.mock(
   }),
 );
 
-import { canCurrentInstitutionCreateFormalFollowUpV1 } from '@/server/orchestration/institution-care-create-availability';
+import {
+  canCurrentInstitutionCreateFormalAppointmentV1,
+  canCurrentInstitutionCreateFormalFollowUpV1,
+} from '@/server/orchestration/institution-care-create-availability';
 
 function capabilityStatus(
+  key:
+    | 'action_care_appointment_create'
+    | 'action_care_followup_create',
   decision: 'operational' | 'hidden' = 'operational',
 ) {
   return {
@@ -45,7 +52,7 @@ function capabilityStatus(
     freshness: null,
     partitions: [
       {
-        key: 'action_care_followup_create',
+        key,
         readiness: 'ready',
         freshness: null,
         failureCode: null,
@@ -54,7 +61,7 @@ function capabilityStatus(
     data: {
       capabilities: [
         {
-          key: 'action_care_followup_create',
+          key,
           decision,
           dimensions: {
             codeMaturity:
@@ -95,58 +102,76 @@ beforeEach(() => {
     role: 'tenant_admin',
     tenantId: 'tenant-1',
     institutionId: 'institution-1',
-    observedAt:
-      '2026-08-17T15:30:00.000Z',
+    observedAt: '2026-08-17T15:30:00.000Z',
   });
-  mocks.resolveCapability.mockResolvedValue(
-    capabilityStatus(),
-  );
 });
 
 describe('Care Workbench create availability', () => {
-  it('allows only a formal management actor plus exact released create capability', async () => {
-    await expect(
-      canCurrentInstitutionCreateFormalFollowUpV1(),
-    ).resolves.toBe(true);
-  });
+  it.each([
+    [
+      'action_care_appointment_create',
+      canCurrentInstitutionCreateFormalAppointmentV1,
+    ],
+    [
+      'action_care_followup_create',
+      canCurrentInstitutionCreateFormalFollowUpV1,
+    ],
+  ] as const)(
+    'allows management actor plus exact %s release',
+    async (key, fn) => {
+      mocks.resolveCapability.mockResolvedValue(
+        capabilityStatus(key),
+      );
+      await expect(fn()).resolves.toBe(true);
+    },
+  );
 
-  it('does not expose Workbench create to consultant/customer_service', async () => {
+  it('does not expose either create action to consultant/customer_service', async () => {
     for (const role of [
       'consultant',
       'customer_service',
     ] as const) {
-      mocks.consumeWrite.mockReturnValueOnce({
+      mocks.consumeWrite.mockReturnValue({
         accountId: 'staff-1',
         displayName: '员工',
         role,
         tenantId: 'tenant-1',
         institutionId: 'institution-1',
-        observedAt:
-          '2026-08-17T15:30:00.000Z',
+        observedAt: '2026-08-17T15:30:00.000Z',
       });
+      mocks.resolveCapability.mockResolvedValue(
+        capabilityStatus(
+          'action_care_appointment_create',
+        ),
+      );
       await expect(
-        canCurrentInstitutionCreateFormalFollowUpV1(),
+        canCurrentInstitutionCreateFormalAppointmentV1(),
       ).resolves.toBe(false);
     }
   });
 
   it('fails closed on scope mismatch or unreleased action', async () => {
     mocks.resolveCapability.mockResolvedValueOnce({
-      ...capabilityStatus(),
+      ...capabilityStatus(
+        'action_care_appointment_create',
+      ),
       scope: {
         tenantId: 'tenant-1',
         institutionId: 'institution-other',
       },
     });
     await expect(
-      canCurrentInstitutionCreateFormalFollowUpV1(),
+      canCurrentInstitutionCreateFormalAppointmentV1(),
     ).resolves.toBe(false);
 
     mocks.resolveCapability.mockResolvedValueOnce(
-      capabilityStatus('hidden'),
+      capabilityStatus(
+        'action_care_appointment_create',
+        'hidden',
+      ),
     );
     await expect(
-      canCurrentInstitutionCreateFormalFollowUpV1(),
+      canCurrentInstitutionCreateFormalAppointmentV1(),
     ).resolves.toBe(false);
   });
 });

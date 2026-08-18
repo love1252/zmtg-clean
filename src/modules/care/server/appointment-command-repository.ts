@@ -67,6 +67,14 @@ async function findScopedAppointment(
   return row ?? null;
 }
 
+export async function readScopedAppointmentCommandRecordV1(
+  database: TenantDatabase,
+  input: AppointmentCommandAttribution & Readonly<{ appointmentId: string }>,
+): Promise<AppointmentCommandRecord | null> {
+  const row = await findScopedAppointment(database, input);
+  return row ? mapScopedRow(row, input.institutionId) : null;
+}
+
 export function createAppointmentCommandRepository(
   database: TenantDatabase,
 ): AppointmentCommandRepository {
@@ -124,7 +132,12 @@ export function createAppointmentCommandRepository(
 
       const [row] = await database
         .update(appointments)
-        .set({ status: input.status, note: input.note, updatedAt: new Date() })
+        .set({
+          scheduledAt: input.scheduledAt ?? current.scheduledAt,
+          status: input.status,
+          note: input.note,
+          updatedAt: new Date(),
+        })
         .where(
           and(
             eq(appointments.tenantId, input.tenantId),

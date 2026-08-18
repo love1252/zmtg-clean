@@ -55,6 +55,7 @@ export type UpdateAppointmentCommand = Readonly<{
   attribution: AppointmentCommandAttribution;
   appointmentId: string;
   expectedUpdatedAt: string;
+  scheduledAt?: Date;
   status: AppointmentCommandStatus;
   note: string;
 }>;
@@ -78,6 +79,7 @@ export interface AppointmentCommandRepository {
       Readonly<{
         appointmentId: string;
         expectedUpdatedAt: string;
+        scheduledAt?: Date;
         status: AppointmentCommandStatus;
         note: string;
       }>,
@@ -167,6 +169,10 @@ export function createAppointmentCommandService(
         ...normalizeAttribution(input.attribution),
         appointmentId: requireExactIdentifier(input.appointmentId, 'appointment_id'),
         expectedUpdatedAt: requireCanonicalIsoTimestamp(input.expectedUpdatedAt),
+        scheduledAt:
+          input.scheduledAt === undefined
+            ? undefined
+            : copyDate(input.scheduledAt),
         status: requireStatus(input.status),
         note: copyString(input.note, 'note'),
       });

@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   readAppointments: vi.fn(),
   resolveCapability: vi.fn(),
   resolveServerAuthorization: vi.fn(),
+  canCreateAppointment: vi.fn(),
 }));
 
 vi.mock('@/modules/institution/server/institution-server-runtime', () => ({
@@ -31,6 +32,10 @@ vi.mock('@/server/orchestration/institution-capability-authority', () => ({
 }));
 vi.mock('@/server/orchestration/institution-appointment-list-reader', () => ({
   readCurrentInstitutionAppointmentsV1: mocks.readAppointments,
+}));
+vi.mock('@/server/orchestration/institution-care-create-availability', () => ({
+  canCurrentInstitutionCreateFormalAppointmentV1:
+    mocks.canCreateAppointment,
 }));
 vi.mock(
   '@/modules/institution/components/InstitutionNavigationShell',
@@ -95,7 +100,9 @@ function navigation(targetAccess: 'allowed' | 'blocked') {
   return value;
 }
 
-function capability(decision: 'read_only' | 'hidden' = 'read_only') {
+function capability(
+  decision: 'read_only' | 'operational' | 'hidden' = 'read_only',
+) {
   return Object.freeze({
     contractVersion: 'v1',
     readiness: 'ready',
@@ -118,9 +125,14 @@ function capability(decision: 'read_only' | 'hidden' = 'read_only') {
             connectionAvailability: 'not_required',
             dataReadiness: 'ready',
             productionRelease:
-              decision === 'read_only' ? 'pilot_released' : 'not_released',
+              decision === 'hidden' ? 'not_released' : 'pilot_released',
           }),
-          safeSummary: decision === 'read_only' ? '预约管理仅供查看' : null,
+          safeSummary:
+            decision === 'read_only'
+              ? '预约管理仅供查看'
+              : decision === 'operational'
+                ? '预约管理可用'
+                : null,
         }),
       ]),
     }),
@@ -134,6 +146,7 @@ beforeEach(() => {
   mocks.authorizeNavigation.mockResolvedValue(navigation('allowed'));
   mocks.resolveCapability.mockResolvedValue(capability());
   mocks.readAppointments.mockResolvedValue(ready);
+  mocks.canCreateAppointment.mockResolvedValue(true);
 });
 
 describe('/hospital/care/appointments readonly release page', () => {
@@ -172,6 +185,24 @@ describe('/hospital/care/appointments readonly release page', () => {
       expect(params.get('status')).toBe(status);
     },
   );
+
+  it('operational capability + management availability exposes controlled create without changing list Reader query', async () => {
+    mocks.resolveCapability.mockResolvedValueOnce(
+      capability('operational'),
+    );
+    render(
+      await HospitalCareAppointmentsPage({
+        searchParams: Promise.resolve({ create: '1' }),
+      }),
+    );
+    expect(
+      screen.getByRole('heading', { name: '新建预约' }),
+    ).toBeInTheDocument();
+    const params =
+      mocks.readAppointments.mock.calls[0]?.[0] as URLSearchParams;
+    expect(params.has('create')).toBe(false);
+    expect(mocks.canCreateAppointment).toHaveBeenCalledTimes(1);
+  });
 
   it('navigation forbidden 与 capability hidden 均不调用 business Reader', async () => {
     mocks.authorizeNavigation.mockResolvedValueOnce(navigation('blocked'));

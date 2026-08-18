@@ -1,5 +1,17 @@
 # 智美天工架构文档索引
 
+<!-- CARE_APPOINTMENT_CONTROLLED_WRITE_ARCH_20260818 -->
+
+## 预约受控写正式闭环（2026-08-18）
+
+预约继续复用现有 `appointments` authoritative persistence 与 Care owner
+`appointment-command-repository`，不新增第二套 appointment table。正式写链统一为：
+formal session → identity/membership/scope → Care write authorization →
+Capability release → exact tenant/institution writer → updatedAt CAS →
+institution-attributed audit。`page_care_appointments` 从 read-only 升级为
+operational，`action_care_appointment_create` 正式发布；真实 HIS、真实消息、
+Staging 与 Production 仍关闭。
+
 <!-- CARE_MANUAL_FOLLOWUP_CONTROLLED_WRITE_ARCH_20260817 -->
 
 ## 人工随访受控写正式闭环（2026-08-17）
