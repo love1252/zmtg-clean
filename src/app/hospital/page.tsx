@@ -19,6 +19,7 @@ import {
   canCurrentInstitutionCreateFormalAppointmentV1,
   canCurrentInstitutionCreateFormalFollowUpV1,
 } from '@/server/orchestration/institution-care-create-availability';
+import { canCurrentInstitutionCreateFormalCustomerV1 } from '@/server/orchestration/institution-customer-create-availability';
 
 const TARGET_SECTION_ID = 'workbench' as const;
 const TARGET_CAPABILITY_KEY = 'page_workbench' as const;
@@ -37,6 +38,10 @@ const GOVERNED_WORKBENCH_PAGE_KEYS = Object.freeze([
 
 const QUICK_CREATE_TARGETS = Object.freeze([
   Object.freeze({
+    key: 'action_customer_create' as const,
+    href: '/hospital/customers?create=1',
+  }),
+  Object.freeze({
     key: 'action_care_appointment_create' as const,
     href: '/hospital/care/appointments?create=1',
   }),
@@ -48,19 +53,18 @@ const QUICK_CREATE_TARGETS = Object.freeze([
 
 function selectGovernedWorkbenchProjection(
   projection: WorkbenchCapabilityProjection,
+  allowCustomerCreate: boolean,
   allowAppointmentCreate: boolean,
   allowFollowUpCreate: boolean,
 ): WorkbenchCapabilityProjection | null {
-  if (projection.status !== 'projected') {
-    return null;
-  }
+  if (projection.status !== 'projected') return null;
 
   const quickCreate = projection.quickCreateMenu;
   if (quickCreate !== null) {
     if (
-      quickCreate.label !== '新建'
-      || quickCreate.items.length < 1
-      || quickCreate.items.length > QUICK_CREATE_TARGETS.length
+      quickCreate.label !== '新建' ||
+      quickCreate.items.length < 1 ||
+      quickCreate.items.length > QUICK_CREATE_TARGETS.length
     ) {
       return null;
     }
@@ -69,15 +73,9 @@ function selectGovernedWorkbenchProjection(
     let lastIndex = -1;
     for (const item of quickCreate.items) {
       const index = QUICK_CREATE_TARGETS.findIndex(
-        (target) =>
-          target.key === item.key
-          && target.href === item.href,
+        (target) => target.key === item.key && target.href === item.href,
       );
-      if (
-        index < 0
-        || index <= lastIndex
-        || seen.has(item.key)
-      ) {
+      if (index < 0 || index <= lastIndex || seen.has(item.key)) {
         return null;
       }
       seen.add(item.key);
@@ -95,33 +93,43 @@ function selectGovernedWorkbenchProjection(
 
   const workbenchSummary = workbenchSummaries[0];
   if (
-    !workbenchSummary
-    || workbenchSummary.kind !== 'page'
-    || workbenchSummary.decision !== 'read_only'
-    || workbenchSummary.safeSummary !== '工作台仅供查看'
-    || summaries.some((summary) => {
+    !workbenchSummary ||
+    workbenchSummary.kind !== 'page' ||
+    workbenchSummary.decision !== 'read_only' ||
+    workbenchSummary.safeSummary !== '工作台仅供查看' ||
+    summaries.some((summary) => {
       if (summary.kind !== 'page') return true;
+
+      if (summary.key === 'page_customer_list') {
+        return !(
+          (summary.decision === 'operational' &&
+            summary.safeSummary === '客户列表可用') ||
+          (summary.decision === 'read_only' &&
+            summary.safeSummary === '客户列表仅供查看')
+        );
+      }
+
       if (summary.key === 'page_care_followups') {
         return (
-          summary.decision !== 'operational'
-          || summary.safeSummary !== '随访任务可用'
+          summary.decision !== 'operational' ||
+          summary.safeSummary !== '随访任务可用'
         );
       }
+
       if (summary.key === 'page_care_appointments') {
         return !(
-          (
-            summary.decision === 'operational'
-            && summary.safeSummary === '预约管理可用'
-          )
-          || (
-            summary.decision === 'read_only'
-            && summary.safeSummary === '预约管理仅供查看'
-          )
+          (summary.decision === 'operational' &&
+            summary.safeSummary === '预约管理可用') ||
+          (summary.decision === 'read_only' &&
+            summary.safeSummary === '预约管理仅供查看')
         );
       }
+
       return summary.decision !== 'read_only';
     })
-  ) return null;
+  ) {
+    return null;
+  }
 
   const filteredQuickCreate =
     quickCreate === null
@@ -130,11 +138,13 @@ function selectGovernedWorkbenchProjection(
           label: quickCreate.label,
           items: Object.freeze(
             quickCreate.items.filter((item) =>
-              item.key === 'action_care_appointment_create'
-                ? allowAppointmentCreate
-                : item.key === 'action_care_followup_create'
-                  ? allowFollowUpCreate
-                  : false,
+              item.key === 'action_customer_create'
+                ? allowCustomerCreate
+                : item.key === 'action_care_appointment_create'
+                  ? allowAppointmentCreate
+                  : item.key === 'action_care_followup_create'
+                    ? allowFollowUpCreate
+                    : false,
             ),
           ),
         });
@@ -144,8 +154,7 @@ function selectGovernedWorkbenchProjection(
     sourceReadiness: projection.sourceReadiness,
     summaries: Object.freeze(summaries),
     quickCreateMenu:
-      filteredQuickCreate
-      && filteredQuickCreate.items.length > 0
+      filteredQuickCreate && filteredQuickCreate.items.length > 0
         ? filteredQuickCreate
         : null,
   });
@@ -195,8 +204,8 @@ export default async function HospitalPage() {
 
   let exactNavigationAuthorization: InstitutionNavigationAuthorizationV1 | null = null;
   if (
-    isInstitutionNavigationAuthorizationV1(navigationAuthorization)
-    && navigationAuthorization.targetSectionId === TARGET_SECTION_ID
+    isInstitutionNavigationAuthorizationV1(navigationAuthorization) &&
+    navigationAuthorization.targetSectionId === TARGET_SECTION_ID
   ) {
     exactNavigationAuthorization = navigationAuthorization;
   }
@@ -204,16 +213,14 @@ export default async function HospitalPage() {
   const availableSectionIds = exactNavigationAuthorization
     ? exactNavigationAuthorization.availableSectionIds
     : EMPTY_SECTION_IDS;
-  const genuineAllowed =
-    exactNavigationAuthorization?.targetAccess === 'allowed';
+  const genuineAllowed = exactNavigationAuthorization?.targetAccess === 'allowed';
 
   let capabilityProjection: WorkbenchCapabilityProjection | null = null;
   let actionProjection: WorkbenchActionProjection | null = null;
 
   if (genuineAllowed) {
     try {
-      const capabilityStatus =
-        await resolveInstitutionCapabilityAuthorityStatusV1();
+      const capabilityStatus = await resolveInstitutionCapabilityAuthorityStatusV1();
       if (capabilityStatus) {
         const projection = buildWorkbenchCapabilityProjection({
           capabilities: capabilityStatus,
@@ -224,33 +231,34 @@ export default async function HospitalPage() {
           projection.status === 'projected'
             ? projection.quickCreateMenu?.items ?? []
             : [];
+
+        const hasCustomerCreate = quickCreateItems.some(
+          (item) => item.key === 'action_customer_create',
+        );
         const hasAppointmentCreate = quickCreateItems.some(
-          (item) =>
-            item.key === 'action_care_appointment_create',
+          (item) => item.key === 'action_care_appointment_create',
         );
         const hasFollowUpCreate = quickCreateItems.some(
-          (item) =>
-            item.key === 'action_care_followup_create',
+          (item) => item.key === 'action_care_followup_create',
         );
 
-        const allowAppointmentCreate =
-          hasAppointmentCreate
-            ? await canCurrentInstitutionCreateFormalAppointmentV1()
-            : false;
-        const allowFollowUpCreate =
-          hasFollowUpCreate
-            ? await canCurrentInstitutionCreateFormalFollowUpV1()
-            : false;
+        const allowCustomerCreate = hasCustomerCreate
+          ? await canCurrentInstitutionCreateFormalCustomerV1()
+          : false;
+        const allowAppointmentCreate = hasAppointmentCreate
+          ? await canCurrentInstitutionCreateFormalAppointmentV1()
+          : false;
+        const allowFollowUpCreate = hasFollowUpCreate
+          ? await canCurrentInstitutionCreateFormalFollowUpV1()
+          : false;
 
-        const workbenchProjection =
-          selectGovernedWorkbenchProjection(
-            projection,
-            allowAppointmentCreate,
-            allowFollowUpCreate,
-          );
-        if (workbenchProjection) {
-          capabilityProjection = workbenchProjection;
-        }
+        const workbenchProjection = selectGovernedWorkbenchProjection(
+          projection,
+          allowCustomerCreate,
+          allowAppointmentCreate,
+          allowFollowUpCreate,
+        );
+        if (workbenchProjection) capabilityProjection = workbenchProjection;
       }
     } catch {
       capabilityProjection = null;
@@ -258,12 +266,12 @@ export default async function HospitalPage() {
   }
 
   const followupsOperational =
-    capabilityProjection?.status === 'projected'
-    && capabilityProjection.summaries.some(
+    capabilityProjection?.status === 'projected' &&
+    capabilityProjection.summaries.some(
       (summary) =>
-        summary.key === 'page_care_followups'
-        && summary.decision === 'operational'
-        && summary.safeSummary === '随访任务可用',
+        summary.key === 'page_care_followups' &&
+        summary.decision === 'operational' &&
+        summary.safeSummary === '随访任务可用',
     );
 
   if (genuineAllowed && followupsOperational) {

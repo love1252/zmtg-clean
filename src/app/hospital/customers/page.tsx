@@ -1,3 +1,5 @@
+
+import { CustomerCreateControlledShell } from '@/modules/customer-center/components/CustomerCreateControlledShell';
 import { CustomerListReadonlyShell } from '@/modules/customer-center/components/CustomerListReadonlyShell';
 import type {
   CustomerListLifecycleV1,
@@ -18,6 +20,7 @@ import {
   type InstitutionNavigationAuthorizationV1,
 } from '@/modules/security/server/institution-section-guard';
 import { resolveInstitutionCapabilityAuthorityStatusV1 } from '@/server/orchestration/institution-capability-authority';
+import { canCurrentInstitutionCreateFormalCustomerV1 } from '@/server/orchestration/institution-customer-create-availability';
 import { readCurrentInstitutionCustomersV1 } from '@/server/orchestration/institution-customer-list-reader';
 
 export const dynamic = 'force-dynamic';
@@ -27,17 +30,25 @@ const TARGET_CAPABILITY_KEY = 'page_customer_list' as const;
 const EMPTY_SECTION_IDS = Object.freeze([]) as readonly InstitutionNavigationSectionIdV1[];
 const CAPABILITY_OFF_ROUTE = resolveInstitutionCapabilityOffRouteV1(['customers']);
 
-type PageCapabilityState = 'released' | 'capability_off' | 'unavailable';
+type PageCapabilityState =
+  | 'read_only_released'
+  | 'operational_released'
+  | 'capability_off'
+  | 'unavailable';
 type SearchParamsInput = Readonly<Record<string, string | string[] | undefined>>;
 
-function resolveExactCapabilityState(status: CapabilityStatusV1 | null): PageCapabilityState {
+function resolveExactCapabilityState(
+  status: CapabilityStatusV1 | null,
+): PageCapabilityState {
   if (
     !status ||
     status.contractVersion !== 'v1' ||
     status.readiness !== 'ready' ||
     status.failureCode !== null ||
     !status.data
-  ) return 'unavailable';
+  ) {
+    return 'unavailable';
+  }
 
   const capabilities = status.data.capabilities.filter(
     (capability) => capability.key === TARGET_CAPABILITY_KEY,
@@ -52,21 +63,37 @@ function resolveExactCapabilityState(status: CapabilityStatusV1 | null): PageCap
   const capability = capabilities[0];
   const partition = partitions[0];
   if (
-    capability?.decision !== 'read_only' ||
-    capability.dimensions.codeMaturity !== 'verified' ||
+    capability?.dimensions.codeMaturity !== 'verified' ||
     capability.dimensions.institutionAuthorization !== 'authorized' ||
     capability.dimensions.connectionAvailability !== 'not_required' ||
     capability.dimensions.dataReadiness !== 'ready' ||
     capability.dimensions.productionRelease !== 'pilot_released' ||
-    capability.safeSummary !== '客户列表仅供查看' ||
     partition?.readiness !== 'ready' ||
     partition.failureCode !== null
-  ) return 'capability_off';
+  ) {
+    return 'capability_off';
+  }
 
-  return 'released';
+  if (
+    capability.decision === 'operational' &&
+    capability.safeSummary === '客户列表可用'
+  ) {
+    return 'operational_released';
+  }
+
+  if (
+    capability.decision === 'read_only' &&
+    capability.safeSummary === '客户列表仅供查看'
+  ) {
+    return 'read_only_released';
+  }
+
+  return 'capability_off';
 }
 
-function toUrlSearchParams(input: SearchParamsInput | undefined): URLSearchParams {
+function toUrlSearchParams(
+  input: SearchParamsInput | undefined,
+): URLSearchParams {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(input ?? {})) {
     if (Array.isArray(value)) {
@@ -82,8 +109,15 @@ export default async function HospitalCustomersPage({
   searchParams,
 }: Readonly<{ searchParams?: Promise<SearchParamsInput> }>) {
   let resolvedSearchParams: URLSearchParams | null = null;
+  let createRequested = false;
+
   try {
     resolvedSearchParams = toUrlSearchParams(await searchParams);
+    const createValues = resolvedSearchParams.getAll('create');
+    if (createValues.length === 1 && createValues[0] === '1') {
+      createRequested = true;
+      resolvedSearchParams.delete('create');
+    }
   } catch {
     resolvedSearchParams = null;
   }
@@ -105,7 +139,9 @@ export default async function HospitalCustomersPage({
   if (
     isInstitutionNavigationAuthorizationV1(navigationAuthorization) &&
     navigationAuthorization.targetSectionId === TARGET_SECTION_ID
-  ) exactNavigationAuthorization = navigationAuthorization;
+  ) {
+    exactNavigationAuthorization = navigationAuthorization;
+  }
 
   const availableSectionIds = exactNavigationAuthorization
     ? exactNavigationAuthorization.availableSectionIds
@@ -124,12 +160,22 @@ export default async function HospitalCustomersPage({
     }
   }
 
+  const released =
+    capabilityState === 'read_only_released' ||
+    capabilityState === 'operational_released';
+
   const result =
-    genuineAllowed && capabilityState === 'released' && resolvedSearchParams
+    genuineAllowed && released && resolvedSearchParams
       ? await readCurrentInstitutionCustomersV1(resolvedSearchParams).catch(() => ({
           kind: 'unavailable' as const,
         }))
       : null;
+
+  const canCreate =
+    genuineAllowed && capabilityState === 'operational_released'
+      ? await canCurrentInstitutionCreateFormalCustomerV1().catch(() => false)
+      : false;
+
   const lifecycle =
     result?.kind === 'ready'
       ? (resolvedSearchParams?.get('lifecycle') as CustomerListLifecycleV1 | null)
@@ -145,18 +191,27 @@ export default async function HospitalCustomersPage({
       availableSectionIds={availableSectionIds}
     >
       {result?.kind === 'ready' ? (
-        <CustomerListReadonlyShell
-          lifecycle={lifecycle}
-          priority={priority}
-          result={result}
-        />
+        <div className="space-y-5">
+          <CustomerCreateControlledShell
+            canCreate={canCreate}
+            open={createRequested}
+          />
+          <CustomerListReadonlyShell
+            lifecycle={lifecycle}
+            priority={priority}
+            result={result}
+            operational={capabilityState === 'operational_released'}
+          />
+        </div>
       ) : genuineBlocked || result?.kind === 'forbidden' ? (
         <InstitutionPageState
           kind="forbidden"
           title="当前账号不可访问客户列表"
           description="当前仅确认客户栏目访问受限；未读取或展示任何客户数据。"
         />
-      ) : genuineAllowed && capabilityState === 'capability_off' && CAPABILITY_OFF_ROUTE ? (
+      ) : genuineAllowed &&
+        capabilityState === 'capability_off' &&
+        CAPABILITY_OFF_ROUTE ? (
         <InstitutionCapabilityOffPage
           pageLabel={CAPABILITY_OFF_ROUTE.pageLabel}
           section={CAPABILITY_OFF_ROUTE.section}
@@ -171,7 +226,7 @@ export default async function HospitalCustomersPage({
         <InstitutionPageState
           kind="unavailable"
           title="客户列表暂时不可用"
-          description="当前未获得可信的只读客户列表结果；客户数据和操作入口保持隐藏。"
+          description="当前未获得可信的客户管理结果；客户数据和写操作保持 fail-closed。"
         />
       )}
     </InstitutionNavigationShell>

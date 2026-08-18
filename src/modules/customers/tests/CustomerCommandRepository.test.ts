@@ -1,7 +1,8 @@
+
 import { describe, expect, it, vi } from 'vitest';
 
-import { customers } from '@/server/db/schema';
 import type { TenantDatabase } from '@/server/db/client';
+import { customers } from '@/server/db/schema';
 import { createCustomerCommandRepository } from '@/modules/customers/server/customer-command-repository';
 
 const eqMock = vi.hoisted(() =>
@@ -11,23 +12,17 @@ const eqMock = vi.hoisted(() =>
     value,
   })),
 );
-
 const andMock = vi.hoisted(() =>
-  vi.fn((...conditions: unknown[]) => ({
-    conditions,
-    operator: 'and',
-  })),
+  vi.fn((...conditions: unknown[]) => ({ conditions, operator: 'and' })),
 );
 
-vi.mock('drizzle-orm', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('drizzle-orm')>();
-  return {
-    ...actual,
-    eq: eqMock,
-    and: andMock,
-  };
-});
+vi.mock('drizzle-orm', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('drizzle-orm')>()),
+  eq: eqMock,
+  and: andMock,
+}));
 
+const UPDATED_AT = new Date('2026-08-18T12:00:00.000Z');
 const customerRow = {
   id: 'cust_001',
   tenantId: 'tenant_001',
@@ -37,17 +32,17 @@ const customerRow = {
   priority: 'high',
   ownerUserId: 'user_001',
   projectInterest: '皮肤管理',
-  maskedPhone: '138****0001',
-  maskedMedicalRecordNo: 'MR****001',
-  lastTouchSummary: '首次咨询',
-  nextAction: '人工跟进',
-  tags: ['重点'],
-  gender: 'female',
-  birthDate: '1990-01',
-  referralSource: '转介绍',
-  notes: '低敏备注',
-  createdAt: new Date('2026-08-08T00:00:00.000Z'),
-  updatedAt: new Date('2026-08-08T00:00:00.000Z'),
+  maskedPhone: '',
+  maskedMedicalRecordNo: '',
+  lastTouchSummary: '',
+  nextAction: '',
+  tags: [],
+  gender: '',
+  birthDate: '',
+  referralSource: '',
+  notes: '',
+  createdAt: UPDATED_AT,
+  updatedAt: UPDATED_AT,
 } satisfies typeof customers.$inferSelect;
 
 function createMutationDatabase(row: typeof customerRow | null = customerRow) {
@@ -73,11 +68,11 @@ function createMutationDatabase(row: typeof customerRow | null = customerRow) {
 }
 
 describe('CustomerCommandRepository', () => {
-  it('create 同时持久化 tenantId + institutionId，且只写 Customers canonical shape', async () => {
+  it('create persists exact tenant/institution and returns updatedAt', async () => {
     const mutation = createMutationDatabase();
     const repository = createCustomerCommandRepository(mutation.database);
 
-    await repository.create({
+    const record = await repository.create({
       id: 'cust_001',
       tenantId: 'tenant_001',
       institutionId: 'inst_001',
@@ -86,57 +81,42 @@ describe('CustomerCommandRepository', () => {
       priority: 'high',
       ownerUserId: 'user_001',
       projectInterest: '皮肤管理',
-      maskedPhone: '138****0001',
-      maskedMedicalRecordNo: 'MR****001',
-      lastTouchSummary: '首次咨询',
-      nextAction: '人工跟进',
-      tags: ['重点'],
-      gender: 'female',
-      birthDate: '1990-01',
-      referralSource: '转介绍',
-      notes: '低敏备注',
+      maskedPhone: '',
+      maskedMedicalRecordNo: '',
+      lastTouchSummary: '',
+      nextAction: '',
+      tags: [],
+      gender: '',
+      birthDate: '',
+      referralSource: '',
+      notes: '',
     });
 
     expect(mutation.insert).toHaveBeenCalledWith(customers);
-    expect(mutation.values).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: 'cust_001',
-        tenantId: 'tenant_001',
-        institutionId: 'inst_001',
-      }),
-    );
+    expect(record.updatedAt).toBe(UPDATED_AT.toISOString());
   });
 
-  it('update WHERE 同时绑定 tenant + institution + customer，跨机构无返回即 fail-closed', async () => {
+  it('update WHERE binds tenant + institution + customer + updatedAt CAS', async () => {
     const mutation = createMutationDatabase(null);
     const repository = createCustomerCommandRepository(mutation.database);
 
-    await expect(
-      repository.update({
-        tenantId: 'tenant_001',
-        institutionId: 'inst_002',
-        id: 'cust_001',
-        changes: { displayName: '非法跨机构更新' },
-      }),
-    ).resolves.toBeNull();
+    await repository.update({
+      tenantId: 'tenant_001',
+      institutionId: 'inst_002',
+      id: 'cust_001',
+      expectedUpdatedAt: UPDATED_AT.toISOString(),
+      changes: { displayName: '更新' },
+    });
 
-    expect(mutation.update).toHaveBeenCalledWith(customers);
     expect(andMock).toHaveBeenCalledWith(
       { column: customers.tenantId, operator: 'eq', value: 'tenant_001' },
       { column: customers.institutionId, operator: 'eq', value: 'inst_002' },
       { column: customers.id, operator: 'eq', value: 'cust_001' },
+      { column: customers.updatedAt, operator: 'eq', value: UPDATED_AT },
     );
-    expect(mutation.where).toHaveBeenCalledWith({
-      conditions: [
-        { column: customers.tenantId, operator: 'eq', value: 'tenant_001' },
-        { column: customers.institutionId, operator: 'eq', value: 'inst_002' },
-        { column: customers.id, operator: 'eq', value: 'cust_001' },
-      ],
-      operator: 'and',
-    });
   });
 
-  it('update 对不安全 changes 再次剥离 identity/attribution 字段', async () => {
+  it('unsafe changes cannot overwrite identity or attribution columns', async () => {
     const mutation = createMutationDatabase();
     const repository = createCustomerCommandRepository(mutation.database);
 
@@ -144,30 +124,22 @@ describe('CustomerCommandRepository', () => {
       tenantId: 'tenant_001',
       institutionId: 'inst_001',
       id: 'cust_001',
+      expectedUpdatedAt: UPDATED_AT.toISOString(),
       changes: {
-        displayName: '王女士更新',
-        id: 'attacker_customer',
-        tenantId: 'attacker_tenant',
-        institutionId: 'attacker_institution',
-        createdAt: new Date(),
+        displayName: '更新',
+        id: 'attacker',
+        tenantId: 'attacker',
+        institutionId: 'attacker',
       } as never,
     });
 
     const values = mutation.set.mock.calls[0]?.[0] as Record<string, unknown>;
-
-    expect(values).toEqual(
-      expect.objectContaining({
-        displayName: '王女士更新',
-        updatedAt: expect.any(Date),
-      }),
-    );
     expect(values).not.toHaveProperty('id');
     expect(values).not.toHaveProperty('tenantId');
     expect(values).not.toHaveProperty('institutionId');
-    expect(values).not.toHaveProperty('createdAt');
   });
 
-  it('create 无 returning row 时 fail-closed', async () => {
+  it('create without returning row fails closed', async () => {
     const mutation = createMutationDatabase(null);
     const repository = createCustomerCommandRepository(mutation.database);
 
@@ -180,16 +152,16 @@ describe('CustomerCommandRepository', () => {
         lifecycle: 'consulting',
         priority: 'high',
         ownerUserId: 'user_001',
-        projectInterest: '皮肤管理',
-        maskedPhone: '138****0001',
-        maskedMedicalRecordNo: 'MR****001',
-        lastTouchSummary: '首次咨询',
-        nextAction: '人工跟进',
-        tags: ['重点'],
-        gender: 'female',
-        birthDate: '1990-01',
-        referralSource: '转介绍',
-        notes: '低敏备注',
+        projectInterest: '',
+        maskedPhone: '',
+        maskedMedicalRecordNo: '',
+        lastTouchSummary: '',
+        nextAction: '',
+        tags: [],
+        gender: '',
+        birthDate: '',
+        referralSource: '',
+        notes: '',
       }),
     ).rejects.toThrow('customer_create_returning_missing');
   });

@@ -43,22 +43,26 @@ export function CustomerListReadonlyShell({
   lifecycle,
   priority,
   result,
+  operational,
 }: Readonly<{
   lifecycle: CustomerListLifecycleV1 | null;
   priority: CustomerListPriorityV1 | null;
   result: CustomerListReadyResultV1;
+  operational: boolean;
 }>) {
   return (
     <section className="space-y-5" aria-labelledby="customer-list-title">
       <header className="rounded-[28px] border border-white/80 bg-white/90 px-6 py-6 shadow-xl shadow-slate-200/50">
         <p className="text-xs font-semibold tracking-[0.16em] text-cyan-700">
-          READ ONLY
+          {operational ? 'CONTROLLED WRITE' : 'READ ONLY'}
         </p>
         <h1 id="customer-list-title" className="mt-2 text-2xl font-bold text-slate-950">
           客户列表
         </h1>
         <p className="mt-2 text-sm text-slate-600">
-          当前共展示 {result.records.length} 条低敏客户记录，仅供查看。
+          {operational
+            ? `当前共展示 ${result.records.length} 条低敏客户记录；具备权限的账号可进入详情执行受控操作。`
+            : `当前共展示 ${result.records.length} 条低敏客户记录，仅供查看。`}
         </p>
       </header>
 
@@ -67,7 +71,10 @@ export function CustomerListReadonlyShell({
           当前页暂无客户记录
         </div>
       ) : (
-        <ul className="grid gap-3" aria-label="客户只读记录">
+        <ul
+          className="grid gap-3"
+          aria-label={operational ? '客户记录' : '客户只读记录'}
+        >
           {result.records.map((record) => (
             <li
               key={record.customerId}
@@ -80,9 +87,21 @@ export function CustomerListReadonlyShell({
                     {lifecycleLabels[record.lifecycle]} · {priorityLabels[record.priority]}
                   </p>
                 </div>
-                <time className="text-xs text-slate-500" dateTime={record.updatedAt}>
-                  更新于 {record.updatedAt}
-                </time>
+                <div className="flex flex-col items-end gap-2">
+                  <time className="text-xs text-slate-500" dateTime={record.updatedAt}>
+                    更新于 {record.updatedAt}
+                  </time>
+                  {operational ? (
+                    <Link
+                      href={`/hospital/customers/${encodeURIComponent(
+                        record.customerId,
+                      )}`}
+                      className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-800"
+                    >
+                      查看 / 操作
+                    </Link>
+                  ) : null}
+                </div>
               </div>
             </li>
           ))}

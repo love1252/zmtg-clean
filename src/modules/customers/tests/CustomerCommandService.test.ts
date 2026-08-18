@@ -1,3 +1,4 @@
+
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -6,6 +7,8 @@ import {
   type CustomerCommandRecord,
   type CustomerCommandRepository,
 } from '@/modules/customers/application/customer-command-service';
+
+const UPDATED_AT = '2026-08-18T12:00:00.000Z';
 
 const customerRecord: CustomerCommandRecord = {
   id: 'cust_001',
@@ -16,21 +19,21 @@ const customerRecord: CustomerCommandRecord = {
   priority: 'high',
   ownerUserId: 'user_001',
   projectInterest: '皮肤管理',
-  maskedPhone: '138****0001',
-  maskedMedicalRecordNo: 'MR****001',
-  lastTouchSummary: '首次咨询',
-  nextAction: '人工跟进',
-  tags: ['重点'],
-  gender: 'female',
-  birthDate: '1990-01',
-  referralSource: '转介绍',
-  notes: '低敏备注',
+  maskedPhone: '',
+  maskedMedicalRecordNo: '',
+  lastTouchSummary: '',
+  nextAction: '',
+  tags: [],
+  gender: '',
+  birthDate: '',
+  referralSource: '',
+  notes: '',
+  updatedAt: UPDATED_AT,
 };
 
 function createRepositoryMock() {
   const create = vi.fn(async () => customerRecord);
   const update = vi.fn(async () => customerRecord);
-
   return {
     repository: { create, update } as CustomerCommandRepository,
     create,
@@ -39,15 +42,12 @@ function createRepositoryMock() {
 }
 
 describe('CustomerCommandService', () => {
-  it('create 只从 server attribution 注入 tenantId + institutionId 并剥离伪造归属字段', async () => {
+  it('create injects exact server attribution and strips forged ownership fields', async () => {
     const mock = createRepositoryMock();
     const service = createCustomerCommandService(mock.repository);
 
     await service.createCustomer({
-      attribution: {
-        tenantId: 'tenant_001',
-        institutionId: 'inst_001',
-      },
+      attribution: { tenantId: 'tenant_001', institutionId: 'inst_001' },
       customer: {
         id: 'cust_001',
         displayName: '王女士',
@@ -55,73 +55,54 @@ describe('CustomerCommandService', () => {
         priority: 'high',
         ownerUserId: 'user_001',
         projectInterest: '皮肤管理',
-        maskedPhone: '138****0001',
-        maskedMedicalRecordNo: 'MR****001',
-        lastTouchSummary: '首次咨询',
-        nextAction: '人工跟进',
-        tags: ['重点'],
-        gender: 'female',
-        birthDate: '1990-01',
-        referralSource: '转介绍',
-        notes: '低敏备注',
-        tenantId: 'attacker_tenant',
-        institutionId: 'attacker_institution',
+        maskedPhone: '',
+        maskedMedicalRecordNo: '',
+        lastTouchSummary: '',
+        nextAction: '',
+        tags: [],
+        gender: '',
+        birthDate: '',
+        referralSource: '',
+        notes: '',
+        tenantId: 'attacker',
+        institutionId: 'attacker',
+        updatedAt: 'attacker',
       } as never,
     });
 
     expect(mock.create).toHaveBeenCalledWith({
-      ...customerRecord,
+      id: 'cust_001',
       tenantId: 'tenant_001',
       institutionId: 'inst_001',
+      displayName: '王女士',
+      lifecycle: 'consulting',
+      priority: 'high',
+      ownerUserId: 'user_001',
+      projectInterest: '皮肤管理',
+      maskedPhone: '',
+      maskedMedicalRecordNo: '',
+      lastTouchSummary: '',
+      nextAction: '',
+      tags: [],
+      gender: '',
+      birthDate: '',
+      referralSource: '',
+      notes: '',
     });
   });
 
-  it('缺失或非规范 server attribution 时 fail-closed 且不触发 repository', async () => {
-    const mock = createRepositoryMock();
-    const service = createCustomerCommandService(mock.repository);
-
-    await expect(
-      service.createCustomer({
-        attribution: {
-          tenantId: ' tenant_001',
-          institutionId: 'inst_001',
-        },
-        customer: customerRecord,
-      }),
-    ).rejects.toBeInstanceOf(CustomerCommandInputError);
-
-    await expect(
-      service.updateCustomer({
-        attribution: {
-          tenantId: 'tenant_001',
-          institutionId: '',
-        },
-        customerId: 'cust_001',
-        changes: { displayName: '更新' },
-      }),
-    ).rejects.toBeInstanceOf(CustomerCommandInputError);
-
-    expect(mock.create).not.toHaveBeenCalled();
-    expect(mock.update).not.toHaveBeenCalled();
-  });
-
-  it('update 固定 customerId 与 attribution，剥离 identity/attribution/createdAt 注入', async () => {
+  it('update requires canonical expectedUpdatedAt and preserves exact scope', async () => {
     const mock = createRepositoryMock();
     const service = createCustomerCommandService(mock.repository);
 
     await service.updateCustomer({
-      attribution: {
-        tenantId: 'tenant_001',
-        institutionId: 'inst_001',
-      },
+      attribution: { tenantId: 'tenant_001', institutionId: 'inst_001' },
       customerId: 'cust_001',
+      expectedUpdatedAt: UPDATED_AT,
       changes: {
         displayName: '王女士更新',
-        tags: ['更新'],
-        id: 'attacker_customer',
-        tenantId: 'attacker_tenant',
-        institutionId: 'attacker_institution',
-        createdAt: new Date(),
+        id: 'attacker',
+        tenantId: 'attacker',
       } as never,
     });
 
@@ -129,29 +110,40 @@ describe('CustomerCommandService', () => {
       tenantId: 'tenant_001',
       institutionId: 'inst_001',
       id: 'cust_001',
-      changes: {
-        displayName: '王女士更新',
-        tags: ['更新'],
-      },
+      expectedUpdatedAt: UPDATED_AT,
+      changes: { displayName: '王女士更新' },
     });
   });
 
-  it('update repository 返回 null 时保持 not-found 语义', async () => {
-    const update = vi.fn(async () => null);
+  it('invalid attribution or CAS fails before repository', async () => {
+    const mock = createRepositoryMock();
+    const service = createCustomerCommandService(mock.repository);
+
+    await expect(
+      service.updateCustomer({
+        attribution: { tenantId: 'tenant_001', institutionId: 'inst_001' },
+        customerId: 'cust_001',
+        expectedUpdatedAt: 'not-canonical',
+        changes: { priority: 'medium' },
+      }),
+    ).rejects.toBeInstanceOf(CustomerCommandInputError);
+
+    expect(mock.update).not.toHaveBeenCalled();
+  });
+
+  it('repository null remains a fail-closed update result', async () => {
     const repository = {
       create: vi.fn(),
-      update,
+      update: vi.fn(async () => null),
     } as unknown as CustomerCommandRepository;
     const service = createCustomerCommandService(repository);
 
     await expect(
       service.updateCustomer({
-        attribution: {
-          tenantId: 'tenant_001',
-          institutionId: 'inst_001',
-        },
+        attribution: { tenantId: 'tenant_001', institutionId: 'inst_001' },
         customerId: 'cust_missing',
-        changes: { displayName: '不存在' },
+        expectedUpdatedAt: UPDATED_AT,
+        changes: { priority: 'medium' },
       }),
     ).resolves.toBeNull();
   });

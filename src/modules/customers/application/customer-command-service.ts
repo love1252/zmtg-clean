@@ -1,3 +1,4 @@
+
 export type CustomerLifecycle =
   | 'consulting'
   | 'scheduled'
@@ -32,27 +33,30 @@ export type CustomerMutableFields = {
 export type CustomerCommandRecord = CustomerInstitutionAttribution &
   CustomerMutableFields & {
     id: string;
+    updatedAt: string;
   };
 
 export type CreateCustomerCommand = {
   attribution: CustomerInstitutionAttribution;
-  customer: CustomerMutableFields & {
-    id: string;
-  };
+  customer: CustomerMutableFields & { id: string };
 };
 
 export type UpdateCustomerCommand = {
   attribution: CustomerInstitutionAttribution;
   customerId: string;
+  expectedUpdatedAt: string;
   changes: Partial<CustomerMutableFields>;
 };
 
-export type CustomerRepositoryCreateInput = CustomerCommandRecord;
+export type CustomerRepositoryCreateInput =
+  CustomerInstitutionAttribution & CustomerMutableFields & { id: string };
 
-export type CustomerRepositoryUpdateInput = CustomerInstitutionAttribution & {
-  id: string;
-  changes: Partial<CustomerMutableFields>;
-};
+export type CustomerRepositoryUpdateInput =
+  CustomerInstitutionAttribution & {
+    id: string;
+    expectedUpdatedAt: string;
+    changes: Partial<CustomerMutableFields>;
+  };
 
 export interface CustomerCommandRepository {
   create(input: CustomerRepositoryCreateInput): Promise<CustomerCommandRecord>;
@@ -66,11 +70,24 @@ export class CustomerCommandInputError extends Error {
   }
 }
 
+const canonicalUtcInstant =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
+
 function requireExactIdentifier(value: unknown, field: string): string {
   if (typeof value !== 'string' || value.length === 0 || value.trim() !== value) {
     throw new CustomerCommandInputError(`invalid_${field}`);
   }
+  return value;
+}
 
+function requireCanonicalIsoTimestamp(value: unknown): string {
+  if (typeof value !== 'string' || !canonicalUtcInstant.test(value)) {
+    throw new CustomerCommandInputError('invalid_expected_updated_at');
+  }
+  const epochMs = Date.parse(value);
+  if (!Number.isFinite(epochMs) || new Date(epochMs).toISOString() !== value) {
+    throw new CustomerCommandInputError('invalid_expected_updated_at');
+  }
   return value;
 }
 
@@ -87,7 +104,6 @@ function copyTags(value: unknown): string[] {
   if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
     throw new CustomerCommandInputError('invalid_tags');
   }
-
   return [...value];
 }
 
@@ -117,7 +133,6 @@ function pickUpdateChanges(
   changes: Partial<CustomerMutableFields>,
 ): Partial<CustomerMutableFields> {
   const result: Partial<CustomerMutableFields> = {};
-
   if (changes.displayName !== undefined) result.displayName = changes.displayName;
   if (changes.lifecycle !== undefined) result.lifecycle = changes.lifecycle;
   if (changes.priority !== undefined) result.priority = changes.priority;
@@ -134,7 +149,6 @@ function pickUpdateChanges(
   if (changes.birthDate !== undefined) result.birthDate = changes.birthDate;
   if (changes.referralSource !== undefined) result.referralSource = changes.referralSource;
   if (changes.notes !== undefined) result.notes = changes.notes;
-
   return result;
 }
 
@@ -143,7 +157,6 @@ export function createCustomerCommandService(repository: CustomerCommandReposito
     async createCustomer(input: CreateCustomerCommand): Promise<CustomerCommandRecord> {
       const attribution = normalizeAttribution(input.attribution);
       const customer = pickCreateCustomer(input.customer);
-
       return repository.create({
         tenantId: attribution.tenantId,
         institutionId: attribution.institutionId,
@@ -153,12 +166,11 @@ export function createCustomerCommandService(repository: CustomerCommandReposito
 
     async updateCustomer(input: UpdateCustomerCommand): Promise<CustomerCommandRecord | null> {
       const attribution = normalizeAttribution(input.attribution);
-      const customerId = requireExactIdentifier(input.customerId, 'customer_id');
-
       return repository.update({
         tenantId: attribution.tenantId,
         institutionId: attribution.institutionId,
-        id: customerId,
+        id: requireExactIdentifier(input.customerId, 'customer_id'),
+        expectedUpdatedAt: requireCanonicalIsoTimestamp(input.expectedUpdatedAt),
         changes: pickUpdateChanges(input.changes),
       });
     },

@@ -12,11 +12,11 @@ import {
 } from '@/modules/institution/server/institution-server-runtime';
 
 export const INSTITUTION_CAPABILITY_AUTHORITY_REVISION_V1 =
-  'r8-care-appointment-controlled-write-v1' as const;
+  'r9-customer-controlled-write-v1' as const;
 
 const AUTHORITY_STATUS_FRESHNESS_WINDOW_MS = 5_000;
 const WORKBENCH_READONLY_SUMMARY = '工作台仅供查看' as const;
-const CUSTOMER_LIST_READONLY_SUMMARY = '客户列表仅供查看' as const;
+const CUSTOMER_LIST_OPERATIONAL_SUMMARY = '客户列表可用' as const;
 const CONVERSATION_QUEUE_READONLY_SUMMARY = '会话队列仅供查看' as const;
 const CARE_APPOINTMENTS_OPERATIONAL_SUMMARY = '预约管理可用' as const;
 const KNOWLEDGE_LIBRARY_READONLY_SUMMARY = '知识库资料仅供查看' as const;
@@ -47,7 +47,9 @@ function buildCapabilityStatus(
     INSTITUTION_CAPABILITY_REGISTRY_V1.map((definition) => {
       const institutionAuthorized = availableSections.has(definition.sectionId);
       const workbenchReadonlyPilot = definition.key === 'page_workbench';
-      const customerListReadonlyPilot = definition.key === 'page_customer_list';
+      const customerListOperationalPilot = definition.key === 'page_customer_list';
+      const customerCreateOperationalPilot =
+        definition.key === 'action_customer_create';
       const conversationQueueReadonlyPilot =
         definition.key === 'page_conversation_queue';
       const careAppointmentsOperationalPilot =
@@ -67,14 +69,15 @@ function buildCapabilityStatus(
         definition.key === 'action_care_followup_create';
       const readonlyPilot =
         workbenchReadonlyPilot ||
-        customerListReadonlyPilot ||
         conversationQueueReadonlyPilot ||
         knowledgeLibraryReadonlyPilot ||
         analyticsOverviewReadonlyPilot ||
         aiUsageReadonlyPilot ||
         auditReadonlyPilot;
       const operationalPilot =
-        careAppointmentsOperationalPilot
+        customerListOperationalPilot
+        || customerCreateOperationalPilot
+        || careAppointmentsOperationalPilot
         || careAppointmentCreateOperationalPilot
         || careFollowupsOperationalPilot
         || careFollowupCreateOperationalPilot;
@@ -96,8 +99,7 @@ function buildCapabilityStatus(
           connectionAvailability: 'not_required',
           dataReadiness: auditReadonlyPilot
             ? 'partial'
-            : customerListReadonlyPilot
-                || conversationQueueReadonlyPilot
+            : conversationQueueReadonlyPilot
                 || knowledgeLibraryReadonlyPilot
                 || analyticsOverviewReadonlyPilot
                 || aiUsageReadonlyPilot
@@ -109,7 +111,11 @@ function buildCapabilityStatus(
             : 'not_released',
         }),
         safeSummary:
-          careAppointmentsOperationalPilot && institutionAuthorized
+          customerListOperationalPilot && institutionAuthorized
+            ? CUSTOMER_LIST_OPERATIONAL_SUMMARY
+            : customerCreateOperationalPilot && institutionAuthorized
+              ? null
+              : careAppointmentsOperationalPilot && institutionAuthorized
             ? CARE_APPOINTMENTS_OPERATIONAL_SUMMARY
             : careAppointmentCreateOperationalPilot && institutionAuthorized
               ? null
@@ -120,9 +126,7 @@ function buildCapabilityStatus(
                   : readonlyPilot && institutionAuthorized
             ? auditReadonlyPilot
               ? AUDIT_READONLY_SUMMARY
-              : customerListReadonlyPilot
-                ? CUSTOMER_LIST_READONLY_SUMMARY
-                : conversationQueueReadonlyPilot
+              : conversationQueueReadonlyPilot
                   ? CONVERSATION_QUEUE_READONLY_SUMMARY
                   : knowledgeLibraryReadonlyPilot
                     ? KNOWLEDGE_LIBRARY_READONLY_SUMMARY
