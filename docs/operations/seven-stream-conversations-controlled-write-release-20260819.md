@@ -48,3 +48,14 @@ PRODUCTION=false
 ```
 
 No new Conversation table, alternate writer, free-text disposition, real provider mutation, or automatic AI transition is introduced by this release.
+
+## Independent Review corrective
+
+- `close` 对无风险分段只接受 canonical `conversation_risks` exact-scope 查询确认的
+  `authoritative_empty` 完整性证明；普通 `histories=[]` 继续 fail-closed，不冒充权威无风险。
+- `requestId` 的内部幂等引用同时绑定 `conversationId + segmentId + operation`，避免同一会话后续
+  segment 复用 requestId 时碰撞历史 assignment event。
+- `/hospital/conversations/automations` 与其 `:journeyId` 详情保留为物理静态 namespace，
+  继续复用既有 capability-off 渲染；不得被 `:conversationId` 动态详情吞并。
+- `AUTO_REACHOUT=false`、`REAL_SEND=false`、`REAL_INBOUND=false`；本修正不发布自动触达、
+  真实收发、AI 自动回复或任何外部 mutation。

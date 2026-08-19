@@ -20,7 +20,10 @@ export const dynamic = 'force-dynamic';
 
 const TARGET_SECTION_ID = 'conversations' as const;
 const EMPTY_SECTION_IDS = Object.freeze([]) as readonly InstitutionNavigationSectionIdV1[];
-const CAPABILITY_OFF_ROUTE = resolveInstitutionCapabilityOffRouteV1(['conversations']);
+const CAPABILITY_OFF_ROUTE = resolveInstitutionCapabilityOffRouteV1([
+  'conversations',
+  'conversation-detail-placeholder',
+]);
 
 function operational(status: CapabilityStatusV1 | null): boolean {
   if (

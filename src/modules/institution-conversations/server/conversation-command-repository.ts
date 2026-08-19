@@ -479,7 +479,9 @@ export async function executeConversationCommandV1(
     conversationId: input.conversationId,
     segmentId: segment.segmentId,
   });
-  const idem = idempotencyRef(`${input.requestId}\n${input.operation.kind}\n${input.conversationId}`);
+  const idem = idempotencyRef(
+    `${input.requestId}\n${input.operation.kind}\n${input.conversationId}\n${segment.segmentId}`,
+  );
   const event = (slot: string) => operationRef('ase', `${idem}\n${slot}`);
   const assignment = (slot: string) => operationRef('asn', `${idem}\n${slot}`);
   const actorUserId = domainRef('usr', input.actor.userId);
@@ -659,6 +661,7 @@ export async function executeConversationCommandV1(
         validUntil: occurredAt,
         histories: [],
         currentClinicalClosureChecks: [],
+        completeness: 'authoritative_empty',
       },
     });
     if (transitioned.kind !== 'applied') {

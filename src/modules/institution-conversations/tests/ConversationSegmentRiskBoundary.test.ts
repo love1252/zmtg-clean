@@ -189,6 +189,69 @@ describe('conversation segment and complete risk history boundary', () => {
     });
   });
 
+  it('权威零风险证明允许正常结束，但不能携带伪造风险或临床校验', () => {
+    const result = closeConversationSegmentManually(
+      humanSegment(),
+      {
+        operatorId: 'actor-handler-001',
+        occurredAt: decisionAt,
+        closeResultCode: 'unresolved',
+        blockingSnapshot: {
+          readiness: 'ready',
+          ...target,
+          checkedAt: '2026-07-17T01:04:30.000Z',
+          validUntil: '2026-07-17T01:05:30.000Z',
+          state: 'clear',
+        },
+        riskSet: {
+          readiness: 'ready',
+          ...target,
+          checkedAt: '2026-07-17T01:04:30.000Z',
+          validUntil: '2026-07-17T01:05:30.000Z',
+          histories: [],
+          currentClinicalClosureChecks: [],
+          completeness: 'authoritative_empty',
+        },
+      },
+    );
+    expect(result.kind).toBe('applied');
+    if (result.kind !== 'applied') throw new Error('expected normal close');
+    expect(result.segment).toMatchObject({
+      state: 'closed',
+      segmentCloseKind: 'normal',
+      resolutionState: 'open',
+      closedAt: decisionAt,
+    });
+
+    expect(closeConversationSegmentManually(
+      humanSegment(),
+      {
+        operatorId: 'actor-handler-001',
+        occurredAt: decisionAt,
+        closeResultCode: 'unresolved',
+        blockingSnapshot: {
+          readiness: 'ready',
+          ...target,
+          checkedAt: '2026-07-17T01:04:30.000Z',
+          validUntil: '2026-07-17T01:05:30.000Z',
+          state: 'clear',
+        },
+        riskSet: {
+          readiness: 'ready',
+          ...target,
+          checkedAt: '2026-07-17T01:04:30.000Z',
+          validUntil: '2026-07-17T01:05:30.000Z',
+          histories: [nonClinicalHistory(1)],
+          currentClinicalClosureChecks: [],
+          completeness: 'authoritative_empty',
+        },
+      },
+    )).toEqual({
+      kind: 'blocked',
+      code: 'risk_set_completeness_unverified',
+    });
+  });
+
   it('完整历史投影允许多个已解决非临床风险且不修改输入', () => {
     const histories = [nonClinicalHistory(1), nonClinicalHistory(2)];
     const before = structuredClone(histories);
