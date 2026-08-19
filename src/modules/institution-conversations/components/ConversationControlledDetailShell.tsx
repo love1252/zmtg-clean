@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import type { ConversationControlledDtoV1 } from '@/modules/institution-conversations/application/conversation-controlled-view';
 
@@ -44,6 +44,12 @@ function requestId(): string {
   return `cw_${Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('')}`;
 }
 
+type PendingMutationRequest = Readonly<{
+  fingerprint: string;
+  requestId: string;
+  body: string;
+}>;
+
 export function ConversationControlledDetailShell({
   record: initialRecord,
 }: Readonly<{ record: ConversationControlledDtoV1 }>) {
@@ -51,9 +57,39 @@ export function ConversationControlledDetailShell({
   const [assigneeUserId, setAssigneeUserId] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const pendingMutationRequest = useRef<PendingMutationRequest | null>(null);
 
   async function mutate(operation: Record<string, unknown>) {
     if (!record.activeSegment) return;
+
+    const fingerprint = JSON.stringify({
+      conversationId: record.conversationId,
+      expectedConversationRevision: record.conversationRevision,
+      expectedSegmentRevision: record.activeSegment.revision,
+      expectedAssignmentRevision: record.activeSegment.assignmentRevision,
+      operation,
+    });
+    const pending = pendingMutationRequest.current;
+    if (pending && pending.fingerprint !== fingerprint) {
+      setMessage('上次操作结果尚未确认，请先重试相同操作。');
+      return;
+    }
+
+    const stableRequestId = pending?.requestId ?? requestId();
+    const stableBody = pending?.body ?? JSON.stringify({
+      expectedConversationRevision: record.conversationRevision,
+      expectedSegmentRevision: record.activeSegment.revision,
+      expectedAssignmentRevision: record.activeSegment.assignmentRevision,
+      requestId: stableRequestId,
+      operation,
+    });
+    const request = pending ?? Object.freeze({
+      fingerprint,
+      requestId: stableRequestId,
+      body: stableBody,
+    });
+    pendingMutationRequest.current = request;
+
     setBusy(true);
     setMessage(null);
     try {
@@ -62,13 +98,7 @@ export function ConversationControlledDetailShell({
         {
           method: 'PATCH',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            expectedConversationRevision: record.conversationRevision,
-            expectedSegmentRevision: record.activeSegment.revision,
-            expectedAssignmentRevision: record.activeSegment.assignmentRevision,
-            requestId: requestId(),
-            operation,
-          }),
+          body: request.body,
         },
       );
       const payload = await response.json() as {
@@ -76,6 +106,9 @@ export function ConversationControlledDetailShell({
         code?: string;
         record?: ConversationControlledDtoV1;
       };
+
+      pendingMutationRequest.current = null;
+
       if (!response.ok || payload.kind !== 'ready' || !payload.record) {
         setMessage(mutationErrorMessage(payload.code));
         return;
@@ -83,7 +116,7 @@ export function ConversationControlledDetailShell({
       setRecord(payload.record);
       setMessage('操作已完成。');
     } catch {
-      setMessage('当前无法完成操作，请刷新后重试。');
+      setMessage('操作结果尚未确认，请再次执行相同操作。');
     } finally {
       setBusy(false);
     }

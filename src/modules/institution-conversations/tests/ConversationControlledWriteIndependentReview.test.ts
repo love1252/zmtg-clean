@@ -157,4 +157,41 @@ describe('Conversation controlled-write independent review regressions', () => {
     expect(detailShell).not.toContain('payload.code ??');
   });
 
+  it('final Codex corrective locks own-assignment scope, state replay facts, and stable browser retries', () => {
+    const runtime = readFileSync(
+      resolve(process.cwd(), 'src/server/orchestration/institution-conversation-controlled-write-runtime.ts'),
+      'utf8',
+    );
+    const auditRepository = readFileSync(
+      resolve(process.cwd(), 'src/modules/audit/server/audit-event-repository.ts'),
+      'utf8',
+    );
+    const detailShell = readFileSync(
+      resolve(process.cwd(), 'src/modules/institution-conversations/components/ConversationControlledDetailShell.tsx'),
+      'utf8',
+    );
+
+    expect(runtime).toContain('function recordInActorScope(');
+    expect(runtime).toContain('!recordInActorScope(record, authorization.actor)');
+    expect(runtime).toContain('!currentRecord || !recordInActorScope(currentRecord, actor)');
+    expect(runtime).toContain(
+      "operation.kind === 'request_human' && !isManagement(actor.role)",
+    );
+    expect(runtime).toContain(
+      "canRequestHuman: isManagement(actor.role) && state === 'ai_handling'",
+    );
+    expect(runtime).toContain('conversationStateOperationAuditEventId(');
+    expect(runtime).toContain('readConversationStateOperationReplayV1(');
+    expect(runtime).toContain('readVerifiedInstitutionAuditEventById({');
+    expect(runtime).toContain("'conversation-controlled-state-operation-v1'");
+    expect(auditRepository).toContain('readVerifiedInstitutionAuditEventById(input: {');
+    expect(auditRepository).toContain(
+      "eq(auditEvents.institutionAttribution, 'verified')",
+    );
+    expect(detailShell).toContain('pendingMutationRequest');
+    expect(detailShell).toContain('const stableRequestId = pending?.requestId ?? requestId();');
+    expect(detailShell).toContain('body: request.body');
+    expect(detailShell).toContain('操作结果尚未确认，请再次执行相同操作。');
+  });
+
 });

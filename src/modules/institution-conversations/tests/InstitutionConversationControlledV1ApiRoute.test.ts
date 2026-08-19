@@ -28,6 +28,8 @@ describe('Institution Conversation Controlled V1 API route', () => {
     expect(runtime).toContain('resolveInstitutionConversationWriteAuthorizationV1');
     expect(runtime).toContain('createAccessControlAuthoritativeMembershipFactReaderV1');
     expect(runtime).toContain('resolveInstitutionAuditWriterVerifiedAttributionV1');
+    expect(runtime).toContain('recordInActorScope');
+    expect(runtime).toContain('readConversationStateOperationReplayV1');
     expect(repository).toContain('conversationAssignments');
     expect(repository).toContain('eq(conversationSegments.revision, input.expectedSegmentRevision)');
     expect(repository).toContain('eq(conversations.revision, input.expectedConversationRevision)');

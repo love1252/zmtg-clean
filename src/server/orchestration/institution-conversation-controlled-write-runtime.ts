@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { isProxy } from 'node:util/types';
 
 import { createAccessControlAuthoritativeMembershipFactReaderV1 } from '@/modules/access-control/application/authoritative-membership-reader';
@@ -247,7 +247,7 @@ function permissions(record: ConversationCommandRecordV1, actor: Actor) {
   const state = segment?.value.state ?? null;
 
   return Object.freeze({
-    canRequestHuman: state === 'ai_handling',
+    canRequestHuman: isManagement(actor.role) && state === 'ai_handling',
     canAssign:
       isManagement(actor.role) &&
       state === 'awaiting_human' &&
@@ -323,6 +323,104 @@ function auditReason(operation: ConversationCommandOperationV1): AuditReason {
   }
 }
 
+type ConversationStateOperationV1 = Extract<
+  ConversationCommandOperationV1,
+  { kind: 'request_human' | 'waiting_customer' }
+>;
+
+function isConversationStateOperationV1(
+  operation: ConversationCommandOperationV1,
+): operation is ConversationStateOperationV1 {
+  return operation.kind === 'request_human' || operation.kind === 'waiting_customer';
+}
+
+function recordInActorScope(
+  record: ConversationCommandRecordV1,
+  actor: Actor,
+): boolean {
+  if (isManagement(actor.role)) return true;
+  const assignment = record.segment?.assignment ?? null;
+  return (
+    assignment !== null
+    && assignment.assigneeUserId === actor.accountId
+    && (assignment.status === 'assigned' || assignment.status === 'accepted')
+  );
+}
+
+function conversationStateOperationAuditEventId(
+  actor: Actor,
+  conversationId: string,
+  requestId: string,
+  operation: ConversationStateOperationV1,
+): string {
+  const digest = createHash('sha256')
+    .update(
+      [
+        'conversation-controlled-state-operation-v1',
+        actor.tenantId,
+        actor.institutionId,
+        actor.accountId,
+        conversationId,
+        requestId,
+        operation.kind,
+      ].join('\n'),
+      'utf8',
+    )
+    .digest('hex');
+  return `cwo_${digest.slice(0, 60)}`;
+}
+
+type ConversationStateOperationReplayResultV1 =
+  | Readonly<{ kind: 'replayed'; record: ConversationCommandRecordV1 }>
+  | Readonly<{ kind: 'not_replayed' | 'idempotency_conflict' | 'not_found' }>;
+
+async function readConversationStateOperationReplayV1(
+  database: TenantDatabase,
+  actor: Actor,
+  conversationId: string,
+  requestId: string,
+  operation: ConversationStateOperationV1,
+): Promise<ConversationStateOperationReplayResultV1> {
+  const eventId = conversationStateOperationAuditEventId(
+    actor,
+    conversationId,
+    requestId,
+    operation,
+  );
+  const fact = await createAuditEventRepository(database)
+    .readVerifiedInstitutionAuditEventById({
+      eventId,
+      tenantId: actor.tenantId,
+      institutionId: actor.institutionId,
+    });
+
+  if (!fact) return Object.freeze({ kind: 'not_replayed' as const });
+
+  if (
+    fact.eventId !== eventId
+    || fact.actorId !== actor.accountId
+    || fact.resource !== 'ai_conversation'
+    || fact.resourceId !== conversationId
+    || fact.action !== 'update'
+    || fact.result !== 'transitioned'
+    || fact.reason !== auditReason(operation)
+    || fact.source !== 'server_session'
+  ) {
+    return Object.freeze({ kind: 'idempotency_conflict' as const });
+  }
+
+  const record = await readScopedConversationCommandRecordV1(database, {
+    tenantId: actor.tenantId,
+    institutionId: actor.institutionId,
+    conversationId,
+  });
+  if (!record || !recordInActorScope(record, actor)) {
+    return Object.freeze({ kind: 'not_found' as const });
+  }
+
+  return Object.freeze({ kind: 'replayed' as const, record });
+}
+
 async function auditChanged(
   database: TenantDatabase,
   actor: Actor,
@@ -330,10 +428,11 @@ async function auditChanged(
   reason: AuditReason,
   occurredAt: string,
   attribution: VerifiedInstitutionAuditAttributionHandleV1,
+  eventId: string,
 ) {
   const event = createVerifiedInstitutionAttributedTenantAuditEventV1({
     event: {
-      eventId: randomUUID(),
+      eventId,
       actorId: actor.accountId,
       actorRole: actor.role,
       tenantId: actor.tenantId,
@@ -369,12 +468,13 @@ export async function readCurrentInstitutionConversationControlledV1(
       institutionId: authorization.actor.institutionId,
       conversationId,
     });
-    return record
-      ? Object.freeze({
-          kind: 'ready' as const,
-          record: toDto(record, authorization.actor),
-        })
-      : Object.freeze({ kind: 'not_found' as const });
+    if (!record || !recordInActorScope(record, authorization.actor)) {
+      return Object.freeze({ kind: 'not_found' as const });
+    }
+    return Object.freeze({
+      kind: 'ready' as const,
+      record: toDto(record, authorization.actor),
+    });
   } catch {
     return Object.freeze({ kind: 'unavailable' as const });
   }
@@ -403,6 +503,33 @@ export async function mutateCurrentInstitutionConversationControlledV1(
 
   const database = getDatabase();
   let operation = parsed.operation;
+
+  if (isConversationStateOperationV1(operation)) {
+    const replay = await readConversationStateOperationReplayV1(
+      database,
+      actor,
+      conversationId,
+      parsed.requestId,
+      operation,
+    ).catch(() => null);
+    if (!replay) return Object.freeze({ kind: 'unavailable' as const });
+    if (replay.kind === 'replayed') {
+      return Object.freeze({
+        kind: 'ready' as const,
+        record: toDto(replay.record, actor),
+      });
+    }
+    if (replay.kind === 'idempotency_conflict') {
+      return Object.freeze({
+        kind: 'conflict' as const,
+        code: 'idempotency_conflict',
+      });
+    }
+    if (replay.kind === 'not_found') {
+      return Object.freeze({ kind: 'not_found' as const });
+    }
+  }
+
   if (operation.kind === 'assign' || operation.kind === 'reassign') {
     const replay = await readConversationAssignmentReplayV1(database, {
       tenantId: actor.tenantId,
@@ -412,19 +539,82 @@ export async function mutateCurrentInstitutionConversationControlledV1(
       expectedAssignmentRevision: parsed.expectedAssignmentRevision,
       requestId: parsed.requestId,
       actorUserId: actor.accountId,
-      operation: { kind: operation.kind, assigneeUserId: operation.assigneeUserId },
+      operation: {
+        kind: operation.kind,
+        assigneeUserId: operation.assigneeUserId,
+      },
     }).catch(() => null);
     if (!replay) return Object.freeze({ kind: 'unavailable' as const });
     if (replay.kind === 'replayed') {
-      return Object.freeze({ kind: 'ready' as const, record: toDto(replay.record, actor) });
+      return Object.freeze({
+        kind: 'ready' as const,
+        record: toDto(replay.record, actor),
+      });
     }
     if (replay.kind === 'idempotency_conflict') {
-      return Object.freeze({ kind: 'conflict' as const, code: 'idempotency_conflict' });
+      return Object.freeze({
+        kind: 'conflict' as const,
+        code: 'idempotency_conflict',
+      });
     }
     if (replay.kind === 'not_found_or_not_owned') {
       return Object.freeze({ kind: 'not_found' as const });
     }
+  }
 
+  if (
+    operation.kind === 'takeover'
+    || operation.kind === 'release_takeover'
+    || operation.kind === 'close'
+  ) {
+    const replay = await readConversationAssignmentReplayV1(database, {
+      tenantId: actor.tenantId,
+      institutionId: actor.institutionId,
+      conversationId,
+      expectedConversationRevision: parsed.expectedConversationRevision,
+      expectedAssignmentRevision: parsed.expectedAssignmentRevision,
+      requestId: parsed.requestId,
+      actorUserId: actor.accountId,
+      operation,
+    }).catch(() => null);
+    if (!replay) return Object.freeze({ kind: 'unavailable' as const });
+    if (replay.kind === 'replayed') {
+      return Object.freeze({
+        kind: 'ready' as const,
+        record: toDto(replay.record, actor),
+      });
+    }
+    if (replay.kind === 'idempotency_conflict') {
+      return Object.freeze({
+        kind: 'conflict' as const,
+        code: 'idempotency_conflict',
+      });
+    }
+    if (replay.kind === 'not_found_or_not_owned') {
+      return Object.freeze({ kind: 'not_found' as const });
+    }
+  }
+
+  let currentRecord: ConversationCommandRecordV1 | null;
+  try {
+    currentRecord = await readScopedConversationCommandRecordV1(database, {
+      tenantId: actor.tenantId,
+      institutionId: actor.institutionId,
+      conversationId,
+    });
+  } catch {
+    return Object.freeze({ kind: 'unavailable' as const });
+  }
+
+  if (!currentRecord || !recordInActorScope(currentRecord, actor)) {
+    return Object.freeze({ kind: 'not_found' as const });
+  }
+
+  if (operation.kind === 'request_human' && !isManagement(actor.role)) {
+    return Object.freeze({ kind: 'forbidden' as const });
+  }
+
+  if (operation.kind === 'assign' || operation.kind === 'reassign') {
     if (!isManagement(actor.role)) {
       return Object.freeze({ kind: 'forbidden' as const });
     }
@@ -453,6 +643,15 @@ export async function mutateCurrentInstitutionConversationControlledV1(
   if (!auditAttribution) {
     return Object.freeze({ kind: 'unavailable' as const });
   }
+
+  const auditEventId = isConversationStateOperationV1(operation)
+    ? conversationStateOperationAuditEventId(
+        actor,
+        conversationId,
+        parsed.requestId,
+        operation,
+      )
+    : randomUUID();
 
   try {
     return await database.transaction(async (transactionDatabase) => {
@@ -493,6 +692,7 @@ export async function mutateCurrentInstitutionConversationControlledV1(
           auditReason(operation),
           result.occurredAt,
           auditAttribution,
+          auditEventId,
         );
       }
 

@@ -94,4 +94,46 @@ describe('Hospital Conversation controlled detail', () => {
     expect(screen.queryByText('future_internal_code')).not.toBeInTheDocument();
   });
 
+  it('reuses the exact request id and body after an uncertain transport failure', async () => {
+    const bodies: string[] = [];
+    let attempt = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_input: unknown, init?: RequestInit) => {
+        bodies.push(String(init?.body ?? ''));
+        attempt += 1;
+        if (attempt === 1) {
+          throw new TypeError('simulated_transport_loss');
+        }
+        return new Response(
+          JSON.stringify({ kind: 'ready', record }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }),
+    );
+
+    render(<ConversationControlledDetailShell record={record} />);
+    const button = screen.getByRole('button', { name: '接管会话' });
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(
+        '操作结果尚未确认，请再次执行相同操作。',
+      );
+    });
+
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('操作已完成。');
+    });
+
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]).toBe(bodies[0]);
+    const first = JSON.parse(bodies[0]!) as { requestId?: unknown };
+    const second = JSON.parse(bodies[1]!) as { requestId?: unknown };
+    expect(typeof first.requestId).toBe('string');
+    expect(second.requestId).toBe(first.requestId);
+  });
+
 });
