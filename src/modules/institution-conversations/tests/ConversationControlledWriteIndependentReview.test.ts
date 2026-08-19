@@ -130,6 +130,10 @@ describe('Conversation controlled-write independent review regressions', () => {
     expect(repository).toContain('hasRiskFacts?: boolean | null;');
     expect(repository).toContain('hasRiskFacts: !riskFree');
     expect(runtime).toContain('segment?.hasRiskFacts === false');
+    expect(repository).toContain(
+      'inArray(conversationAssignments.idempotencyKey, candidateKeys)',
+    );
+    expect(repository).toContain('historicalMatches.length > 1');
     expect(releaseDoc).toMatch(/^# 会话受控写完整闭环发布说明/mu);
     expect(releaseDoc).not.toContain('## Canonical write chain');
     expect(releaseDoc).not.toContain('## Released controlled mutations');

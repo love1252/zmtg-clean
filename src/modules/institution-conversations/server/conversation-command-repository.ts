@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 
 import {
   acceptConversationAssignment,
@@ -433,83 +433,168 @@ export async function readConversationAssignmentReplayV1(
   database: TenantDatabase,
   input: ConversationAssignmentReplayProbeInputV1,
 ): Promise<ConversationAssignmentReplayProbeResultV1> {
-  const [root] = await database.select().from(conversations).where(and(
-    eq(conversations.tenantId, input.tenantId),
-    eq(conversations.institutionId, input.institutionId),
-    eq(conversations.id, input.conversationId),
-  ));
-  if (!root || !root.activeSegmentId) return { kind: 'not_found_or_not_owned' };
+  const [root] = await database
+    .select()
+    .from(conversations)
+    .where(
+      and(
+        eq(conversations.tenantId, input.tenantId),
+        eq(conversations.institutionId, input.institutionId),
+        eq(conversations.id, input.conversationId),
+      ),
+    );
+  if (!root) return { kind: 'not_found_or_not_owned' };
 
-  const [segmentRow] = await database.select().from(conversationSegments).where(and(
-    eq(conversationSegments.tenantId, input.tenantId),
-    eq(conversationSegments.institutionId, input.institutionId),
-    eq(conversationSegments.conversationId, input.conversationId),
-    eq(conversationSegments.id, root.activeSegmentId),
-  ));
-  if (!segmentRow) return { kind: 'not_found_or_not_owned' };
-  const segment = mapSegment(segmentRow);
-  if (!segment || segment.state === 'closed') return { kind: 'not_replayed' };
+  const segmentRows = await database
+    .select({ segmentId: conversationSegments.id })
+    .from(conversationSegments)
+    .where(
+      and(
+        eq(conversationSegments.tenantId, input.tenantId),
+        eq(conversationSegments.institutionId, input.institutionId),
+        eq(conversationSegments.conversationId, input.conversationId),
+      ),
+    )
+    .orderBy(asc(conversationSegments.sequenceNo));
 
-  const assignmentRows = await database.select().from(conversationAssignments).where(and(
-    eq(conversationAssignments.tenantId, input.tenantId),
-    eq(conversationAssignments.institutionId, input.institutionId),
-    eq(conversationAssignments.conversationId, input.conversationId),
-    eq(conversationAssignments.segmentId, segment.segmentId),
-  )).orderBy(asc(conversationAssignments.revision));
+  if (segmentRows.length === 0) return { kind: 'not_replayed' };
 
-  const idem = idempotencyRef(
-    `${input.requestId}\n${input.operation.kind}\n${input.conversationId}\n${segment.segmentId}`,
-  );
-  const rows = assignmentRows.filter((row) => row.idempotencyKey === idem);
-  if (rows.length === 0) return { kind: 'not_replayed' };
-  if (rows.some((row) => row.actorUserId !== input.actorUserId)) {
-    return { kind: 'idempotency_conflict' };
+  const idempotencyBySegment = new Map<string, string>();
+  const segmentByIdempotency = new Map<string, string>();
+  for (const row of segmentRows) {
+    const idempotencyKey = idempotencyRef(
+      `${input.requestId}\n${input.operation.kind}\n${input.conversationId}\n${row.segmentId}`,
+    );
+    const existingSegmentId = segmentByIdempotency.get(idempotencyKey);
+    if (existingSegmentId && existingSegmentId !== row.segmentId) {
+      return { kind: 'idempotency_conflict' };
+    }
+    idempotencyBySegment.set(row.segmentId, idempotencyKey);
+    segmentByIdempotency.set(idempotencyKey, row.segmentId);
   }
 
-  const expectedEvent = (slot: string) => operationRef('ase', `${idem}\n${slot}`);
-  const expectedAssignment = (slot: string) => operationRef('asn', `${idem}\n${slot}`);
-  let occurredAt: Date | null = null;
+  const candidateKeys = [...segmentByIdempotency.keys()];
+  const candidateRows = await database
+    .select()
+    .from(conversationAssignments)
+    .where(
+      and(
+        eq(conversationAssignments.tenantId, input.tenantId),
+        eq(conversationAssignments.institutionId, input.institutionId),
+        eq(conversationAssignments.conversationId, input.conversationId),
+        inArray(conversationAssignments.idempotencyKey, candidateKeys),
+      ),
+    )
+    .orderBy(
+      asc(conversationAssignments.segmentId),
+      asc(conversationAssignments.revision),
+    );
 
-  if (input.operation.kind === 'assign') {
-    const assigned = rows.length === 1 ? rows[0] : null;
+  const rowsBySegment = new Map<string, AssignmentRow[]>();
+  for (const row of candidateRows) {
+    const expectedKey = idempotencyBySegment.get(row.segmentId);
+    if (!expectedKey || row.idempotencyKey !== expectedKey) continue;
+    const rows = rowsBySegment.get(row.segmentId) ?? [];
+    rows.push(row);
+    rowsBySegment.set(row.segmentId, rows);
+  }
+
+  if (rowsBySegment.size === 0) return { kind: 'not_replayed' };
+
+  const replayOccurredAt = (
+    segmentId: string,
+    rows: readonly AssignmentRow[],
+  ): Date | null => {
+    const idem = idempotencyBySegment.get(segmentId);
+    if (!idem || rows.some((row) => row.actorUserId !== input.actorUserId)) {
+      return null;
+    }
+
+    const expectedEvent = (slot: string) =>
+      operationRef('ase', `${idem}\n${slot}`);
+    const expectedAssignment = (slot: string) =>
+      operationRef('asn', `${idem}\n${slot}`);
+
+    if (input.operation.kind === 'assign') {
+      const assigned = rows.length === 1 ? rows[0] : null;
+      if (
+        !assigned
+        || assigned.eventId !== expectedEvent('assign')
+        || assigned.assignmentId !== expectedAssignment('assign')
+        || assigned.status !== 'assigned'
+        || assigned.reasonCode !== 'manual_assign'
+        || assigned.sourceSegmentState !== 'awaiting_human'
+        || assigned.assigneeUserId !== input.operation.assigneeUserId
+      ) {
+        return null;
+      }
+      return assigned.occurredAt;
+    }
+
+    if (rows.length !== 2) return null;
+    const released = rows.find(
+      (row) =>
+        row.eventId === expectedEvent('reassign-release')
+        && row.status === 'released'
+        && row.reasonCode === 'manual_reassign',
+    );
+    const assigned = rows.find(
+      (row) =>
+        row.eventId === expectedEvent('reassign-assign')
+        && row.assignmentId === expectedAssignment('reassign')
+        && row.status === 'assigned'
+        && row.reasonCode === 'manual_reassign',
+    );
     if (
-      !assigned
-      || assigned.eventId !== expectedEvent('assign')
-      || assigned.assignmentId !== expectedAssignment('assign')
-      || assigned.status !== 'assigned'
-      || assigned.reasonCode !== 'manual_assign'
-      || assigned.sourceSegmentState !== 'awaiting_human'
-      || assigned.assigneeUserId !== input.operation.assigneeUserId
-    ) return { kind: 'idempotency_conflict' };
-    occurredAt = assigned.occurredAt;
-  } else {
-    if (rows.length !== 2) return { kind: 'idempotency_conflict' };
-    const released = rows.find((row) =>
-      row.eventId === expectedEvent('reassign-release')
-      && row.status === 'released'
-      && row.reasonCode === 'manual_reassign');
-    const assigned = rows.find((row) =>
-      row.eventId === expectedEvent('reassign-assign')
-      && row.assignmentId === expectedAssignment('reassign')
-      && row.status === 'assigned'
-      && row.reasonCode === 'manual_reassign');
-    if (
-      !released || !assigned
+      !released
+      || !assigned
       || released.sourceSegmentState !== 'awaiting_human'
       || assigned.sourceSegmentState !== 'awaiting_human'
       || released.occurredAt.getTime() !== assigned.occurredAt.getTime()
       || assigned.assigneeUserId !== input.operation.assigneeUserId
-    ) return { kind: 'idempotency_conflict' };
-    occurredAt = assigned.occurredAt;
+    ) {
+      return null;
+    }
+    return assigned.occurredAt;
+  };
+
+  if (root.activeSegmentId) {
+    const activeRows = rowsBySegment.get(root.activeSegmentId);
+    if (activeRows) {
+      const occurredAt = replayOccurredAt(root.activeSegmentId, activeRows);
+      if (!occurredAt) return { kind: 'idempotency_conflict' };
+      const record = await readScopedState(database, {
+        tenantId: input.tenantId,
+        institutionId: input.institutionId,
+        conversationId: input.conversationId,
+      });
+      return record
+        ? { kind: 'replayed', record, occurredAt: iso(occurredAt) }
+        : { kind: 'not_found_or_not_owned' };
+    }
   }
+
+  const historicalMatches: Date[] = [];
+  for (const [segmentId, rows] of rowsBySegment) {
+    if (segmentId === root.activeSegmentId) continue;
+    const occurredAt = replayOccurredAt(segmentId, rows);
+    if (occurredAt) historicalMatches.push(occurredAt);
+  }
+
+  if (historicalMatches.length === 0) return { kind: 'not_replayed' };
+  if (historicalMatches.length > 1) return { kind: 'idempotency_conflict' };
 
   const record = await readScopedState(database, {
     tenantId: input.tenantId,
     institutionId: input.institutionId,
     conversationId: input.conversationId,
   });
-  if (!record || !occurredAt) return { kind: 'not_found_or_not_owned' };
-  return { kind: 'replayed', record, occurredAt: iso(occurredAt) };
+  if (!record) return { kind: 'not_found_or_not_owned' };
+  return {
+    kind: 'replayed',
+    record,
+    occurredAt: iso(historicalMatches[0]!),
+  };
 }
 
 export async function executeConversationCommandV1(

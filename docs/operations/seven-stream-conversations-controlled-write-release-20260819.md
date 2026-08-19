@@ -67,3 +67,15 @@ PRODUCTION=false
 
 - P2：`assign/reassign` 在重新解析目标 assignee 当前 Membership 之前，先通过 canonical Conversation repository 检查已持久化的同 requestId replay。已完成操作可依据持久化 assignment facts 返回 `replayed`；只有新写入才要求目标 assignee 当前 Membership 有效。
 - P2：Conversation 详情读取同时检查当前 segment 的 canonical `conversation_risks`；`canClose=true` 只在当前 actor/assignment/handler 条件成立、local blocker 为空且持久化 risk fact 不存在时返回，避免展示必然失败的“结束会话”入口。
+
+## 历史 segment 幂等重放修正
+
+- P2：`assign/reassign` 的 replay probe 不再只依赖当前 `activeSegmentId`；它先枚举同一
+  exact tenant + institution + conversation 下既有 segment，并用既有
+  `requestId + operation + conversationId + segmentId` 公式计算候选幂等键，再从 canonical
+  `conversation_assignments` 定位已经持久化的操作事实。
+- 当前 active segment 若已有同 requestId 事实，继续按当前 segment 严格执行 replay /
+  `idempotency_conflict`；当前 segment 未命中时，只允许唯一精确匹配的历史 segment replay。
+- 多个历史 segment 同时精确匹配时 fail-closed 为 `idempotency_conflict`；历史 segment 上
+  不同 payload 的同 requestId 不阻断后续新 segment 合法复用。
+- 不新增 API 字段、不修改 V1 请求契约、不新增表或 Migration。
