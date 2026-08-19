@@ -106,12 +106,14 @@ export type ConversationAssignmentReplayProbeInputV1 = Readonly<{
   tenantId: string;
   institutionId: string;
   conversationId: string;
+  expectedConversationRevision?: number;
+  expectedAssignmentRevision?: number;
   requestId: string;
   actorUserId: string;
-  operation: Readonly<{
-    kind: 'assign' | 'reassign';
-    assigneeUserId: string;
-  }>;
+  operation:
+    | Readonly<{ kind: 'assign' | 'reassign'; assigneeUserId: string }>
+    | Readonly<{ kind: 'takeover' | 'release_takeover' }>
+    | Readonly<{ kind: 'close'; closeResultCode: SegmentManualCloseResultCode }>;
 }>;
 
 export type ConversationAssignmentReplayProbeResultV1 =
@@ -446,7 +448,13 @@ export async function readConversationAssignmentReplayV1(
   if (!root) return { kind: 'not_found_or_not_owned' };
 
   const segmentRows = await database
-    .select({ segmentId: conversationSegments.id })
+    .select({
+      segmentId: conversationSegments.id,
+      state: conversationSegments.state,
+      segmentCloseKind: conversationSegments.segmentCloseKind,
+      resolutionState: conversationSegments.resolutionState,
+      closedAt: conversationSegments.closedAt,
+    })
     .from(conversationSegments)
     .where(
       and(
@@ -459,6 +467,7 @@ export async function readConversationAssignmentReplayV1(
 
   if (segmentRows.length === 0) return { kind: 'not_replayed' };
 
+  const segmentById = new Map(segmentRows.map((row) => [row.segmentId, row] as const));
   const idempotencyBySegment = new Map<string, string>();
   const segmentByIdempotency = new Map<string, string>();
   for (const row of segmentRows) {
@@ -506,56 +515,77 @@ export async function readConversationAssignmentReplayV1(
     rows: readonly AssignmentRow[],
   ): Date | null => {
     const idem = idempotencyBySegment.get(segmentId);
-    if (!idem || rows.some((row) => row.actorUserId !== input.actorUserId)) {
-      return null;
-    }
-
-    const expectedEvent = (slot: string) =>
-      operationRef('ase', `${idem}\n${slot}`);
-    const expectedAssignment = (slot: string) =>
-      operationRef('asn', `${idem}\n${slot}`);
+    if (!idem || rows.some((row) => row.actorUserId !== input.actorUserId)) return null;
+    const event = (slot: string) => operationRef('ase', `${idem}\n${slot}`);
+    const assignment = (slot: string) => operationRef('asn', `${idem}\n${slot}`);
+    const revisionOk = (revision: number, offset: number) =>
+      input.expectedAssignmentRevision === undefined
+      || revision === input.expectedAssignmentRevision + offset;
 
     if (input.operation.kind === 'assign') {
-      const assigned = rows.length === 1 ? rows[0] : null;
-      if (
-        !assigned
-        || assigned.eventId !== expectedEvent('assign')
-        || assigned.assignmentId !== expectedAssignment('assign')
-        || assigned.status !== 'assigned'
-        || assigned.reasonCode !== 'manual_assign'
-        || assigned.sourceSegmentState !== 'awaiting_human'
-        || assigned.assigneeUserId !== input.operation.assigneeUserId
-      ) {
-        return null;
-      }
-      return assigned.occurredAt;
+      const row = rows.length === 1 ? rows[0] : null;
+      return row
+        && row.eventId === event('assign')
+        && row.assignmentId === assignment('assign')
+        && revisionOk(row.revision, 1)
+        && row.status === 'assigned'
+        && row.reasonCode === 'manual_assign'
+        && row.sourceSegmentState === 'awaiting_human'
+        && row.assigneeUserId === input.operation.assigneeUserId
+        ? row.occurredAt : null;
     }
 
-    if (rows.length !== 2) return null;
-    const released = rows.find(
-      (row) =>
-        row.eventId === expectedEvent('reassign-release')
+    if (input.operation.kind === 'reassign') {
+      if (rows.length !== 2) return null;
+      const released = rows.find((row) =>
+        row.eventId === event('reassign-release')
         && row.status === 'released'
-        && row.reasonCode === 'manual_reassign',
-    );
-    const assigned = rows.find(
-      (row) =>
-        row.eventId === expectedEvent('reassign-assign')
-        && row.assignmentId === expectedAssignment('reassign')
+        && row.reasonCode === 'manual_reassign');
+      const assigned = rows.find((row) =>
+        row.eventId === event('reassign-assign')
+        && row.assignmentId === assignment('reassign')
         && row.status === 'assigned'
-        && row.reasonCode === 'manual_reassign',
-    );
-    if (
-      !released
-      || !assigned
-      || released.sourceSegmentState !== 'awaiting_human'
-      || assigned.sourceSegmentState !== 'awaiting_human'
-      || released.occurredAt.getTime() !== assigned.occurredAt.getTime()
-      || assigned.assigneeUserId !== input.operation.assigneeUserId
-    ) {
-      return null;
+        && row.reasonCode === 'manual_reassign');
+      return released && assigned
+        && revisionOk(released.revision, 1)
+        && revisionOk(assigned.revision, 2)
+        && released.sourceSegmentState === 'awaiting_human'
+        && assigned.sourceSegmentState === 'awaiting_human'
+        && released.occurredAt.getTime() === assigned.occurredAt.getTime()
+        && assigned.assigneeUserId === input.operation.assigneeUserId
+        ? assigned.occurredAt : null;
     }
-    return assigned.occurredAt;
+
+    const row = rows.length === 1 ? rows[0] : null;
+    if (!row || !revisionOk(row.revision, 1)
+      || row.actorUserId !== row.assigneeUserId
+      || row.actorRole !== row.assigneeRole) return null;
+
+    if (input.operation.kind === 'takeover') {
+      return row.eventId === event('takeover')
+        && row.status === 'accepted'
+        && row.sourceSegmentState === 'awaiting_human'
+        && (row.reasonCode === 'manual_assign'
+          || row.reasonCode === 'manual_reassign'
+          || row.reasonCode === 'manual_fallback')
+        ? row.occurredAt : null;
+    }
+
+    const slot = input.operation.kind === 'close' ? 'close-release' : 'release-takeover';
+    if (row.eventId !== event(slot)
+      || row.status !== 'released'
+      || row.reasonCode !== 'handler_release'
+      || (row.sourceSegmentState !== 'human_handling'
+        && row.sourceSegmentState !== 'waiting_customer')) return null;
+
+    if (input.operation.kind === 'release_takeover') return row.occurredAt;
+    if (input.operation.kind !== 'close') return null;
+
+    const seg = segmentById.get(segmentId);
+    if (!seg || seg.state !== 'closed' || seg.segmentCloseKind !== 'normal'
+      || seg.closedAt === null || seg.closedAt.getTime() !== row.occurredAt.getTime()) return null;
+    const code = seg.resolutionState === 'resolved' ? 'resolved' : 'unresolved';
+    return code === input.operation.closeResultCode ? row.occurredAt : null;
   };
 
   if (root.activeSegmentId) {
@@ -574,15 +604,28 @@ export async function readConversationAssignmentReplayV1(
     }
   }
 
+  if (
+    root.activeSegmentId
+    && input.expectedConversationRevision !== undefined
+    && input.expectedConversationRevision === root.revision
+  ) return { kind: 'not_replayed' };
+
   const historicalMatches: Date[] = [];
+  let historicalCandidateCount = 0;
   for (const [segmentId, rows] of rowsBySegment) {
     if (segmentId === root.activeSegmentId) continue;
+    historicalCandidateCount += 1;
     const occurredAt = replayOccurredAt(segmentId, rows);
     if (occurredAt) historicalMatches.push(occurredAt);
   }
 
-  if (historicalMatches.length === 0) return { kind: 'not_replayed' };
   if (historicalMatches.length > 1) return { kind: 'idempotency_conflict' };
+  if (historicalMatches.length === 0) {
+    return input.expectedConversationRevision !== undefined
+      && historicalCandidateCount > 0
+      ? { kind: 'idempotency_conflict' }
+      : { kind: 'not_replayed' };
+  }
 
   const record = await readScopedState(database, {
     tenantId: input.tenantId,
@@ -601,6 +644,30 @@ export async function executeConversationCommandV1(
   database: TenantDatabase,
   input: ConversationCommandInputV1,
 ): Promise<ConversationCommandResultV1> {
+  if (
+    input.operation.kind === 'takeover'
+    || input.operation.kind === 'release_takeover'
+    || input.operation.kind === 'close'
+  ) {
+    const replay = await readConversationAssignmentReplayV1(database, {
+      tenantId: input.tenantId,
+      institutionId: input.institutionId,
+      conversationId: input.conversationId,
+      expectedConversationRevision: input.expectedConversationRevision,
+      expectedAssignmentRevision: input.expectedAssignmentRevision,
+      requestId: input.requestId,
+      actorUserId: input.actor.userId,
+      operation: input.operation,
+    });
+    if (replay.kind === 'replayed') return replay;
+    if (replay.kind === 'idempotency_conflict') {
+      return { kind: 'blocked', code: 'idempotency_conflict' };
+    }
+    if (replay.kind === 'not_found_or_not_owned') {
+      return { kind: 'not_found_or_not_owned' };
+    }
+  }
+
   const [root] = await database
     .select()
     .from(conversations)

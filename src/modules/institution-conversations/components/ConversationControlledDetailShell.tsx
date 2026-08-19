@@ -12,6 +12,11 @@ const stateLabels = Object.freeze({
   closed: '已结束',
 } as const);
 
+const assignmentStatusLabels = Object.freeze({
+  assigned: '已分配',
+  accepted: '已接管',
+} as const);
+
 function requestId(): string {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
@@ -68,7 +73,7 @@ export function ConversationControlledDetailShell({
   return (
     <main className="mx-auto w-full max-w-5xl px-5 py-8">
       <header className="mb-6">
-        <p className="text-sm font-medium text-slate-500">CONVERSATION CONTROLLED WRITE</p>
+        <p className="text-sm font-medium text-slate-500">会话受控处置</p>
         <h1 className="mt-1 text-2xl font-semibold text-slate-950">会话处置</h1>
         <p className="mt-2 text-sm leading-6 text-slate-600">
           仅开放机构内受控分配、改派、人工接管、解除接管和状态处置。消息发送、消息接收、AI 自动回复与自动触达均保持关闭。
@@ -78,7 +83,7 @@ export function ConversationControlledDetailShell({
       <section className="rounded-xl border border-slate-200 bg-white p-5">
         <dl className="grid gap-4 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-slate-500">Conversation</dt>
+            <dt className="text-slate-500">会话编号</dt>
             <dd className="mt-1 break-all text-slate-950">{record.conversationId}</dd>
           </div>
           <div>
@@ -97,7 +102,7 @@ export function ConversationControlledDetailShell({
             <dt className="text-slate-500">当前分配</dt>
             <dd className="mt-1 break-all text-slate-950">
               {segment?.assignment
-                ? `${segment.assignment.assigneeUserId} / ${segment.assignment.status}`
+                ? `${segment.assignment.assigneeUserId} / ${assignmentStatusLabels[segment.assignment.status]}`
                 : '暂无'}
             </dd>
           </div>
@@ -147,7 +152,7 @@ export function ConversationControlledDetailShell({
               <input
                 value={assigneeUserId}
                 onChange={(event) => setAssigneeUserId(event.target.value.trim())}
-                placeholder="当前机构 Membership accountId"
+                placeholder="当前机构成员账号标识"
                 className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
               <button

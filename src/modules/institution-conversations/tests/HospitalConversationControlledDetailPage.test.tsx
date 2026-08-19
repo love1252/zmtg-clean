@@ -40,6 +40,11 @@ describe('Hospital Conversation controlled detail', () => {
   it('shows only server-authorized controls and keeps message automation absent', () => {
     render(<ConversationControlledDetailShell record={record} />);
     expect(screen.getByRole('heading', { name: '会话处置' })).toBeInTheDocument();
+    expect(screen.getByText('会话受控处置')).toBeInTheDocument();
+    expect(screen.getByText('会话编号')).toBeInTheDocument();
+    expect(screen.getByText('account-1 / 已分配')).toBeInTheDocument();
+    expect(screen.queryByText('CONVERSATION CONTROLLED WRITE')).not.toBeInTheDocument();
+    expect(screen.queryByText('Conversation')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '接管会话' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '解除接管' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '发送消息' })).not.toBeInTheDocument();

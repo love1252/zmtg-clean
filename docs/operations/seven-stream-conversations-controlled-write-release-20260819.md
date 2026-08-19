@@ -79,3 +79,10 @@ PRODUCTION=false
 - 多个历史 segment 同时精确匹配时 fail-closed 为 `idempotency_conflict`；历史 segment 上
   不同 payload 的同 requestId 不阻断后续新 segment 合法复用。
 - 不新增 API 字段、不修改 V1 请求契约、不新增表或 Migration。
+
+## 最终 Codex 审查补充修正
+
+- P2：`takeover / release_takeover / close` 在 repository 的 active-segment 与 revision CAS 之前检查 canonical assignment facts；成功重试返回 `replayed` 且不重复 mutation / audit。
+- `close` 重放额外校验 normal closed segment 与持久化 `resolutionState` 对应的 `closeResultCode`；载荷变化 fail-closed。
+- replay probe 可绑定原始 conversation / assignment revision；请求明确指向当前 root revision 时，历史事实不吞掉后续新 segment 对相同 requestId 的合法复用。
+- P1：详情页可见标题、字段、分配状态和成员账号提示均改为中文；技术契约值保持不变。

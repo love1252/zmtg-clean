@@ -134,6 +134,17 @@ describe('Conversation controlled-write independent review regressions', () => {
       'inArray(conversationAssignments.idempotencyKey, candidateKeys)',
     );
     expect(repository).toContain('historicalMatches.length > 1');
+    const executeSource = repository.slice(
+      repository.indexOf('export async function executeConversationCommandV1('),
+    );
+    expect(executeSource.indexOf("input.operation.kind === 'takeover'")).toBeGreaterThan(-1);
+    expect(executeSource.indexOf('if (!root || !root.activeSegmentId)')).toBeGreaterThan(
+      executeSource.indexOf("input.operation.kind === 'takeover'"),
+    );
+    expect(executeSource).toContain("'release_takeover'");
+    expect(executeSource).toContain("'close'");
+    expect(repository).toContain("'close-release'");
+    expect(repository).toContain("'release-takeover'");
     expect(releaseDoc).toMatch(/^# 会话受控写完整闭环发布说明/mu);
     expect(releaseDoc).not.toContain('## Canonical write chain');
     expect(releaseDoc).not.toContain('## Released controlled mutations');

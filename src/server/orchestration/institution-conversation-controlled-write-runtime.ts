@@ -408,6 +408,8 @@ export async function mutateCurrentInstitutionConversationControlledV1(
       tenantId: actor.tenantId,
       institutionId: actor.institutionId,
       conversationId,
+      expectedConversationRevision: parsed.expectedConversationRevision,
+      expectedAssignmentRevision: parsed.expectedAssignmentRevision,
       requestId: parsed.requestId,
       actorUserId: actor.accountId,
       operation: { kind: operation.kind, assigneeUserId: operation.assigneeUserId },
