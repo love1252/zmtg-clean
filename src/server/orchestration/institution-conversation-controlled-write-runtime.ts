@@ -12,6 +12,7 @@ import type { ConversationControlledDtoV1 } from '@/modules/institution-conversa
 import {
   executeConversationCommandV1,
   isConversationCommandConflictError,
+  readConversationAssignmentReplayV1,
   readScopedConversationCommandRecordV1,
   type ConversationCommandOperationV1,
   type ConversationCommandRecordV1,
@@ -274,7 +275,8 @@ function permissions(record: ConversationCommandRecordV1, actor: Actor) {
       assignment?.status === 'accepted' &&
       isAssignee &&
       isCurrentHandler &&
-      (segment?.value.blockingReasonCodes.length ?? 1) === 0,
+      (segment?.value.blockingReasonCodes.length ?? 1) === 0 &&
+      segment?.hasRiskFacts === false,
   });
 }
 
@@ -399,8 +401,28 @@ export async function mutateCurrentInstitutionConversationControlledV1(
     });
   }
 
+  const database = getDatabase();
   let operation = parsed.operation;
   if (operation.kind === 'assign' || operation.kind === 'reassign') {
+    const replay = await readConversationAssignmentReplayV1(database, {
+      tenantId: actor.tenantId,
+      institutionId: actor.institutionId,
+      conversationId,
+      requestId: parsed.requestId,
+      actorUserId: actor.accountId,
+      operation: { kind: operation.kind, assigneeUserId: operation.assigneeUserId },
+    }).catch(() => null);
+    if (!replay) return Object.freeze({ kind: 'unavailable' as const });
+    if (replay.kind === 'replayed') {
+      return Object.freeze({ kind: 'ready' as const, record: toDto(replay.record, actor) });
+    }
+    if (replay.kind === 'idempotency_conflict') {
+      return Object.freeze({ kind: 'conflict' as const, code: 'idempotency_conflict' });
+    }
+    if (replay.kind === 'not_found_or_not_owned') {
+      return Object.freeze({ kind: 'not_found' as const });
+    }
+
     if (!isManagement(actor.role)) {
       return Object.freeze({ kind: 'forbidden' as const });
     }
@@ -430,7 +452,6 @@ export async function mutateCurrentInstitutionConversationControlledV1(
     return Object.freeze({ kind: 'unavailable' as const });
   }
 
-  const database = getDatabase();
   try {
     return await database.transaction(async (transactionDatabase) => {
       const transactionDb = transactionDatabase as unknown as TenantDatabase;

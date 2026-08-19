@@ -118,4 +118,23 @@ describe('Conversation controlled-write independent review regressions', () => {
     expect(segmentDomain).toContain("riskSet.completeness !== 'authoritative_empty'");
     expect(detailPage).toContain("'conversation-detail-placeholder'");
   });
+  it('latest Codex review keeps replay before target Membership, close risk-aware, and release prose Chinese', () => {
+    const runtime = readFileSync(resolve(process.cwd(), 'src/server/orchestration/institution-conversation-controlled-write-runtime.ts'), 'utf8');
+    const repository = readFileSync(resolve(process.cwd(), 'src/modules/institution-conversations/server/conversation-command-repository.ts'), 'utf8');
+    const releaseDoc = readFileSync(resolve(process.cwd(), 'docs/operations/seven-stream-conversations-controlled-write-release-20260819.md'), 'utf8');
+
+    const replayIndex = runtime.indexOf('await readConversationAssignmentReplayV1(database, {');
+    const membershipIndex = runtime.indexOf('const assignee = await resolveCurrentAssignee(');
+    expect(replayIndex).toBeGreaterThan(-1);
+    expect(membershipIndex).toBeGreaterThan(replayIndex);
+    expect(repository).toContain('hasRiskFacts?: boolean | null;');
+    expect(repository).toContain('hasRiskFacts: !riskFree');
+    expect(runtime).toContain('segment?.hasRiskFacts === false');
+    expect(releaseDoc).toMatch(/^# 会话受控写完整闭环发布说明/mu);
+    expect(releaseDoc).not.toContain('## Canonical write chain');
+    expect(releaseDoc).not.toContain('## Released controlled mutations');
+    expect(releaseDoc).not.toContain('## Hard boundaries');
+    expect(releaseDoc).not.toContain('No new Conversation table');
+  });
+
 });

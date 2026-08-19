@@ -83,6 +83,7 @@ export type ConversationCommandRecordV1 = Readonly<{
     value: ConversationSegment;
     revision: number;
     assignmentRevision: number;
+    hasRiskFacts?: boolean | null;
     assignment: null | Readonly<{
       assignmentId: string;
       assigneeUserId: string;
@@ -100,6 +101,22 @@ export type ConversationCommandResultV1 =
     }>
   | Readonly<{ kind: 'not_found_or_not_owned' }>
   | Readonly<{ kind: 'blocked'; code: string }>;
+
+export type ConversationAssignmentReplayProbeInputV1 = Readonly<{
+  tenantId: string;
+  institutionId: string;
+  conversationId: string;
+  requestId: string;
+  actorUserId: string;
+  operation: Readonly<{
+    kind: 'assign' | 'reassign';
+    assigneeUserId: string;
+  }>;
+}>;
+
+export type ConversationAssignmentReplayProbeResultV1 =
+  | Readonly<{ kind: 'replayed'; record: ConversationCommandRecordV1; occurredAt: string }>
+  | Readonly<{ kind: 'not_replayed' | 'idempotency_conflict' | 'not_found_or_not_owned' }>;
 
 class ConversationCommandConflictError extends Error {
   constructor(readonly code: string) {
@@ -322,6 +339,13 @@ async function readScopedState(
     throw new Error(`conversation_assignment_history_${projected.code}`);
   }
 
+  const riskFree = await noRiskFacts(database, {
+    tenantId: input.tenantId,
+    institutionId: input.institutionId,
+    conversationId: input.conversationId,
+    segmentId: segment.segmentId,
+  });
+
   return {
     tenantId: root.tenantId,
     institutionId: root.institutionId,
@@ -332,6 +356,7 @@ async function readScopedState(
       value: segment,
       revision: segmentRow.revision,
       assignmentRevision: projected.projection.revision,
+      hasRiskFacts: !riskFree,
       assignment: activeAssignment(projected.projection, assignmentRows),
     },
   };
@@ -402,6 +427,89 @@ async function noRiskFacts(
     )
     .limit(1);
   return rows.length === 0;
+}
+
+export async function readConversationAssignmentReplayV1(
+  database: TenantDatabase,
+  input: ConversationAssignmentReplayProbeInputV1,
+): Promise<ConversationAssignmentReplayProbeResultV1> {
+  const [root] = await database.select().from(conversations).where(and(
+    eq(conversations.tenantId, input.tenantId),
+    eq(conversations.institutionId, input.institutionId),
+    eq(conversations.id, input.conversationId),
+  ));
+  if (!root || !root.activeSegmentId) return { kind: 'not_found_or_not_owned' };
+
+  const [segmentRow] = await database.select().from(conversationSegments).where(and(
+    eq(conversationSegments.tenantId, input.tenantId),
+    eq(conversationSegments.institutionId, input.institutionId),
+    eq(conversationSegments.conversationId, input.conversationId),
+    eq(conversationSegments.id, root.activeSegmentId),
+  ));
+  if (!segmentRow) return { kind: 'not_found_or_not_owned' };
+  const segment = mapSegment(segmentRow);
+  if (!segment || segment.state === 'closed') return { kind: 'not_replayed' };
+
+  const assignmentRows = await database.select().from(conversationAssignments).where(and(
+    eq(conversationAssignments.tenantId, input.tenantId),
+    eq(conversationAssignments.institutionId, input.institutionId),
+    eq(conversationAssignments.conversationId, input.conversationId),
+    eq(conversationAssignments.segmentId, segment.segmentId),
+  )).orderBy(asc(conversationAssignments.revision));
+
+  const idem = idempotencyRef(
+    `${input.requestId}\n${input.operation.kind}\n${input.conversationId}\n${segment.segmentId}`,
+  );
+  const rows = assignmentRows.filter((row) => row.idempotencyKey === idem);
+  if (rows.length === 0) return { kind: 'not_replayed' };
+  if (rows.some((row) => row.actorUserId !== input.actorUserId)) {
+    return { kind: 'idempotency_conflict' };
+  }
+
+  const expectedEvent = (slot: string) => operationRef('ase', `${idem}\n${slot}`);
+  const expectedAssignment = (slot: string) => operationRef('asn', `${idem}\n${slot}`);
+  let occurredAt: Date | null = null;
+
+  if (input.operation.kind === 'assign') {
+    const assigned = rows.length === 1 ? rows[0] : null;
+    if (
+      !assigned
+      || assigned.eventId !== expectedEvent('assign')
+      || assigned.assignmentId !== expectedAssignment('assign')
+      || assigned.status !== 'assigned'
+      || assigned.reasonCode !== 'manual_assign'
+      || assigned.sourceSegmentState !== 'awaiting_human'
+      || assigned.assigneeUserId !== input.operation.assigneeUserId
+    ) return { kind: 'idempotency_conflict' };
+    occurredAt = assigned.occurredAt;
+  } else {
+    if (rows.length !== 2) return { kind: 'idempotency_conflict' };
+    const released = rows.find((row) =>
+      row.eventId === expectedEvent('reassign-release')
+      && row.status === 'released'
+      && row.reasonCode === 'manual_reassign');
+    const assigned = rows.find((row) =>
+      row.eventId === expectedEvent('reassign-assign')
+      && row.assignmentId === expectedAssignment('reassign')
+      && row.status === 'assigned'
+      && row.reasonCode === 'manual_reassign');
+    if (
+      !released || !assigned
+      || released.sourceSegmentState !== 'awaiting_human'
+      || assigned.sourceSegmentState !== 'awaiting_human'
+      || released.occurredAt.getTime() !== assigned.occurredAt.getTime()
+      || assigned.assigneeUserId !== input.operation.assigneeUserId
+    ) return { kind: 'idempotency_conflict' };
+    occurredAt = assigned.occurredAt;
+  }
+
+  const record = await readScopedState(database, {
+    tenantId: input.tenantId,
+    institutionId: input.institutionId,
+    conversationId: input.conversationId,
+  });
+  if (!record || !occurredAt) return { kind: 'not_found_or_not_owned' };
+  return { kind: 'replayed', record, occurredAt: iso(occurredAt) };
 }
 
 export async function executeConversationCommandV1(
