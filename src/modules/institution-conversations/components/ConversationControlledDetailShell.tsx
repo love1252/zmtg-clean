@@ -17,6 +17,27 @@ const assignmentStatusLabels = Object.freeze({
   accepted: '已接管',
 } as const);
 
+const mutationErrorMessages = Object.freeze({
+  revision_conflict: '会话状态已变化，请刷新后重试。',
+  idempotency_conflict: '本次操作与已提交请求不一致，请刷新后重试。',
+  invalid_conversation_assignee: '指定的处理人当前不可用，请重新选择。',
+  risk_status_requires_review: '当前会话仍有风险事项需要处理，暂不能结束。',
+  blocking_reason_present: '当前会话仍有阻断事项需要处理，暂不能结束。',
+  actor_not_assignee: '当前账号已不是该会话处理人，请刷新后重试。',
+  active_assignment_missing: '当前分配状态已变化，请刷新后重试。',
+  assignment_history_unavailable: '当前分配记录暂不可用，请刷新后重试。',
+  segment_unavailable: '当前会话状态暂不可操作，请刷新后重试。',
+  invalid_conversation_update: '本次操作内容无效，请刷新后重试。',
+} as const);
+
+function mutationErrorMessage(code: string | undefined): string {
+  if (!code) return '当前无法完成操作，请刷新后重试。';
+  return (
+    mutationErrorMessages[code as keyof typeof mutationErrorMessages]
+    ?? '当前无法完成操作，请刷新后重试。'
+  );
+}
+
 function requestId(): string {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
@@ -56,7 +77,7 @@ export function ConversationControlledDetailShell({
         record?: ConversationControlledDtoV1;
       };
       if (!response.ok || payload.kind !== 'ready' || !payload.record) {
-        setMessage(payload.code ?? '会话状态已变化，请刷新后重试。');
+        setMessage(mutationErrorMessage(payload.code));
         return;
       }
       setRecord(payload.record);

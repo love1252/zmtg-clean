@@ -122,6 +122,7 @@ describe('Conversation controlled-write independent review regressions', () => {
     const runtime = readFileSync(resolve(process.cwd(), 'src/server/orchestration/institution-conversation-controlled-write-runtime.ts'), 'utf8');
     const repository = readFileSync(resolve(process.cwd(), 'src/modules/institution-conversations/server/conversation-command-repository.ts'), 'utf8');
     const releaseDoc = readFileSync(resolve(process.cwd(), 'docs/operations/seven-stream-conversations-controlled-write-release-20260819.md'), 'utf8');
+    const detailShell = readFileSync(resolve(process.cwd(), 'src/modules/institution-conversations/components/ConversationControlledDetailShell.tsx'), 'utf8');
 
     const replayIndex = runtime.indexOf('await readConversationAssignmentReplayV1(database, {');
     const membershipIndex = runtime.indexOf('const assignee = await resolveCurrentAssignee(');
@@ -150,6 +151,10 @@ describe('Conversation controlled-write independent review regressions', () => {
     expect(releaseDoc).not.toContain('## Released controlled mutations');
     expect(releaseDoc).not.toContain('## Hard boundaries');
     expect(releaseDoc).not.toContain('No new Conversation table');
+    expect(detailShell).toContain('mutationErrorMessages');
+    expect(detailShell).toContain('mutationErrorMessage(payload.code)');
+    expect(detailShell).not.toContain('setMessage(payload.code');
+    expect(detailShell).not.toContain('payload.code ??');
   });
 
 });
