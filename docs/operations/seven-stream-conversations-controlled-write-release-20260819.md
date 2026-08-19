@@ -59,3 +59,16 @@ No new Conversation table, alternate writer, free-text disposition, real provide
   继续复用既有 capability-off 渲染；不得被 `:conversationId` 动态详情吞并。
 - `AUTO_REACHOUT=false`、`REAL_SEND=false`、`REAL_INBOUND=false`；本修正不发布自动触达、
   真实收发、AI 自动回复或任何外部 mutation。
+
+## Post-Ready Codex Review corrective
+
+- P1：Conversation mutation 在进入单连接 DB transaction 前完成 institution audit attribution
+  解析；transaction 内只使用预先 mint 的 verified attribution handle 写 audit，避免
+  `max: 1` 连接池下 transaction 等待全局 reader、全局 reader 又等待 transaction 的自锁。
+- P2：`assign/reassign` 的持久化 idempotency replay 在 root / segment / assignment stale
+  revision 判定之前执行；相同 requestId + 相同操作载荷返回 `replayed` 且不重复 mutation /
+  audit，载荷变化返回 `idempotency_conflict`。
+- `.vscode/launch.json` 继续作为 intentional untracked 本地文件保留；tracked cleanliness
+  仍使用 `git status --porcelain --untracked-files=no`，不得删除、提交或把它作为代码阻断项。
+- REAL_INBOUND / REAL_SEND / AI_AUTO_REPLY / AUTO_REACHOUT / WeCom/HIS mutation /
+  Staging / Production 继续保持关闭。

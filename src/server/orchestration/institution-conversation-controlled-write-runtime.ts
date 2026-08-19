@@ -5,6 +5,7 @@ import { createAccessControlAuthoritativeMembershipFactReaderV1 } from '@/module
 import {
   createVerifiedInstitutionAttributedTenantAuditEventV1,
   type AuditReason,
+  type VerifiedInstitutionAuditAttributionHandleV1,
 } from '@/modules/audit/domain/audit-events';
 import { createAuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import type { ConversationControlledDtoV1 } from '@/modules/institution-conversations/application/conversation-controlled-view';
@@ -326,13 +327,8 @@ async function auditChanged(
   conversationId: string,
   reason: AuditReason,
   occurredAt: string,
+  attribution: VerifiedInstitutionAuditAttributionHandleV1,
 ) {
-  const attribution = await resolveInstitutionAuditWriterVerifiedAttributionV1({
-    tenantId: actor.tenantId,
-    institutionId: actor.institutionId,
-  });
-  if (!attribution) throw new Error('conversation_audit_attribution_unavailable');
-
   const event = createVerifiedInstitutionAttributedTenantAuditEventV1({
     event: {
       eventId: randomUUID(),
@@ -425,6 +421,15 @@ export async function mutateCurrentInstitutionConversationControlledV1(
     });
   }
 
+  const auditAttribution =
+    await resolveInstitutionAuditWriterVerifiedAttributionV1({
+      tenantId: actor.tenantId,
+      institutionId: actor.institutionId,
+    }).catch(() => null);
+  if (!auditAttribution) {
+    return Object.freeze({ kind: 'unavailable' as const });
+  }
+
   const database = getDatabase();
   try {
     return await database.transaction(async (transactionDatabase) => {
@@ -457,13 +462,16 @@ export async function mutateCurrentInstitutionConversationControlledV1(
         });
       }
 
-      await auditChanged(
-        transactionDb,
-        actor,
-        conversationId,
-        auditReason(operation),
-        result.occurredAt,
-      );
+      if (result.kind === 'applied') {
+        await auditChanged(
+          transactionDb,
+          actor,
+          conversationId,
+          auditReason(operation),
+          result.occurredAt,
+          auditAttribution,
+        );
+      }
 
       return Object.freeze({
         kind: 'ready' as const,

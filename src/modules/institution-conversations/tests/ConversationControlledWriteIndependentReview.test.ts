@@ -40,6 +40,54 @@ describe('Conversation controlled-write independent review regressions', () => {
     ).toBe('conversation_detail');
   });
 
+  it('post-ready review keeps audit attribution outside the single-connection transaction and replays before CAS', () => {
+    const runtime = readFileSync(
+      resolve(
+        process.cwd(),
+        'src/server/orchestration/institution-conversation-controlled-write-runtime.ts',
+      ),
+      'utf8',
+    );
+    const repository = readFileSync(
+      resolve(
+        process.cwd(),
+        'src/modules/institution-conversations/server/conversation-command-repository.ts',
+      ),
+      'utf8',
+    );
+    const dbClient = readFileSync(
+      resolve(process.cwd(), 'src/server/db/client.ts'),
+      'utf8',
+    );
+
+    expect(dbClient).toContain('max: 1');
+    const attributionIndex = runtime.lastIndexOf(
+      'await resolveInstitutionAuditWriterVerifiedAttributionV1({',
+    );
+    const transactionIndex = runtime.indexOf('return await database.transaction(');
+    expect(attributionIndex).toBeGreaterThan(-1);
+    expect(transactionIndex).toBeGreaterThan(attributionIndex);
+
+    const auditChangedStart = runtime.indexOf('async function auditChanged(');
+    const readStart = runtime.indexOf(
+      'export async function readCurrentInstitutionConversationControlledV1',
+    );
+    expect(runtime.slice(auditChangedStart, readStart)).not.toContain(
+      'resolveInstitutionAuditWriterVerifiedAttributionV1',
+    );
+
+    const replayIndex = repository.indexOf(
+      'existingIdempotentRows.length > 0',
+    );
+    const revisionIndex = repository.indexOf(
+      'root.revision !== input.expectedConversationRevision',
+    );
+    expect(replayIndex).toBeGreaterThan(-1);
+    expect(revisionIndex).toBeGreaterThan(replayIndex);
+    expect(repository).toContain("kind: 'applied' | 'replayed'");
+    expect(runtime).toContain("if (result.kind === 'applied')");
+  });
+
   it('zero-risk normal close requires server-owned completeness and request identity binds segmentId', () => {
     const repository = readFileSync(
       resolve(

@@ -94,7 +94,7 @@ export type ConversationCommandRecordV1 = Readonly<{
 
 export type ConversationCommandResultV1 =
   | Readonly<{
-      kind: 'applied';
+      kind: 'applied' | 'replayed';
       record: ConversationCommandRecordV1;
       occurredAt: string;
     }>
@@ -433,13 +433,6 @@ export async function executeConversationCommandV1(
     );
   if (!segmentRow) return { kind: 'not_found_or_not_owned' };
 
-  if (
-    root.revision !== input.expectedConversationRevision ||
-    segmentRow.revision !== input.expectedSegmentRevision
-  ) {
-    return { kind: 'blocked', code: 'revision_conflict' };
-  }
-
   const segment = mapSegment(segmentRow);
   if (!segment || segment.state === 'closed') {
     return { kind: 'blocked', code: 'segment_unavailable' };
@@ -459,26 +452,17 @@ export async function executeConversationCommandV1(
     .orderBy(asc(conversationAssignments.revision));
 
   const history = toDomainHistory(assignmentRows);
-  const projected = projectConversationAssignments(history, domainTarget({
-    tenantId: input.tenantId,
-    institutionId: input.institutionId,
-    conversationId: input.conversationId,
-    segmentId: segment.segmentId,
-  }));
-  if (projected.kind !== 'projected') {
-    return { kind: 'blocked', code: 'assignment_history_unavailable' };
-  }
-  if (projected.projection.revision !== input.expectedAssignmentRevision) {
-    return { kind: 'blocked', code: 'revision_conflict' };
-  }
-
-  const occurredAt = serverOccurredAt(root, segmentRow, assignmentRows);
   const target = domainTarget({
     tenantId: input.tenantId,
     institutionId: input.institutionId,
     conversationId: input.conversationId,
     segmentId: segment.segmentId,
   });
+  const projected = projectConversationAssignments(history, target);
+  if (projected.kind !== 'projected') {
+    return { kind: 'blocked', code: 'assignment_history_unavailable' };
+  }
+
   const idem = idempotencyRef(
     `${input.requestId}\n${input.operation.kind}\n${input.conversationId}\n${segment.segmentId}`,
   );
@@ -486,6 +470,103 @@ export async function executeConversationCommandV1(
   const assignment = (slot: string) => operationRef('asn', `${idem}\n${slot}`);
   const actorUserId = domainRef('usr', input.actor.userId);
   const actorRole = input.actor.role as ConversationAssignmentActorRole;
+  const existingIdempotentRows = assignmentRows.filter(
+    (row) => row.idempotencyKey === idem,
+  );
+
+  const replayedRecord = (): ConversationCommandRecordV1 => ({
+    tenantId: root.tenantId,
+    institutionId: root.institutionId,
+    conversationId: root.id,
+    conversationRevision: root.revision,
+    updatedAt: iso(root.updatedAt),
+    segment: {
+      value: segment,
+      revision: segmentRow.revision,
+      assignmentRevision: projected.projection.revision,
+      assignment: activeAssignment(projected.projection, assignmentRows),
+    },
+  });
+
+  if (
+    existingIdempotentRows.length > 0 &&
+    (input.operation.kind === 'assign' || input.operation.kind === 'reassign')
+  ) {
+    const replayAnchor = existingIdempotentRows[0]!;
+    const replayOccurredAt = iso(replayAnchor.occurredAt);
+
+    if (input.operation.kind === 'assign') {
+      const replay = assignConversationSegment(history, {
+        eventId: event('assign'),
+        assignmentId: assignment('assign'),
+        ...target,
+        expectedRevision: input.expectedAssignmentRevision,
+        idempotencyKey: idem,
+        actorUserId,
+        actorRole,
+        assigneeUserId: domainRef('usr', input.operation.assigneeUserId),
+        assigneeRole: input.operation.assigneeRole,
+        sourceSegmentState: replayAnchor.sourceSegmentState,
+        occurredAt: replayOccurredAt,
+      });
+      if (replay.kind === 'replayed') {
+        return {
+          kind: 'replayed',
+          record: replayedRecord(),
+          occurredAt: replayOccurredAt,
+        };
+      }
+      if (replay.kind === 'blocked') {
+        return { kind: 'blocked', code: replay.code };
+      }
+      return { kind: 'blocked', code: 'idempotency_conflict' };
+    }
+
+    const released = existingIdempotentRows.find(
+      (row) =>
+        row.status === 'released' &&
+        row.reasonCode === 'manual_reassign',
+    );
+    if (!released) {
+      return { kind: 'blocked', code: 'idempotency_conflict' };
+    }
+    const replay = reassignConversationSegment(history, {
+      releaseEventId: event('reassign-release'),
+      assignedEventId: event('reassign-assign'),
+      currentAssignmentId: released.assignmentId,
+      newAssignmentId: assignment('reassign'),
+      ...target,
+      expectedRevision: input.expectedAssignmentRevision,
+      idempotencyKey: idem,
+      actorUserId,
+      actorRole,
+      newAssigneeUserId: domainRef('usr', input.operation.assigneeUserId),
+      newAssigneeRole: input.operation.assigneeRole,
+      sourceSegmentState: replayAnchor.sourceSegmentState,
+      occurredAt: replayOccurredAt,
+    });
+    if (replay.kind === 'replayed') {
+      return {
+        kind: 'replayed',
+        record: replayedRecord(),
+        occurredAt: replayOccurredAt,
+      };
+    }
+    if (replay.kind === 'blocked') {
+      return { kind: 'blocked', code: replay.code };
+    }
+    return { kind: 'blocked', code: 'idempotency_conflict' };
+  }
+
+  if (
+    root.revision !== input.expectedConversationRevision ||
+    segmentRow.revision !== input.expectedSegmentRevision ||
+    projected.projection.revision !== input.expectedAssignmentRevision
+  ) {
+    return { kind: 'blocked', code: 'revision_conflict' };
+  }
+
+  const occurredAt = serverOccurredAt(root, segmentRow, assignmentRows);
 
   let nextSegment: ConversationSegment = segment;
   let operationFacts: ConversationAssignmentHistory = [];
