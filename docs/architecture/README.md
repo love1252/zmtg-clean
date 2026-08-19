@@ -1,3 +1,15 @@
+<!-- CONVERSATIONS_CONTROLLED_WRITE_ARCH_20260819 -->
+
+## Conversations Controlled Write 正式闭环（2026-08-19）
+
+Conversations 继续复用 `0049_conversations_formal_fact_persistence` 建立的 authoritative
+root / segment / assignment / risk persistence，不新增第二套事实源。正式写链为：formal
+session → identity/membership/scope → Conversation write authorization → Capability release →
+exact tenant/institution canonical writer → root/segment revision CAS + assignment revision →
+institution-attributed audit。受控范围仅包括人工请求、分配/改派、人工接管/解除接管、
+等待客户与人工结束；真实消息入站/发送、AI 自动回复、自动触达、WeCom/HIS mutation、
+Staging 与 Production 均保持关闭。
+
 <!-- CUSTOMER_CONTROLLED_WRITE_ARCH_20260818 -->
 
 ## 客户受控写正式闭环（2026-08-18）

@@ -647,6 +647,29 @@ export function acceptHumanHandling(
   });
 }
 
+export function releaseHumanHandling(
+  segment: Readonly<ConversationSegment>,
+  input: Readonly<{ operatorId: string; occurredAt: string }>,
+): SegmentTransitionResult {
+  if (segment.state === 'closed') {
+    return blocked('segment_closed');
+  }
+  if (segment.state !== 'human_handling' && segment.state !== 'waiting_customer') {
+    return blocked('transition_not_allowed');
+  }
+  const handlerFailure = operatorIsCurrentHandler(segment, input.operatorId);
+  if (handlerFailure) {
+    return handlerFailure;
+  }
+  return transition(segment, input.occurredAt, {
+    state: 'awaiting_human',
+    currentHandlerId: null,
+    waitingAfterCustomerMessageId: null,
+    waitingAfterCustomerMessageAt: null,
+    waitingAfterInboundRevision: null,
+  });
+}
+
 export function markWaitingForCustomer(
   segment: Readonly<ConversationSegment>,
   input: Readonly<{ operatorId: string; occurredAt: string }>,

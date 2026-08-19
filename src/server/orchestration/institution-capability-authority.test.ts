@@ -385,7 +385,7 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
       ReturnType<typeof resolveInstitutionCapabilityAuthorityStatusV1>
     >().toEqualTypeOf<Promise<CapabilityStatusV1 | null>>();
     expect(INSTITUTION_CAPABILITY_AUTHORITY_REVISION_V1).toBe(
-      'r9-customer-controlled-write-v1',
+      'r10-conversations-controlled-write-v1',
     );
   });
 
@@ -484,7 +484,7 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
 
     expect(conversations).toEqual({
       key: 'page_conversation_queue',
-      decision: 'read_only',
+      decision: 'operational',
       dimensions: {
         codeMaturity: 'verified',
         institutionAuthorization: 'authorized',
@@ -492,7 +492,7 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
         dataReadiness: 'ready',
         productionRelease: 'pilot_released',
       },
-      safeSummary: '会话队列仅供查看',
+      safeSummary: '会话队列可用',
       diagnosticTargetKey: null,
     });
 
@@ -667,7 +667,7 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
   });
 
   it.each(['consultant', 'customer_service'] as const)(
-    '%s receives Care release metadata without making Capability Authority the target-role permission source',
+    '%s receives Controlled Write release metadata without making Capability Authority the target-role permission source',
     async (role) => {
       runtimeMocks.membershipRead.mockResolvedValue([
         {
@@ -705,13 +705,13 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
       expect(
         capabilities.find((item) => item.key === 'page_conversation_queue'),
       ).toMatchObject({
-        decision: 'read_only',
+        decision: 'operational',
         dimensions: {
           institutionAuthorization: 'authorized',
           dataReadiness: 'ready',
           productionRelease: 'pilot_released',
         },
-        safeSummary: '会话队列仅供查看',
+        safeSummary: '会话队列可用',
       });
 
       expect(

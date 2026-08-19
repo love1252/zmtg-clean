@@ -330,7 +330,7 @@ describe('conversation assignment domain', () => {
     }))).toEqual({ kind: 'blocked', code: 'transition_not_allowed' });
   });
 
-  it('已 accepted 不得改派，handler release 后不得重新分配绕过非范围', () => {
+  it('已 accepted 不得直接改派；handler release 回到人工队列后允许管理员重新分配', () => {
     expect(reassignConversationSegment(acceptedHistory(), reassignCommand({
       expectedRevision: 2,
     }))).toEqual({ kind: 'blocked', code: 'transition_not_allowed' });
@@ -342,13 +342,22 @@ describe('conversation assignment domain', () => {
       sourceSegmentState: 'waiting_customer',
       occurredAt: '2026-07-17T01:02:00.000Z',
     }))).history;
-    expect(assignConversationSegment(released, assignCommand({
+    const assignedAgain = success(assignConversationSegment(released, assignCommand({
       eventId: eventId(4),
       assignmentId: assignmentId(2),
       expectedRevision: 3,
       idempotencyKey: idempotencyKey(4),
+      assigneeUserId: userId(4),
+      assigneeRole: 'customer_service',
       occurredAt: '2026-07-17T01:03:00.000Z',
-    }))).toEqual({ kind: 'blocked', code: 'transition_not_allowed' });
+    })));
+    expect(assignedAgain.projection).toMatchObject({
+      revision: 4,
+      assignmentId: assignmentId(2),
+      assignmentStatus: 'assigned',
+      activeAssignmentCount: 1,
+      assigneeId: userId(4),
+    });
   });
 
   it('改派拒绝相同 assignee、复用 assignmentId 或重复 eventId', () => {

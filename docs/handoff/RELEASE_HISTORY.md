@@ -1,3 +1,18 @@
+<!-- CONVERSATIONS_CONTROLLED_WRITE_HISTORY_20260819 -->
+
+## 2026-08-19：Conversations 受控写完整闭环
+
+- 复用 `0049_conversations_formal_fact_persistence` 的 canonical Conversation persistence，不新增 Migration。
+- 发布 Formal Conversation Write Authorization 与 exact tenant/institution command runtime。
+- 分配/改派复用 append-only `conversation_assignments`，使用 assignment revision 并与 root/segment revision CAS 同事务收口。
+- 人工接管/解除接管、等待客户和人工结束复用现有 Conversation segment domain；解除接管返回 `awaiting_human`，不切回 AI 自动处理。
+- `/api/v1/institution/conversations/[conversationId]` 仅开放受控 GET/PATCH；不开放 POST/DELETE、真实发送或真实入站。
+- `/hospital/conversations` 升级为 operational pilot，并通过 detail route 提供受控入口。
+- Workbench 仅同步 `page_conversation_queue` operational capability 的最终消费门禁；Conversation action source 仍保持 disabled，不伪造新的业务 action source。
+- 每次成功写入生成 institution-attributed audit；目标 assignee 必须是当前 exact institution 的正式 Membership。
+- Governed readonly page `6 → 5`，Controlled Write page `3 → 4`，Controlled Create 仍为 `3`。
+- REAL_INBOUND / REAL_SEND / AI_AUTO_REPLY / AUTO_REACHOUT / WeCom/HIS mutation / Staging / Production 保持关闭。
+
 <!-- CUSTOMER_CONTROLLED_WRITE_HISTORY_20260818 -->
 
 ## 2026-08-18：客户受控写完整闭环

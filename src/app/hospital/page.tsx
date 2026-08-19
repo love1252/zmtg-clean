@@ -116,6 +116,15 @@ function selectGovernedWorkbenchProjection(
         );
       }
 
+      if (summary.key === 'page_conversation_queue') {
+        return !(
+          (summary.decision === 'operational' &&
+            summary.safeSummary === '会话队列可用') ||
+          (summary.decision === 'read_only' &&
+            summary.safeSummary === '会话队列仅供查看')
+        );
+      }
+
       if (summary.key === 'page_care_appointments') {
         return !(
           (summary.decision === 'operational' &&

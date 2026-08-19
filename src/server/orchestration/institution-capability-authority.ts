@@ -12,12 +12,12 @@ import {
 } from '@/modules/institution/server/institution-server-runtime';
 
 export const INSTITUTION_CAPABILITY_AUTHORITY_REVISION_V1 =
-  'r9-customer-controlled-write-v1' as const;
+  'r10-conversations-controlled-write-v1' as const;
 
 const AUTHORITY_STATUS_FRESHNESS_WINDOW_MS = 5_000;
 const WORKBENCH_READONLY_SUMMARY = '工作台仅供查看' as const;
 const CUSTOMER_LIST_OPERATIONAL_SUMMARY = '客户列表可用' as const;
-const CONVERSATION_QUEUE_READONLY_SUMMARY = '会话队列仅供查看' as const;
+const CONVERSATION_QUEUE_OPERATIONAL_SUMMARY = '会话队列可用' as const;
 const CARE_APPOINTMENTS_OPERATIONAL_SUMMARY = '预约管理可用' as const;
 const KNOWLEDGE_LIBRARY_READONLY_SUMMARY = '知识库资料仅供查看' as const;
 const ANALYTICS_OVERVIEW_READONLY_SUMMARY = '经营总览仅供查看' as const;
@@ -50,7 +50,7 @@ function buildCapabilityStatus(
       const customerListOperationalPilot = definition.key === 'page_customer_list';
       const customerCreateOperationalPilot =
         definition.key === 'action_customer_create';
-      const conversationQueueReadonlyPilot =
+      const conversationQueueOperationalPilot =
         definition.key === 'page_conversation_queue';
       const careAppointmentsOperationalPilot =
         definition.key === 'page_care_appointments';
@@ -69,13 +69,13 @@ function buildCapabilityStatus(
         definition.key === 'action_care_followup_create';
       const readonlyPilot =
         workbenchReadonlyPilot ||
-        conversationQueueReadonlyPilot ||
         knowledgeLibraryReadonlyPilot ||
         analyticsOverviewReadonlyPilot ||
         aiUsageReadonlyPilot ||
         auditReadonlyPilot;
       const operationalPilot =
-        customerListOperationalPilot
+        conversationQueueOperationalPilot
+        || customerListOperationalPilot
         || customerCreateOperationalPilot
         || careAppointmentsOperationalPilot
         || careAppointmentCreateOperationalPilot
@@ -99,7 +99,7 @@ function buildCapabilityStatus(
           connectionAvailability: 'not_required',
           dataReadiness: auditReadonlyPilot
             ? 'partial'
-            : conversationQueueReadonlyPilot
+            : conversationQueueOperationalPilot
                 || knowledgeLibraryReadonlyPilot
                 || analyticsOverviewReadonlyPilot
                 || aiUsageReadonlyPilot
@@ -123,11 +123,13 @@ function buildCapabilityStatus(
                 ? CARE_FOLLOWUPS_OPERATIONAL_SUMMARY
                 : careFollowupCreateOperationalPilot && institutionAuthorized
                   ? null
-                  : readonlyPilot && institutionAuthorized
+                  : conversationQueueOperationalPilot && institutionAuthorized
+                    ? CONVERSATION_QUEUE_OPERATIONAL_SUMMARY
+                    : readonlyPilot && institutionAuthorized
             ? auditReadonlyPilot
               ? AUDIT_READONLY_SUMMARY
-              : conversationQueueReadonlyPilot
-                  ? CONVERSATION_QUEUE_READONLY_SUMMARY
+              : conversationQueueOperationalPilot
+                  ? CONVERSATION_QUEUE_OPERATIONAL_SUMMARY
                   : knowledgeLibraryReadonlyPilot
                     ? KNOWLEDGE_LIBRARY_READONLY_SUMMARY
                     : analyticsOverviewReadonlyPilot

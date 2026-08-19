@@ -721,9 +721,6 @@ const inspectHistory = (rawHistory: unknown): HistoryInspectionResult => {
 
     for (let index = 0; index < facts.length; index += 1) {
       const fact = facts[index]!;
-      if (handlerReleased) {
-        return invalidHistory();
-      }
 
       if (fact.status === 'released' && fact.reasonCode === 'manual_reassign') {
         const replacement = facts[index + 1];
@@ -780,6 +777,7 @@ const inspectHistory = (rawHistory: unknown): HistoryInspectionResult => {
           return invalidHistory();
         }
         assignedIds.add(fact.assignmentId);
+        handlerReleased = false;
         activeAssignment = {
           assignmentId: fact.assignmentId,
           assigneeUserId: fact.assigneeUserId,
@@ -1030,7 +1028,7 @@ const assignWithReason = (
   if (command.sourceSegmentState !== 'awaiting_human') {
     return blocked('transition_not_allowed');
   }
-  if (inspected.activeAssignment !== null || inspected.handlerReleased) {
+  if (inspected.activeAssignment !== null) {
     return blocked('transition_not_allowed');
   }
   const revisionFailure = validateRevision(inspected, command.expectedRevision, 1);

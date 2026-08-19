@@ -45,7 +45,7 @@ describe('Hospital Conversation Queue readonly page', () => {
       "const TARGET_CAPABILITY_KEY = 'page_conversation_queue' as const;",
     );
     expect(source).toContain(
-      "capability.safeSummary !== '会话队列仅供查看'",
+      "capability.safeSummary !== '会话队列可用'",
     );
     expect(source).not.toMatch(/真实发送|自动发送|controlled create/iu);
   });
