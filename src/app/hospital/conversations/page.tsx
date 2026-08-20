@@ -14,7 +14,10 @@ import {
   type InstitutionNavigationAuthorizationV1,
 } from '@/modules/security/server/institution-section-guard';
 import { resolveInstitutionCapabilityAuthorityStatusV1 } from '@/server/orchestration/institution-capability-authority';
-import { readCurrentInstitutionConversationQueueV1 } from '@/server/orchestration/institution-conversation-queue-reader';
+import {
+  readCurrentInstitutionConversationQueueActionableIdsV1,
+  readCurrentInstitutionConversationQueueV1,
+} from '@/server/orchestration/institution-conversation-queue-reader';
 
 export const dynamic = 'force-dynamic';
 
@@ -105,6 +108,12 @@ export default async function HospitalConversationsPage() {
           kind: 'unavailable' as const,
         }))
       : null;
+  const actionableConversationIds =
+    result?.kind === 'ready'
+      ? await readCurrentInstitutionConversationQueueActionableIdsV1(
+          result.queue,
+        ).catch(() => Object.freeze([]) as readonly string[])
+      : Object.freeze([]) as readonly string[];
 
   return (
     <InstitutionNavigationShell
@@ -112,7 +121,10 @@ export default async function HospitalConversationsPage() {
       availableSectionIds={availableSectionIds}
     >
       {result?.kind === 'ready' ? (
-        <ConversationQueueReadonlyShell queue={result.queue} />
+        <ConversationQueueReadonlyShell
+          queue={result.queue}
+          actionableConversationIds={actionableConversationIds}
+        />
       ) : genuineBlocked || result?.kind === 'forbidden' ? (
         <InstitutionPageState
           kind="forbidden"

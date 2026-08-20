@@ -32,7 +32,13 @@ function formatInstant(value: string | null): string {
 
 export function ConversationQueueReadonlyShell({
   queue,
-}: Readonly<{ queue: ConversationQueueV1 }>) {
+  actionableConversationIds = [],
+}: Readonly<{
+  queue: ConversationQueueV1;
+  actionableConversationIds?: readonly string[];
+}>) {
+  const actionable = new Set(actionableConversationIds);
+
   return (
     <main className="mx-auto w-full max-w-6xl px-5 py-8">
       <header className="mb-6">
@@ -95,14 +101,16 @@ export function ConversationQueueReadonlyShell({
                   </dd>
                 </div>
               </dl>
-              <div className="mt-4">
-                <Link
-                  href={`/hospital/conversations/${encodeURIComponent(item.conversationId)}`}
-                  className="text-sm font-medium text-slate-700 underline underline-offset-4"
-                >
-                  打开会话处置
-                </Link>
-              </div>
+              {actionable.has(item.conversationId) ? (
+                <div className="mt-4">
+                  <Link
+                    href={`/hospital/conversations/${encodeURIComponent(item.conversationId)}`}
+                    className="text-sm font-medium text-slate-700 underline underline-offset-4"
+                  >
+                    打开会话处置
+                  </Link>
+                </div>
+              ) : null}
             </article>
           ))}
           {queue.pageInfo.hasMore ? (

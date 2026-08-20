@@ -1,6 +1,6 @@
 <!-- CONVERSATIONS_CONTROLLED_WRITE_NEXT_20260819 -->
 
-## Conversations 受控写闭环后的硬边界
+## 会话受控写闭环后的硬边界
 
 ```text
 CURRENT_COMPLETE_TARGET=CONVERSATIONS_CONTROLLED_WRITE_CLOSED_LOOP_RELEASE
@@ -21,8 +21,8 @@ STAGING_AUTHORIZED=false
 PRODUCTION_AUTHORIZED=false
 ```
 
-不得从 Conversations Controlled Write 自动扩展到真实消息接收/发送、AI 自动接待、
-自动触达、WeCom/HIS mutation、其他业务目标、Staging 或 Production。
+不得从会话受控写自动扩展到真实消息接收/发送、AI 自动接待、自动触达、
+WeCom/HIS 真实变更、其他业务目标、预发布或生产环境。
 
 <!-- CUSTOMER_CONTROLLED_WRITE_NEXT_20260818 -->
 

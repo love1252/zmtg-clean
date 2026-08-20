@@ -107,6 +107,11 @@ export function ConversationControlledDetailShell({
         record?: ConversationControlledDtoV1;
       };
 
+      if (response.status >= 500 && response.status <= 599) {
+        setMessage('操作结果尚未确认，请再次执行相同操作。');
+        return;
+      }
+
       pendingMutationRequest.current = null;
 
       if (!response.ok || payload.kind !== 'ready' || !payload.record) {

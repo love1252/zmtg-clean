@@ -1,16 +1,16 @@
 <!-- CONVERSATIONS_CONTROLLED_WRITE_HISTORY_20260819 -->
 
-## 2026-08-19：Conversations 受控写完整闭环
+## 2026-08-19：会话受控写完整闭环
 
-- 复用 `0049_conversations_formal_fact_persistence` 的 canonical Conversation persistence，不新增 Migration。
-- 发布 Formal Conversation Write Authorization 与 exact tenant/institution command runtime。
-- 分配/改派复用 append-only `conversation_assignments`，使用 assignment revision 并与 root/segment revision CAS 同事务收口。
-- 人工接管/解除接管、等待客户和人工结束复用现有 Conversation segment domain；解除接管返回 `awaiting_human`，不切回 AI 自动处理。
+- 复用 `0049_conversations_formal_fact_persistence` 的会话唯一正式持久化，不新增 Migration。
+- 发布正式会话写授权与精确 tenant + institution command runtime。
+- 分配/改派复用只追加的 `conversation_assignments`，使用分配 revision，并与根记录 / 会话段 revision CAS 在同一事务收口。
+- 人工接管/解除接管、等待客户和人工结束复用既有会话段领域模型；解除接管返回 `awaiting_human`，不切回 AI 自动处理。
 - `/api/v1/institution/conversations/[conversationId]` 仅开放受控 GET/PATCH；不开放 POST/DELETE、真实发送或真实入站。
-- `/hospital/conversations` 升级为 operational pilot，并通过 detail route 提供受控入口。
-- Workbench 仅同步 `page_conversation_queue` operational capability 的最终消费门禁；Conversation action source 仍保持 disabled，不伪造新的业务 action source。
-- 每次成功写入生成 institution-attributed audit；目标 assignee 必须是当前 exact institution 的正式 Membership。
-- Governed readonly page `6 → 5`，Controlled Write page `3 → 4`，Controlled Create 仍为 `3`。
+- `/hospital/conversations` 升级为 `operational / pilot_released`，并通过详情路由提供受控入口。
+- 工作台仅同步 `page_conversation_queue` 的 operational 能力最终消费门禁；会话 action source 仍保持 disabled，不伪造新的业务 action source。
+- 每次成功写入生成机构归属审计；目标处理人必须是当前精确机构的正式 Membership。
+- governed readonly page `6 → 5`，Controlled Write page `3 → 4`，Controlled Create 仍为 `3`。
 - REAL_INBOUND / REAL_SEND / AI_AUTO_REPLY / AUTO_REACHOUT / WeCom/HIS mutation / Staging / Production 保持关闭。
 
 <!-- CUSTOMER_CONTROLLED_WRITE_HISTORY_20260818 -->
