@@ -64,7 +64,9 @@ describe('Conversation controlled-write independent review regressions', () => {
     const attributionIndex = runtime.lastIndexOf(
       'await resolveInstitutionAuditWriterVerifiedAttributionV1({',
     );
-    const transactionIndex = runtime.indexOf('return await database.transaction(');
+    const transactionIndex = runtime.indexOf(
+      'const transactionResult = await database.transaction(',
+    );
     expect(attributionIndex).toBeGreaterThan(-1);
     expect(transactionIndex).toBeGreaterThan(attributionIndex);
 
@@ -134,7 +136,7 @@ describe('Conversation controlled-write independent review regressions', () => {
     expect(repository).toContain(
       'inArray(conversationAssignments.idempotencyKey, candidateKeys)',
     );
-    expect(repository).toContain('historicalMatches.length > 1');
+    expect(repository).toContain('exactMatches.length > 1');
     const executeSource = repository.slice(
       repository.indexOf('export async function executeConversationCommandV1('),
     );
@@ -322,6 +324,43 @@ describe('Conversation controlled-write independent review regressions', () => {
     expect(runtime).toContain('assignment.assigneeUserId === segment?.value.currentHandlerId');
     expect(runtime).not.toContain("kind: 'force_reassign'");
     expect(runtime).not.toContain("kind: 'admin_release'");
+  });
+
+
+  it('unified replay protocol keeps all four checkpoints and aggregate candidate resolution', () => {
+    const runtime = readFileSync(
+      resolve(process.cwd(), 'src/server/orchestration/institution-conversation-controlled-write-runtime.ts'),
+      'utf8',
+    );
+    const repository = readFileSync(
+      resolve(process.cwd(), 'src/modules/institution-conversations/server/conversation-command-repository.ts'),
+      'utf8',
+    );
+
+    expect(runtime).toContain('async function readConversationMutationReplayResultV1(');
+    expect(runtime).toContain('const preflightReplay = await readConversationMutationReplayResultV1(');
+    expect(runtime).toContain('const transactionReplay = await readConversationMutationReplayResultV1(');
+    expect(runtime).toContain("if (result.kind === 'replayed') {");
+    expect(runtime).toContain("if (result.kind === 'applied') {");
+    expect(runtime).toContain('return replayReadyMutationResult(');
+    expect(runtime).toContain("if (transactionResult.kind !== 'ready') {");
+    expect(runtime).toContain('const publicOperation = parsed.operation;');
+
+    const replayStart = repository.indexOf(
+      'export async function readConversationAssignmentReplayV1(',
+    );
+    const replayEnd = repository.indexOf(
+      'export async function executeConversationCommandV1(',
+      replayStart,
+    );
+    const replaySource = repository.slice(replayStart, replayEnd);
+    expect(replaySource).toContain('const activeCandidatePresent = (');
+    expect(replaySource).toContain('const currentWriteIntent = (');
+    expect(replaySource).toContain('const exactMatches: Array<Readonly<{');
+    expect(replaySource).toContain('if (exactMatches.length > 1)');
+    expect(replaySource).not.toContain(
+      "if (!occurredAt) return { kind: 'idempotency_conflict' };",
+    );
   });
 
 });

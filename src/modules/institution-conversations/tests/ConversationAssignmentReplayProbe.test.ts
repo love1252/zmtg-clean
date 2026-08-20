@@ -313,4 +313,95 @@ describe('Conversation assignment persisted replay probe', () => {
       ),
     ).resolves.toEqual({ kind: 'idempotency_conflict' });
   });
+
+  it('active mismatch does not mask one exact historical replay', async () => {
+    const requestId = 'request-active-mismatch-historical-exact-001';
+    const db = dbMock({
+      rootRow: root('segment-b', 'segment-a'),
+      segments: [
+        segment('segment-a', 1, 'closed'),
+        segment('segment-b', 2, 'awaiting_human'),
+      ],
+      assignments: [
+        assignFact({
+          requestId,
+          segmentId: 'segment-a',
+          assigneeUserId: 'consultant-old',
+        }),
+        assignFact({
+          requestId,
+          segmentId: 'segment-b',
+          assigneeUserId: 'consultant-new',
+        }),
+      ],
+    });
+
+    await expect(readConversationAssignmentReplayV1(db.database, {
+      ...probeInput(requestId, 'consultant-old'),
+      expectedConversationRevision: 1,
+      expectedAssignmentRevision: 0,
+    })).resolves.toMatchObject({
+      kind: 'replayed',
+      record: {
+        segment: {
+          value: { segmentId: 'segment-b' },
+          assignment: { assigneeUserId: 'consultant-new' },
+        },
+      },
+    });
+  });
+
+  it('active and historical exact matches remain ambiguous and fail closed', async () => {
+    const requestId = 'request-active-historical-double-exact-001';
+    const db = dbMock({
+      rootRow: root('segment-b', 'segment-a'),
+      segments: [
+        segment('segment-a', 1, 'closed'),
+        segment('segment-b', 2, 'awaiting_human'),
+      ],
+      assignments: [
+        assignFact({
+          requestId,
+          segmentId: 'segment-a',
+          assigneeUserId: 'consultant-a',
+        }),
+        assignFact({
+          requestId,
+          segmentId: 'segment-b',
+          assigneeUserId: 'consultant-a',
+        }),
+      ],
+    });
+
+    await expect(readConversationAssignmentReplayV1(db.database, {
+      ...probeInput(requestId, 'consultant-a'),
+      expectedConversationRevision: 1,
+      expectedAssignmentRevision: 0,
+    })).resolves.toEqual({ kind: 'idempotency_conflict' });
+  });
+
+  it('current root revision treats a historical exact candidate as legal later-segment reuse', async () => {
+    const requestId = 'request-current-write-intent-reuse-001';
+    const db = dbMock({
+      rootRow: root('segment-b', 'segment-a'),
+      segments: [
+        segment('segment-a', 1, 'closed'),
+        segment('segment-b', 2, 'awaiting_human'),
+      ],
+      assignments: [
+        assignFact({
+          requestId,
+          segmentId: 'segment-a',
+          assigneeUserId: 'consultant-a',
+        }),
+      ],
+    });
+
+    await expect(readConversationAssignmentReplayV1(db.database, {
+      ...probeInput(requestId, 'consultant-a'),
+      expectedConversationRevision: 4,
+      expectedAssignmentRevision: 0,
+    })).resolves.toEqual({ kind: 'not_replayed' });
+  });
+
 });

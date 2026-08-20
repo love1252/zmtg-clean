@@ -516,6 +516,87 @@ async function readConversationStateOperationReplayV1(
   return Object.freeze({ kind: 'replayed' as const, record });
 }
 
+async function readConversationMutationReplayResultV1(
+  database: TenantDatabase,
+  actor: Actor,
+  conversationId: string,
+  requestId: string,
+  expectedConversationRevision: number,
+  expectedSegmentRevision: number,
+  expectedAssignmentRevision: number,
+  operation: ConversationCommandOperationV1,
+): Promise<ConversationControlledMutationResultV1 | null> {
+  try {
+    if (isConversationStateOperationV1(operation)) {
+      const replay = await readConversationStateOperationReplayV1(
+        database,
+        actor,
+        conversationId,
+        requestId,
+        expectedConversationRevision,
+        expectedSegmentRevision,
+        expectedAssignmentRevision,
+        operation,
+      );
+      if (replay.kind === 'not_replayed') return null;
+      if (replay.kind === 'idempotency_conflict') {
+        return Object.freeze({
+          kind: 'conflict' as const,
+          code: 'idempotency_conflict',
+        });
+      }
+      if (replay.kind === 'not_found') {
+        return Object.freeze({ kind: 'not_found' as const });
+      }
+      if (replay.kind !== 'replayed') {
+        return Object.freeze({ kind: 'unavailable' as const });
+      }
+      return replayReadyMutationResult(
+        replay.record,
+        actor,
+        expectedConversationRevision,
+        expectedSegmentRevision,
+        expectedAssignmentRevision,
+        operation,
+      );
+    }
+
+    const replay = await readConversationAssignmentReplayV1(database, {
+      tenantId: actor.tenantId,
+      institutionId: actor.institutionId,
+      conversationId,
+      expectedConversationRevision,
+      expectedAssignmentRevision,
+      requestId,
+      actorUserId: actor.accountId,
+      operation,
+    });
+    if (replay.kind === 'not_replayed') return null;
+    if (replay.kind === 'idempotency_conflict') {
+      return Object.freeze({
+        kind: 'conflict' as const,
+        code: 'idempotency_conflict',
+      });
+    }
+    if (replay.kind === 'not_found_or_not_owned') {
+      return Object.freeze({ kind: 'not_found' as const });
+    }
+    if (replay.kind !== 'replayed') {
+      return Object.freeze({ kind: 'unavailable' as const });
+    }
+    return replayReadyMutationResult(
+      replay.record,
+      actor,
+      expectedConversationRevision,
+      expectedSegmentRevision,
+      expectedAssignmentRevision,
+      operation,
+    );
+  } catch {
+    return Object.freeze({ kind: 'unavailable' as const });
+  }
+}
+
 async function auditChanged(
   database: TenantDatabase,
   actor: Actor,
@@ -597,113 +678,20 @@ export async function mutateCurrentInstitutionConversationControlledV1(
   }
 
   const database = getDatabase();
-  let operation = parsed.operation;
+  const publicOperation = parsed.operation;
+  let operation = publicOperation;
 
-  if (isConversationStateOperationV1(operation)) {
-    const replay = await readConversationStateOperationReplayV1(
-      database,
-      actor,
-      conversationId,
-      parsed.requestId,
-      parsed.expectedConversationRevision,
-      parsed.expectedSegmentRevision,
-      parsed.expectedAssignmentRevision,
-      operation,
-    ).catch(() => null);
-    if (!replay) return Object.freeze({ kind: 'unavailable' as const });
-    if (replay.kind === 'replayed') {
-      return replayReadyMutationResult(
-        replay.record,
-        actor,
-        parsed.expectedConversationRevision,
-        parsed.expectedSegmentRevision,
-        parsed.expectedAssignmentRevision,
-        operation,
-      );
-    }
-    if (replay.kind === 'idempotency_conflict') {
-      return Object.freeze({
-        kind: 'conflict' as const,
-        code: 'idempotency_conflict',
-      });
-    }
-    if (replay.kind === 'not_found') {
-      return Object.freeze({ kind: 'not_found' as const });
-    }
-  }
-
-  if (operation.kind === 'assign' || operation.kind === 'reassign') {
-    const replay = await readConversationAssignmentReplayV1(database, {
-      tenantId: actor.tenantId,
-      institutionId: actor.institutionId,
-      conversationId,
-      expectedConversationRevision: parsed.expectedConversationRevision,
-      expectedAssignmentRevision: parsed.expectedAssignmentRevision,
-      requestId: parsed.requestId,
-      actorUserId: actor.accountId,
-      operation: {
-        kind: operation.kind,
-        assigneeUserId: operation.assigneeUserId,
-      },
-    }).catch(() => null);
-    if (!replay) return Object.freeze({ kind: 'unavailable' as const });
-    if (replay.kind === 'replayed') {
-      return replayReadyMutationResult(
-        replay.record,
-        actor,
-        parsed.expectedConversationRevision,
-        parsed.expectedSegmentRevision,
-        parsed.expectedAssignmentRevision,
-        operation,
-      );
-    }
-    if (replay.kind === 'idempotency_conflict') {
-      return Object.freeze({
-        kind: 'conflict' as const,
-        code: 'idempotency_conflict',
-      });
-    }
-    if (replay.kind === 'not_found_or_not_owned') {
-      return Object.freeze({ kind: 'not_found' as const });
-    }
-  }
-
-  if (
-    operation.kind === 'takeover'
-    || operation.kind === 'release_takeover'
-    || operation.kind === 'close'
-  ) {
-    const replay = await readConversationAssignmentReplayV1(database, {
-      tenantId: actor.tenantId,
-      institutionId: actor.institutionId,
-      conversationId,
-      expectedConversationRevision: parsed.expectedConversationRevision,
-      expectedAssignmentRevision: parsed.expectedAssignmentRevision,
-      requestId: parsed.requestId,
-      actorUserId: actor.accountId,
-      operation,
-    }).catch(() => null);
-    if (!replay) return Object.freeze({ kind: 'unavailable' as const });
-    if (replay.kind === 'replayed') {
-      return replayReadyMutationResult(
-        replay.record,
-        actor,
-        parsed.expectedConversationRevision,
-        parsed.expectedSegmentRevision,
-        parsed.expectedAssignmentRevision,
-        operation,
-      );
-    }
-    if (replay.kind === 'idempotency_conflict') {
-      return Object.freeze({
-        kind: 'conflict' as const,
-        code: 'idempotency_conflict',
-      });
-    }
-    if (replay.kind === 'not_found_or_not_owned') {
-      return Object.freeze({ kind: 'not_found' as const });
-    }
-  }
+  const preflightReplay = await readConversationMutationReplayResultV1(
+    database,
+    actor,
+    conversationId,
+    parsed.requestId,
+    parsed.expectedConversationRevision,
+    parsed.expectedSegmentRevision,
+    parsed.expectedAssignmentRevision,
+    publicOperation,
+  );
+  if (preflightReplay) return preflightReplay;
 
   let currentRecord: ConversationCommandRecordV1 | null;
   try {
@@ -717,6 +705,17 @@ export async function mutateCurrentInstitutionConversationControlledV1(
   }
 
   if (!currentRecord || !recordInActorScope(currentRecord, actor)) {
+    const replay = await readConversationMutationReplayResultV1(
+      database,
+      actor,
+      conversationId,
+      parsed.requestId,
+      parsed.expectedConversationRevision,
+      parsed.expectedSegmentRevision,
+      parsed.expectedAssignmentRevision,
+      publicOperation,
+    );
+    if (replay) return replay;
     return Object.freeze({ kind: 'not_found' as const });
   }
 
@@ -733,6 +732,17 @@ export async function mutateCurrentInstitutionConversationControlledV1(
       operation.assigneeUserId,
     ).catch(() => null);
     if (!assignee) {
+      const replay = await readConversationMutationReplayResultV1(
+        database,
+        actor,
+        conversationId,
+        parsed.requestId,
+        parsed.expectedConversationRevision,
+        parsed.expectedSegmentRevision,
+        parsed.expectedAssignmentRevision,
+        publicOperation,
+      );
+      if (replay) return replay;
       return Object.freeze({
         kind: 'invalid' as const,
         code: 'invalid_conversation_assignee',
@@ -751,6 +761,17 @@ export async function mutateCurrentInstitutionConversationControlledV1(
       institutionId: actor.institutionId,
     }).catch(() => null);
   if (!auditAttribution) {
+    const replay = await readConversationMutationReplayResultV1(
+      database,
+      actor,
+      conversationId,
+      parsed.requestId,
+      parsed.expectedConversationRevision,
+      parsed.expectedSegmentRevision,
+      parsed.expectedAssignmentRevision,
+      publicOperation,
+    );
+    if (replay) return replay;
     return Object.freeze({ kind: 'unavailable' as const });
   }
 
@@ -767,8 +788,20 @@ export async function mutateCurrentInstitutionConversationControlledV1(
     : randomUUID();
 
   try {
-    return await database.transaction(async (transactionDatabase) => {
+    const transactionResult = await database.transaction(async (transactionDatabase) => {
       const transactionDb = transactionDatabase as unknown as TenantDatabase;
+      const transactionReplay = await readConversationMutationReplayResultV1(
+        transactionDb,
+        actor,
+        conversationId,
+        parsed.requestId,
+        parsed.expectedConversationRevision,
+        parsed.expectedSegmentRevision,
+        parsed.expectedAssignmentRevision,
+        publicOperation,
+      );
+      if (transactionReplay) return transactionReplay;
+
       const result = await executeConversationCommandV1(transactionDb, {
         tenantId: actor.tenantId,
         institutionId: actor.institutionId,
@@ -797,6 +830,17 @@ export async function mutateCurrentInstitutionConversationControlledV1(
         });
       }
 
+      if (result.kind === 'replayed') {
+        return replayReadyMutationResult(
+          result.record,
+          actor,
+          parsed.expectedConversationRevision,
+          parsed.expectedSegmentRevision,
+          parsed.expectedAssignmentRevision,
+          publicOperation,
+        );
+      }
+
       if (result.kind === 'applied') {
         await auditChanged(
           transactionDb,
@@ -814,7 +858,35 @@ export async function mutateCurrentInstitutionConversationControlledV1(
         record: toDto(result.record, actor),
       });
     });
+
+    if (transactionResult.kind !== 'ready') {
+      const replay = await readConversationMutationReplayResultV1(
+        database,
+        actor,
+        conversationId,
+        parsed.requestId,
+        parsed.expectedConversationRevision,
+        parsed.expectedSegmentRevision,
+        parsed.expectedAssignmentRevision,
+        publicOperation,
+      );
+      if (replay) return replay;
+    }
+
+    return transactionResult;
   } catch (error) {
+    const replay = await readConversationMutationReplayResultV1(
+      database,
+      actor,
+      conversationId,
+      parsed.requestId,
+      parsed.expectedConversationRevision,
+      parsed.expectedSegmentRevision,
+      parsed.expectedAssignmentRevision,
+      publicOperation,
+    );
+    if (replay) return replay;
+
     if (isConversationCommandConflictError(error)) {
       return Object.freeze({ kind: 'conflict' as const, code: error.code });
     }

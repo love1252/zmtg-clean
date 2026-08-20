@@ -678,44 +678,48 @@ export async function readConversationAssignmentReplayV1(
     return code === input.operation.closeResultCode ? row.occurredAt : null;
   };
 
-  if (root.activeSegmentId) {
-    const activeRows = rowsBySegment.get(root.activeSegmentId);
-    if (activeRows) {
-      const occurredAt = replayOccurredAt(root.activeSegmentId, activeRows);
-      if (!occurredAt) return { kind: 'idempotency_conflict' };
-      const record = await readScopedState(database, {
-        tenantId: input.tenantId,
-        institutionId: input.institutionId,
-        conversationId: input.conversationId,
-      });
-      return record
-        ? { kind: 'replayed', record, occurredAt: iso(occurredAt) }
-        : { kind: 'not_found_or_not_owned' };
-    }
-  }
-
-  if (
-    root.activeSegmentId
+  const activeCandidatePresent = (
+    root.activeSegmentId !== null
+    && rowsBySegment.has(root.activeSegmentId)
+  );
+  const currentWriteIntent = (
+    root.activeSegmentId !== null
     && input.expectedConversationRevision !== undefined
     && input.expectedConversationRevision === root.revision
-  ) return { kind: 'not_replayed' };
+  );
 
-  const historicalMatches: Date[] = [];
-  let historicalCandidateCount = 0;
-  for (const [segmentId, rows] of rowsBySegment) {
-    if (segmentId === root.activeSegmentId) continue;
-    historicalCandidateCount += 1;
-    const occurredAt = replayOccurredAt(segmentId, rows);
-    if (occurredAt) historicalMatches.push(occurredAt);
-  }
-
-  if (historicalMatches.length > 1) return { kind: 'idempotency_conflict' };
-  if (historicalMatches.length === 0) {
-    return input.expectedConversationRevision !== undefined
-      && historicalCandidateCount > 0
+  if (currentWriteIntent) {
+    return activeCandidatePresent
       ? { kind: 'idempotency_conflict' }
       : { kind: 'not_replayed' };
   }
+
+  const exactMatches: Array<Readonly<{
+    segmentId: string;
+    occurredAt: Date;
+  }>> = [];
+  for (const [segmentId, rows] of rowsBySegment) {
+    const occurredAt = replayOccurredAt(segmentId, rows);
+    if (occurredAt) exactMatches.push({ segmentId, occurredAt });
+  }
+
+  if (exactMatches.length > 1) {
+    return { kind: 'idempotency_conflict' };
+  }
+  if (exactMatches.length === 0) {
+    if (activeCandidatePresent) {
+      return { kind: 'idempotency_conflict' };
+    }
+    return (
+      input.expectedConversationRevision !== undefined
+      && rowsBySegment.size > 0
+    )
+      ? { kind: 'idempotency_conflict' }
+      : { kind: 'not_replayed' };
+  }
+
+  const [match] = exactMatches;
+  if (!match) return { kind: 'idempotency_conflict' };
 
   const record = await readScopedState(database, {
     tenantId: input.tenantId,
@@ -726,7 +730,7 @@ export async function readConversationAssignmentReplayV1(
   return {
     kind: 'replayed',
     record,
-    occurredAt: iso(historicalMatches[0]!),
+    occurredAt: iso(match.occurredAt),
   };
 }
 
