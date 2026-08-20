@@ -375,6 +375,92 @@ export async function readScopedConversationCommandRecordV1(
   return readScopedState(database, input);
 }
 
+export async function readScopedConversationActionableIdsV1(
+  database: TenantDatabase,
+  input: Readonly<{
+    tenantId: string;
+    institutionId: string;
+    conversationIds: readonly string[];
+    actorUserId: string;
+  }>,
+): Promise<readonly string[]> {
+  const conversationIds = [...new Set(input.conversationIds)];
+  if (conversationIds.length === 0) return Object.freeze([]);
+
+  const rootRows = await database
+    .select({
+      conversationId: conversations.id,
+      activeSegmentId: conversations.activeSegmentId,
+    })
+    .from(conversations)
+    .where(and(
+      eq(conversations.tenantId, input.tenantId),
+      eq(conversations.institutionId, input.institutionId),
+      inArray(conversations.id, conversationIds),
+    ));
+
+  const activeSegmentByConversation = new Map<string, string>();
+  for (const row of rootRows) {
+    if (row.activeSegmentId !== null && conversationIds.includes(row.conversationId)) {
+      activeSegmentByConversation.set(row.conversationId, row.activeSegmentId);
+    }
+  }
+  if (activeSegmentByConversation.size === 0) return Object.freeze([]);
+
+  const activeConversationIds = [...activeSegmentByConversation.keys()];
+  const activeSegmentIds = [...new Set(activeSegmentByConversation.values())];
+  const assignmentRows = await database
+    .select()
+    .from(conversationAssignments)
+    .where(and(
+      eq(conversationAssignments.tenantId, input.tenantId),
+      eq(conversationAssignments.institutionId, input.institutionId),
+      inArray(conversationAssignments.conversationId, activeConversationIds),
+      inArray(conversationAssignments.segmentId, activeSegmentIds),
+    ))
+    .orderBy(
+      asc(conversationAssignments.conversationId),
+      asc(conversationAssignments.segmentId),
+      asc(conversationAssignments.revision),
+    );
+
+  const rowsByConversation = new Map<string, AssignmentRow[]>();
+  for (const row of assignmentRows) {
+    const activeSegmentId = activeSegmentByConversation.get(row.conversationId);
+    if (!activeSegmentId || row.segmentId !== activeSegmentId) continue;
+    const rows = rowsByConversation.get(row.conversationId) ?? [];
+    rows.push(row);
+    rowsByConversation.set(row.conversationId, rows);
+  }
+
+  const actionable = new Set<string>();
+  for (const conversationId of activeConversationIds) {
+    const activeSegmentId = activeSegmentByConversation.get(conversationId);
+    if (!activeSegmentId) continue;
+    const rows = rowsByConversation.get(conversationId) ?? [];
+    const projected = projectConversationAssignments(
+      toDomainHistory(rows),
+      domainTarget({
+        tenantId: input.tenantId,
+        institutionId: input.institutionId,
+        conversationId,
+        segmentId: activeSegmentId,
+      }),
+    );
+    if (projected.kind !== 'projected') {
+      throw new Error('conversation_assignment_batch_projection_unavailable');
+    }
+    const assignment = activeAssignment(projected.projection, rows);
+    if (
+      assignment
+      && assignment.assigneeUserId === input.actorUserId
+      && (assignment.status === 'assigned' || assignment.status === 'accepted')
+    ) actionable.add(conversationId);
+  }
+
+  return Object.freeze(conversationIds.filter((id) => actionable.has(id)));
+}
+
 function serverOccurredAt(
   root: RootRow,
   segment: SegmentRow,

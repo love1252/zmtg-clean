@@ -3,7 +3,7 @@ import {
   type ConversationQueueReaderResultV1,
   type ConversationQueueV1,
 } from '@/modules/institution-conversations/application/conversation-queue-reader';
-import { readScopedConversationCommandRecordV1 } from '@/modules/institution-conversations/server/conversation-command-repository';
+import { readScopedConversationActionableIdsV1 } from '@/modules/institution-conversations/server/conversation-command-repository';
 import { createConversationQueueRepository } from '@/modules/institution-conversations/server/conversation-queue-repository';
 import { getDatabase } from '@/server/db/client';
 import {
@@ -49,27 +49,12 @@ export async function readCurrentInstitutionConversationQueueActionableIdsV1(
       return Object.freeze(queue.records.map((item) => item.conversationId));
     }
 
-    const database = getDatabase();
-    const resolved = await Promise.all(
-      queue.records.map(async (item) => {
-        const record = await readScopedConversationCommandRecordV1(database, {
-          tenantId: actor.tenantId,
-          institutionId: actor.institutionId,
-          conversationId: item.conversationId,
-        });
-        const assignment = record?.segment?.assignment ?? null;
-        if (
-          !assignment
-          || assignment.assigneeUserId !== actor.accountId
-          || (assignment.status !== 'assigned' && assignment.status !== 'accepted')
-        ) return null;
-        return item.conversationId;
-      }),
-    );
-
-    return Object.freeze(
-      resolved.filter((conversationId): conversationId is string => conversationId !== null),
-    );
+    return await readScopedConversationActionableIdsV1(getDatabase(), {
+      tenantId: actor.tenantId,
+      institutionId: actor.institutionId,
+      conversationIds: queue.records.map((item) => item.conversationId),
+      actorUserId: actor.accountId,
+    });
   } catch {
     return EMPTY_ACTIONABLE_CONVERSATION_IDS;
   }

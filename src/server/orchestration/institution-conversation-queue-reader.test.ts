@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   createReader: vi.fn(),
   resolveWriteAuthorization: vi.fn(),
   consumeWriteAuthorization: vi.fn(),
-  readCommandRecord: vi.fn(),
+  readActionableIds: vi.fn(),
 }));
 
 vi.mock('@/server/orchestration/institution-conversation-read-authorization', () => ({
@@ -28,7 +28,7 @@ vi.mock('@/server/orchestration/institution-conversation-write-authorization', (
 }));
 
 vi.mock('@/modules/institution-conversations/server/conversation-command-repository', () => ({
-  readScopedConversationCommandRecordV1: mocks.readCommandRecord,
+  readScopedConversationActionableIdsV1: mocks.readActionableIds,
 }));
 
 vi.mock('@/server/db/client', () => ({
@@ -75,6 +75,7 @@ describe('Institution conversation queue orchestration', () => {
       institutionId: 'institution-001',
       observedAt: '2026-08-20T01:00:00.000Z',
     });
+    mocks.readActionableIds.mockResolvedValue([]);
     reader.read.mockResolvedValue({
       kind: 'ready',
       queue: {
@@ -153,10 +154,10 @@ describe('Institution conversation queue orchestration', () => {
     await expect(
       readCurrentInstitutionConversationQueueActionableIdsV1(queue),
     ).resolves.toEqual(['conversation-1', 'conversation-2']);
-    expect(mocks.readCommandRecord).not.toHaveBeenCalled();
+    expect(mocks.readActionableIds).not.toHaveBeenCalled();
   });
 
-  it('普通角色仅对当前本人 active assignment 渲染受控详情入口', async () => {
+  it('普通角色通过单次 batch reader 解析本人 active assignment 可处置范围', async () => {
     const queue = {
       contractVersion: 'v1' as const,
       dataState: 'ready' as const,
@@ -166,28 +167,35 @@ describe('Institution conversation queue orchestration', () => {
       ],
       pageInfo: { pageSize: 100 as const, hasMore: false },
     } as never;
-    mocks.readCommandRecord
-      .mockResolvedValueOnce({
-        segment: {
-          assignment: {
-            assigneeUserId: 'account-001',
-            status: 'accepted',
-          },
-        },
-      })
-      .mockResolvedValueOnce({
-        segment: {
-          assignment: {
-            assigneeUserId: 'account-999',
-            status: 'accepted',
-          },
-        },
-      });
+    mocks.readActionableIds.mockResolvedValueOnce(['conversation-self']);
 
-    await expect(
-      readCurrentInstitutionConversationQueueActionableIdsV1(queue),
-    ).resolves.toEqual(['conversation-self']);
-    expect(mocks.readCommandRecord).toHaveBeenCalledTimes(2);
+    await expect(readCurrentInstitutionConversationQueueActionableIdsV1(queue))
+      .resolves.toEqual(['conversation-self']);
+    expect(mocks.readActionableIds).toHaveBeenCalledTimes(1);
+    expect(mocks.readActionableIds).toHaveBeenCalledWith(database, {
+      tenantId: 'tenant-001',
+      institutionId: 'institution-001',
+      conversationIds: ['conversation-self', 'conversation-other'],
+      actorUserId: 'account-001',
+    });
+  });
+
+  it('100 条普通角色队列仍只调用一次 batch actionability reader', async () => {
+    const records = Array.from({ length: 100 }, (_, index) => ({
+      conversationId: `conversation-${String(index + 1).padStart(3, '0')}`,
+    }));
+    const queue = {
+      contractVersion: 'v1' as const,
+      dataState: 'ready' as const,
+      records,
+      pageInfo: { pageSize: 100 as const, hasMore: false },
+    } as never;
+    mocks.readActionableIds.mockResolvedValueOnce(['conversation-001']);
+
+    await expect(readCurrentInstitutionConversationQueueActionableIdsV1(queue))
+      .resolves.toEqual(['conversation-001']);
+    expect(mocks.readActionableIds).toHaveBeenCalledTimes(1);
+    expect(mocks.readActionableIds.mock.calls[0]?.[1].conversationIds).toHaveLength(100);
   });
 
   it('写授权不可用时 fail-closed 隐藏全部详情入口', async () => {
@@ -202,6 +210,6 @@ describe('Institution conversation queue orchestration', () => {
     await expect(
       readCurrentInstitutionConversationQueueActionableIdsV1(queue),
     ).resolves.toEqual([]);
-    expect(mocks.readCommandRecord).not.toHaveBeenCalled();
+    expect(mocks.readActionableIds).not.toHaveBeenCalled();
   });
 });

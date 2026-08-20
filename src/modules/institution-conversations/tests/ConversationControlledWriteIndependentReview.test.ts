@@ -257,4 +257,41 @@ describe('Conversation controlled-write independent review regressions', () => {
     );
   });
 
+
+  it('queue actionability remains fixed-query batch scoped', () => {
+    const queueReader = readFileSync(
+      resolve(process.cwd(), 'src/server/orchestration/institution-conversation-queue-reader.ts'),
+      'utf8',
+    );
+    const repository = readFileSync(
+      resolve(process.cwd(), 'src/modules/institution-conversations/server/conversation-command-repository.ts'),
+      'utf8',
+    );
+
+    const queueStart = queueReader.indexOf(
+      'export async function readCurrentInstitutionConversationQueueActionableIdsV1(',
+    );
+    const queueEnd = queueReader.indexOf(
+      'export async function readCurrentInstitutionConversationQueueV1(',
+      queueStart,
+    );
+    const queueSource = queueReader.slice(queueStart, queueEnd);
+    expect(queueSource).toContain('readScopedConversationActionableIdsV1(getDatabase(), {');
+    expect(queueSource).not.toContain('Promise.all(');
+    expect(queueSource).not.toContain('readScopedConversationCommandRecordV1');
+
+    const batchStart = repository.indexOf(
+      'export async function readScopedConversationActionableIdsV1(',
+    );
+    const batchEnd = repository.indexOf('function serverOccurredAt(', batchStart);
+    const batchSource = repository.slice(batchStart, batchEnd);
+    expect(batchSource.match(/\.from\(/gu) ?? []).toHaveLength(2);
+    expect(batchSource).toContain('.from(conversations)');
+    expect(batchSource).toContain('.from(conversationAssignments)');
+    expect(batchSource).not.toContain('.from(conversationSegments)');
+    expect(batchSource).not.toContain('.from(conversationRisks)');
+    expect(batchSource).toContain('projectConversationAssignments(');
+    expect(batchSource).toContain('assignment.assigneeUserId === input.actorUserId');
+  });
+
 });
