@@ -208,6 +208,12 @@ export type SegmentRiskSetSnapshot =
       validUntil: string;
       histories: readonly ConversationRiskHistory[];
       currentClinicalClosureChecks: readonly CurrentClinicalClosureCheck[];
+      /**
+       * Server-owned completeness assertion used only when an exact canonical
+       * risk query proves that this segment has zero risk facts.
+       * An ordinary empty histories array remains fail-closed.
+       */
+      completeness?: 'authoritative_empty';
     }>;
 
 export type SegmentManualCloseInput = Readonly<{
@@ -275,6 +281,10 @@ const readyRiskSetKeys = [
   'validUntil',
   'histories',
   'currentClinicalClosureChecks',
+] as const;
+const readyAuthoritativeEmptyRiskSetKeys = [
+  ...readyRiskSetKeys,
+  'completeness',
 ] as const;
 const manualCloseInputKeys = [
   'operatorId',
@@ -644,6 +654,52 @@ export function acceptHumanHandling(
     state: 'human_handling',
     currentHandlerId: input.operatorId,
     everHumanHandled: true,
+  });
+}
+
+export function releaseHumanHandling(
+  segment: Readonly<ConversationSegment>,
+  input: Readonly<{ operatorId: string; occurredAt: string }>,
+): SegmentTransitionResult {
+  if (segment.state === 'closed') {
+    return blocked('segment_closed');
+  }
+  if (segment.state !== 'human_handling' && segment.state !== 'waiting_customer') {
+    return blocked('transition_not_allowed');
+  }
+  const handlerFailure = operatorIsCurrentHandler(segment, input.operatorId);
+  if (handlerFailure) {
+    return handlerFailure;
+  }
+  return transition(segment, input.occurredAt, {
+    state: 'awaiting_human',
+    currentHandlerId: null,
+    waitingAfterCustomerMessageId: null,
+    waitingAfterCustomerMessageAt: null,
+    waitingAfterInboundRevision: null,
+  });
+}
+
+export function recoverHumanHandlingForReassignment(
+  segment: Readonly<ConversationSegment>,
+  input: Readonly<{ expectedHandlerId: string; occurredAt: string }>,
+): SegmentTransitionResult {
+  if (segment.state === 'closed') return blocked('segment_closed');
+  if (segment.state !== 'human_handling' && segment.state !== 'waiting_customer') {
+    return blocked('transition_not_allowed');
+  }
+  if (!safeIdentifierPattern.test(input.expectedHandlerId)) {
+    return blocked('invalid_identifier');
+  }
+  if (segment.currentHandlerId !== input.expectedHandlerId) {
+    return blocked('operator_not_active_assignee');
+  }
+  return transition(segment, input.occurredAt, {
+    state: 'awaiting_human',
+    currentHandlerId: null,
+    waitingAfterCustomerMessageId: null,
+    waitingAfterCustomerMessageAt: null,
+    waitingAfterInboundRevision: null,
   });
 }
 
@@ -1121,6 +1177,7 @@ export function closeConversationSegmentManually(
 
     const riskSet = captureOneOfExactDataRecords(capturedInput.riskSet, [
       readyRiskSetKeys,
+      readyAuthoritativeEmptyRiskSetKeys,
       unknownReadinessKeys,
     ]);
     if (riskSet === null || riskSet.readiness !== 'ready') {
@@ -1149,19 +1206,30 @@ export function closeConversationSegmentManually(
     ) {
       return blocked('risk_status_unknown');
     }
-    const riskGuard = checkConversationRiskSetForNormalClose(
-      riskSet.histories as readonly ConversationRiskHistory[],
-      {
-        tenantId: segment.tenantId,
-        institutionId: segment.institutionId,
-        conversationId: segment.conversationId,
-        segmentId: segment.segmentId,
-        decisionAt: capturedInput.occurredAt,
-        currentClinicalClosureChecks: riskSet.currentClinicalClosureChecks as readonly CurrentClinicalClosureCheck[],
-      },
-    );
-    if (riskGuard.kind === 'blocked') {
-      return blocked(riskGuard.code);
+    const authoritativeEmpty = Object.hasOwn(riskSet, 'completeness');
+    if (authoritativeEmpty) {
+      if (
+        riskSet.completeness !== 'authoritative_empty'
+        || riskSet.histories.length !== 0
+        || riskSet.currentClinicalClosureChecks.length !== 0
+      ) {
+        return blocked('risk_set_completeness_unverified');
+      }
+    } else {
+      const riskGuard = checkConversationRiskSetForNormalClose(
+        riskSet.histories as readonly ConversationRiskHistory[],
+        {
+          tenantId: segment.tenantId,
+          institutionId: segment.institutionId,
+          conversationId: segment.conversationId,
+          segmentId: segment.segmentId,
+          decisionAt: capturedInput.occurredAt,
+          currentClinicalClosureChecks: riskSet.currentClinicalClosureChecks as readonly CurrentClinicalClosureCheck[],
+        },
+      );
+      if (riskGuard.kind === 'blocked') {
+        return blocked(riskGuard.code);
+      }
     }
     return applied({
       ...segment,

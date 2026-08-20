@@ -430,6 +430,17 @@ const isAssignmentAdministrator = (role: ConversationAssignmentActorRole): boole
   role === 'tenant_admin' || role === 'tenant_operator'
 );
 
+const isAdministrativeReassignSourceState = (
+  sourceSegmentState: ConversationSegmentState,
+  activeStatus: ActiveAssignment['status'],
+): boolean => (
+  (sourceSegmentState === 'awaiting_human' && activeStatus === 'assigned')
+  || (
+    (sourceSegmentState === 'human_handling' || sourceSegmentState === 'waiting_customer')
+    && activeStatus === 'accepted'
+  )
+);
+
 const factTarget = (fact: ConversationAssignmentFact): ConversationAssignmentTarget => ({
   tenantId: fact.tenantId,
   institutionId: fact.institutionId,
@@ -721,9 +732,6 @@ const inspectHistory = (rawHistory: unknown): HistoryInspectionResult => {
 
     for (let index = 0; index < facts.length; index += 1) {
       const fact = facts[index]!;
-      if (handlerReleased) {
-        return invalidHistory();
-      }
 
       if (fact.status === 'released' && fact.reasonCode === 'manual_reassign') {
         const replacement = facts[index + 1];
@@ -736,11 +744,13 @@ const inspectHistory = (rawHistory: unknown): HistoryInspectionResult => {
           || replacement.occurredAt !== fact.occurredAt
           || replacement.actorUserId !== fact.actorUserId
           || replacement.actorRole !== fact.actorRole
-          || replacement.sourceSegmentState !== 'awaiting_human'
-          || fact.sourceSegmentState !== 'awaiting_human'
+          || replacement.sourceSegmentState !== fact.sourceSegmentState
           || !isAssignmentAdministrator(fact.actorRole)
           || activeAssignment === null
-          || activeAssignment.status !== 'assigned'
+          || !isAdministrativeReassignSourceState(
+            fact.sourceSegmentState,
+            activeAssignment.status,
+          )
           || fact.assignmentId !== activeAssignment.assignmentId
           || fact.assigneeUserId !== activeAssignment.assigneeUserId
           || fact.assigneeRole !== activeAssignment.assigneeRole
@@ -780,6 +790,7 @@ const inspectHistory = (rawHistory: unknown): HistoryInspectionResult => {
           return invalidHistory();
         }
         assignedIds.add(fact.assignmentId);
+        handlerReleased = false;
         activeAssignment = {
           assignmentId: fact.assignmentId,
           assigneeUserId: fact.assigneeUserId,
@@ -795,7 +806,6 @@ const inspectHistory = (rawHistory: unknown): HistoryInspectionResult => {
           || fact.assigneeUserId !== activeAssignment.assigneeUserId
           || fact.assigneeRole !== activeAssignment.assigneeRole
           || fact.actorUserId !== activeAssignment.assigneeUserId
-          || fact.actorRole !== activeAssignment.assigneeRole
           || fact.reasonCode !== activeAssignment.originReasonCode
           || fact.sourceSegmentState !== 'awaiting_human'
         ) {
@@ -816,7 +826,6 @@ const inspectHistory = (rawHistory: unknown): HistoryInspectionResult => {
           || fact.assigneeUserId !== activeAssignment.assigneeUserId
           || fact.assigneeRole !== activeAssignment.assigneeRole
           || fact.actorUserId !== activeAssignment.assigneeUserId
-          || fact.actorRole !== activeAssignment.assigneeRole
           || fact.reasonCode !== 'assignee_reject'
           || fact.sourceSegmentState !== 'awaiting_human'
         ) {
@@ -834,7 +843,6 @@ const inspectHistory = (rawHistory: unknown): HistoryInspectionResult => {
           || fact.assigneeUserId !== activeAssignment.assigneeUserId
           || fact.assigneeRole !== activeAssignment.assigneeRole
           || fact.actorUserId !== activeAssignment.assigneeUserId
-          || fact.actorRole !== activeAssignment.assigneeRole
         ) {
           return invalidHistory();
         }
@@ -877,7 +885,6 @@ const matchesCommonFact = (
   && fact.revision === command.expectedRevision + 1
   && fact.status === expectedStatus
   && fact.actorUserId === command.actorUserId
-  && fact.actorRole === command.actorRole
   && fact.reasonCode === expectedReasonCode
   && fact.sourceSegmentState === command.sourceSegmentState
   && fact.occurredAt === command.occurredAt
@@ -1018,6 +1025,7 @@ const assignWithReason = (
     return facts.length === 1
       && fact !== undefined
       && matchesCommonFact(fact, command, 'assigned', reasonCode)
+      && fact.actorRole === command.actorRole
       && fact.assigneeUserId === command.assigneeUserId
       && fact.assigneeRole === command.assigneeRole;
   });
@@ -1030,7 +1038,7 @@ const assignWithReason = (
   if (command.sourceSegmentState !== 'awaiting_human') {
     return blocked('transition_not_allowed');
   }
-  if (inspected.activeAssignment !== null || inspected.handlerReleased) {
+  if (inspected.activeAssignment !== null) {
     return blocked('transition_not_allowed');
   }
   const revisionFailure = validateRevision(inspected, command.expectedRevision, 1);
@@ -1159,7 +1167,6 @@ const decideAssignment = (
     active === null
     || active.assignmentId !== command.assignmentId
     || active.assigneeUserId !== command.actorUserId
-    || active.assigneeRole !== command.actorRole
   ) {
     return blocked('actor_not_assignee');
   }
@@ -1286,14 +1293,14 @@ export function reassignConversationSegment(
   if (!isAssignmentAdministrator(command.actorRole)) {
     return blocked('actor_role_not_allowed');
   }
-  if (command.sourceSegmentState !== 'awaiting_human') {
-    return blocked('transition_not_allowed');
-  }
   const active = inspected.activeAssignment;
   if (
     active === null
-    || active.status !== 'assigned'
     || active.assignmentId !== command.currentAssignmentId
+    || !isAdministrativeReassignSourceState(
+      command.sourceSegmentState,
+      active.status,
+    )
   ) {
     return blocked('transition_not_allowed');
   }

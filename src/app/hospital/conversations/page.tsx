@@ -14,7 +14,10 @@ import {
   type InstitutionNavigationAuthorizationV1,
 } from '@/modules/security/server/institution-section-guard';
 import { resolveInstitutionCapabilityAuthorityStatusV1 } from '@/server/orchestration/institution-capability-authority';
-import { readCurrentInstitutionConversationQueueV1 } from '@/server/orchestration/institution-conversation-queue-reader';
+import {
+  readCurrentInstitutionConversationQueueActionableIdsV1,
+  readCurrentInstitutionConversationQueueV1,
+} from '@/server/orchestration/institution-conversation-queue-reader';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,13 +51,13 @@ function resolveExactCapabilityState(status: CapabilityStatusV1 | null): PageCap
   const capability = capabilities[0];
   const partition = partitions[0];
   if (
-    capability?.decision !== 'read_only'
+    capability?.decision !== 'operational'
     || capability.dimensions.codeMaturity !== 'verified'
     || capability.dimensions.institutionAuthorization !== 'authorized'
     || capability.dimensions.connectionAvailability !== 'not_required'
     || capability.dimensions.dataReadiness !== 'ready'
     || capability.dimensions.productionRelease !== 'pilot_released'
-    || capability.safeSummary !== '会话队列仅供查看'
+    || capability.safeSummary !== '会话队列可用'
     || partition?.readiness !== 'ready'
     || partition.failureCode !== null
   ) return 'capability_off';
@@ -105,6 +108,12 @@ export default async function HospitalConversationsPage() {
           kind: 'unavailable' as const,
         }))
       : null;
+  const actionableConversationIds =
+    result?.kind === 'ready'
+      ? await readCurrentInstitutionConversationQueueActionableIdsV1(
+          result.queue,
+        ).catch(() => Object.freeze([]) as readonly string[])
+      : Object.freeze([]) as readonly string[];
 
   return (
     <InstitutionNavigationShell
@@ -112,7 +121,10 @@ export default async function HospitalConversationsPage() {
       availableSectionIds={availableSectionIds}
     >
       {result?.kind === 'ready' ? (
-        <ConversationQueueReadonlyShell queue={result.queue} />
+        <ConversationQueueReadonlyShell
+          queue={result.queue}
+          actionableConversationIds={actionableConversationIds}
+        />
       ) : genuineBlocked || result?.kind === 'forbidden' ? (
         <InstitutionPageState
           kind="forbidden"
@@ -128,7 +140,7 @@ export default async function HospitalConversationsPage() {
         <InstitutionPageState
           kind="unavailable"
           title="会话队列暂时不可用"
-          description="当前未获得可信的正式会话队列结果；发送、接管、改派、结束和自动触达入口保持隐藏。"
+          description="当前未获得可信的正式会话队列结果；外部消息与自动化能力保持关闭。"
         />
       )}
     </InstitutionNavigationShell>

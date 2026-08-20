@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const authorizationHandle = Object.freeze({});
+const writeAuthorizationHandle = Object.freeze({});
 const source = Object.freeze({ list: vi.fn() });
 const reader = Object.freeze({ read: vi.fn() });
 const database = Object.freeze({ kind: 'database' });
@@ -11,11 +12,23 @@ const mocks = vi.hoisted(() => ({
   getDatabase: vi.fn(),
   createRepository: vi.fn(),
   createReader: vi.fn(),
+  resolveWriteAuthorization: vi.fn(),
+  consumeWriteAuthorization: vi.fn(),
+  readActionableIds: vi.fn(),
 }));
 
 vi.mock('@/server/orchestration/institution-conversation-read-authorization', () => ({
   resolveInstitutionConversationReadAuthorizationV1: mocks.resolveAuthorization,
   consumeInstitutionConversationReadAuthorizationV1: mocks.consumeAuthorization,
+}));
+
+vi.mock('@/server/orchestration/institution-conversation-write-authorization', () => ({
+  resolveInstitutionConversationWriteAuthorizationV1: mocks.resolveWriteAuthorization,
+  consumeInstitutionConversationWriteAuthorizationV1: mocks.consumeWriteAuthorization,
+}));
+
+vi.mock('@/modules/institution-conversations/server/conversation-command-repository', () => ({
+  readScopedConversationActionableIdsV1: mocks.readActionableIds,
 }));
 
 vi.mock('@/server/db/client', () => ({
@@ -31,6 +44,7 @@ vi.mock('@/modules/institution-conversations/application/conversation-queue-read
 }));
 
 import {
+  readCurrentInstitutionConversationQueueActionableIdsV1,
   readCurrentInstitutionConversationQueueV1,
 } from '@/server/orchestration/institution-conversation-queue-reader';
 
@@ -49,6 +63,19 @@ describe('Institution conversation queue orchestration', () => {
     mocks.getDatabase.mockReturnValue(database);
     mocks.createRepository.mockReturnValue(source);
     mocks.createReader.mockReturnValue(reader);
+    mocks.resolveWriteAuthorization.mockResolvedValue({
+      kind: 'allowed',
+      authorization: writeAuthorizationHandle,
+    });
+    mocks.consumeWriteAuthorization.mockReturnValue({
+      accountId: 'account-001',
+      displayName: '当前处理人',
+      role: 'customer_service',
+      tenantId: 'tenant-001',
+      institutionId: 'institution-001',
+      observedAt: '2026-08-20T01:00:00.000Z',
+    });
+    mocks.readActionableIds.mockResolvedValue([]);
     reader.read.mockResolvedValue({
       kind: 'ready',
       queue: {
@@ -103,5 +130,86 @@ describe('Institution conversation queue orchestration', () => {
     await expect(readCurrentInstitutionConversationQueueV1()).resolves.toEqual({
       kind: 'unavailable',
     });
+  });
+
+  it('管理角色对当前正式队列记录均可进入受控详情', async () => {
+    mocks.consumeWriteAuthorization.mockReturnValueOnce({
+      accountId: 'account-admin',
+      displayName: '管理员',
+      role: 'tenant_operator',
+      tenantId: 'tenant-001',
+      institutionId: 'institution-001',
+      observedAt: '2026-08-20T01:00:00.000Z',
+    });
+    const queue = {
+      contractVersion: 'v1' as const,
+      dataState: 'ready' as const,
+      records: [
+        { conversationId: 'conversation-1' },
+        { conversationId: 'conversation-2' },
+      ],
+      pageInfo: { pageSize: 100 as const, hasMore: false },
+    } as never;
+
+    await expect(
+      readCurrentInstitutionConversationQueueActionableIdsV1(queue),
+    ).resolves.toEqual(['conversation-1', 'conversation-2']);
+    expect(mocks.readActionableIds).not.toHaveBeenCalled();
+  });
+
+  it('普通角色通过单次 batch reader 解析本人 active assignment 可处置范围', async () => {
+    const queue = {
+      contractVersion: 'v1' as const,
+      dataState: 'ready' as const,
+      records: [
+        { conversationId: 'conversation-self' },
+        { conversationId: 'conversation-other' },
+      ],
+      pageInfo: { pageSize: 100 as const, hasMore: false },
+    } as never;
+    mocks.readActionableIds.mockResolvedValueOnce(['conversation-self']);
+
+    await expect(readCurrentInstitutionConversationQueueActionableIdsV1(queue))
+      .resolves.toEqual(['conversation-self']);
+    expect(mocks.readActionableIds).toHaveBeenCalledTimes(1);
+    expect(mocks.readActionableIds).toHaveBeenCalledWith(database, {
+      tenantId: 'tenant-001',
+      institutionId: 'institution-001',
+      conversationIds: ['conversation-self', 'conversation-other'],
+      actorUserId: 'account-001',
+    });
+  });
+
+  it('100 条普通角色队列仍只调用一次 batch actionability reader', async () => {
+    const records = Array.from({ length: 100 }, (_, index) => ({
+      conversationId: `conversation-${String(index + 1).padStart(3, '0')}`,
+    }));
+    const queue = {
+      contractVersion: 'v1' as const,
+      dataState: 'ready' as const,
+      records,
+      pageInfo: { pageSize: 100 as const, hasMore: false },
+    } as never;
+    mocks.readActionableIds.mockResolvedValueOnce(['conversation-001']);
+
+    await expect(readCurrentInstitutionConversationQueueActionableIdsV1(queue))
+      .resolves.toEqual(['conversation-001']);
+    expect(mocks.readActionableIds).toHaveBeenCalledTimes(1);
+    expect(mocks.readActionableIds.mock.calls[0]?.[1].conversationIds).toHaveLength(100);
+  });
+
+  it('写授权不可用时 fail-closed 隐藏全部详情入口', async () => {
+    mocks.resolveWriteAuthorization.mockResolvedValueOnce({ kind: 'unavailable' });
+    const queue = {
+      contractVersion: 'v1' as const,
+      dataState: 'ready' as const,
+      records: [{ conversationId: 'conversation-1' }],
+      pageInfo: { pageSize: 100 as const, hasMore: false },
+    } as never;
+
+    await expect(
+      readCurrentInstitutionConversationQueueActionableIdsV1(queue),
+    ).resolves.toEqual([]);
+    expect(mocks.readActionableIds).not.toHaveBeenCalled();
   });
 });

@@ -319,6 +319,42 @@ export function createAuditEventRepository(database: TenantDatabase) {
         ...followUpRows.map((row) => mapAuditEventRowToSummary(row.audit)),
       ]);
     },
+    async readVerifiedInstitutionAuditEventById(input: {
+      eventId: string;
+      tenantId: string;
+      institutionId: string;
+    }) {
+      const [row] = await database
+        .select({
+          eventId: auditEvents.eventId,
+          actorId: auditEvents.actorId,
+          actorRole: auditEvents.actorRole,
+          resource: auditEvents.resource,
+          resourceId: auditEvents.resourceId,
+          action: auditEvents.action,
+          result: auditEvents.result,
+          reason: auditEvents.reason,
+          occurredAt: auditEvents.occurredAt,
+          source: auditEvents.source,
+        })
+        .from(auditEvents)
+        .where(
+          and(
+            eq(auditEvents.eventId, input.eventId),
+            eq(auditEvents.tenantId, input.tenantId),
+            eq(auditEvents.institutionId, input.institutionId),
+            eq(auditEvents.institutionAttribution, 'verified'),
+          ),
+        )
+        .limit(1);
+
+      return row
+        ? Object.freeze({
+            ...row,
+            occurredAt: row.occurredAt.toISOString(),
+          })
+        : null;
+    },
     async listAuditEvents(input: {
       scope: AuditEventQueryScope;
       query: AuditEventQuery;

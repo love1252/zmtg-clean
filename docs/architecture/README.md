@@ -1,3 +1,14 @@
+<!-- CONVERSATIONS_CONTROLLED_WRITE_ARCH_20260819 -->
+
+## 会话受控写正式闭环（2026-08-19）
+
+会话继续复用 `0049_conversations_formal_fact_persistence` 建立的权威根记录、会话段、
+分配与风险持久化，不新增第二套事实源。正式写链为：正式会话 → 权威身份 / 当前成员关系 /
+权威机构作用域 → 会话写授权 → 能力发布 → 精确 tenant + institution canonical writer →
+根记录 / 会话段 revision CAS + 分配 revision → 机构归属审计。受控范围仅包括人工请求、
+分配/改派、人工接管/解除接管、等待客户与人工结束；真实消息入站/发送、AI 自动回复、
+自动触达、WeCom/HIS 真实变更、预发布与生产环境均保持关闭。
+
 <!-- CUSTOMER_CONTROLLED_WRITE_ARCH_20260818 -->
 
 ## 客户受控写正式闭环（2026-08-18）

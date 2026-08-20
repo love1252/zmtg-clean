@@ -32,6 +32,48 @@ describe('Hospital Conversation Queue readonly page', () => {
     }
   });
 
+  it('仅为服务端判定可处置的会话渲染详情入口', () => {
+    const queue = {
+      contractVersion: 'v1' as const,
+      dataState: 'ready' as const,
+      records: [
+        {
+          contractVersion: 'v1' as const,
+          conversationId: 'conversation-self',
+          channelType: 'wecom',
+          identityState: 'matched' as const,
+          activeSegmentState: 'human_handling' as const,
+          latestCustomerInboundAt: null,
+          updatedAt: '2026-08-20T01:00:00.000Z',
+        },
+        {
+          contractVersion: 'v1' as const,
+          conversationId: 'conversation-other',
+          channelType: 'wecom',
+          identityState: 'matched' as const,
+          activeSegmentState: 'human_handling' as const,
+          latestCustomerInboundAt: null,
+          updatedAt: '2026-08-20T00:59:00.000Z',
+        },
+      ],
+      pageInfo: { pageSize: 100 as const, hasMore: false },
+    };
+
+    render(
+      <ConversationQueueReadonlyShell
+        queue={queue}
+        actionableConversationIds={['conversation-self']}
+      />,
+    );
+
+    const links = screen.getAllByRole('link', { name: '打开会话处置' });
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute(
+      'href',
+      '/hospital/conversations/conversation-self',
+    );
+  });
+
   it('canonical page 固定 conversations section 与 page_conversation_queue authority', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'src/app/hospital/conversations/page.tsx'),
@@ -45,7 +87,7 @@ describe('Hospital Conversation Queue readonly page', () => {
       "const TARGET_CAPABILITY_KEY = 'page_conversation_queue' as const;",
     );
     expect(source).toContain(
-      "capability.safeSummary !== '会话队列仅供查看'",
+      "capability.safeSummary !== '会话队列可用'",
     );
     expect(source).not.toMatch(/真实发送|自动发送|controlled create/iu);
   });

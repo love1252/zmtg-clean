@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import type { ConversationQueueV1 } from '../application/conversation-queue-reader';
 
 const identityLabels = Object.freeze({
@@ -30,14 +32,20 @@ function formatInstant(value: string | null): string {
 
 export function ConversationQueueReadonlyShell({
   queue,
-}: Readonly<{ queue: ConversationQueueV1 }>) {
+  actionableConversationIds = [],
+}: Readonly<{
+  queue: ConversationQueueV1;
+  actionableConversationIds?: readonly string[];
+}>) {
+  const actionable = new Set(actionableConversationIds);
+
   return (
     <main className="mx-auto w-full max-w-6xl px-5 py-8">
       <header className="mb-6">
         <p className="text-sm font-medium text-slate-500">CONVERSATIONS</p>
         <h1 className="mt-1 text-2xl font-semibold text-slate-950">会话队列</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-          当前页面仅展示正式机构作用域内的会话队列摘要。发送、接管、改派、结束、AI 接待和自动触达均未开放。
+          当前页面展示正式机构作用域内的会话队列，并提供受控处置入口。消息发送、消息接收、AI 自动回复和自动触达均保持关闭。
         </p>
       </header>
 
@@ -93,6 +101,16 @@ export function ConversationQueueReadonlyShell({
                   </dd>
                 </div>
               </dl>
+              {actionable.has(item.conversationId) ? (
+                <div className="mt-4">
+                  <Link
+                    href={`/hospital/conversations/${encodeURIComponent(item.conversationId)}`}
+                    className="text-sm font-medium text-slate-700 underline underline-offset-4"
+                  >
+                    打开会话处置
+                  </Link>
+                </div>
+              ) : null}
             </article>
           ))}
           {queue.pageInfo.hasMore ? (
