@@ -347,22 +347,105 @@ function recordInActorScope(
   );
 }
 
+function safeSuccessorRevision(value: number): number | null {
+  const next = value + 1;
+  return Number.isSafeInteger(next) ? next : null;
+}
+
+function replayRecordVisibleToActor(
+  record: ConversationCommandRecordV1,
+  actor: Actor,
+  expectedConversationRevision: number,
+  expectedSegmentRevision: number,
+  expectedAssignmentRevision: number,
+  operation: ConversationCommandOperationV1,
+): boolean {
+  if (recordInActorScope(record, actor)) return true;
+
+  if (operation.kind !== 'release_takeover' && operation.kind !== 'close') {
+    return false;
+  }
+
+  const segment = record.segment;
+  const nextConversationRevision = safeSuccessorRevision(
+    expectedConversationRevision,
+  );
+  const nextSegmentRevision = safeSuccessorRevision(expectedSegmentRevision);
+  const nextAssignmentRevision = safeSuccessorRevision(
+    expectedAssignmentRevision,
+  );
+  if (
+    !segment
+    || nextConversationRevision === null
+    || nextSegmentRevision === null
+    || nextAssignmentRevision === null
+    || record.conversationRevision !== nextConversationRevision
+    || segment.revision !== nextSegmentRevision
+    || segment.assignmentRevision !== nextAssignmentRevision
+    || segment.assignment !== null
+  ) {
+    return false;
+  }
+
+  if (operation.kind === 'release_takeover') {
+    return (
+      segment.value.state === 'awaiting_human'
+      && segment.value.currentHandlerId === null
+    );
+  }
+
+  return segment.value.state === 'closed';
+}
+
+function replayReadyMutationResult(
+  record: ConversationCommandRecordV1,
+  actor: Actor,
+  expectedConversationRevision: number,
+  expectedSegmentRevision: number,
+  expectedAssignmentRevision: number,
+  operation: ConversationCommandOperationV1,
+): ConversationControlledMutationResultV1 {
+  if (
+    !replayRecordVisibleToActor(
+      record,
+      actor,
+      expectedConversationRevision,
+      expectedSegmentRevision,
+      expectedAssignmentRevision,
+      operation,
+    )
+  ) {
+    return Object.freeze({ kind: 'not_found' as const });
+  }
+
+  return Object.freeze({
+    kind: 'ready' as const,
+    record: toDto(record, actor),
+  });
+}
+
 function conversationStateOperationAuditEventId(
   actor: Actor,
   conversationId: string,
   requestId: string,
+  expectedConversationRevision: number,
+  expectedSegmentRevision: number,
+  expectedAssignmentRevision: number,
   operation: ConversationStateOperationV1,
 ): string {
   const digest = createHash('sha256')
     .update(
       [
-        'conversation-controlled-state-operation-v1',
+        'conversation-controlled-state-operation-v2',
         actor.tenantId,
         actor.institutionId,
         actor.accountId,
         conversationId,
         requestId,
         operation.kind,
+        String(expectedConversationRevision),
+        String(expectedSegmentRevision),
+        String(expectedAssignmentRevision),
       ].join('\n'),
       'utf8',
     )
@@ -379,12 +462,18 @@ async function readConversationStateOperationReplayV1(
   actor: Actor,
   conversationId: string,
   requestId: string,
+  expectedConversationRevision: number,
+  expectedSegmentRevision: number,
+  expectedAssignmentRevision: number,
   operation: ConversationStateOperationV1,
 ): Promise<ConversationStateOperationReplayResultV1> {
   const eventId = conversationStateOperationAuditEventId(
     actor,
     conversationId,
     requestId,
+    expectedConversationRevision,
+    expectedSegmentRevision,
+    expectedAssignmentRevision,
     operation,
   );
   const fact = await createAuditEventRepository(database)
@@ -510,14 +599,21 @@ export async function mutateCurrentInstitutionConversationControlledV1(
       actor,
       conversationId,
       parsed.requestId,
+      parsed.expectedConversationRevision,
+      parsed.expectedSegmentRevision,
+      parsed.expectedAssignmentRevision,
       operation,
     ).catch(() => null);
     if (!replay) return Object.freeze({ kind: 'unavailable' as const });
     if (replay.kind === 'replayed') {
-      return Object.freeze({
-        kind: 'ready' as const,
-        record: toDto(replay.record, actor),
-      });
+      return replayReadyMutationResult(
+        replay.record,
+        actor,
+        parsed.expectedConversationRevision,
+        parsed.expectedSegmentRevision,
+        parsed.expectedAssignmentRevision,
+        operation,
+      );
     }
     if (replay.kind === 'idempotency_conflict') {
       return Object.freeze({
@@ -546,10 +642,14 @@ export async function mutateCurrentInstitutionConversationControlledV1(
     }).catch(() => null);
     if (!replay) return Object.freeze({ kind: 'unavailable' as const });
     if (replay.kind === 'replayed') {
-      return Object.freeze({
-        kind: 'ready' as const,
-        record: toDto(replay.record, actor),
-      });
+      return replayReadyMutationResult(
+        replay.record,
+        actor,
+        parsed.expectedConversationRevision,
+        parsed.expectedSegmentRevision,
+        parsed.expectedAssignmentRevision,
+        operation,
+      );
     }
     if (replay.kind === 'idempotency_conflict') {
       return Object.freeze({
@@ -579,10 +679,14 @@ export async function mutateCurrentInstitutionConversationControlledV1(
     }).catch(() => null);
     if (!replay) return Object.freeze({ kind: 'unavailable' as const });
     if (replay.kind === 'replayed') {
-      return Object.freeze({
-        kind: 'ready' as const,
-        record: toDto(replay.record, actor),
-      });
+      return replayReadyMutationResult(
+        replay.record,
+        actor,
+        parsed.expectedConversationRevision,
+        parsed.expectedSegmentRevision,
+        parsed.expectedAssignmentRevision,
+        operation,
+      );
     }
     if (replay.kind === 'idempotency_conflict') {
       return Object.freeze({
@@ -649,6 +753,9 @@ export async function mutateCurrentInstitutionConversationControlledV1(
         actor,
         conversationId,
         parsed.requestId,
+        parsed.expectedConversationRevision,
+        parsed.expectedSegmentRevision,
+        parsed.expectedAssignmentRevision,
         operation,
       )
     : randomUUID();

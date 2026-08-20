@@ -183,7 +183,7 @@ describe('Conversation controlled-write independent review regressions', () => {
     expect(runtime).toContain('conversationStateOperationAuditEventId(');
     expect(runtime).toContain('readConversationStateOperationReplayV1(');
     expect(runtime).toContain('readVerifiedInstitutionAuditEventById({');
-    expect(runtime).toContain("'conversation-controlled-state-operation-v1'");
+    expect(runtime).toContain("'conversation-controlled-state-operation-v2'");
     expect(auditRepository).toContain('readVerifiedInstitutionAuditEventById(input: {');
     expect(auditRepository).toContain(
       "eq(auditEvents.institutionAttribution, 'verified')",
@@ -193,5 +193,34 @@ describe('Conversation controlled-write independent review regressions', () => {
     expect(detailShell).toContain('body: request.body');
     expect(detailShell).toContain('操作结果尚未确认，请再次执行相同操作。');
   });
+
+
+  it('latest replay review binds target versions and never returns an unchecked current assignment record', () => {
+    const runtime = readFileSync(
+      resolve(process.cwd(), 'src/server/orchestration/institution-conversation-controlled-write-runtime.ts'),
+      'utf8',
+    );
+    const identityStart = runtime.indexOf('function conversationStateOperationAuditEventId(');
+    const identityEnd = runtime.indexOf('type ConversationStateOperationReplayResultV1');
+    expect(identityStart).toBeGreaterThan(-1);
+    expect(identityEnd).toBeGreaterThan(identityStart);
+    const identitySource = runtime.slice(identityStart, identityEnd);
+    expect(identitySource).toContain("'conversation-controlled-state-operation-v2'");
+    expect(identitySource).toContain('String(expectedConversationRevision)');
+    expect(identitySource).toContain('String(expectedSegmentRevision)');
+    expect(identitySource).toContain('String(expectedAssignmentRevision)');
+    expect(runtime).toContain('function replayRecordVisibleToActor(');
+    expect(runtime).toContain('function replayReadyMutationResult(');
+    expect(runtime).toContain("operation.kind !== 'release_takeover' && operation.kind !== 'close'");
+    expect(runtime).toContain('record.conversationRevision !== nextConversationRevision');
+    expect(runtime).toContain('segment.revision !== nextSegmentRevision');
+    expect(runtime).toContain('segment.assignmentRevision !== nextAssignmentRevision');
+    expect(runtime).toContain('segment.assignment !== null');
+    expect(runtime).toContain("segment.value.state === 'awaiting_human'");
+    expect(runtime).toContain("segment.value.state === 'closed'");
+    expect(runtime.match(/return replayReadyMutationResult\(/gu) ?? []).toHaveLength(3);
+    expect(runtime).not.toContain('record: toDto(replay.record, actor)');
+  });
+
 
 });
