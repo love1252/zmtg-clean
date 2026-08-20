@@ -793,7 +793,6 @@ const inspectHistory = (rawHistory: unknown): HistoryInspectionResult => {
           || fact.assigneeUserId !== activeAssignment.assigneeUserId
           || fact.assigneeRole !== activeAssignment.assigneeRole
           || fact.actorUserId !== activeAssignment.assigneeUserId
-          || fact.actorRole !== activeAssignment.assigneeRole
           || fact.reasonCode !== activeAssignment.originReasonCode
           || fact.sourceSegmentState !== 'awaiting_human'
         ) {
@@ -814,7 +813,6 @@ const inspectHistory = (rawHistory: unknown): HistoryInspectionResult => {
           || fact.assigneeUserId !== activeAssignment.assigneeUserId
           || fact.assigneeRole !== activeAssignment.assigneeRole
           || fact.actorUserId !== activeAssignment.assigneeUserId
-          || fact.actorRole !== activeAssignment.assigneeRole
           || fact.reasonCode !== 'assignee_reject'
           || fact.sourceSegmentState !== 'awaiting_human'
         ) {
@@ -832,7 +830,6 @@ const inspectHistory = (rawHistory: unknown): HistoryInspectionResult => {
           || fact.assigneeUserId !== activeAssignment.assigneeUserId
           || fact.assigneeRole !== activeAssignment.assigneeRole
           || fact.actorUserId !== activeAssignment.assigneeUserId
-          || fact.actorRole !== activeAssignment.assigneeRole
         ) {
           return invalidHistory();
         }
@@ -875,7 +872,6 @@ const matchesCommonFact = (
   && fact.revision === command.expectedRevision + 1
   && fact.status === expectedStatus
   && fact.actorUserId === command.actorUserId
-  && fact.actorRole === command.actorRole
   && fact.reasonCode === expectedReasonCode
   && fact.sourceSegmentState === command.sourceSegmentState
   && fact.occurredAt === command.occurredAt
@@ -1016,6 +1012,7 @@ const assignWithReason = (
     return facts.length === 1
       && fact !== undefined
       && matchesCommonFact(fact, command, 'assigned', reasonCode)
+      && fact.actorRole === command.actorRole
       && fact.assigneeUserId === command.assigneeUserId
       && fact.assigneeRole === command.assigneeRole;
   });
@@ -1157,7 +1154,6 @@ const decideAssignment = (
     active === null
     || active.assignmentId !== command.assignmentId
     || active.assigneeUserId !== command.actorUserId
-    || active.assigneeRole !== command.actorRole
   ) {
     return blocked('actor_not_assignee');
   }

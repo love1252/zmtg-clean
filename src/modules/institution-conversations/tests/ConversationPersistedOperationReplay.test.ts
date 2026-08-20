@@ -160,6 +160,8 @@ function candidateRow(input: {
   status: 'accepted' | 'released';
   sourceSegmentState: 'awaiting_human' | 'human_handling';
   occurredAt: Date;
+  actorRole?: AssignmentRow['actorRole'];
+  assigneeRole?: AssignmentRow['assigneeRole'];
 }): AssignmentRow {
   const key = idem(input.requestId, input.kind);
   const slot =
@@ -178,9 +180,9 @@ function candidateRow(input: {
     revision: input.revision,
     status: input.status,
     assigneeUserId: 'agent-a',
-    assigneeRole: 'customer_service',
+    assigneeRole: input.assigneeRole ?? 'customer_service',
     actorUserId: 'agent-a',
-    actorRole: 'customer_service',
+    actorRole: input.actorRole ?? 'customer_service',
     reasonCode: input.status === 'released' ? 'handler_release' : 'manual_assign',
     sourceSegmentState: input.sourceSegmentState,
     occurredAt: input.occurredAt,
@@ -277,6 +279,52 @@ describe('Conversation persisted non-assign operation replay', () => {
       actorUserId: 'agent-a',
       operation: { kind: 'takeover' },
     })).resolves.toMatchObject({ kind: 'replayed' });
+  });
+
+  it('replays takeover when the same assignee account acts after Membership role change', async () => {
+    const requestId = 'request-takeover-role-change-replay-001';
+    const at = new Date('2026-08-19T01:02:30.000Z');
+    const candidate = candidateRow({
+      requestId,
+      kind: 'takeover',
+      revision: 2,
+      status: 'accepted',
+      sourceSegmentState: 'awaiting_human',
+      occurredAt: at,
+      assigneeRole: 'customer_service',
+      actorRole: 'tenant_operator',
+    });
+    const db = databaseMock({
+      rootRow: root(scope.segmentId, 3),
+      segmentRow: segment({
+        state: 'human_handling',
+        currentHandlerId: 'agent-a',
+      }),
+      candidateRows: [candidate],
+      fullHistory: [assignedRow(), candidate],
+    });
+
+    await expect(readConversationAssignmentReplayV1(db, {
+      tenantId: scope.tenantId,
+      institutionId: scope.institutionId,
+      conversationId: scope.conversationId,
+      expectedConversationRevision: 2,
+      expectedAssignmentRevision: 1,
+      requestId,
+      actorUserId: 'agent-a',
+      operation: { kind: 'takeover' },
+    })).resolves.toMatchObject({
+      kind: 'replayed',
+      record: {
+        segment: {
+          assignment: {
+            assigneeUserId: 'agent-a',
+            assigneeRole: 'customer_service',
+            status: 'accepted',
+          },
+        },
+      },
+    });
   });
 
   it('replays release_takeover from its persisted release fact', async () => {

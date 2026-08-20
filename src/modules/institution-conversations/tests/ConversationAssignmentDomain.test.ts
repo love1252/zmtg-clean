@@ -284,11 +284,75 @@ describe('conversation assignment domain', () => {
     },
   );
 
-  it('只有 ID 和角色都匹配的目标 assignee 可接受、拒绝或释放', () => {
+  it('assignment 所有权绑定账号身份，Membership 角色变化后仍可接受、拒绝和释放', () => {
+    const assigned = assignedHistory();
+
+    const accepted = success(acceptConversationAssignment(
+      assigned,
+      decisionCommand({ actorRole: 'customer_service' }),
+    ));
+    expect(accepted.history.at(-1)).toMatchObject({
+      status: 'accepted',
+      assigneeUserId: userId(2),
+      assigneeRole: 'consultant',
+      actorUserId: userId(2),
+      actorRole: 'customer_service',
+    });
+
+    const rejected = success(rejectConversationAssignment(
+      assigned,
+      decisionCommand({ actorRole: 'customer_service' }),
+    ));
+    expect(rejected.history.at(-1)).toMatchObject({
+      status: 'rejected',
+      assigneeUserId: userId(2),
+      assigneeRole: 'consultant',
+      actorUserId: userId(2),
+      actorRole: 'customer_service',
+    });
+
+    const released = success(releaseConversationAssignment(
+      accepted.history,
+      decisionCommand({
+        eventId: eventId(3),
+        expectedRevision: 2,
+        idempotencyKey: idempotencyKey(21),
+        actorRole: 'tenant_operator',
+        sourceSegmentState: 'human_handling',
+        occurredAt: '2026-07-17T01:02:00.000Z',
+      }),
+    ));
+    expect(released.history.at(-1)).toMatchObject({
+      status: 'released',
+      assigneeUserId: userId(2),
+      assigneeRole: 'consultant',
+      actorUserId: userId(2),
+      actorRole: 'tenant_operator',
+      reasonCode: 'handler_release',
+    });
+    expect(released.projection.activeAssignmentCount).toBe(0);
+  });
+
+  it('同一 assignment decision 在角色变化后仍按账号身份幂等重放', () => {
+    const first = success(acceptConversationAssignment(
+      assignedHistory(),
+      decisionCommand({ actorRole: 'customer_service' }),
+    ));
+    const replayed = success(acceptConversationAssignment(
+      first.history,
+      decisionCommand({ actorRole: 'tenant_operator' }),
+    ));
+
+    expect(replayed.kind).toBe('replayed');
+    expect(replayed.history).toEqual(first.history);
+    expect(replayed.operationFacts).toEqual(first.operationFacts);
+    expect(replayed.projection).toEqual(first.projection);
+  });
+
+  it('不同账号或 assignmentId 仍不能接受、拒绝或释放', () => {
     const history = assignedHistory();
     for (const overrides of [
       { actorUserId: userId(5) },
-      { actorRole: 'customer_service' },
       { assignmentId: assignmentId(99) },
     ]) {
       expect(acceptConversationAssignment(history, decisionCommand(overrides))).toEqual({

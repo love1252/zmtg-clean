@@ -223,4 +223,38 @@ describe('Conversation controlled-write independent review regressions', () => {
   });
 
 
+
+  it('role-change review keeps active assignment ownership bound to account identity', () => {
+    const assignmentDomain = readFileSync(
+      resolve(
+        process.cwd(),
+        'src/modules/institution-conversations/domain/conversation-assignments.ts',
+      ),
+      'utf8',
+    );
+    const repository = readFileSync(
+      resolve(
+        process.cwd(),
+        'src/modules/institution-conversations/server/conversation-command-repository.ts',
+      ),
+      'utf8',
+    );
+
+    expect(assignmentDomain).not.toContain(
+      'active.assigneeRole !== command.actorRole',
+    );
+    expect(assignmentDomain).not.toContain(
+      'fact.actorRole !== activeAssignment.assigneeRole',
+    );
+    expect(assignmentDomain).toContain(
+      'fact.actorRole === command.actorRole',
+    );
+    expect(repository).not.toContain(
+      'row.actorRole !== row.assigneeRole',
+    );
+    expect(repository).toContain(
+      'row.actorUserId !== row.assigneeUserId',
+    );
+  });
+
 });

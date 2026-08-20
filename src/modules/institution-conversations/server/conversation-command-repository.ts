@@ -558,8 +558,7 @@ export async function readConversationAssignmentReplayV1(
 
     const row = rows.length === 1 ? rows[0] : null;
     if (!row || !revisionOk(row.revision, 1)
-      || row.actorUserId !== row.assigneeUserId
-      || row.actorRole !== row.assigneeRole) return null;
+      || row.actorUserId !== row.assigneeUserId) return null;
 
     if (input.operation.kind === 'takeover') {
       return row.eventId === event('takeover')
