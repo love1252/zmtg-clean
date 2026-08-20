@@ -1,3 +1,14 @@
+<!-- WORKBENCH_CONTROLLED_WRITE_FINAL_ACCEPTANCE_HISTORY_20260820 -->
+
+## 2026-08-20：工作台受控写重聚合最终验收
+
+- `page_workbench` 从 `read_only / pilot_released` 升级为 `operational / pilot_released`。
+- 工作台最终重聚合 5 个 operational pages、4 个 readonly pages 与 3 个 Controlled Create actions。
+- 新建客户、新建预约、新建随访继续由各目标 availability/runtime 执行当前权限和业务前置校验。
+- Care 行动继续消费正式 `CareActionSourceV1`。
+- Conversation action source 继续 disabled，不因会话 Controlled Write 已发布而伪造工作台行动源。
+- 无 Schema/Migration、数据库连接或写入、真实消息、AI 自动回复、自动触达、WeCom/HIS mutation、Staging 或 Production。
+
 <!-- CONVERSATIONS_CONTROLLED_WRITE_HISTORY_20260819 -->
 
 ## 2026-08-19：会话受控写完整闭环

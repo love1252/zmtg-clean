@@ -1,3 +1,13 @@
+<!-- WORKBENCH_CONTROLLED_WRITE_FINAL_ACCEPTANCE_ARCH_20260820 -->
+
+## 工作台受控写重聚合最终验收（2026-08-20）
+
+`/hospital` 继续以正式 `CapabilityStatusV1` 为唯一能力发布输入，并将
+`page_workbench` 发布为 `operational / pilot_released`。工作台只聚合已独立发布的
+客户、预约、人工随访和会话入口；目标页面/API 继续独立校验当前 Membership、exact
+tenant + institution、角色、对象范围、revision 与业务前置。Care 行动复用
+`CareActionSourceV1`；Conversation action source 保持 disabled，不建立第二套会话行动事实源。
+
 <!-- CONVERSATIONS_CONTROLLED_WRITE_ARCH_20260819 -->
 
 ## 会话受控写正式闭环（2026-08-19）

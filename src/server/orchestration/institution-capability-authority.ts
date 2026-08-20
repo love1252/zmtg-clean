@@ -12,10 +12,10 @@ import {
 } from '@/modules/institution/server/institution-server-runtime';
 
 export const INSTITUTION_CAPABILITY_AUTHORITY_REVISION_V1 =
-  'r10-conversations-controlled-write-v1' as const;
+  'r11-workbench-controlled-write-final-acceptance-v1' as const;
 
 const AUTHORITY_STATUS_FRESHNESS_WINDOW_MS = 5_000;
-const WORKBENCH_READONLY_SUMMARY = '工作台仅供查看' as const;
+const WORKBENCH_OPERATIONAL_SUMMARY = '工作台可用' as const;
 const CUSTOMER_LIST_OPERATIONAL_SUMMARY = '客户列表可用' as const;
 const CONVERSATION_QUEUE_OPERATIONAL_SUMMARY = '会话队列可用' as const;
 const CARE_APPOINTMENTS_OPERATIONAL_SUMMARY = '预约管理可用' as const;
@@ -46,7 +46,7 @@ function buildCapabilityStatus(
   const capabilities: CapabilityStatusItemV1[] =
     INSTITUTION_CAPABILITY_REGISTRY_V1.map((definition) => {
       const institutionAuthorized = availableSections.has(definition.sectionId);
-      const workbenchReadonlyPilot = definition.key === 'page_workbench';
+      const workbenchOperationalPilot = definition.key === 'page_workbench';
       const customerListOperationalPilot = definition.key === 'page_customer_list';
       const customerCreateOperationalPilot =
         definition.key === 'action_customer_create';
@@ -68,13 +68,13 @@ function buildCapabilityStatus(
       const careFollowupCreateOperationalPilot =
         definition.key === 'action_care_followup_create';
       const readonlyPilot =
-        workbenchReadonlyPilot ||
         knowledgeLibraryReadonlyPilot ||
         analyticsOverviewReadonlyPilot ||
         aiUsageReadonlyPilot ||
         auditReadonlyPilot;
       const operationalPilot =
-        conversationQueueOperationalPilot
+        workbenchOperationalPilot
+        || conversationQueueOperationalPilot
         || customerListOperationalPilot
         || customerCreateOperationalPilot
         || careAppointmentsOperationalPilot
@@ -111,33 +111,31 @@ function buildCapabilityStatus(
             : 'not_released',
         }),
         safeSummary:
-          customerListOperationalPilot && institutionAuthorized
-            ? CUSTOMER_LIST_OPERATIONAL_SUMMARY
-            : customerCreateOperationalPilot && institutionAuthorized
-              ? null
-              : careAppointmentsOperationalPilot && institutionAuthorized
-            ? CARE_APPOINTMENTS_OPERATIONAL_SUMMARY
-            : careAppointmentCreateOperationalPilot && institutionAuthorized
-              ? null
-              : careFollowupsOperationalPilot && institutionAuthorized
-                ? CARE_FOLLOWUPS_OPERATIONAL_SUMMARY
-                : careFollowupCreateOperationalPilot && institutionAuthorized
-                  ? null
-                  : conversationQueueOperationalPilot && institutionAuthorized
-                    ? CONVERSATION_QUEUE_OPERATIONAL_SUMMARY
-                    : readonlyPilot && institutionAuthorized
-            ? auditReadonlyPilot
-              ? AUDIT_READONLY_SUMMARY
-              : conversationQueueOperationalPilot
-                  ? CONVERSATION_QUEUE_OPERATIONAL_SUMMARY
-                  : knowledgeLibraryReadonlyPilot
-                    ? KNOWLEDGE_LIBRARY_READONLY_SUMMARY
-                    : analyticsOverviewReadonlyPilot
-                      ? ANALYTICS_OVERVIEW_READONLY_SUMMARY
-                      : aiUsageReadonlyPilot
-                      ? AI_USAGE_READONLY_SUMMARY
-                    : WORKBENCH_READONLY_SUMMARY
-            : null,
+          workbenchOperationalPilot && institutionAuthorized
+            ? WORKBENCH_OPERATIONAL_SUMMARY
+            : customerListOperationalPilot && institutionAuthorized
+              ? CUSTOMER_LIST_OPERATIONAL_SUMMARY
+              : customerCreateOperationalPilot && institutionAuthorized
+                ? null
+                : careAppointmentsOperationalPilot && institutionAuthorized
+                  ? CARE_APPOINTMENTS_OPERATIONAL_SUMMARY
+                  : careAppointmentCreateOperationalPilot && institutionAuthorized
+                    ? null
+                    : careFollowupsOperationalPilot && institutionAuthorized
+                      ? CARE_FOLLOWUPS_OPERATIONAL_SUMMARY
+                      : careFollowupCreateOperationalPilot && institutionAuthorized
+                        ? null
+                        : conversationQueueOperationalPilot && institutionAuthorized
+                          ? CONVERSATION_QUEUE_OPERATIONAL_SUMMARY
+                          : auditReadonlyPilot && institutionAuthorized
+                            ? AUDIT_READONLY_SUMMARY
+                            : knowledgeLibraryReadonlyPilot && institutionAuthorized
+                              ? KNOWLEDGE_LIBRARY_READONLY_SUMMARY
+                              : analyticsOverviewReadonlyPilot && institutionAuthorized
+                                ? ANALYTICS_OVERVIEW_READONLY_SUMMARY
+                                : aiUsageReadonlyPilot && institutionAuthorized
+                                  ? AI_USAGE_READONLY_SUMMARY
+                                  : null,
         diagnosticTargetKey:
           systemAvailable &&
           isInstitutionDiagnosticTargetCapabilityKeyV1(definition.key)

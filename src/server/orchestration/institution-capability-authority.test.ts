@@ -377,7 +377,7 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
     vi.restoreAllMocks();
   });
 
-  it('exposes no-input authority resolver and frozen Care controlled-write revision', () => {
+  it('exposes no-input authority resolver and frozen Workbench final-acceptance revision', () => {
     expectTypeOf<
       Parameters<typeof resolveInstitutionCapabilityAuthorityStatusV1>
     >().toEqualTypeOf<[]>();
@@ -385,11 +385,11 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
       ReturnType<typeof resolveInstitutionCapabilityAuthorityStatusV1>
     >().toEqualTypeOf<Promise<CapabilityStatusV1 | null>>();
     expect(INSTITUTION_CAPABILITY_AUTHORITY_REVISION_V1).toBe(
-      'r10-conversations-controlled-write-v1',
+      'r11-workbench-controlled-write-final-acceptance-v1',
     );
   });
 
-  it('tenant_admin keeps six governed readonly pages, releases customers/appointments/followups controlled write, and hides the remaining capabilities', async () => {
+  it('tenant_admin receives five operational pages, four readonly pages and three controlled-create actions', async () => {
     const status = await resolveInstitutionCapabilityAuthorityStatusV1();
 
     expect(status).toMatchObject({
@@ -442,15 +442,15 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
 
     expect(workbench).toEqual({
       key: 'page_workbench',
-      decision: 'read_only',
+      decision: 'operational',
       dimensions: {
         codeMaturity: 'verified',
         institutionAuthorization: 'authorized',
         connectionAvailability: 'not_required',
-        dataReadiness: 'not_required',
+        dataReadiness: 'ready',
         productionRelease: 'pilot_released',
       },
-      safeSummary: '工作台仅供查看',
+      safeSummary: '工作台可用',
       diagnosticTargetKey: null,
     });
 
@@ -627,6 +627,42 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
       'page_system_audit',
     ]);
 
+    const operationalPageKeys = capabilities
+      .filter(
+        (item) => item.key.startsWith('page_') && item.decision === 'operational',
+      )
+      .map((item) => item.key);
+    expect(operationalPageKeys).toEqual([
+      'page_workbench',
+      'page_customer_list',
+      'page_conversation_queue',
+      'page_care_appointments',
+      'page_care_followups',
+    ]);
+
+    const readonlyPageKeys = capabilities
+      .filter(
+        (item) => item.key.startsWith('page_') && item.decision === 'read_only',
+      )
+      .map((item) => item.key);
+    expect(readonlyPageKeys).toEqual([
+      'page_knowledge_library',
+      'page_analytics_overview',
+      'page_system_ai_usage',
+      'page_system_audit',
+    ]);
+
+    const operationalActionKeys = capabilities
+      .filter(
+        (item) => item.key.startsWith('action_') && item.decision === 'operational',
+      )
+      .map((item) => item.key);
+    expect(operationalActionKeys).toEqual([
+      'action_customer_create',
+      'action_care_appointment_create',
+      'action_care_followup_create',
+    ]);
+
     const remaining = capabilities.filter(
       (item) =>
         item.key !== 'page_workbench' &&
@@ -682,12 +718,13 @@ describe('POST-V2-R1C page_system_audit readonly release authority', () => {
       expect(
         capabilities.find((item) => item.key === 'page_workbench'),
       ).toMatchObject({
-        decision: 'read_only',
+        decision: 'operational',
         dimensions: {
           institutionAuthorization: 'authorized',
+          dataReadiness: 'ready',
           productionRelease: 'pilot_released',
         },
-        safeSummary: '工作台仅供查看',
+        safeSummary: '工作台可用',
       });
 
       expect(
