@@ -26,6 +26,26 @@ function projected(
   } as unknown as WorkbenchCapabilityProjection;
 }
 
+function operationalWorkbenchProjection(): WorkbenchCapabilityProjection {
+  return {
+    status: 'projected',
+    sourceReadiness: 'ready',
+    summaries: [
+      {
+        key: 'page_workbench',
+        kind: 'page',
+        label: '工作台',
+        decision: 'operational',
+        safeSummary: '工作台可用',
+        dataStatus: 'current',
+        observedAt: null,
+        diagnosticTarget: null,
+      },
+    ],
+    quickCreateMenu: null,
+  };
+}
+
 const customerCreate = Object.freeze({
   key: 'action_customer_create' as const,
   label: '新建客户',
@@ -45,6 +65,26 @@ const followUpCreate = Object.freeze({
 });
 
 describe('InstitutionWorkbenchCapabilityOff controlled quick-create gate', () => {
+  it('marks an operational page_workbench as controlled write without quick-create or action rows', () => {
+    const { container } = render(
+      <InstitutionWorkbenchCapabilityOff
+        genuineAllowed
+        capabilityProjection={operationalWorkbenchProjection()}
+      />,
+    );
+
+    expect(
+      container.querySelector(
+        '[data-capability-state="controlled-write-pilot"]',
+      ),
+    ).not.toBeNull();
+    expect(screen.getByText('工作台可用')).toBeInTheDocument();
+    expect(screen.getByText('可操作')).toBeInTheDocument();
+    expect(
+      screen.queryByText('工作台访问已核验'),
+    ).not.toBeInTheDocument();
+  });
+
   it('accepts the governed customer + appointment + follow-up menu', () => {
     const { container } = render(
       <InstitutionWorkbenchCapabilityOff

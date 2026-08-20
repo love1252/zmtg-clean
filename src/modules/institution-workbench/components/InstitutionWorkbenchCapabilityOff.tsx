@@ -75,6 +75,23 @@ function isGovernedQuickCreateMenu(
   return true;
 }
 
+function hasOperationalWorkbenchSummary(
+  projection: WorkbenchCapabilityProjection,
+): boolean {
+  if (projection.status !== 'projected') return false;
+
+  const matches = projection.summaries.filter(
+    (summary) => summary.key === 'page_workbench',
+  );
+  const [summary] = matches;
+  return (
+    matches.length === 1
+    && summary?.kind === 'page'
+    && summary.decision === 'operational'
+    && summary.safeSummary === '工作台可用'
+  );
+}
+
 export function InstitutionWorkbenchCapabilityOff({
   genuineAllowed = false,
   capabilityProjection = null,
@@ -94,7 +111,8 @@ export function InstitutionWorkbenchCapabilityOff({
     return (
       <div
         data-capability-state={
-          capabilityProjection.quickCreateMenu !== null
+          hasOperationalWorkbenchSummary(capabilityProjection)
+          || capabilityProjection.quickCreateMenu !== null
           || actionProjection?.status === 'projected'
             ? 'controlled-write-pilot'
             : 'readonly-pilot'

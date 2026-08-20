@@ -91,14 +91,22 @@ function selectGovernedWorkbenchProjection(
   );
   if (workbenchSummaries.length !== 1) return null;
 
-  const workbenchSummary = workbenchSummaries[0];
   if (
-    !workbenchSummary ||
-    workbenchSummary.kind !== 'page' ||
-    workbenchSummary.decision !== 'read_only' ||
-    workbenchSummary.safeSummary !== '工作台仅供查看' ||
     summaries.some((summary) => {
       if (summary.kind !== 'page') return true;
+
+      if (summary.key === 'page_workbench') {
+        return !(
+          (
+            summary.decision === 'operational'
+            && summary.safeSummary === '工作台可用'
+          )
+          || (
+            summary.decision === 'read_only'
+            && summary.safeSummary === '工作台仅供查看'
+          )
+        );
+      }
 
       if (summary.key === 'page_customer_list') {
         return !(

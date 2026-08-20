@@ -328,6 +328,28 @@ function readonlyWorkbenchCapabilityStatus(
   };
 }
 
+function operationalWorkbenchCapabilityStatus(): CapabilityStatusV1 {
+  const source = readonlyWorkbenchCapabilityStatus();
+  return {
+    ...source,
+    data: {
+      capabilities: (source.data?.capabilities ?? []).map((item) =>
+        item.key === 'page_workbench'
+          ? {
+              ...item,
+              decision: 'operational' as const,
+              dimensions: {
+                ...item.dimensions,
+                dataReadiness: 'ready' as const,
+              },
+              safeSummary: '工作台可用',
+            }
+          : item,
+      ),
+    },
+  };
+}
+
 describe('WB-ENTRY-02A server-owned 工作台入口', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -712,6 +734,39 @@ describe('BASE-WIRE-01 /hospital server navigation authorization', () => {
       capabilityAuthorityMocks.resolveInstitutionCapabilityAuthorityStatusV1,
     ).toHaveBeenCalledTimes(1);
   });
+
+  it('renders page_workbench operational final acceptance without fabricating action sources', async () => {
+    const created = authorizationFixture('tenant_admin');
+    vi.spyOn(Date, 'now').mockReturnValue(NOW.getTime());
+
+    serverRuntimeMocks.resolveInstitutionServerAuthorizationV1.mockResolvedValueOnce(
+      created.authorization,
+    );
+    capabilityAuthorityMocks.resolveInstitutionCapabilityAuthorityStatusV1.mockResolvedValueOnce(
+      operationalWorkbenchCapabilityStatus(),
+    );
+
+    render(await HospitalPage());
+
+    const main = screen.getByRole('main');
+    expect(
+      main.querySelector('[data-capability-state="controlled-write-pilot"]'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: '工作台', level: 1 }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('工作台可用')).toBeInTheDocument();
+    expect(screen.getByText('可操作')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', {
+        name: '工作台访问已核验',
+        level: 2,
+      }),
+    ).not.toBeInTheDocument();
+    expect(within(main).queryAllByRole('link')).toHaveLength(0);
+    expect(within(main).queryAllByRole('button')).toHaveLength(0);
+  });
+
 
   it.each([
     {
