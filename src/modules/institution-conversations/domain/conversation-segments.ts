@@ -680,6 +680,29 @@ export function releaseHumanHandling(
   });
 }
 
+export function recoverHumanHandlingForReassignment(
+  segment: Readonly<ConversationSegment>,
+  input: Readonly<{ expectedHandlerId: string; occurredAt: string }>,
+): SegmentTransitionResult {
+  if (segment.state === 'closed') return blocked('segment_closed');
+  if (segment.state !== 'human_handling' && segment.state !== 'waiting_customer') {
+    return blocked('transition_not_allowed');
+  }
+  if (!safeIdentifierPattern.test(input.expectedHandlerId)) {
+    return blocked('invalid_identifier');
+  }
+  if (segment.currentHandlerId !== input.expectedHandlerId) {
+    return blocked('operator_not_active_assignee');
+  }
+  return transition(segment, input.occurredAt, {
+    state: 'awaiting_human',
+    currentHandlerId: null,
+    waitingAfterCustomerMessageId: null,
+    waitingAfterCustomerMessageAt: null,
+    waitingAfterInboundRevision: null,
+  });
+}
+
 export function markWaitingForCustomer(
   segment: Readonly<ConversationSegment>,
   input: Readonly<{ operatorId: string; occurredAt: string }>,

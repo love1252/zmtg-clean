@@ -17,6 +17,7 @@ import {
   acceptHumanHandling,
   closeConversationSegmentManually,
   markWaitingForCustomer,
+  recoverHumanHandlingForReassignment,
   releaseHumanHandling,
   requestHumanHandling,
   segmentLocalBlockingReasonCodes,
@@ -635,8 +636,12 @@ export async function readConversationAssignmentReplayV1(
       return released && assigned
         && revisionOk(released.revision, 1)
         && revisionOk(assigned.revision, 2)
-        && released.sourceSegmentState === 'awaiting_human'
-        && assigned.sourceSegmentState === 'awaiting_human'
+        && released.sourceSegmentState === assigned.sourceSegmentState
+        && (
+          released.sourceSegmentState === 'awaiting_human'
+          || released.sourceSegmentState === 'human_handling'
+          || released.sourceSegmentState === 'waiting_customer'
+        )
         && released.occurredAt.getTime() === assigned.occurredAt.getTime()
         && assigned.assigneeUserId === input.operation.assigneeUserId
         ? assigned.occurredAt : null;
@@ -940,6 +945,26 @@ export async function executeConversationCommandV1(
     if (!projected.projection.assignmentId) {
       return { kind: 'blocked', code: 'active_assignment_missing' };
     }
+    const current = activeAssignment(projected.projection, assignmentRows);
+    if (!current) return { kind: 'blocked', code: 'active_assignment_missing' };
+
+    if (segment.state === 'human_handling' || segment.state === 'waiting_customer') {
+      if (
+        current.status !== 'accepted'
+        || current.assigneeUserId !== segment.currentHandlerId
+      ) {
+        return { kind: 'blocked', code: 'operator_not_active_assignee' };
+      }
+      const recovered = recoverHumanHandlingForReassignment(segment, {
+        expectedHandlerId: current.assigneeUserId,
+        occurredAt,
+      });
+      if (recovered.kind !== 'applied') {
+        return { kind: 'blocked', code: recovered.code };
+      }
+      nextSegment = recovered.segment;
+    }
+
     const result = reassignConversationSegment(history, {
       releaseEventId: event('reassign-release'),
       assignedEventId: event('reassign-assign'),

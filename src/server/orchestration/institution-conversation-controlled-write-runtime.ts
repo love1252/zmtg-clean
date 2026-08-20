@@ -254,8 +254,14 @@ function permissions(record: ConversationCommandRecordV1, actor: Actor) {
       assignment === null,
     canReassign:
       isManagement(actor.role) &&
-      state === 'awaiting_human' &&
-      assignment?.status === 'assigned',
+      (
+        (state === 'awaiting_human' && assignment?.status === 'assigned')
+        || (
+          (state === 'human_handling' || state === 'waiting_customer')
+          && assignment?.status === 'accepted'
+          && assignment.assigneeUserId === segment?.value.currentHandlerId
+        )
+      ),
     canTakeover:
       state === 'awaiting_human' &&
       assignment?.status === 'assigned' &&

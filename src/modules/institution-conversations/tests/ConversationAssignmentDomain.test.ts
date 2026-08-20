@@ -394,34 +394,47 @@ describe('conversation assignment domain', () => {
     }))).toEqual({ kind: 'blocked', code: 'transition_not_allowed' });
   });
 
-  it('已 accepted 不得直接改派；handler release 回到人工队列后允许管理员重新分配', () => {
+  it.each(['human_handling', 'waiting_customer'] as const)(
+    '管理员可对 %s + accepted 分配执行恢复改派并幂等重放',
+    (sourceSegmentState) => {
+      const command = reassignCommand({
+        expectedRevision: 2,
+        sourceSegmentState,
+      });
+      const result = success(reassignConversationSegment(acceptedHistory(), command));
+      expect(result.operationFacts).toHaveLength(2);
+      expect(result.operationFacts[0]).toMatchObject({
+        revision: 3,
+        status: 'released',
+        reasonCode: 'manual_reassign',
+        actorRole: 'tenant_operator',
+        sourceSegmentState,
+      });
+      expect(result.operationFacts[1]).toMatchObject({
+        revision: 4,
+        status: 'assigned',
+        assigneeUserId: userId(4),
+        reasonCode: 'manual_reassign',
+        actorRole: 'tenant_operator',
+        sourceSegmentState,
+      });
+      expect(result.projection).toMatchObject({
+        revision: 4,
+        assignmentStatus: 'assigned',
+        assigneeId: userId(4),
+      });
+      expect(success(reassignConversationSegment(result.history, command)).kind).toBe('replayed');
+    },
+  );
+
+  it('accepted assignment 不能从 awaiting_human 或 ai_handling 绕过恢复边界', () => {
     expect(reassignConversationSegment(acceptedHistory(), reassignCommand({
       expectedRevision: 2,
     }))).toEqual({ kind: 'blocked', code: 'transition_not_allowed' });
-
-    const released = success(releaseConversationAssignment(acceptedHistory(), decisionCommand({
-      eventId: eventId(3),
+    expect(reassignConversationSegment(acceptedHistory(), reassignCommand({
       expectedRevision: 2,
-      idempotencyKey: idempotencyKey(3),
-      sourceSegmentState: 'waiting_customer',
-      occurredAt: '2026-07-17T01:02:00.000Z',
-    }))).history;
-    const assignedAgain = success(assignConversationSegment(released, assignCommand({
-      eventId: eventId(4),
-      assignmentId: assignmentId(2),
-      expectedRevision: 3,
-      idempotencyKey: idempotencyKey(4),
-      assigneeUserId: userId(4),
-      assigneeRole: 'customer_service',
-      occurredAt: '2026-07-17T01:03:00.000Z',
-    })));
-    expect(assignedAgain.projection).toMatchObject({
-      revision: 4,
-      assignmentId: assignmentId(2),
-      assignmentStatus: 'assigned',
-      activeAssignmentCount: 1,
-      assigneeId: userId(4),
-    });
+      sourceSegmentState: 'ai_handling',
+    }))).toEqual({ kind: 'blocked', code: 'transition_not_allowed' });
   });
 
   it('改派拒绝相同 assignee、复用 assignmentId 或重复 eventId', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { releaseHumanHandling } from '@/modules/institution-conversations/domain/conversation-segments';
+import { recoverHumanHandlingForReassignment, releaseHumanHandling } from '@/modules/institution-conversations/domain/conversation-segments';
 import type { ConversationSegment } from '@/modules/institution-conversations/domain/conversation-segments';
 
 const base: ConversationSegment = {
@@ -55,4 +55,43 @@ describe('conversation controlled release domain', () => {
       occurredAt: '2026-08-19T01:02:00.000Z',
     })).toEqual({ kind: 'blocked', code: 'transition_not_allowed' });
   });
+  it.each(['human_handling', 'waiting_customer'] as const)(
+    '管理恢复改派可从 %s 清除旧 handler 并返回 awaiting_human',
+    (state) => {
+      const result = recoverHumanHandlingForReassignment(
+        {
+          ...base,
+          state,
+          waitingAfterCustomerMessageId: state === 'waiting_customer' ? 'message-1' : null,
+          waitingAfterCustomerMessageAt: state === 'waiting_customer'
+            ? '2026-08-19T01:00:00.000Z'
+            : null,
+          waitingAfterInboundRevision: state === 'waiting_customer' ? 1 : null,
+        },
+        {
+          expectedHandlerId: 'operator-1',
+          occurredAt: '2026-08-19T01:02:00.000Z',
+        },
+      );
+      expect(result).toMatchObject({
+        kind: 'applied',
+        segment: {
+          state: 'awaiting_human',
+          currentHandlerId: null,
+          everHumanHandled: true,
+          waitingAfterCustomerMessageId: null,
+          waitingAfterCustomerMessageAt: null,
+          waitingAfterInboundRevision: null,
+        },
+      });
+    },
+  );
+
+  it('管理恢复改派要求旧 active assignee 与 current handler 精确一致', () => {
+    expect(recoverHumanHandlingForReassignment(base, {
+      expectedHandlerId: 'operator-2',
+      occurredAt: '2026-08-19T01:02:00.000Z',
+    })).toEqual({ kind: 'blocked', code: 'operator_not_active_assignee' });
+  });
+
 });

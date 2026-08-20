@@ -294,4 +294,34 @@ describe('Conversation controlled-write independent review regressions', () => {
     expect(batchSource).toContain('assignment.assigneeUserId === input.actorUserId');
   });
 
+  it('management recovery reassign remains narrow and reuses existing V1 reassign', () => {
+    const assignmentDomain = readFileSync(
+      resolve(process.cwd(), 'src/modules/institution-conversations/domain/conversation-assignments.ts'),
+      'utf8',
+    );
+    const segmentDomain = readFileSync(
+      resolve(process.cwd(), 'src/modules/institution-conversations/domain/conversation-segments.ts'),
+      'utf8',
+    );
+    const repository = readFileSync(
+      resolve(process.cwd(), 'src/modules/institution-conversations/server/conversation-command-repository.ts'),
+      'utf8',
+    );
+    const runtime = readFileSync(
+      resolve(process.cwd(), 'src/server/orchestration/institution-conversation-controlled-write-runtime.ts'),
+      'utf8',
+    );
+
+    expect(assignmentDomain).toContain("activeStatus === 'accepted'");
+    expect(assignmentDomain).toContain("sourceSegmentState === 'human_handling'");
+    expect(assignmentDomain).toContain("sourceSegmentState === 'waiting_customer'");
+    expect(segmentDomain).toContain('export function recoverHumanHandlingForReassignment(');
+    expect(repository).toContain('recoverHumanHandlingForReassignment(segment, {');
+    expect(repository).toContain('released.sourceSegmentState === assigned.sourceSegmentState');
+    expect(runtime).toContain("assignment?.status === 'accepted'");
+    expect(runtime).toContain('assignment.assigneeUserId === segment?.value.currentHandlerId');
+    expect(runtime).not.toContain("kind: 'force_reassign'");
+    expect(runtime).not.toContain("kind: 'admin_release'");
+  });
+
 });
