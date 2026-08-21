@@ -3,8 +3,8 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-describe('Workbench Conversation controlled-write final consumption gate', () => {
-  it('accepts operational conversation summary without enabling a fabricated Conversation action source', () => {
+describe('Workbench Conversation action-source formal release gate', () => {
+  it('accepts operational conversation summary and consumes the formal Conversation action source', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'src/app/hospital/page.tsx'),
       'utf8',
@@ -12,7 +12,8 @@ describe('Workbench Conversation controlled-write final consumption gate', () =>
     expect(source).toContain("summary.key === 'page_conversation_queue'");
     expect(source).toContain("summary.decision === 'operational'");
     expect(source).toContain("summary.safeSummary === '会话队列可用'");
-    expect(source).toContain('disabledConversationActionSource');
-    expect(source).not.toContain('readCurrentInstitutionConversationActionSourceV1');
+    expect(source).toContain('readCurrentInstitutionConversationActionSourceV1');
+    expect(source).toContain('buildWorkbenchActionProjection');
+    expect(source).not.toContain('disabledConversationActionSource');
   });
 });

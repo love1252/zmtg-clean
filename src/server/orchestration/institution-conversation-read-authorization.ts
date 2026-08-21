@@ -17,6 +17,7 @@ import {
 import {
   isInstitutionRoleV1,
   isRoleInInstitutionSectionAudienceV1,
+  type InstitutionRoleV1,
 } from '@/modules/institution-contracts/v1/institution-navigation';
 import { isInstitutionScopeIdV1 } from '@/modules/security/domain/institution-access';
 import {
@@ -34,6 +35,8 @@ export type InstitutionConversationReadAuthorizationHandleV1 = Readonly<{
 }>;
 
 export type InstitutionConversationReadAuthorizationConsumptionV1 = Readonly<{
+  accountId: string;
+  role: InstitutionRoleV1;
   tenantId: string;
   institutionId: string;
   observedAt: string;
@@ -248,6 +251,8 @@ export async function resolveInstitutionConversationReadAuthorizationV1(): Promi
     ) return UNAVAILABLE;
 
     const consumption = Object.freeze({
+      accountId: user.id,
+      role: user.role,
       tenantId: claims.tenantId,
       institutionId: claims.institutionId,
       observedAt: new Date(observedAtEpochMs).toISOString(),

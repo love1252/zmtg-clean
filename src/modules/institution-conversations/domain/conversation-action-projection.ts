@@ -448,12 +448,17 @@ function captureCustomerSubject(raw: unknown): ConversationActionItemV1['subject
     || customer.contractVersion !== 'v1'
     || typeof customer.customerId !== 'string'
     || typeof customer.displayName !== 'string'
-    || typeof customer.maskedReference !== 'string'
     || !isSafeIdentifier(customer.customerId)
     || customer.displayName.length === 0
     || customer.displayName.length > 80
-    || customer.maskedReference.length === 0
-    || customer.maskedReference.length > 80
+    || (
+      customer.maskedReference !== null
+      && (
+        typeof customer.maskedReference !== 'string'
+        || customer.maskedReference.length === 0
+        || customer.maskedReference.length > 80
+      )
+    )
   ) {
     return null;
   }

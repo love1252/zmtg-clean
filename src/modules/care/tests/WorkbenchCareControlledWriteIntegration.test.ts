@@ -35,13 +35,10 @@ describe('Workbench Care controlled-write integration', () => {
       'canCurrentInstitutionCreateFormalFollowUpV1',
     );
     expect(source).toContain(
-      "readiness: 'disabled'",
+      'readCurrentInstitutionConversationActionSourceV1',
     );
-    expect(source).toContain(
-      "key: 'waiting_human'",
-    );
-    expect(source).toContain(
-      "key: 'unresolved_risk'",
+    expect(source).not.toContain(
+      'disabledConversationActionSource',
     );
   });
 });
