@@ -1,3 +1,15 @@
+<!-- CONVERSATION_ACTION_SOURCE_FORMAL_RELEASE_HISTORY_20260821 -->
+
+## 2026-08-21：Conversation Action Source 正式发布
+
+- Workbench 不再构造 `disabledConversationActionSource`，改为消费正式 `ConversationActionSourceV1`。
+- 正式行动分区发布 `waiting_human` 与 `unresolved_risk`；同一 active segment 双分区只保留一条 action。
+- 正式读取链复用既有 0049 Conversation persistence、正式会话 read authorization、当前 Membership、exact tenant + institution scope 与 `page_conversation_queue=operational/pilot_released` capability gate。
+- `safeSummary` 继续只消费正式低敏摘要，不读取完整聊天正文、provider raw payload 或 AI thought。
+- Care Action Source 与 3 个 Controlled Create actions 保持不变；Workbench 形成 `care + conversation` 双行动源聚合。
+- 修正 `CustomerReferenceV1.maskedReference=null` 的正式 Conversation action 投影兼容性。
+- 无 Schema/Migration、数据库写入、真实消息入站/发送、AI 自动回复、自动触达、WeCom/HIS mutation、Staging 或 Production。
+
 <!-- WORKBENCH_CONTROLLED_WRITE_FINAL_ACCEPTANCE_HISTORY_20260820 -->
 
 ## 2026-08-20：工作台受控写重聚合最终验收

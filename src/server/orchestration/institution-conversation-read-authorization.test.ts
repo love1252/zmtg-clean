@@ -159,6 +159,8 @@ describe('Conversations Queue formal read authorization', () => {
     expect(Object.isFrozen(result.authorization)).toBe(true);
     expect(Reflect.ownKeys(result.authorization)).toEqual([]);
     expect(consumeInstitutionConversationReadAuthorizationV1(result.authorization)).toEqual({
+      accountId: 'account-001',
+      role: 'tenant_admin',
       tenantId: 'tenant-001',
       institutionId: 'institution-001',
       observedAt: '2026-08-15T08:00:00.000Z',

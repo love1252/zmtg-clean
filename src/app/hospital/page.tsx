@@ -1,6 +1,5 @@
 
 import { InstitutionNavigationShell } from '@/modules/institution/components/InstitutionNavigationShell';
-import type { ConversationActionSourceV1 } from '@/modules/institution-contracts/v1/conversation-action';
 import type { InstitutionNavigationSectionIdV1 } from '@/modules/institution-contracts/v1/institution-navigation';
 import { resolveInstitutionServerAuthorizationV1 } from '@/modules/institution/server/institution-server-runtime';
 import { InstitutionWorkbenchCapabilityOff } from '@/modules/institution-workbench/components/InstitutionWorkbenchCapabilityOff';
@@ -15,6 +14,7 @@ import {
 } from '@/modules/security/server/institution-section-guard';
 import { resolveInstitutionCapabilityAuthorityStatusV1 } from '@/server/orchestration/institution-capability-authority';
 import { readCurrentInstitutionCareActionSourceV1 } from '@/server/orchestration/institution-care-action-source';
+import { readCurrentInstitutionConversationActionSourceV1 } from '@/server/orchestration/institution-conversation-action-source';
 import {
   canCurrentInstitutionCreateFormalAppointmentV1,
   canCurrentInstitutionCreateFormalFollowUpV1,
@@ -177,34 +177,6 @@ function selectGovernedWorkbenchProjection(
   });
 }
 
-function disabledConversationActionSource(
-  tenantId: string,
-  institutionId: string,
-): ConversationActionSourceV1 {
-  return {
-    contractVersion: 'v1',
-    scope: { tenantId, institutionId },
-    readiness: 'disabled',
-    freshness: null,
-    partitions: [
-      {
-        key: 'waiting_human',
-        readiness: 'disabled',
-        freshness: null,
-        failureCode: 'not_released',
-      },
-      {
-        key: 'unresolved_risk',
-        readiness: 'disabled',
-        freshness: null,
-        failureCode: 'not_released',
-      },
-    ],
-    data: null,
-    failureCode: 'not_released',
-  };
-}
-
 export default async function HospitalPage() {
   let navigationAuthorization: unknown;
   try {
@@ -295,14 +267,19 @@ export default async function HospitalPage() {
     try {
       const care = await readCurrentInstitutionCareActionSourceV1();
       if (care) {
-        actionProjection = buildWorkbenchActionProjection({
-          care,
-          conversation: disabledConversationActionSource(
-            care.scope.tenantId,
-            care.scope.institutionId,
-          ),
-          filter: 'all',
-        });
+        const conversation =
+          await readCurrentInstitutionConversationActionSourceV1({
+            tenantId: care.scope.tenantId,
+            institutionId: care.scope.institutionId,
+          });
+
+        if (conversation) {
+          actionProjection = buildWorkbenchActionProjection({
+            care,
+            conversation,
+            filter: 'all',
+          });
+        }
       }
     } catch {
       actionProjection = null;

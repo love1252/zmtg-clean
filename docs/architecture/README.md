@@ -1,3 +1,19 @@
+<!-- CONVERSATION_ACTION_SOURCE_FORMAL_RELEASE_ARCH_20260821 -->
+
+## Conversation Action Source 正式发布（2026-08-21）
+
+`/hospital` 的行动聚合现在由两个正式 source 组成：既有 `CareActionSourceV1` 与
+正式 `ConversationActionSourceV1`。Conversation 链路固定为：formal session →
+authoritative Membership / institution scope → Conversation read authorization →
+`page_conversation_queue` operational capability gate → 0049 canonical Conversation
+persistence → current conversation/segment/assignment/risk/message facts →
+`projectConversationActionSource` → Workbench action aggregation。
+
+Workbench 不直接读取 Conversation table，也不拥有 Conversation role/object
+authorization；source scope mismatch、capability 未发布、持久化事实不完整或超出 bounded
+queue 均 fail-closed。该发布仅增加内部正式行动读取/聚合，不授权真实消息入站、发送、
+AI 自动回复、自动触达或任何 WeCom/HIS mutation。
+
 <!-- WORKBENCH_CONTROLLED_WRITE_FINAL_ACCEPTANCE_ARCH_20260820 -->
 
 ## 工作台受控写重聚合最终验收（2026-08-20）
