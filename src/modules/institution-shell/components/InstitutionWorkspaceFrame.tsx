@@ -11,12 +11,17 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  Bell,
+  Building2,
+  CircleHelp,
   Command,
+  MessagesSquare,
   LayoutDashboard,
   MoreHorizontal,
   Plus,
   Search,
   ShieldCheck,
+  UserRound,
   X,
 } from 'lucide-react';
 import {
@@ -109,6 +114,9 @@ export function InstitutionWorkspaceFrame({
   >(undefined);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isTabMenuOpen, setIsTabMenuOpen] = useState(false);
+  const [activeUtility, setActiveUtility] = useState<
+    'messages' | 'notifications' | 'help' | 'user' | null
+  >(null);
   const [query, setQuery] = useState('');
   const searchButtonRef = useRef<HTMLButtonElement>(null);
   const searchDialogRef = useRef<HTMLElement>(null);
@@ -177,15 +185,26 @@ export function InstitutionWorkspaceFrame({
       } catch {
         // Legacy cleanup is best effort; no legacy value is ever restored.
       }
-      setTabs(
-        filterInstitutionWorkspaceTabsByPagePathsV1(
-          mergeInstitutionWorkspaceTabsV1(
-            readStoredPaths(storageKey),
-            effectivePathname,
-          ),
-          availablePagePaths,
+      const nextTabs = filterInstitutionWorkspaceTabsByPagePathsV1(
+        mergeInstitutionWorkspaceTabsV1(
+          readStoredPaths(storageKey),
+          effectivePathname,
         ),
+        availablePagePaths,
       );
+      if (storageKey) {
+        try {
+          window.sessionStorage.setItem(
+            storageKey,
+            JSON.stringify(
+              nextTabs.filter((tab) => !tab.fixed).map((tab) => tab.pathname),
+            ),
+          );
+        } catch {
+          // Session storage is optional UI state; hydration remains in memory.
+        }
+      }
+      setTabs(nextTabs);
       setHydratedStorageKey(storageKey);
     });
     return () => window.cancelAnimationFrame(frame);
@@ -200,18 +219,29 @@ export function InstitutionWorkspaceFrame({
   useEffect(() => {
     if (!isHydrated) return;
 
-    const frame = window.requestAnimationFrame(() => {
-      setTabs((currentTabs) =>
-        filterInstitutionWorkspaceTabsByPagePathsV1(
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setTabs((currentTabs) => {
+        const nextTabs = filterInstitutionWorkspaceTabsByPagePathsV1(
           mergeInstitutionWorkspaceTabsV1(
             currentTabs.map((tab) => tab.pathname),
             effectivePathname,
           ),
           availablePagePaths,
-        ),
-      );
+        );
+        return nextTabs.length === currentTabs.length
+          && nextTabs.every((tab, tabPosition) => (
+            tab.pathname === currentTabs[tabPosition]?.pathname
+          ))
+          ? currentTabs
+          : nextTabs;
+      });
     });
-    return () => window.cancelAnimationFrame(frame);
+
+    return () => {
+      cancelled = true;
+    };
   }, [availablePagePaths, availablePagePathsKey, effectivePathname, isHydrated]);
 
   useEffect(() => {
@@ -241,10 +271,12 @@ export function InstitutionWorkspaceFrame({
       if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === 'k') {
         event.preventDefault();
         setIsTabMenuOpen(false);
+        setActiveUtility(null);
         setIsSearchOpen(true);
       } else if (event.key === 'Escape') {
         setIsSearchOpen(false);
         setIsTabMenuOpen(false);
+        setActiveUtility(null);
       }
     }
 
@@ -279,6 +311,7 @@ export function InstitutionWorkspaceFrame({
 
   function openNavigationSearch() {
     setIsTabMenuOpen(false);
+    setActiveUtility(null);
     setIsSearchOpen(true);
   }
 
@@ -351,16 +384,21 @@ export function InstitutionWorkspaceFrame({
 
   return (
     <>
-      <header className="hidden h-[var(--institution-topbar)] items-center justify-between gap-5 border-b border-[var(--institution-line)] bg-white px-6 md:flex">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-[var(--institution-text)]">
-            {activeSection?.label ?? '机构工作台'}
-          </div>
-          <div className="mt-0.5 text-xs text-[var(--institution-muted)]">
-            页面访问与业务操作均由服务端重新校验
+      <header className="hidden h-[var(--institution-topbar)] items-center justify-between gap-4 border-b border-[var(--institution-line)] bg-white px-5 md:flex">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700">
+            <Building2 aria-hidden="true" className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold text-[var(--institution-text)]">
+              {activeSection?.label ?? '机构工作台'}
+            </div>
+            <div className="mt-0.5 truncate text-[11px] text-[var(--institution-muted)]">
+              当前机构 · 页面与对象权限由服务端校验
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-2">
           <button
             ref={searchButtonRef}
             type="button"
@@ -369,16 +407,91 @@ export function InstitutionWorkspaceFrame({
             aria-expanded={isSearchOpen}
             aria-controls="institution-navigation-search-dialog"
             onClick={openNavigationSearch}
-            className="flex h-9 min-w-[240px] items-center gap-2 rounded-lg border border-[var(--institution-line)] bg-[var(--institution-bg)] px-3 text-left text-sm text-[var(--institution-muted)] transition hover:border-slate-300 hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/35"
+            className="hidden h-9 min-w-[190px] max-w-[280px] flex-1 items-center gap-2 rounded-lg border border-[var(--institution-line)] bg-[var(--institution-bg)] px-3 text-left text-sm text-[var(--institution-muted)] transition hover:border-slate-300 hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/35 lg:flex xl:min-w-[240px]"
           >
             <Search className="h-4 w-4" />
             <span className="flex-1">搜索栏目与页面</span>
             <span className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold">⌘K</span>
           </button>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+          <button
+            type="button"
+            aria-label="打开机构端导航搜索（紧凑）"
+            aria-haspopup="dialog"
+            aria-expanded={isSearchOpen}
+            aria-controls="institution-navigation-search-dialog"
+            onClick={openNavigationSearch}
+            className="grid h-9 w-9 place-items-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/35 lg:hidden"
+          >
+            <Search aria-hidden="true" className="h-4 w-4" />
+          </button>
+          <span className="hidden items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 xl:inline-flex">
             <ShieldCheck className="h-3.5 w-3.5" />
-            服务端安全边界
+            服务端校验
           </span>
+          <div className="relative flex items-center gap-0.5 border-l border-slate-200 pl-2">
+            {([
+              ['messages', '消息入口', MessagesSquare],
+              ['notifications', '通知入口', Bell],
+              ['help', '帮助入口', CircleHelp],
+              ['user', '用户菜单', UserRound],
+            ] as const).map(([id, label, Icon]) => (
+              <button
+                key={id}
+                type="button"
+                aria-label={label}
+                aria-haspopup="dialog"
+                aria-expanded={activeUtility === id}
+                onClick={() => setActiveUtility((current) => current === id ? null : id)}
+                className={cn(
+                  'grid h-9 w-9 place-items-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/35',
+                  activeUtility === id ? 'bg-slate-100 text-blue-700' : '',
+                )}
+              >
+                <Icon aria-hidden="true" className="h-4 w-4" />
+              </button>
+            ))}
+            {activeUtility ? (
+              <section
+                role="dialog"
+                aria-label={
+                  activeUtility === 'messages'
+                    ? '消息入口状态'
+                    : activeUtility === 'notifications'
+                      ? '通知入口状态'
+                      : activeUtility === 'help'
+                        ? '帮助入口'
+                        : '用户菜单'
+                }
+                className="absolute right-0 top-11 z-50 w-72 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl shadow-slate-950/15"
+              >
+                <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                  <h2 className="text-sm font-semibold text-slate-900">
+                    {activeUtility === 'messages'
+                      ? '消息'
+                      : activeUtility === 'notifications'
+                        ? '通知'
+                        : activeUtility === 'help'
+                          ? '帮助与支持'
+                          : '当前访问身份'}
+                  </h2>
+                  <button type="button" aria-label="关闭顶部浮层" onClick={() => setActiveUtility(null)} className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-slate-100">
+                    <X aria-hidden="true" className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="p-4 text-xs leading-5 text-slate-600">
+                  {activeUtility === 'messages' ? (
+                    <p>统一消息中心 Reader 未开放；这里不会把会话消息解释为系统消息。</p>
+                  ) : activeUtility === 'notifications' ? (
+                    <p>通知聚合 Reader 未开放；当前不显示模拟未读数。</p>
+                  ) : activeUtility === 'help' ? (
+                    <div className="space-y-2"><p>快捷键：⌘ / Ctrl + K 打开页面搜索。</p><p>页面异常时请保留当前路由与机构作用域，交由管理员核查 Capability。</p></div>
+                  ) : (
+                    <div className="space-y-2"><p className="font-semibold text-slate-800">当前机构授权身份</p><p>姓名、手机号和成员标识不会写入 Workspace Storage。</p><p className="text-slate-400">账户与退出登录继续由现有 Auth 边界负责。</p></div>
+                  )}
+                </div>
+              </section>
+            ) : null}
+          </div>
         </div>
       </header>
 
@@ -518,7 +631,7 @@ export function InstitutionWorkspaceFrame({
         </div>
       </nav>
 
-      <main className="mx-auto min-h-[calc(100vh-var(--institution-topbar)-var(--institution-workspace))] w-full max-w-[1680px] px-4 py-5 pb-28 sm:px-6 md:pb-8 lg:px-8 lg:py-8">
+      <main className="mx-auto min-h-[calc(100vh-var(--institution-topbar)-var(--institution-workspace))] w-full max-w-[1680px] px-4 py-5 pb-28 sm:px-5 md:pb-8 lg:px-6 lg:py-6">
         {children}
       </main>
 

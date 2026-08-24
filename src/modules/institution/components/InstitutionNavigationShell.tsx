@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import {
   BarChart3,
@@ -54,6 +55,7 @@ export function InstitutionNavigationShell({
   workspaceScopeKey,
   children,
 }: InstitutionNavigationShellProps) {
+  const pathname = usePathname() ?? '';
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
@@ -77,6 +79,9 @@ export function InstitutionNavigationShell({
   const activeSection = availableIds.has(activeSectionId)
     ? INSTITUTION_NAVIGATION_SECTIONS_V1.find((section) => section.id === activeSectionId)
     : null;
+  const activePageTargets = availableNavigationTargets.filter(
+    (target) => target.sectionId === activeSectionId,
+  );
 
   useEffect(() => {
     if (!isMoreOpen) return;
@@ -174,7 +179,7 @@ export function InstitutionNavigationShell({
 
         <nav
           aria-label="机构端桌面导航"
-          className={cn('relative flex-1 space-y-1 overflow-y-auto py-3', isCollapsed ? 'px-2' : 'px-3')}
+          className={cn('relative space-y-1 overflow-y-auto py-3', isCollapsed ? 'px-2' : 'px-3')}
         >
           {desktopSections.map((section) => {
             const Icon = sectionIcons[section.id];
@@ -188,7 +193,7 @@ export function InstitutionNavigationShell({
                 aria-label={section.label}
                 title={isCollapsed ? section.label : undefined}
                 className={cn(
-                  'flex h-11 items-center rounded-2xl text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50',
+                  'flex h-10 items-center rounded-lg text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50',
                   isCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
                   isActive
                     ? 'bg-cyan-300/14 text-cyan-100 ring-1 ring-cyan-300/20'
@@ -201,6 +206,54 @@ export function InstitutionNavigationShell({
             );
           })}
         </nav>
+
+        {activePageTargets.length > 1 ? (
+          <nav
+            aria-label="机构端页面导航"
+            className={cn(
+              'relative min-h-0 flex-1 overflow-y-auto border-t border-white/10 py-3',
+              isCollapsed ? 'px-2' : 'px-3',
+            )}
+          >
+            {!isCollapsed ? (
+              <p className="px-3 pb-2 text-[10px] font-semibold tracking-[0.14em] text-slate-500">
+                {activeSection?.label}页面
+              </p>
+            ) : null}
+            <div className="space-y-0.5">
+              {activePageTargets.map((target) => {
+                const isCurrent = pathname === target.pathname;
+                return (
+                  <Link
+                    key={target.pathname}
+                    href={target.pathname}
+                    aria-current={isCurrent ? 'page' : undefined}
+                    aria-label={isCollapsed ? target.label : undefined}
+                    title={isCollapsed ? target.label : undefined}
+                    className={cn(
+                      'flex min-h-9 items-center rounded-lg text-xs transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50',
+                      isCollapsed ? 'justify-center px-0' : 'gap-2.5 px-3',
+                      isCurrent
+                        ? 'bg-white/10 font-semibold text-cyan-100'
+                        : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100',
+                    )}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        'h-1.5 w-1.5 shrink-0 rounded-full',
+                        isCurrent ? 'bg-cyan-300' : 'bg-slate-600',
+                      )}
+                    />
+                    {!isCollapsed ? <span className="truncate">{target.label}</span> : null}
+                  </Link>
+                );
+              })}
+            </div>
+          </nav>
+        ) : (
+          <div className="min-h-0 flex-1" />
+        )}
 
         <div className={cn('relative border-t border-white/10', isCollapsed ? 'p-3' : 'p-4')}>
           <div

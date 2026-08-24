@@ -1,3 +1,5 @@
+'use client';
+
 import {
   Activity,
   ArrowUpRight,
@@ -10,7 +12,6 @@ import {
   Clock3,
   LockKeyhole,
   Plus,
-  ShieldCheck,
   Sparkles,
   UsersRound,
 } from 'lucide-react';
@@ -30,6 +31,10 @@ import {
   type WorkbenchLifecycleProjection,
 } from '@/modules/institution-workbench/domain/workbench-lifecycle-view-models';
 import { cn } from '@/shared/utils/cn';
+import {
+  InstitutionV11PageHeader,
+  InstitutionV11UnavailableValue,
+} from '@/modules/institution-v11/components/InstitutionV11Ui';
 
 export type InstitutionWorkbenchShellProps = Readonly<{
   actionProjection: WorkbenchActionProjection;
@@ -301,7 +306,7 @@ export function InstitutionWorkbenchShell({
 
   return (
     <section
-      aria-labelledby="institution-workbench-heading"
+      aria-label="工作台"
       className="relative space-y-5 overflow-hidden sm:space-y-6"
     >
       <div
@@ -309,38 +314,36 @@ export function InstitutionWorkbenchShell({
         className="pointer-events-none absolute -right-36 -top-44 -z-10 h-96 w-96 rounded-full bg-cyan-200/30 blur-3xl"
       />
 
-      <header className="flex flex-col gap-4 rounded-[28px] border border-white/80 bg-white/72 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between sm:p-7">
-        <div className="flex min-w-0 items-start gap-4">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-slate-950 text-white shadow-lg shadow-slate-950/15">
-            <Activity aria-hidden="true" className="h-5 w-5" />
-          </span>
-          <div className="min-w-0">
-            <p className="text-xs font-semibold tracking-[0.14em] text-cyan-700">机构运营工作台</p>
-            <h1
-              id="institution-workbench-heading"
-              className="mt-1 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl"
-            >
-              工作台
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              {hasVisibleProjection
-                ? '聚合已授权的预约、随访与会话信息，帮助团队优先处理需要关注的事项。'
-                : '当前仅展示安全阻断状态；业务数据和业务入口保持隐藏。'}
-            </p>
+      <div id="institution-workbench-heading">
+        {hasVisibleProjection ? <span className="sr-only">聚合已授权的预约、随访与会话信息，帮助团队优先处理需要关注的事项。</span> : null}
+        <InstitutionV11PageHeader
+          eyebrow="INSTITUTION WORKBENCH"
+          title="工作台"
+          description={hasVisibleProjection
+            ? '聚合已授权的预约、随访与会话低敏投影，缺少正式 Reader 的指标保持不可用。'
+            : '当前仅展示安全阻断状态；业务数据和业务入口保持隐藏。'}
+          breadcrumbs={[{ label: '机构端' }, { label: '工作台' }]}
+          state={hasVisibleProjection ? 'READ_ONLY' : 'CAPABILITY_OFF'}
+        />
+      </div>
+
+      <section aria-labelledby="workbench-kpi-heading">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-semibold tracking-[0.12em] text-slate-400">实时经营信号</p>
+            <h2 id="workbench-kpi-heading" className="mt-0.5 text-[15px] font-semibold text-slate-950">今日概览</h2>
           </div>
+          <span className="text-[11px] text-slate-500">无正式 Reader 的指标不会显示为 0</span>
         </div>
-        <span
-          className={cn(
-            'inline-flex w-fit shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold',
-            hasVisibleProjection
-              ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
-              : 'border-amber-200 bg-amber-50 text-amber-700',
-          )}
-        >
-          <ShieldCheck aria-hidden="true" className="h-3.5 w-3.5" />
-          {hasVisibleProjection ? '已授权投影' : '安全阻断'}
-        </span>
-      </header>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+          <InstitutionV11UnavailableValue label="今日新增客户" source="Customer Reader 未提供今日聚合" icon={UsersRound} />
+          <InstitutionV11UnavailableValue label="待处理会话" source="Conversation Queue 未提供安全计数" icon={Activity} />
+          <InstitutionV11UnavailableValue label="今日预约" source="Appointment Reader 未提供今日聚合" icon={CalendarCheck2} />
+          <InstitutionV11UnavailableValue label="待执行随访" source="Follow-up Projection 未提供统一计数" icon={CalendarClock} />
+          <InstitutionV11UnavailableValue label="经营机会" source="Opportunity Domain 未开放" icon={Sparkles} />
+          <InstitutionV11UnavailableValue label="异常事项" source="统一异常 Reader 未开放" icon={CircleAlert} />
+        </div>
+      </section>
 
       {hasVisibleProjection ? null : (
         <section

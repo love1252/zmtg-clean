@@ -120,6 +120,7 @@ export default async function HospitalAnalyticsOverviewPage() {
         && CAPABILITY_OFF_ROUTE ? (
         <InstitutionCapabilityOffPage
           pageLabel={CAPABILITY_OFF_ROUTE.pageLabel}
+          routeId={CAPABILITY_OFF_ROUTE.routeId}
           section={CAPABILITY_OFF_ROUTE.section}
         />
       ) : (

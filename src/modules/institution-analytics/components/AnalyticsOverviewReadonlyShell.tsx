@@ -1,6 +1,13 @@
+'use client';
+
 import type {
   AnalyticsOverviewV1,
 } from '@/modules/institution-analytics/application/institution/analytics-overview-reader';
+import {
+  InstitutionV11DateRangeControl,
+  InstitutionV11PageHeader,
+  InstitutionV11Tabs,
+} from '@/modules/institution-v11/components/InstitutionV11Ui';
 
 function currencyDivisor(currency: string) {
   try {
@@ -60,15 +67,32 @@ export function AnalyticsOverviewReadonlyShell({
 }: Readonly<{ overview: AnalyticsOverviewV1 }>) {
   return (
     <section className="space-y-6" aria-labelledby="analytics-overview-title">
-      <header className="space-y-2">
-        <p className="text-sm text-slate-500">经营分析 · 只读试用</p>
-        <h1 id="analytics-overview-title" className="text-2xl font-semibold text-slate-950">
-          经营总览
-        </h1>
-        <p className="text-sm text-slate-600">
-          本月截至 {overview.asOfBusinessDate}，对比上一等长周期。金额按币种独立呈现，不跨币种合计。
-        </p>
-      </header>
+      <div id="analytics-overview-title">
+        <InstitutionV11PageHeader
+          eyebrow="BUSINESS ANALYTICS"
+          title="经营总览"
+          description={`本月截至 ${overview.asOfBusinessDate}，对比上一等长周期。金额按币种独立呈现，不跨币种合计。`}
+          breadcrumbs={[{ label: '机构端', href: '/hospital' }, { label: '经营分析' }, { label: '经营总览' }]}
+          state="READ_ONLY"
+          actions={<InstitutionV11DateRangeControl label="本月" />}
+        />
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+        <InstitutionV11Tabs
+          label="经营分析页面"
+          activeId="overview"
+          onChange={() => undefined}
+          items={[
+            { id: 'overview', label: '经营总览' },
+            { id: 'customers', label: '客户分析', disabled: true, reason: '需要页面级 Capability' },
+            { id: 'appointments', label: '预约与服务', disabled: true, reason: '需要页面级 Capability' },
+            { id: 'followups', label: '随访与触达', disabled: true, reason: '需要页面级 Capability' },
+            { id: 'ai', label: 'AI 与自动化', disabled: true, reason: '需要页面级 Capability' },
+            { id: 'strategy', label: '经营策略', disabled: true, reason: '经营策略模型未开放' },
+          ]}
+        />
+      </div>
 
       {overview.dataState === 'empty' ? (
         <div
@@ -121,7 +145,7 @@ export function AnalyticsOverviewReadonlyShell({
             return (
               <section
                 key={item.currency}
-                className="border border-slate-200 bg-white p-5"
+                className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
                 aria-label={`${item.currency} 经营指标`}
               >
                 <div className="mb-4 flex items-center justify-between gap-4">
@@ -130,7 +154,7 @@ export function AnalyticsOverviewReadonlyShell({
                 </div>
                 <div className="grid gap-3 md:grid-cols-5">
                   {metrics.map((metric) => (
-                    <article key={metric.label} className="border border-slate-100 p-3">
+                    <article key={metric.label} className="rounded-lg border border-slate-100 bg-slate-50/50 p-3">
                       <p className="text-xs text-slate-500">{metric.label}</p>
                       <p className="mt-2 text-lg font-semibold text-slate-950">
                         {metric.value}
@@ -147,8 +171,11 @@ export function AnalyticsOverviewReadonlyShell({
         </div>
       )}
 
-      <footer className="text-xs text-slate-500">
-        当前页面仅展示确定性只读指标，不提供自定义时间窗、导出、AI 经营报告或任何写入操作。
+      <footer className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-lg border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500">
+        <span>数据来源：正式消费事实聚合</span>
+        <span>统计口径：成功支付与确认退款</span>
+        <span>更新时间：{overview.asOfBusinessDate}</span>
+        <span>新鲜度：按当前 Reader 返回</span>
       </footer>
     </section>
   );

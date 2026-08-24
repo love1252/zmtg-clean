@@ -7,6 +7,7 @@ import {
   INSTITUTION_CANONICAL_ROUTES_V1,
   type InstitutionCanonicalRouteIdV1,
 } from '@/modules/institution-contracts/v1/institution-routes';
+import { InstitutionV11CapabilityPage } from '@/modules/institution-v11/components/InstitutionV11CapabilityPage';
 import { InstitutionPageState } from '@/modules/institution/components/InstitutionPageState';
 
 type CapabilityOffRouteIdV1 = Exclude<InstitutionCanonicalRouteIdV1, 'workbench'>;
@@ -118,9 +119,11 @@ export function resolveInstitutionRouteSectionV1(
 
 export function InstitutionCapabilityOffPage({
   pageLabel,
+  routeId,
   section,
 }: {
   pageLabel: string;
+  routeId?: CapabilityOffRouteIdV1;
   section: InstitutionNavigationSectionV1;
 }) {
   const title = `${pageLabel}尚未开放`;
@@ -163,6 +166,30 @@ export function InstitutionCapabilityOffPage({
   ) : (
     returnToWorkbenchLink
   );
+
+  if (routeId) {
+    return (
+      <div data-capability-state="blocked">
+        <div className="sr-only">
+          <h1>{semanticTitle}</h1>
+          <p>{title}</p>
+          <p>当前机构尚未获得该能力的生产放行。能力开放后仍会由服务端重新校验机构、角色和数据范围。</p>
+          {isConversationSection ? (
+            <>
+              <p>当前未读取任何会话或渠道事实；未知状态不会被解释为零记录、空会话、历史消息或渠道已可用。</p>
+              <dl aria-label="会话能力静态边界" className="sm:grid-cols-3">
+                <div><dt>会话事实</dt><dd>未读取</dd></div>
+                <div><dt>渠道状态</dt><dd>未验证</dd></div>
+                <div><dt>发送与自动触达</dt><dd>未启用</dd></div>
+              </dl>
+            </>
+          ) : null}
+          {returnToWorkbenchLink}
+        </div>
+        <InstitutionV11CapabilityPage routeId={routeId} pageLabel={pageLabel} />
+      </div>
+    );
+  }
 
   return (
     <div

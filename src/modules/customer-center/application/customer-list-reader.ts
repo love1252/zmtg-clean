@@ -1,6 +1,12 @@
 import { isProxy } from 'node:util/types';
 
 import {
+  CUSTOMER_LIST_MAX_OFFSET_V1,
+  CUSTOMER_LIST_MAX_PAGE_V1,
+  CUSTOMER_LIST_PAGE_SIZE_V1,
+} from '@/modules/customer-center/application/customer-list-pagination-contract';
+
+import {
   CUSTOMER_LIST_LIFECYCLES_V1,
   CUSTOMER_LIST_PRIORITIES_V1,
   type CustomerListLifecycleV1,
@@ -9,9 +15,11 @@ import {
   type CustomerListSourceV1,
 } from '@/modules/customer-center/ports/customer-list-source';
 
-export const CUSTOMER_LIST_PAGE_SIZE_V1 = 20;
-export const CUSTOMER_LIST_MAX_PAGE_V1 = 100;
-export const CUSTOMER_LIST_MAX_OFFSET_V1 = 1980;
+export {
+  CUSTOMER_LIST_MAX_OFFSET_V1,
+  CUSTOMER_LIST_MAX_PAGE_V1,
+  CUSTOMER_LIST_PAGE_SIZE_V1,
+} from '@/modules/customer-center/application/customer-list-pagination-contract';
 
 export type CustomerListItemV1 = Readonly<{
   contractVersion: 'v1';

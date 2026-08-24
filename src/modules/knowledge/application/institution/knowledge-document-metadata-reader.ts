@@ -1,38 +1,22 @@
 import { isProxy } from 'node:util/types';
 
+import {
+  KNOWLEDGE_DOCUMENT_METADATA_MAX_PAGE_V1,
+  KNOWLEDGE_DOCUMENT_METADATA_PAGE_SIZE_V1,
+  type KnowledgeDocumentMetadataReaderResultV1,
+} from '@/modules/knowledge/application/institution/knowledge-document-metadata-pagination-contract';
 import type {
   InstitutionDocumentMetadataSourceRowV1,
   InstitutionDocumentMetadataSourceV1,
 } from '@/modules/knowledge/ports/institution-document-metadata-source';
 
-export const KNOWLEDGE_DOCUMENT_METADATA_PAGE_SIZE_V1 = 20;
-export const KNOWLEDGE_DOCUMENT_METADATA_MAX_PAGE_V1 = 100;
-export const KNOWLEDGE_DOCUMENT_METADATA_MAX_OFFSET_V1 = 1980;
-
-export type KnowledgeDocumentMetadataItemV1 = Readonly<{
-  contractVersion: 'v1';
-  documentId: string;
-  title: string;
-  version: number;
-  sourceLabel: string;
-  publishedAt: string;
-}>;
-
-export type KnowledgeDocumentMetadataReaderResultV1 =
-  | Readonly<{
-      kind: 'ready';
-      records: readonly KnowledgeDocumentMetadataItemV1[];
-      pageInfo: Readonly<{
-        page: number;
-        pageSize: typeof KNOWLEDGE_DOCUMENT_METADATA_PAGE_SIZE_V1;
-        hasMore: boolean;
-      }>;
-    }>
-  | Readonly<{
-      kind: 'invalid_query';
-      code: 'invalid_knowledge_document_query';
-    }>
-  | Readonly<{ kind: 'unavailable' }>;
+export {
+  KNOWLEDGE_DOCUMENT_METADATA_MAX_OFFSET_V1,
+  KNOWLEDGE_DOCUMENT_METADATA_MAX_PAGE_V1,
+  KNOWLEDGE_DOCUMENT_METADATA_PAGE_SIZE_V1,
+  type KnowledgeDocumentMetadataItemV1,
+  type KnowledgeDocumentMetadataReaderResultV1,
+} from '@/modules/knowledge/application/institution/knowledge-document-metadata-pagination-contract';
 
 export type KnowledgeDocumentMetadataReaderV1 = Readonly<{
   read: (input: Readonly<{

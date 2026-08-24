@@ -27,7 +27,9 @@ describe('Hospital Conversation Queue readonly page', () => {
       '不会使用 AiConversation、fixture、dry-run、mock_sent 或企业微信 proof 补成会话记录',
     );
 
-    for (const label of ['发送', '接管会话', '改派', '结束会话']) {
+    expect(screen.getByRole('button', { name: '发送' })).toBeDisabled();
+    expect(screen.getByPlaceholderText('真实消息发送未开放')).toBeDisabled();
+    for (const label of ['接管会话', '改派', '结束会话']) {
       expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument();
     }
   });

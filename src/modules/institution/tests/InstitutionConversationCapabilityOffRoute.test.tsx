@@ -151,7 +151,8 @@ describe('CONV-SAFE-02B 会话 canonical capability-off 路由', () => {
     expect(screen.queryByText(/^渠道可用$/u)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '接管会话' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '结束会话' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '发送' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '发送' })).toBeDisabled();
+    expect(screen.getByPlaceholderText('真实消息发送未开放')).toBeDisabled();
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.queryByText('正在检查登录状态...')).not.toBeInTheDocument();

@@ -211,6 +211,7 @@ export default async function HospitalCustomersPage({
         CAPABILITY_OFF_ROUTE ? (
         <InstitutionCapabilityOffPage
           pageLabel={CAPABILITY_OFF_ROUTE.pageLabel}
+          routeId={CAPABILITY_OFF_ROUTE.routeId}
           section={CAPABILITY_OFF_ROUTE.section}
         />
       ) : result?.kind === 'invalid_query' ? (

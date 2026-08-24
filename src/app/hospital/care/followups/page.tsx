@@ -189,6 +189,7 @@ export default async function HospitalCareFollowUpsPage() {
           pageLabel={
             CAPABILITY_OFF_ROUTE.pageLabel
           }
+          routeId={CAPABILITY_OFF_ROUTE.routeId}
           section={
             CAPABILITY_OFF_ROUTE.section
           }
