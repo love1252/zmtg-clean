@@ -22,10 +22,16 @@ import {
   type InstitutionNavigationSectionIdV1,
 } from '@/modules/institution-contracts/v1/institution-navigation';
 import { cn } from '@/shared/utils/cn';
+import {
+  InstitutionWorkspaceFrame,
+  type InstitutionNavigationTargetV1,
+} from '@/modules/institution-shell/components/InstitutionWorkspaceFrame';
 
 type InstitutionNavigationShellProps = {
   activeSectionId: InstitutionNavigationSectionIdV1;
   availableSectionIds: readonly InstitutionNavigationSectionIdV1[];
+  availableNavigationTargets: readonly InstitutionNavigationTargetV1[];
+  workspaceScopeKey: string | null;
   children: ReactNode;
 };
 
@@ -44,6 +50,8 @@ const navigationVisibilityBoundary = '当前仅展示导航入口，不代表已
 export function InstitutionNavigationShell({
   activeSectionId,
   availableSectionIds,
+  availableNavigationTargets,
+  workspaceScopeKey,
   children,
 }: InstitutionNavigationShellProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -66,9 +74,9 @@ export function InstitutionNavigationShell({
     const section = INSTITUTION_NAVIGATION_SECTIONS_V1.find((item) => item.id === sectionId);
     return section ? [section] : [];
   });
-  const activeSection = INSTITUTION_NAVIGATION_SECTIONS_V1.find(
-    (section) => section.id === activeSectionId,
-  );
+  const activeSection = availableIds.has(activeSectionId)
+    ? INSTITUTION_NAVIGATION_SECTIONS_V1.find((section) => section.id === activeSectionId)
+    : null;
 
   useEffect(() => {
     if (!isMoreOpen) return;
@@ -118,20 +126,20 @@ export function InstitutionNavigationShell({
   }
 
   return (
-    <div className="min-h-screen bg-[#eef4fb] text-slate-950">
+    <div className="min-h-screen bg-[var(--institution-bg)] text-slate-950">
       <aside
         aria-label="机构端公共侧边栏"
         data-collapsed={isCollapsed ? 'true' : 'false'}
         className={cn(
-          'fixed inset-y-0 left-0 z-30 hidden flex-col overflow-hidden border-r border-white/10 bg-[#071522] text-slate-200 shadow-2xl shadow-slate-950/20 transition-[width] duration-200 md:flex',
-          isCollapsed ? 'w-[72px]' : 'w-[256px]',
+          'fixed inset-y-0 left-0 z-30 hidden flex-col overflow-hidden border-r border-white/10 bg-[var(--institution-nav)] text-slate-200 shadow-2xl shadow-slate-950/20 transition-[width] duration-200 md:flex',
+          isCollapsed ? 'w-[var(--institution-sidebar-collapsed)]' : 'w-[var(--institution-sidebar-expanded)]',
         )}
       >
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(39,211,193,0.16),transparent_38%),linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[length:auto,32px_32px,32px_32px]" />
 
         <div
           className={cn(
-            'relative flex h-[78px] shrink-0 items-center border-b border-white/10',
+            'relative flex h-[var(--institution-topbar)] shrink-0 items-center border-b border-white/10',
             isCollapsed ? 'justify-center px-2' : 'gap-3 px-5',
           )}
         >
@@ -212,7 +220,7 @@ export function InstitutionNavigationShell({
         aria-label="机构端公共内容区"
         className={cn(
           'min-h-screen transition-[padding] duration-200',
-          isCollapsed ? 'md:pl-[72px]' : 'md:pl-[256px]',
+          isCollapsed ? 'md:pl-[var(--institution-sidebar-collapsed)]' : 'md:pl-[var(--institution-sidebar-expanded)]',
         )}
       >
         <header className="sticky top-0 z-20 border-b border-white/70 bg-white/85 px-4 py-3 shadow-sm shadow-slate-200/50 backdrop-blur-xl md:hidden">
@@ -228,9 +236,14 @@ export function InstitutionNavigationShell({
           </div>
         </header>
 
-        <main className="mx-auto min-h-screen w-full max-w-[1680px] px-4 py-5 pb-28 sm:px-6 md:pb-8 lg:px-8 lg:py-8">
+        <InstitutionWorkspaceFrame
+          activeSectionId={activeSectionId}
+          availableSectionIds={availableSectionIds}
+          availableNavigationTargets={availableNavigationTargets}
+          workspaceScopeKey={workspaceScopeKey}
+        >
           {children}
-        </main>
+        </InstitutionWorkspaceFrame>
 
         <nav
           aria-label="机构端移动导航"

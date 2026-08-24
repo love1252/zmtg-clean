@@ -6,14 +6,13 @@ import {
 import { InstitutionNavigationShell } from '@/modules/institution/components/InstitutionNavigationShell';
 import { InstitutionPageState } from '@/modules/institution/components/InstitutionPageState';
 import type { CapabilityStatusV1 } from '@/modules/institution-contracts/v1/institution-capability';
-import type { InstitutionNavigationSectionIdV1 } from '@/modules/institution-contracts/v1/institution-navigation';
+import { resolveInstitutionShellAuthorizationV1 } from '@/modules/institution-shell/server/institution-shell-authorization';
 import { resolveInstitutionServerAuthorizationV1 } from '@/modules/institution/server/institution-server-runtime';
 import { isInstitutionRequestAuthorizationV1 } from '@/modules/security/server/institution-request-authorization';
 import {
   isInstitutionNavigationAuthorizationV1,
   type InstitutionNavigationAuthorizationV1,
 } from '@/modules/security/server/institution-section-guard';
-import { resolveInstitutionCapabilityAuthorityStatusV1 } from '@/server/orchestration/institution-capability-authority';
 import { readCurrentInstitutionFormalFollowUpsV1 } from '@/server/orchestration/institution-formal-follow-up-runtime';
 
 export const dynamic = 'force-dynamic';
@@ -21,10 +20,6 @@ export const dynamic = 'force-dynamic';
 const TARGET_SECTION_ID = 'care' as const;
 const TARGET_CAPABILITY_KEY =
   'page_care_followups' as const;
-const EMPTY_SECTION_IDS =
-  Object.freeze(
-    [],
-  ) as readonly InstitutionNavigationSectionIdV1[];
 const CAPABILITY_OFF_ROUTE =
   resolveInstitutionCapabilityOffRouteV1([
     'care',
@@ -134,31 +129,26 @@ export default async function HospitalCareFollowUpsPage() {
       navigationAuthorization;
   }
 
-  const availableSectionIds =
-    exactNavigationAuthorization
-      ? exactNavigationAuthorization
-          .availableSectionIds
-      : EMPTY_SECTION_IDS;
-
   const genuineAllowed =
     exactNavigationAuthorization?.targetAccess
       === 'allowed';
   const genuineBlocked =
     exactNavigationAuthorization?.targetAccess
       === 'blocked';
+  const {
+    availableSectionIds,
+    availableNavigationTargets,
+    capabilityStatus,
+    workspaceScopeKey,
+  } = await resolveInstitutionShellAuthorizationV1(
+    exactNavigationAuthorization,
+  );
 
   let capabilityState:
     PageCapabilityState = 'unavailable';
 
   if (genuineAllowed) {
-    try {
-      capabilityState =
-        resolveExactCapabilityState(
-          await resolveInstitutionCapabilityAuthorityStatusV1(),
-        );
-    } catch {
-      capabilityState = 'unavailable';
-    }
+    capabilityState = resolveExactCapabilityState(capabilityStatus);
   }
 
   const result =
@@ -176,6 +166,8 @@ export default async function HospitalCareFollowUpsPage() {
       availableSectionIds={
         availableSectionIds
       }
+      availableNavigationTargets={availableNavigationTargets}
+      workspaceScopeKey={workspaceScopeKey}
     >
       {result?.kind === 'ready' ? (
         <CareFollowUpControlledShell

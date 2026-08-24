@@ -15,6 +15,7 @@ const wireMocks = vi.hoisted(() => {
     resolveInstitutionAuditReadAuthorizationV1: vi.fn(),
     resolveInstitutionCapabilityAuthorityStatusV1: vi.fn(),
     resolveInstitutionServerAuthorizationV1: vi.fn(),
+    workspaceScopeKey: 'S'.repeat(43),
   };
 });
 
@@ -36,6 +37,20 @@ vi.mock('@/modules/security/server/institution-section-guard', () => ({
       typeof value === 'object' &&
       wireMocks.genuineDecisions.has(value),
   ),
+  readInstitutionNavigationWorkspaceScopeKeyV1: vi.fn(
+    (value: unknown) =>
+      value !== null
+      && typeof value === 'object'
+      && wireMocks.genuineDecisions.has(value)
+        ? wireMocks.workspaceScopeKey
+        : null,
+  ),
+  matchesInstitutionNavigationAuthorizationScopeV1: vi.fn(
+    (value: unknown) =>
+      value !== null
+      && typeof value === 'object'
+      && wireMocks.genuineDecisions.has(value),
+  ),
 }));
 
 vi.mock('@/server/orchestration/institution-audit-read-authorization', () => ({
@@ -48,6 +63,14 @@ vi.mock('@/server/orchestration/institution-audit-read-authorization', () => ({
 vi.mock('@/server/orchestration/institution-capability-authority', () => ({
   resolveInstitutionCapabilityAuthorityStatusV1:
     wireMocks.resolveInstitutionCapabilityAuthorityStatusV1,
+}));
+
+vi.mock('next/navigation', () => ({
+  notFound: () => {
+    throw new Error('404');
+  },
+  usePathname: () => '/hospital',
+  useRouter: () => ({ push: vi.fn() }),
 }));
 
 import HospitalCapabilityOffRoute from '@/app/hospital/[...slug]/page';
@@ -133,6 +156,49 @@ function auditAuthorityStatus(
   };
 }
 
+function shellNavigationAuthorityStatus(): CapabilityStatusV1 {
+  const freshness = {
+    observedAt: '2026-08-24T15:00:00.000Z',
+    freshUntil: '2026-08-24T15:00:05.000Z',
+  };
+  const keys = [
+    'page_workbench',
+    'page_customer_list',
+    'page_conversation_queue',
+  ] as const;
+  return {
+    contractVersion: 'v1',
+    scope: {
+      tenantId: 'tenant-shell-route-001',
+      institutionId: 'institution-shell-route-001',
+    },
+    readiness: 'ready',
+    freshness,
+    partitions: keys.map((key) => ({
+      key,
+      readiness: 'ready',
+      freshness,
+      failureCode: null,
+    })),
+    data: {
+      capabilities: keys.map((key) => ({
+        key,
+        decision: 'operational',
+        dimensions: {
+          codeMaturity: 'verified',
+          institutionAuthorization: 'authorized',
+          connectionAvailability: 'not_required',
+          dataReadiness: 'ready',
+          productionRelease: 'pilot_released',
+        },
+        safeSummary: null,
+        diagnosticTargetKey: null,
+      })),
+    },
+    failureCode: null,
+  };
+}
+
 function partialVerifiedEmptyAuditResponse() {
   return new Response(
     JSON.stringify({
@@ -206,6 +272,8 @@ describe('BASE-01A-R1 机构端稳定路由壳', () => {
       <InstitutionNavigationShell
         activeSectionId="customers"
         availableSectionIds={allSectionIds}
+        availableNavigationTargets={[]}
+        workspaceScopeKey={null}
       >
         <div>客户中心内容</div>
       </InstitutionNavigationShell>,
@@ -282,6 +350,8 @@ describe('BASE-01A-R1 机构端稳定路由壳', () => {
       <InstitutionNavigationShell
         activeSectionId="customers"
         availableSectionIds={allSectionIds}
+        availableNavigationTargets={[]}
+        workspaceScopeKey={null}
       >
         <div>客户中心内容</div>
       </InstitutionNavigationShell>,
@@ -333,6 +403,8 @@ describe('BASE-01A-R1 机构端稳定路由壳', () => {
       <InstitutionNavigationShell
         activeSectionId="analytics"
         availableSectionIds={['workbench']}
+        availableNavigationTargets={[]}
+        workspaceScopeKey={null}
       >
         <div>未发布页面</div>
       </InstitutionNavigationShell>,
@@ -520,9 +592,11 @@ describe('BASE-WIRE-01 canonical route authorization wiring', () => {
   beforeEach(() => {
     wireMocks.resolveInstitutionServerAuthorizationV1.mockReset();
     wireMocks.authorizeCurrentInstitutionNavigationV1.mockReset();
+    wireMocks.resolveInstitutionCapabilityAuthorityStatusV1.mockReset();
     wireMocks.resolveInstitutionServerAuthorizationV1.mockResolvedValue(
       wireMocks.authorization,
     );
+    wireMocks.resolveInstitutionCapabilityAuthorityStatusV1.mockResolvedValue(null);
   });
 
   it('resolves an unknown slug before authorization and keeps notFound at zero calls', async () => {
@@ -633,6 +707,60 @@ describe('BASE-WIRE-01 canonical route authorization wiring', () => {
     expect(within(main).queryByText(/^\d+$/u)).not.toBeInTheDocument();
     expect(within(main).queryAllByRole('button')).toHaveLength(0);
     expect(within(main).queryAllByRole('link')).toHaveLength(0);
+  });
+
+  it('当前管理页被阻断时仍从 Authority 提供其他已授权页面搜索结果，阻断内容不放行', async () => {
+    wireMocks.authorizeCurrentInstitutionNavigationV1.mockResolvedValueOnce(
+      mintNavigationDecision('system', 'blocked', [
+        'workbench',
+        'customers',
+        'conversations',
+        'care',
+      ]),
+    );
+    wireMocks.resolveInstitutionCapabilityAuthorityStatusV1.mockResolvedValueOnce(
+      shellNavigationAuthorityStatus(),
+    );
+
+    render(
+      await HospitalCapabilityOffRoute({
+        params: Promise.resolve({ slug: ['system'] }),
+      }),
+    );
+
+    expect(screen.getByText('当前账号不可访问该栏目')).toBeInTheDocument();
+    expect(screen.queryByText('系统概览尚未开放')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '打开机构端导航搜索' }));
+    const dialog = screen.getByRole('dialog', { name: '搜索栏目与页面' });
+    expect(within(dialog).getByRole('link', { name: /客户列表/u })).toHaveAttribute(
+      'href',
+      '/hospital/customers',
+    );
+    expect(within(dialog).queryByRole('link', { name: /管理中心/u })).toBeNull();
+  });
+
+  it('当前 capability-off 页面仍保留其他已授权页面搜索结果', async () => {
+    wireMocks.authorizeCurrentInstitutionNavigationV1.mockResolvedValueOnce(
+      mintNavigationDecision('system', 'allowed', allSectionIds),
+    );
+    wireMocks.resolveInstitutionCapabilityAuthorityStatusV1.mockResolvedValueOnce(
+      shellNavigationAuthorityStatus(),
+    );
+
+    render(
+      await HospitalCapabilityOffRoute({
+        params: Promise.resolve({ slug: ['system'] }),
+      }),
+    );
+
+    expect(screen.getByText('系统概览尚未开放')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '打开机构端导航搜索' }));
+    const dialog = screen.getByRole('dialog', { name: '搜索栏目与页面' });
+    expect(within(dialog).getByRole('link', { name: /会话队列/u })).toHaveAttribute(
+      'href',
+      '/hospital/conversations',
+    );
+    expect(within(dialog).queryByRole('link', { name: /管理中心/u })).toBeNull();
   });
 
   it('maps dependency, authenticity, empty and target-mismatch failures to unavailable with empty navigation', async () => {
@@ -864,7 +992,7 @@ describe('POST-V2-R1C /hospital/system/audit admin-only readonly release route',
     ).toHaveBeenCalledTimes(1);
     expect(
       wireMocks.resolveInstitutionCapabilityAuthorityStatusV1,
-    ).not.toHaveBeenCalled();
+    ).toHaveBeenCalledTimes(1);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.queryByRole('heading', { name: '审计日志' })).not.toBeInTheDocument();
     expect(screen.queryByText('审计与安全尚未开放')).not.toBeInTheDocument();
@@ -892,7 +1020,7 @@ describe('POST-V2-R1C /hospital/system/audit admin-only readonly release route',
       ).not.toHaveBeenCalled();
       expect(
         wireMocks.resolveInstitutionCapabilityAuthorityStatusV1,
-      ).not.toHaveBeenCalled();
+      ).toHaveBeenCalledTimes(1);
       expect(fetchMock).not.toHaveBeenCalled();
       expect(screen.queryByRole('heading', { name: '审计日志' })).not.toBeInTheDocument();
     },
@@ -953,7 +1081,7 @@ describe('POST-V2-R1C /hospital/system/audit admin-only readonly release route',
   );
 
   it.each(['unavailable', 'reject'] as const)(
-    'Audit authorization %s renders unavailable without Authority or Audit data',
+    'Audit authorization %s renders unavailable while retaining page-level navigation filtering',
     async (failure) => {
       wireMocks.authorizeCurrentInstitutionNavigationV1.mockResolvedValueOnce(
         mintNavigationDecision('system', 'allowed', allSectionIds),
@@ -975,7 +1103,7 @@ describe('POST-V2-R1C /hospital/system/audit admin-only readonly release route',
       expect(screen.getByText('机构审计能力暂时不可用')).toBeInTheDocument();
       expect(
         wireMocks.resolveInstitutionCapabilityAuthorityStatusV1,
-      ).not.toHaveBeenCalled();
+      ).toHaveBeenCalledTimes(1);
       expect(fetchMock).not.toHaveBeenCalled();
       expect(screen.queryByRole('heading', { name: '审计日志' })).not.toBeInTheDocument();
     },
@@ -1067,6 +1195,6 @@ describe('POST-V2-R1C /hospital/system/audit admin-only readonly release route',
     expect(screen.getByText('数据与隐私尚未开放')).toBeInTheDocument();
     expect(
       wireMocks.resolveInstitutionCapabilityAuthorityStatusV1,
-    ).not.toHaveBeenCalled();
+    ).toHaveBeenCalledTimes(2);
   });
 });

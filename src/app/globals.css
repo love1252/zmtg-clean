@@ -3,6 +3,19 @@
 :root {
   --background: #fbf7f0;
   --foreground: #0b1624;
+  --institution-nav: #071f2b;
+  --institution-nav-active: #0b4557;
+  --institution-accent: #2478f2;
+  --institution-bg: #f4f7fb;
+  --institution-surface: #ffffff;
+  --institution-line: #e4eaf1;
+  --institution-text: #172033;
+  --institution-muted: #6b788b;
+  --institution-ai: #7251ce;
+  --institution-sidebar-expanded: 236px;
+  --institution-sidebar-collapsed: 76px;
+  --institution-topbar: 64px;
+  --institution-workspace: 46px;
 }
 
 * {

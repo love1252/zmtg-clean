@@ -1,6 +1,6 @@
 
 import { InstitutionNavigationShell } from '@/modules/institution/components/InstitutionNavigationShell';
-import type { InstitutionNavigationSectionIdV1 } from '@/modules/institution-contracts/v1/institution-navigation';
+import { resolveInstitutionShellAuthorizationV1 } from '@/modules/institution-shell/server/institution-shell-authorization';
 import { resolveInstitutionServerAuthorizationV1 } from '@/modules/institution/server/institution-server-runtime';
 import { InstitutionWorkbenchCapabilityOff } from '@/modules/institution-workbench/components/InstitutionWorkbenchCapabilityOff';
 import { buildWorkbenchActionProjection } from '@/modules/institution-workbench/domain/workbench-action-aggregation';
@@ -12,7 +12,6 @@ import {
   isInstitutionNavigationAuthorizationV1,
   type InstitutionNavigationAuthorizationV1,
 } from '@/modules/security/server/institution-section-guard';
-import { resolveInstitutionCapabilityAuthorityStatusV1 } from '@/server/orchestration/institution-capability-authority';
 import { readCurrentInstitutionCareActionSourceV1 } from '@/server/orchestration/institution-care-action-source';
 import { readCurrentInstitutionConversationActionSourceV1 } from '@/server/orchestration/institution-conversation-action-source';
 import {
@@ -23,7 +22,6 @@ import { canCurrentInstitutionCreateFormalCustomerV1 } from '@/server/orchestrat
 
 const TARGET_SECTION_ID = 'workbench' as const;
 const TARGET_CAPABILITY_KEY = 'page_workbench' as const;
-const EMPTY_SECTION_IDS = Object.freeze([]) as readonly InstitutionNavigationSectionIdV1[];
 const GOVERNED_WORKBENCH_PAGE_KEYS = Object.freeze([
   'page_workbench',
   'page_customer_list',
@@ -199,56 +197,58 @@ export default async function HospitalPage() {
     exactNavigationAuthorization = navigationAuthorization;
   }
 
-  const availableSectionIds = exactNavigationAuthorization
-    ? exactNavigationAuthorization.availableSectionIds
-    : EMPTY_SECTION_IDS;
   const genuineAllowed = exactNavigationAuthorization?.targetAccess === 'allowed';
+  const {
+    availableSectionIds,
+    availableNavigationTargets,
+    capabilityStatus,
+    workspaceScopeKey,
+  } = await resolveInstitutionShellAuthorizationV1(
+    exactNavigationAuthorization,
+  );
 
   let capabilityProjection: WorkbenchCapabilityProjection | null = null;
   let actionProjection: WorkbenchActionProjection | null = null;
 
-  if (genuineAllowed) {
+  if (genuineAllowed && capabilityStatus) {
     try {
-      const capabilityStatus = await resolveInstitutionCapabilityAuthorityStatusV1();
-      if (capabilityStatus) {
-        const projection = buildWorkbenchCapabilityProjection({
-          capabilities: capabilityStatus,
-          referenceTime: capabilityStatus.freshness?.observedAt ?? '',
-        });
+      const projection = buildWorkbenchCapabilityProjection({
+        capabilities: capabilityStatus,
+        referenceTime: capabilityStatus.freshness?.observedAt ?? '',
+      });
 
-        const quickCreateItems =
-          projection.status === 'projected'
-            ? projection.quickCreateMenu?.items ?? []
-            : [];
+      const quickCreateItems =
+        projection.status === 'projected'
+          ? projection.quickCreateMenu?.items ?? []
+          : [];
 
-        const hasCustomerCreate = quickCreateItems.some(
-          (item) => item.key === 'action_customer_create',
-        );
-        const hasAppointmentCreate = quickCreateItems.some(
-          (item) => item.key === 'action_care_appointment_create',
-        );
-        const hasFollowUpCreate = quickCreateItems.some(
-          (item) => item.key === 'action_care_followup_create',
-        );
+      const hasCustomerCreate = quickCreateItems.some(
+        (item) => item.key === 'action_customer_create',
+      );
+      const hasAppointmentCreate = quickCreateItems.some(
+        (item) => item.key === 'action_care_appointment_create',
+      );
+      const hasFollowUpCreate = quickCreateItems.some(
+        (item) => item.key === 'action_care_followup_create',
+      );
 
-        const allowCustomerCreate = hasCustomerCreate
-          ? await canCurrentInstitutionCreateFormalCustomerV1()
-          : false;
-        const allowAppointmentCreate = hasAppointmentCreate
-          ? await canCurrentInstitutionCreateFormalAppointmentV1()
-          : false;
-        const allowFollowUpCreate = hasFollowUpCreate
-          ? await canCurrentInstitutionCreateFormalFollowUpV1()
-          : false;
+      const allowCustomerCreate = hasCustomerCreate
+        ? await canCurrentInstitutionCreateFormalCustomerV1()
+        : false;
+      const allowAppointmentCreate = hasAppointmentCreate
+        ? await canCurrentInstitutionCreateFormalAppointmentV1()
+        : false;
+      const allowFollowUpCreate = hasFollowUpCreate
+        ? await canCurrentInstitutionCreateFormalFollowUpV1()
+        : false;
 
-        const workbenchProjection = selectGovernedWorkbenchProjection(
-          projection,
-          allowCustomerCreate,
-          allowAppointmentCreate,
-          allowFollowUpCreate,
-        );
-        if (workbenchProjection) capabilityProjection = workbenchProjection;
-      }
+      const workbenchProjection = selectGovernedWorkbenchProjection(
+        projection,
+        allowCustomerCreate,
+        allowAppointmentCreate,
+        allowFollowUpCreate,
+      );
+      if (workbenchProjection) capabilityProjection = workbenchProjection;
     } catch {
       capabilityProjection = null;
     }
@@ -285,11 +285,12 @@ export default async function HospitalPage() {
       actionProjection = null;
     }
   }
-
   return (
     <InstitutionNavigationShell
       activeSectionId={TARGET_SECTION_ID}
       availableSectionIds={availableSectionIds}
+      availableNavigationTargets={availableNavigationTargets}
+      workspaceScopeKey={workspaceScopeKey}
     >
       <InstitutionWorkbenchCapabilityOff
         genuineAllowed={genuineAllowed}

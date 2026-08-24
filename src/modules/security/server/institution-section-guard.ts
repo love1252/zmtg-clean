@@ -180,6 +180,11 @@ type CanonicalInstantV1 = Readonly<{ raw: string; epochMs: number }>;
 const authenticGuards = new WeakSet<object>();
 const authenticAllows = new WeakSet<object>();
 const authenticNavigationAuthorizations = new WeakSet<object>();
+const navigationWorkspaceScopeKeys = new WeakMap<object, string>();
+const navigationInstitutionScopes = new WeakMap<
+  object,
+  Readonly<{ tenantId: string; institutionId: string }>
+>();
 const emptyAvailableSectionIds = Object.freeze(
   [] as InstitutionNavigationSectionIdV1[],
 );
@@ -205,6 +210,7 @@ function mintNavigationAuthorization(
   targetSectionId: InstitutionNavigationSectionIdV1 | null,
   targetAccess: 'allowed' | 'blocked',
   availableSectionIds: readonly InstitutionNavigationSectionIdV1[],
+  scopeAllow: InstitutionScopeAllowV1 | null = null,
 ): InstitutionNavigationAuthorizationV1 {
   const frozenAvailableSectionIds =
     availableSectionIds === emptyAvailableSectionIds
@@ -217,7 +223,36 @@ function mintNavigationAuthorization(
     availableSectionIds: frozenAvailableSectionIds,
   });
   authenticNavigationAuthorizations.add(decision);
+  const workspaceScopeKey = scopeAllow
+    ? mintWorkspaceScopeKey(scopeAllow)
+    : null;
+  if (scopeAllow && workspaceScopeKey) {
+    navigationWorkspaceScopeKeys.set(decision, workspaceScopeKey);
+    navigationInstitutionScopes.set(decision, Object.freeze({
+      tenantId: scopeAllow.tenantId,
+      institutionId: scopeAllow.institutionId,
+    }));
+  }
   return decision as unknown as InstitutionNavigationAuthorizationV1;
+}
+
+function mintWorkspaceScopeKey(
+  scopeAllow: InstitutionScopeAllowV1,
+): string | null {
+  try {
+    return createHash('sha256')
+      .update(
+        encodeLengthPrefixedTuple([
+          'zmtg.institution-workspace-scope.v2',
+          scopeAllow.userReference,
+          scopeAllow.tenantId,
+          scopeAllow.institutionId,
+        ]),
+      )
+      .digest('base64url');
+  } catch {
+    return null;
+  }
 }
 
 function blockNavigation(
@@ -518,6 +553,7 @@ async function authorizeCurrentNavigation(
     targetSectionId,
     targetAccess,
     availableSectionIds,
+    rawScopeResolution,
   );
 }
 
@@ -543,6 +579,52 @@ export function isInstitutionNavigationAuthorizationV1(
       !isProxy(value) &&
       authenticNavigationAuthorizations.has(value)
     );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Returns the low-sensitivity, server-minted Workspace persistence scope for a genuine current
+ * navigation decision. The raw actor, tenant, institution, membership, and business facts are
+ * never exposed through this seam.
+ */
+export function readInstitutionNavigationWorkspaceScopeKeyV1(
+  value: unknown,
+): string | null {
+  try {
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      isProxy(value) ||
+      !authenticNavigationAuthorizations.has(value)
+    ) {
+      return null;
+    }
+    return navigationWorkspaceScopeKeys.get(value) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function matchesInstitutionNavigationAuthorizationScopeV1(
+  value: unknown,
+  tenantId: unknown,
+  institutionId: unknown,
+): boolean {
+  try {
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      isProxy(value) ||
+      !authenticNavigationAuthorizations.has(value) ||
+      typeof tenantId !== 'string' ||
+      typeof institutionId !== 'string'
+    ) {
+      return false;
+    }
+    const scope = navigationInstitutionScopes.get(value);
+    return scope?.tenantId === tenantId && scope.institutionId === institutionId;
   } catch {
     return false;
   }

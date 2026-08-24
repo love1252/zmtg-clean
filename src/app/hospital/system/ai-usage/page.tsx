@@ -14,9 +14,7 @@ import {
 import type {
   CapabilityStatusV1,
 } from '@/modules/institution-contracts/v1/institution-capability';
-import type {
-  InstitutionNavigationSectionIdV1,
-} from '@/modules/institution-contracts/v1/institution-navigation';
+import { resolveInstitutionShellAuthorizationV1 } from '@/modules/institution-shell/server/institution-shell-authorization';
 import {
   resolveInstitutionServerAuthorizationV1,
 } from '@/modules/institution/server/institution-server-runtime';
@@ -30,18 +28,12 @@ import {
 import {
   readCurrentInstitutionAiUsageMetricsV1,
 } from '@/server/orchestration/institution-ai-usage-metrics-reader';
-import {
-  resolveInstitutionCapabilityAuthorityStatusV1,
-} from '@/server/orchestration/institution-capability-authority';
 
 export const dynamic = 'force-dynamic';
 
 const TARGET_SECTION_ID = 'system' as const;
 const TARGET_CAPABILITY_KEY =
   'page_system_ai_usage' as const;
-
-const EMPTY_SECTION_IDS =
-  Object.freeze([]) as readonly InstitutionNavigationSectionIdV1[];
 
 const CAPABILITY_OFF_ROUTE =
   resolveInstitutionCapabilityOffRouteV1([
@@ -196,12 +188,6 @@ export default async function HospitalSystemAiUsagePage({
       navigationAuthorization;
   }
 
-  const availableSectionIds =
-    exactNavigationAuthorization
-      ? exactNavigationAuthorization
-          .availableSectionIds
-      : EMPTY_SECTION_IDS;
-
   const genuineAllowed =
     exactNavigationAuthorization?.targetAccess
     === 'allowed';
@@ -209,19 +195,20 @@ export default async function HospitalSystemAiUsagePage({
   const genuineBlocked =
     exactNavigationAuthorization?.targetAccess
     === 'blocked';
+  const {
+    availableSectionIds,
+    availableNavigationTargets,
+    capabilityStatus,
+    workspaceScopeKey,
+  } = await resolveInstitutionShellAuthorizationV1(
+    exactNavigationAuthorization,
+  );
 
   let capabilityState:
     PageCapabilityState = 'unavailable';
 
   if (genuineAllowed) {
-    try {
-      capabilityState =
-        resolveExactCapabilityState(
-          await resolveInstitutionCapabilityAuthorityStatusV1(),
-        );
-    } catch {
-      capabilityState = 'unavailable';
-    }
+    capabilityState = resolveExactCapabilityState(capabilityStatus);
   }
 
   const result =
@@ -241,6 +228,8 @@ export default async function HospitalSystemAiUsagePage({
       availableSectionIds={
         availableSectionIds
       }
+      availableNavigationTargets={availableNavigationTargets}
+      workspaceScopeKey={workspaceScopeKey}
     >
       {result?.kind === 'ready' ? (
         <AiUsageReadonlyShell

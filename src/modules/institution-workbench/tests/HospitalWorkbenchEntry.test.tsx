@@ -46,6 +46,11 @@ vi.mock(
   }),
 );
 
+vi.mock('next/navigation', () => ({
+  usePathname: () => '/hospital',
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
 vi.mock(
   '@/modules/access-control/application/authoritative-membership-reader',
   async (importOriginal) => {
