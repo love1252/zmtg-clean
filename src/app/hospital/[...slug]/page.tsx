@@ -5,7 +5,7 @@ import {
 } from '@/modules/institution/components/InstitutionCapabilityOffPage';
 import { InstitutionNavigationShell } from '@/modules/institution/components/InstitutionNavigationShell';
 import { InstitutionPageState } from '@/modules/institution/components/InstitutionPageState';
-import type { InstitutionNavigationSectionIdV1 } from '@/modules/institution-contracts/v1/institution-navigation';
+import { resolveInstitutionShellAuthorizationV1 } from '@/modules/institution-shell/server/institution-shell-authorization';
 import { resolveInstitutionServerAuthorizationV1 } from '@/modules/institution/server/institution-server-runtime';
 import { isInstitutionRequestAuthorizationV1 } from '@/modules/security/server/institution-request-authorization';
 import {
@@ -13,7 +13,6 @@ import {
   type InstitutionNavigationAuthorizationV1,
 } from '@/modules/security/server/institution-section-guard';
 
-const EMPTY_SECTION_IDS = Object.freeze([]) as readonly InstitutionNavigationSectionIdV1[];
 
 type HospitalCapabilityOffRouteProps = {
   params: Promise<{
@@ -50,11 +49,13 @@ export default async function HospitalCapabilityOffRoute({
   ) {
     exactNavigationAuthorization = navigationAuthorization;
   }
-  const availableSectionIds = exactNavigationAuthorization
-    ? exactNavigationAuthorization.availableSectionIds
-    : EMPTY_SECTION_IDS;
   const genuineAllowed =
     exactNavigationAuthorization?.targetAccess === 'allowed';
+  const {
+    availableSectionIds,
+    availableNavigationTargets,
+    workspaceScopeKey,
+  } = await resolveInstitutionShellAuthorizationV1(exactNavigationAuthorization);
   const genuineBlockedWithNavigation =
     exactNavigationAuthorization?.targetAccess === 'blocked' &&
     availableSectionIds.length > 0;
@@ -63,6 +64,8 @@ export default async function HospitalCapabilityOffRoute({
     <InstitutionNavigationShell
       activeSectionId={targetSectionId}
       availableSectionIds={availableSectionIds}
+      availableNavigationTargets={availableNavigationTargets}
+      workspaceScopeKey={workspaceScopeKey}
     >
       {genuineAllowed ? (
         <InstitutionCapabilityOffPage pageLabel={route.pageLabel} section={route.section} />

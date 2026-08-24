@@ -12,14 +12,13 @@ import {
 import { InstitutionNavigationShell } from '@/modules/institution/components/InstitutionNavigationShell';
 import { InstitutionPageState } from '@/modules/institution/components/InstitutionPageState';
 import type { CapabilityStatusV1 } from '@/modules/institution-contracts/v1/institution-capability';
-import type { InstitutionNavigationSectionIdV1 } from '@/modules/institution-contracts/v1/institution-navigation';
+import { resolveInstitutionShellAuthorizationV1 } from '@/modules/institution-shell/server/institution-shell-authorization';
 import { resolveInstitutionServerAuthorizationV1 } from '@/modules/institution/server/institution-server-runtime';
 import { isInstitutionRequestAuthorizationV1 } from '@/modules/security/server/institution-request-authorization';
 import {
   isInstitutionNavigationAuthorizationV1,
   type InstitutionNavigationAuthorizationV1,
 } from '@/modules/security/server/institution-section-guard';
-import { resolveInstitutionCapabilityAuthorityStatusV1 } from '@/server/orchestration/institution-capability-authority';
 import { canCurrentInstitutionCreateFormalCustomerV1 } from '@/server/orchestration/institution-customer-create-availability';
 import { readCurrentInstitutionCustomersV1 } from '@/server/orchestration/institution-customer-list-reader';
 
@@ -27,7 +26,6 @@ export const dynamic = 'force-dynamic';
 
 const TARGET_SECTION_ID = 'customers' as const;
 const TARGET_CAPABILITY_KEY = 'page_customer_list' as const;
-const EMPTY_SECTION_IDS = Object.freeze([]) as readonly InstitutionNavigationSectionIdV1[];
 const CAPABILITY_OFF_ROUTE = resolveInstitutionCapabilityOffRouteV1(['customers']);
 
 type PageCapabilityState =
@@ -143,21 +141,18 @@ export default async function HospitalCustomersPage({
     exactNavigationAuthorization = navigationAuthorization;
   }
 
-  const availableSectionIds = exactNavigationAuthorization
-    ? exactNavigationAuthorization.availableSectionIds
-    : EMPTY_SECTION_IDS;
   const genuineAllowed = exactNavigationAuthorization?.targetAccess === 'allowed';
   const genuineBlocked = exactNavigationAuthorization?.targetAccess === 'blocked';
+  const {
+    availableSectionIds,
+    availableNavigationTargets,
+    capabilityStatus,
+    workspaceScopeKey,
+  } = await resolveInstitutionShellAuthorizationV1(exactNavigationAuthorization);
 
   let capabilityState: PageCapabilityState = 'unavailable';
   if (genuineAllowed) {
-    try {
-      capabilityState = resolveExactCapabilityState(
-        await resolveInstitutionCapabilityAuthorityStatusV1(),
-      );
-    } catch {
-      capabilityState = 'unavailable';
-    }
+    capabilityState = resolveExactCapabilityState(capabilityStatus);
   }
 
   const released =
@@ -189,6 +184,8 @@ export default async function HospitalCustomersPage({
     <InstitutionNavigationShell
       activeSectionId={TARGET_SECTION_ID}
       availableSectionIds={availableSectionIds}
+      availableNavigationTargets={availableNavigationTargets}
+      workspaceScopeKey={workspaceScopeKey}
     >
       {result?.kind === 'ready' ? (
         <div className="space-y-5">

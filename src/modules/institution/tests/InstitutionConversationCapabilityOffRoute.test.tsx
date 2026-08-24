@@ -39,6 +39,23 @@ vi.mock('@/modules/security/server/institution-section-guard', () => ({
   isInstitutionNavigationAuthorizationV1: vi.fn(
     (value: unknown) => value === serverAuthorizationSeam.navigationDecision,
   ),
+  readInstitutionNavigationWorkspaceScopeKeyV1: vi.fn(
+    (value: unknown) =>
+      value === serverAuthorizationSeam.navigationDecision
+        ? 'C'.repeat(43)
+        : null,
+  ),
+  matchesInstitutionNavigationAuthorizationScopeV1: vi.fn(
+    (value: unknown) => value === serverAuthorizationSeam.navigationDecision,
+  ),
+}));
+
+vi.mock('next/navigation', () => ({
+  notFound: () => {
+    throw new Error('404');
+  },
+  usePathname: () => '/hospital/conversations/conversation-001',
+  useRouter: () => ({ push: vi.fn() }),
 }));
 
 import HospitalCapabilityOffRoute from '@/app/hospital/[...slug]/page';

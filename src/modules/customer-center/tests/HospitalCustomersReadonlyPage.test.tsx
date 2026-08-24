@@ -24,6 +24,14 @@ vi.mock('@/modules/security/server/institution-section-guard', () => ({
   isInstitutionNavigationAuthorizationV1(value: unknown) {
     return value !== null && typeof value === 'object' && navigationOwners.has(value);
   },
+  readInstitutionNavigationWorkspaceScopeKeyV1(value: unknown) {
+    return value !== null && typeof value === 'object' && navigationOwners.has(value)
+      ? 'U'.repeat(43)
+      : null;
+  },
+  matchesInstitutionNavigationAuthorizationScopeV1(value: unknown) {
+    return value !== null && typeof value === 'object' && navigationOwners.has(value);
+  },
 }));
 vi.mock('@/server/orchestration/institution-capability-authority', () => ({
   resolveInstitutionCapabilityAuthorityStatusV1: mocks.resolveCapability,
@@ -93,6 +101,7 @@ function capability(
 ) {
   return Object.freeze({
     contractVersion: 'v1',
+    scope: Object.freeze({ tenantId: 'tenant-customer-test', institutionId: 'institution-customer-test' }),
     readiness: 'ready',
     failureCode: null,
     partitions: Object.freeze([
@@ -170,11 +179,11 @@ describe('/hospital/customers controlled-write release page', () => {
     expect(mocks.canCreateCustomer).toHaveBeenCalledTimes(1);
   });
 
-  it('navigation forbidden stops before capability and Reader', async () => {
+  it('navigation forbidden 仅读取 Shell capability 并阻断业务 Reader', async () => {
     mocks.authorizeNavigation.mockResolvedValueOnce(navigation('blocked'));
     render(await HospitalCustomersPage({}));
     expect(screen.getByText('当前账号不可访问客户列表')).toBeInTheDocument();
-    expect(mocks.resolveCapability).not.toHaveBeenCalled();
+    expect(mocks.resolveCapability).toHaveBeenCalledTimes(1);
     expect(mocks.readCustomers).not.toHaveBeenCalled();
   });
 

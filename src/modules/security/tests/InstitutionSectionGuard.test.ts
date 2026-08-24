@@ -90,6 +90,8 @@ import {
   isInstitutionNavigationAuthorizationV1,
   isInstitutionSectionAllowV1,
   isInstitutionSectionGuardV1,
+  matchesInstitutionNavigationAuthorizationScopeV1,
+  readInstitutionNavigationWorkspaceScopeKeyV1,
   type InstitutionNavigationAuthorizationInputV1,
   type InstitutionNavigationAuthorizationV1,
   type InstitutionSectionAllowV1,
@@ -180,12 +182,20 @@ type ScopeTimingOptions = Readonly<{
   provenanceValidUntil?: string;
   membershipObservedAt?: string;
   anchorObservedAt?: string;
+  accountId?: string;
+  tenantId?: string;
+  institutionId?: string;
+  membershipId?: string;
 }>;
 
 function genuineScopeComposition(
   role: InstitutionRoleV1 = 'tenant_admin',
   timing: ScopeTimingOptions = {},
 ) {
+  const accountId = timing.accountId ?? 'account-a';
+  const tenantId = timing.tenantId ?? 'tenant-a';
+  const institutionId = timing.institutionId ?? 'institution-a';
+  const membershipId = timing.membershipId ?? 'membership-a';
   const provenanceCodec = genuineCodec();
   const membershipCodec = genuineCodec();
   const anchorCodec = genuineCodec();
@@ -195,9 +205,9 @@ function genuineScopeComposition(
   const provenanceResolver = createFormalRequestProvenanceResolverV1({
     ownerInput: {
       source: 'server_session',
-      accountId: 'account-a',
-      tenantId: 'tenant-a',
-      institutionId: 'institution-a',
+      accountId,
+      tenantId,
+      institutionId,
       requestIdentifier: 'request-a',
       proofIdentifier: 'proof-a',
       issuedAt: '2026-07-22T07:59:00.000Z',
@@ -210,10 +220,10 @@ function genuineScopeComposition(
   const membershipObservedAt =
     timing.membershipObservedAt ?? '2026-07-22T08:00:00.000Z';
   const membershipRow: CurrentInstitutionMembershipFactRow = {
-    accountId: 'account-a',
-    membershipId: 'membership-a',
-    membershipTenantId: 'tenant-a',
-    membershipUserId: 'account-a',
+    accountId,
+    membershipId,
+    membershipTenantId: tenantId,
+    membershipUserId: accountId,
     membershipRole: role,
     membershipDisplayName: '机构成员',
     membershipRevision: 1,
@@ -227,9 +237,9 @@ function genuineScopeComposition(
     membershipRevokedAt: null,
     membershipDeletedAt: null,
     bindingId: 'binding-a',
-    bindingAccountId: 'account-a',
-    bindingTenantId: 'tenant-a',
-    bindingInstitutionId: 'institution-a',
+    bindingAccountId: accountId,
+    bindingTenantId: tenantId,
+    bindingInstitutionId: institutionId,
     bindingStatus: 'active',
     bindingSource: 'manual_admin',
     bindingAssignedAt: new Date('2026-07-01T00:00:00.000Z'),
@@ -246,8 +256,8 @@ function genuineScopeComposition(
       now: () => new Date(membershipObservedAt),
     });
   const membershipProvider = createRequestBoundFreshActiveMembershipProviderV1({
-    accountId: 'account-a',
-    identityFactReader: genuineIdentityFactReaderForTest('account-a'),
+    accountId,
+    identityFactReader: genuineIdentityFactReaderForTest(accountId),
     factReader: membershipFactReader,
     referenceCodec: membershipCodec,
     now: () => SCOPE_NOW,
@@ -255,8 +265,8 @@ function genuineScopeComposition(
   const resolveAnchorFact = vi.fn(async () =>
     Object.freeze({
       kind: 'current_scope_fact',
-      tenantId: 'tenant-a',
-      institutionId: 'institution-a',
+      tenantId,
+      institutionId,
       status: 'active',
       revision: 7,
       observedAt:
@@ -999,6 +1009,8 @@ describe('WB-BASE-SECTION-GUARD-04A', () => {
       'isInstitutionNavigationAuthorizationV1',
       'isInstitutionSectionAllowV1',
       'isInstitutionSectionGuardV1',
+      'matchesInstitutionNavigationAuthorizationScopeV1',
+      'readInstitutionNavigationWorkspaceScopeKeyV1',
     ]);
   });
 
@@ -1020,6 +1032,78 @@ describe('BASE-NAV-01 canonical visible navigation authorization', () => {
     'conversations',
     'care',
   ] as const satisfies readonly InstitutionNavigationSectionIdV1[]);
+
+  it('为同一 actor + tenant + institution 生成稳定 opaque Key，并隔离三类作用域变化', async () => {
+    async function scopeKey(timing: ScopeTimingOptions) {
+      const scope = genuineScopeComposition('tenant_admin', timing);
+      const decision = await sectionHarness('tenant_admin', {
+        scopeGuard: scope.guard,
+      }).guard.authorizeCurrentNavigation({ targetSectionId: 'workbench' });
+      return readInstitutionNavigationWorkspaceScopeKeyV1(decision);
+    }
+
+    const sameA = await scopeKey({});
+    const sameB = await scopeKey({});
+    const actorChanged = await scopeKey({ accountId: 'account-b' });
+    const tenantChanged = await scopeKey({ tenantId: 'tenant-b' });
+    const institutionChanged = await scopeKey({ institutionId: 'institution-b' });
+
+    expect(sameA).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+    expect(sameB).toBe(sameA);
+    expect(actorChanged).not.toBe(sameA);
+    expect(tenantChanged).not.toBe(sameA);
+    expect(institutionChanged).not.toBe(sameA);
+    expect([sameA, actorChanged, tenantChanged, institutionChanged].join(' '))
+      .not.toMatch(/account-|tenant-|institution-/u);
+  });
+
+  it('只允许 Capability Authority 与原导航决策的 tenant + institution 作用域精确匹配', async () => {
+    const decision = await sectionHarness().guard.authorizeCurrentNavigation({
+      targetSectionId: 'workbench',
+    });
+
+    expect(
+      matchesInstitutionNavigationAuthorizationScopeV1(
+        decision,
+        'tenant-a',
+        'institution-a',
+      ),
+    ).toBe(true);
+    expect(
+      matchesInstitutionNavigationAuthorizationScopeV1(
+        decision,
+        'tenant-b',
+        'institution-a',
+      ),
+    ).toBe(false);
+    expect(
+      matchesInstitutionNavigationAuthorizationScopeV1(
+        { ...decision },
+        'tenant-a',
+        'institution-a',
+      ),
+    ).toBe(false);
+  });
+
+  it('任何正式机构角色的可用导航都显式包含工作台，失败授权不提供 Workspace Key', async () => {
+    for (const role of INSTITUTION_ROLES_V1) {
+      const decision = await sectionHarness(role).guard.authorizeCurrentNavigation({
+        targetSectionId: role === 'consultant' || role === 'customer_service'
+          ? 'system'
+          : 'workbench',
+      });
+      expect(decision.availableSectionIds).toContain('workbench');
+      expect(readInstitutionNavigationWorkspaceScopeKeyV1(decision)).toMatch(
+        /^[A-Za-z0-9_-]{43}$/u,
+      );
+    }
+
+    const failed = await sectionHarness('tenant_admin', {
+      scopeGuard: createInstitutionScopeGuardV1({} as never),
+    }).guard.authorizeCurrentNavigation({ targetSectionId: 'workbench' });
+    expect(failed.availableSectionIds).toEqual([]);
+    expect(readInstitutionNavigationWorkspaceScopeKeyV1(failed)).toBeNull();
+  });
 
   it.each([
     ['tenant_admin', 'system', 'allowed', managementSections],

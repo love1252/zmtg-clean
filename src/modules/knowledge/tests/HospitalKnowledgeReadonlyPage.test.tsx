@@ -65,6 +65,18 @@ vi.mock(
         && navigationOwners.has(value)
       );
     },
+    readInstitutionNavigationWorkspaceScopeKeyV1(value: unknown) {
+      return value !== null
+        && typeof value === 'object'
+        && navigationOwners.has(value)
+        ? 'Z'.repeat(43)
+        : null;
+    },
+    matchesInstitutionNavigationAuthorizationScopeV1(value: unknown) {
+      return value !== null
+        && typeof value === 'object'
+        && navigationOwners.has(value);
+    },
   }),
 );
 
@@ -171,6 +183,7 @@ function capability(
 ) {
   return Object.freeze({
     contractVersion: 'v1',
+    scope: Object.freeze({ tenantId: 'tenant-knowledge-test', institutionId: 'institution-knowledge-test' }),
     readiness: 'ready',
     failureCode: null,
     partitions: Object.freeze([
@@ -305,7 +318,7 @@ describe('/hospital/knowledge formal readonly page', () => {
     ).toBeInTheDocument();
   });
 
-  it('navigation blocked 不读取 capability 或业务数据', async () => {
+  it('navigation blocked 仅读取 Shell capability，不读取业务数据', async () => {
     mocks.authorizeNavigation
       .mockResolvedValueOnce(
         navigation('blocked'),
@@ -323,7 +336,7 @@ describe('/hospital/knowledge formal readonly page', () => {
 
     expect(
       mocks.resolveCapability,
-    ).not.toHaveBeenCalled();
+    ).toHaveBeenCalledTimes(1);
     expect(mocks.read).not.toHaveBeenCalled();
   });
 

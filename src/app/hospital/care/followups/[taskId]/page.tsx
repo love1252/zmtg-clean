@@ -1,7 +1,7 @@
 import { CareFollowUpControlledShell } from '@/modules/care/components/CareFollowUpControlledShell';
 import { InstitutionNavigationShell } from '@/modules/institution/components/InstitutionNavigationShell';
 import { InstitutionPageState } from '@/modules/institution/components/InstitutionPageState';
-import type { InstitutionNavigationSectionIdV1 } from '@/modules/institution-contracts/v1/institution-navigation';
+import { resolveInstitutionShellAuthorizationV1 } from '@/modules/institution-shell/server/institution-shell-authorization';
 import { resolveInstitutionServerAuthorizationV1 } from '@/modules/institution/server/institution-server-runtime';
 import { isInstitutionRequestAuthorizationV1 } from '@/modules/security/server/institution-request-authorization';
 import {
@@ -11,11 +11,6 @@ import {
 import { readCurrentInstitutionFormalFollowUpV1 } from '@/server/orchestration/institution-formal-follow-up-runtime';
 
 export const dynamic = 'force-dynamic';
-
-const EMPTY_SECTION_IDS =
-  Object.freeze(
-    [],
-  ) as readonly InstitutionNavigationSectionIdV1[];
 
 export default async function HospitalCareFollowUpDetailPage({
   params,
@@ -59,14 +54,14 @@ export default async function HospitalCareFollowUpDetailPage({
       navigationAuthorization;
   }
 
-  const availableSectionIds =
-    exactNavigationAuthorization
-      ? exactNavigationAuthorization
-          .availableSectionIds
-      : EMPTY_SECTION_IDS;
   const genuineAllowed =
     exactNavigationAuthorization?.targetAccess
       === 'allowed';
+  const {
+    availableSectionIds,
+    availableNavigationTargets,
+    workspaceScopeKey,
+  } = await resolveInstitutionShellAuthorizationV1(exactNavigationAuthorization);
 
   const result =
     genuineAllowed
@@ -85,6 +80,8 @@ export default async function HospitalCareFollowUpDetailPage({
       availableSectionIds={
         availableSectionIds
       }
+      availableNavigationTargets={availableNavigationTargets}
+      workspaceScopeKey={workspaceScopeKey}
     >
       {result.kind === 'ready' ? (
         <CareFollowUpControlledShell

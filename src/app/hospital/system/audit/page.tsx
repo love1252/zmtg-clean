@@ -6,7 +6,7 @@ import {
 import { InstitutionNavigationShell } from '@/modules/institution/components/InstitutionNavigationShell';
 import { InstitutionPageState } from '@/modules/institution/components/InstitutionPageState';
 import type { CapabilityStatusV1 } from '@/modules/institution-contracts/v1/institution-capability';
-import type { InstitutionNavigationSectionIdV1 } from '@/modules/institution-contracts/v1/institution-navigation';
+import { resolveInstitutionShellAuthorizationV1 } from '@/modules/institution-shell/server/institution-shell-authorization';
 import { resolveInstitutionServerAuthorizationV1 } from '@/modules/institution/server/institution-server-runtime';
 import { isInstitutionRequestAuthorizationV1 } from '@/modules/security/server/institution-request-authorization';
 import {
@@ -14,13 +14,11 @@ import {
   type InstitutionNavigationAuthorizationV1,
 } from '@/modules/security/server/institution-section-guard';
 import { resolveInstitutionAuditReadAuthorizationV1 } from '@/server/orchestration/institution-audit-read-authorization';
-import { resolveInstitutionCapabilityAuthorityStatusV1 } from '@/server/orchestration/institution-capability-authority';
 
 export const dynamic = 'force-dynamic';
 
 const TARGET_SECTION_ID = 'system' as const;
 const TARGET_CAPABILITY_KEY = 'page_system_audit' as const;
-const EMPTY_SECTION_IDS = Object.freeze([]) as readonly InstitutionNavigationSectionIdV1[];
 const AUDIT_CAPABILITY_OFF_ROUTE = resolveInstitutionCapabilityOffRouteV1([
   'system',
   'audit',
@@ -93,10 +91,13 @@ export default async function HospitalSystemAuditPage() {
     exactNavigationAuthorization = navigationAuthorization;
   }
 
-  const availableSectionIds = exactNavigationAuthorization
-    ? exactNavigationAuthorization.availableSectionIds
-    : EMPTY_SECTION_IDS;
   const genuineAllowed = exactNavigationAuthorization?.targetAccess === 'allowed';
+  const {
+    availableSectionIds,
+    availableNavigationTargets,
+    capabilityStatus,
+    workspaceScopeKey,
+  } = await resolveInstitutionShellAuthorizationV1(exactNavigationAuthorization);
   const genuineBlockedWithNavigation =
     exactNavigationAuthorization?.targetAccess === 'blocked' &&
     availableSectionIds.length > 0;
@@ -112,16 +113,9 @@ export default async function HospitalSystemAuditPage() {
     }
   }
 
-  let capabilityState: AuditCapabilityState = 'unavailable';
-  if (genuineAllowed && auditAuthorizationState === 'allowed') {
-    try {
-      capabilityState = resolveExactAuditCapabilityState(
-        await resolveInstitutionCapabilityAuthorityStatusV1(),
-      );
-    } catch {
-      capabilityState = 'unavailable';
-    }
-  }
+  const capabilityState: AuditCapabilityState = auditAuthorizationState === 'allowed'
+    ? resolveExactAuditCapabilityState(capabilityStatus)
+    : 'unavailable';
 
   const trustedForbidden =
     genuineBlockedWithNavigation ||
@@ -131,6 +125,8 @@ export default async function HospitalSystemAuditPage() {
     <InstitutionNavigationShell
       activeSectionId={TARGET_SECTION_ID}
       availableSectionIds={availableSectionIds}
+      availableNavigationTargets={availableNavigationTargets}
+      workspaceScopeKey={workspaceScopeKey}
     >
       {genuineAllowed &&
       auditAuthorizationState === 'allowed' &&
