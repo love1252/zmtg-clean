@@ -1,6 +1,13 @@
 
+import { redirect } from 'next/navigation';
+
 import { InstitutionNavigationShell } from '@/modules/institution/components/InstitutionNavigationShell';
 import { resolveInstitutionShellAuthorizationV1 } from '@/modules/institution-shell/server/institution-shell-authorization';
+import { InstitutionV11ApprovedPrototypeFrame } from '@/modules/institution-v11-preview/components/InstitutionV11ApprovedPrototypeFrame';
+import {
+  isInstitutionV11HospitalSyncEnabled,
+  resolveInstitutionV11HospitalEntryMode,
+} from '@/modules/institution-v11-preview/server/visual-preview-gate';
 import { resolveInstitutionServerAuthorizationV1 } from '@/modules/institution/server/institution-server-runtime';
 import { InstitutionWorkbenchCapabilityOff } from '@/modules/institution-workbench/components/InstitutionWorkbenchCapabilityOff';
 import { buildWorkbenchActionProjection } from '@/modules/institution-workbench/domain/workbench-action-aggregation';
@@ -198,6 +205,15 @@ export default async function HospitalPage() {
   }
 
   const genuineAllowed = exactNavigationAuthorization?.targetAccess === 'allowed';
+  const approvedEntryMode = resolveInstitutionV11HospitalEntryMode({
+    syncEnabled: isInstitutionV11HospitalSyncEnabled(),
+    genuineAllowed,
+  });
+  if (approvedEntryMode === 'approved') {
+    return <InstitutionV11ApprovedPrototypeFrame />;
+  }
+  if (approvedEntryMode === 'login') redirect('/login');
+
   const {
     availableSectionIds,
     availableNavigationTargets,
