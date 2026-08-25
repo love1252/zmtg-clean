@@ -12,16 +12,15 @@ import {
 } from 'react';
 import {
   Bell,
-  Building2,
+  ChevronRight,
   CircleHelp,
   Command,
+  Grid2X2,
   MessagesSquare,
-  LayoutDashboard,
+  Menu,
   MoreHorizontal,
   Plus,
   Search,
-  ShieldCheck,
-  UserRound,
   X,
 } from 'lucide-react';
 import {
@@ -384,21 +383,27 @@ export function InstitutionWorkspaceFrame({
 
   return (
     <>
-      <header className="hidden h-[var(--institution-topbar)] items-center justify-between gap-4 border-b border-[var(--institution-line)] bg-white px-5 md:flex">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700">
-            <Building2 aria-hidden="true" className="h-4 w-4" />
+      <header className="hidden h-[var(--institution-topbar)] items-center justify-between gap-4 border-b border-[var(--institution-line)] bg-white px-6 md:flex">
+        <div className="flex min-w-0 shrink-0 items-center gap-3">
+          <button type="button" aria-label="折叠侧栏快捷入口" className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100">
+            <Menu aria-hidden="true" className="h-[18px] w-[18px]" />
+          </button>
+          <div className="truncate text-[18px] font-bold text-[var(--institution-text)]">机构工作台</div>
+          <span className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 text-[11px] font-semibold text-blue-700">
+            <span aria-hidden="true" className="grid h-3.5 w-3.5 place-items-center rounded-full border border-blue-500 text-[8px]">✓</span>
+            V1.1 APPROVED
           </span>
-          <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-[var(--institution-text)]">
-              {activeSection?.label ?? '机构工作台'}
-            </div>
-            <div className="mt-0.5 truncate text-[11px] text-[var(--institution-muted)]">
-              当前机构 · 页面与对象权限由服务端校验
-            </div>
-          </div>
+          <button type="button" className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
+            <span aria-hidden="true" className="h-2 w-2 rounded-full bg-emerald-500" />
+            当前机构
+            <ChevronRight aria-hidden="true" className="h-4 w-4 text-slate-500" />
+          </button>
         </div>
         <div className="flex min-w-0 items-center gap-2">
+          <button type="button" className="hidden h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 xl:inline-flex">
+            <Grid2X2 aria-hidden="true" className="h-4 w-4" />
+            全产品入口
+          </button>
           <button
             ref={searchButtonRef}
             type="button"
@@ -407,10 +412,10 @@ export function InstitutionWorkspaceFrame({
             aria-expanded={isSearchOpen}
             aria-controls="institution-navigation-search-dialog"
             onClick={openNavigationSearch}
-            className="hidden h-9 min-w-[190px] max-w-[280px] flex-1 items-center gap-2 rounded-lg border border-[var(--institution-line)] bg-[var(--institution-bg)] px-3 text-left text-sm text-[var(--institution-muted)] transition hover:border-slate-300 hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/35 lg:flex xl:min-w-[240px]"
+            className="hidden h-9 min-w-[260px] max-w-[390px] flex-1 items-center gap-2 rounded-xl border border-[var(--institution-line)] bg-[var(--institution-bg)] px-3 text-left text-sm text-[var(--institution-muted)] transition hover:border-slate-300 hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/35 lg:flex xl:min-w-[320px]"
           >
             <Search className="h-4 w-4" />
-            <span className="flex-1">搜索栏目与页面</span>
+            <span className="flex-1">搜索客户、会话、预约、知识、功能...</span>
             <span className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold">⌘K</span>
           </button>
           <button
@@ -424,16 +429,11 @@ export function InstitutionWorkspaceFrame({
           >
             <Search aria-hidden="true" className="h-4 w-4" />
           </button>
-          <span className="hidden items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 xl:inline-flex">
-            <ShieldCheck className="h-3.5 w-3.5" />
-            服务端校验
-          </span>
-          <div className="relative flex items-center gap-0.5 border-l border-slate-200 pl-2">
+          <div className="relative flex items-center gap-0.5">
             {([
               ['messages', '消息入口', MessagesSquare],
               ['notifications', '通知入口', Bell],
               ['help', '帮助入口', CircleHelp],
-              ['user', '用户菜单', UserRound],
             ] as const).map(([id, label, Icon]) => (
               <button
                 key={id}
@@ -450,6 +450,24 @@ export function InstitutionWorkspaceFrame({
                 <Icon aria-hidden="true" className="h-4 w-4" />
               </button>
             ))}
+            <button
+              type="button"
+              aria-label="用户菜单"
+              aria-haspopup="dialog"
+              aria-expanded={activeUtility === 'user'}
+              onClick={() => setActiveUtility((current) => current === 'user' ? null : 'user')}
+              className={cn(
+                'ml-2 flex h-10 items-center gap-2 border-l border-slate-200 pl-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/35',
+                activeUtility === 'user' ? 'text-blue-700' : 'text-slate-700',
+              )}
+            >
+              <span className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-br from-blue-300 to-blue-600 text-sm font-semibold text-white">机</span>
+              <span className="hidden min-w-0 2xl:block">
+                <span className="block text-sm font-semibold leading-4">机构成员</span>
+                <span className="mt-0.5 block text-[10px] text-slate-400">机构管理员</span>
+              </span>
+              <ChevronRight aria-hidden="true" className="hidden h-4 w-4 2xl:block" />
+            </button>
             {activeUtility ? (
               <section
                 role="dialog"
@@ -497,10 +515,10 @@ export function InstitutionWorkspaceFrame({
 
       <nav
         aria-label="机构端工作区标签"
-        className="relative hidden h-[var(--institution-workspace)] items-end border-b border-[var(--institution-line)] bg-white pl-4 md:flex"
+        className="relative hidden h-[var(--institution-workspace)] items-stretch border-b border-[var(--institution-line)] bg-white pl-3 md:flex"
       >
         <div className="min-w-0 flex-1 overflow-x-auto" data-testid="institution-workspace-scroll-area">
-          <div className="flex min-w-max items-end gap-1">
+          <div className="flex h-full min-w-max items-stretch gap-1">
             {visibleTabs.map((tab) => {
               const isCurrent = activeSection !== null && tab.pathname === effectivePathname;
 
@@ -509,18 +527,17 @@ export function InstitutionWorkspaceFrame({
                   key={tab.pathname}
                   data-object-tab={tab.objectTab ? 'true' : 'false'}
                   className={cn(
-                    'group relative flex h-9 min-w-fit items-center rounded-t-lg border border-b-0 text-xs font-medium',
+                    'group relative flex min-w-[96px] items-center border-x border-t text-sm font-medium',
                     isCurrent
-                      ? 'border-[var(--institution-line)] bg-[var(--institution-bg)] text-blue-700'
+                      ? 'border-[var(--institution-line)] bg-blue-50/60 text-blue-700 after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-blue-600'
                       : 'border-transparent text-[var(--institution-muted)] hover:bg-slate-50 hover:text-slate-900',
                   )}
                 >
                   <Link
                     href={tab.pathname}
                     aria-current={isCurrent ? 'page' : undefined}
-                    className={cn('flex h-full items-center gap-1.5 pl-3', tab.fixed ? 'pr-3' : 'pr-1.5')}
+                    className={cn('flex h-full items-center justify-center gap-1.5 pl-4', tab.fixed ? 'pr-4' : 'pr-1')}
                   >
-                    {tab.fixed ? <LayoutDashboard className="h-3.5 w-3.5" /> : null}
                     <span>{tab.label}</span>
                   </Link>
                   {!tab.fixed ? (
@@ -539,7 +556,7 @@ export function InstitutionWorkspaceFrame({
           </div>
         </div>
 
-        <div className="relative flex h-full shrink-0 items-center gap-1 border-l border-[var(--institution-line)] bg-white px-2">
+        <div className="relative flex h-full shrink-0 items-center gap-1 bg-white px-3">
           <button
             type="button"
             aria-label="快速打开页面"
@@ -631,7 +648,7 @@ export function InstitutionWorkspaceFrame({
         </div>
       </nav>
 
-      <main className="mx-auto min-h-[calc(100vh-var(--institution-topbar)-var(--institution-workspace))] w-full max-w-[1680px] px-4 py-5 pb-28 sm:px-5 md:pb-8 lg:px-6 lg:py-6">
+      <main className="mx-auto min-h-[calc(100vh-var(--institution-topbar)-var(--institution-workspace))] w-full max-w-[1800px] px-4 py-5 pb-28 sm:px-5 md:pb-8 lg:px-[26px] lg:py-[22px]">
         {children}
       </main>
 

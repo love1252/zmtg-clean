@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Filter, Import, Plus, Search, SlidersHorizontal } from 'lucide-react';
+import { ChevronRight, Filter, Import, Plus, Search, SlidersHorizontal } from 'lucide-react';
 import { useState } from 'react';
 
 import { CUSTOMER_LIST_MAX_PAGE_V1 } from '@/modules/customer-center/application/customer-list-pagination-contract';
@@ -106,47 +106,58 @@ export function CustomerListReadonlyShell({
         </div>
       </div>
 
-      {result.records.length === 0 ? (
-        <div className="rounded-[24px] border border-dashed border-slate-300 bg-white/80 px-6 py-10 text-center text-sm text-slate-600">
-          当前页暂无客户记录
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex min-h-11 items-center justify-between border-b border-slate-200 px-4">
+          <div className="flex items-center gap-5 text-xs">
+            <span className="border-b-2 border-blue-600 py-3 font-semibold text-blue-700">全部客户</span>
+            <span className="py-3 text-slate-500">我负责的</span>
+            <span className="py-3 text-slate-500">近期活跃</span>
+            <span className="py-3 text-slate-500">待跟进</span>
+          </div>
+          <span className="text-[11px] text-slate-400">共 {result.records.length} 条当前页记录</span>
         </div>
-      ) : (
-        <ul
-          className="grid gap-3"
-          aria-label={operational ? '客户记录' : '客户只读记录'}
-        >
-          {result.records.map((record) => (
-            <li
-              key={record.customerId}
-              className="rounded-[24px] border border-white/90 bg-white/90 px-5 py-4 shadow-sm"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 className="font-semibold text-slate-950">{record.displayName}</h2>
-                  <p className="mt-1 text-sm text-slate-600">
-                    {lifecycleLabels[record.lifecycle]} · {priorityLabels[record.priority]}
-                  </p>
-                </div>
-                <div className="flex flex-col items-end gap-2">
-                  <time className="text-xs text-slate-500" dateTime={record.updatedAt}>
-                    更新于 {record.updatedAt}
-                  </time>
-                  {operational ? (
-                    <Link
-                      href={`/hospital/customers/${encodeURIComponent(
-                        record.customerId,
-                      )}`}
-                      className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-800"
-                    >
-                      查看 / 操作
-                    </Link>
-                  ) : null}
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+        {result.records.length === 0 ? (
+          <div className="border border-dashed border-transparent px-6 py-14 text-center text-sm text-slate-500">
+            当前页暂无客户记录
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] border-collapse text-left" aria-label={operational ? '客户记录' : '客户只读记录'}>
+              <thead className="bg-slate-50/80 text-[11px] font-medium text-slate-500">
+                <tr>
+                  <th className="w-12 px-4 py-3"><span className="sr-only">选择</span><span aria-hidden="true" className="block h-3.5 w-3.5 rounded border border-slate-300 bg-white" /></th>
+                  <th className="px-3 py-3">客户</th>
+                  <th className="px-3 py-3">客户阶段</th>
+                  <th className="px-3 py-3">优先级</th>
+                  <th className="px-3 py-3">最近更新</th>
+                  <th className="w-32 px-4 py-3 text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm">
+                {result.records.map((record) => (
+                  <tr key={record.customerId} className="group transition-colors hover:bg-blue-50/30">
+                    <td className="px-4 py-3"><span aria-hidden="true" className="block h-3.5 w-3.5 rounded border border-slate-300 bg-white" /></td>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-3">
+                        <span aria-hidden="true" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-blue-50 text-xs font-semibold text-blue-700">{record.displayName.slice(0, 1)}</span>
+                        <div className="min-w-0"><p className="truncate font-semibold text-slate-900">{record.displayName}</p><p className="mt-0.5 text-[11px] text-slate-400">正式客户投影</p></div>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3"><span className="rounded-full bg-cyan-50 px-2 py-1 text-xs font-medium text-cyan-700">{lifecycleLabels[record.lifecycle]}</span></td>
+                    <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-xs font-medium ${record.priority === 'high' ? 'bg-red-50 text-red-700' : record.priority === 'medium' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>{priorityLabels[record.priority]}</span></td>
+                    <td className="px-3 py-3"><time className="text-xs text-slate-500" dateTime={record.updatedAt}>更新于 {record.updatedAt}</time></td>
+                    <td className="px-4 py-3 text-right">
+                      {operational ? (
+                        <Link href={`/hospital/customers/${encodeURIComponent(record.customerId)}`} className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:text-blue-800">查看 / 操作<ChevronRight aria-hidden="true" className="h-3.5 w-3.5" /></Link>
+                      ) : <span className="text-xs text-slate-400">仅查看</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       <nav aria-label="客户列表分页" className="flex items-center justify-between gap-3">
         {result.pageInfo.page > 1 ? (

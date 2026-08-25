@@ -41,6 +41,23 @@ function appointmentCreateHref() {
   return `/hospital/care/appointments?${params.toString()}`;
 }
 
+function startOfWeekUtc(value: string | undefined) {
+  const parsed = value ? new Date(value) : new Date();
+  const safeDate = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  const start = new Date(Date.UTC(
+    safeDate.getUTCFullYear(),
+    safeDate.getUTCMonth(),
+    safeDate.getUTCDate(),
+  ));
+  const weekdayOffset = (start.getUTCDay() + 6) % 7;
+  start.setUTCDate(start.getUTCDate() - weekdayOffset);
+  return start;
+}
+
+function compactDate(value: Date) {
+  return `${String(value.getUTCMonth() + 1).padStart(2, '0')}/${String(value.getUTCDate()).padStart(2, '0')}`;
+}
+
 export function AppointmentListReadonlyShell({
   result,
   status,
@@ -50,8 +67,15 @@ export function AppointmentListReadonlyShell({
   status: AppointmentListStatusV1 | null;
   operational: boolean;
 }>) {
-  const [view, setView] = useState<'list' | 'calendar'>('list');
+  const [view, setView] = useState<'list' | 'calendar'>('calendar');
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
+  const weekStart = startOfWeekUtc(result.records[0]?.scheduledAt);
+  const weekDays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(weekStart);
+    date.setUTCDate(weekStart.getUTCDate() + index);
+    return date;
+  });
+  const hours = Array.from({ length: 10 }, (_, index) => index + 9);
   return (
     <section className="space-y-5" aria-labelledby="appointment-list-title">
       <div id="appointment-list-title">
@@ -66,7 +90,7 @@ export function AppointmentListReadonlyShell({
           state={operational ? 'LIVE' : 'READ_ONLY'}
           actions={(
             <>
-              <InstitutionV11DateRangeControl label="本周" />
+              <InstitutionV11DateRangeControl label={`${compactDate(weekDays[0])} - ${compactDate(weekDays[6])}`} />
               <Link href={operational ? appointmentCreateHref() : '/hospital/care/appointments'} aria-disabled={!operational} className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-semibold ${operational ? 'border-blue-700 bg-blue-700 text-white' : 'pointer-events-none border-slate-200 bg-slate-100 text-slate-400'}`}><Plus aria-hidden="true" className="h-4 w-4" />创建预约</Link>
             </>
           )}
@@ -79,7 +103,42 @@ export function AppointmentListReadonlyShell({
       </div>
 
       {view === 'calendar' ? (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm"><div className="min-w-[820px]"><div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">{['周一', '周二', '周三', '周四', '周五', '周六', '周日'].map((day) => <div key={day} className="px-3 py-2 text-center text-xs font-semibold text-slate-500">{day}</div>)}</div><div className="grid grid-cols-7">{Array.from({ length: 35 }, (_, index) => <button key={index} type="button" disabled title="Availability 能力未开放" className="min-h-24 border-b border-r border-slate-100 bg-slate-50/30 p-2 text-left disabled:cursor-not-allowed"><span className="text-xs text-slate-500">{index + 1 <= 31 ? index + 1 : ''}</span><span className="mt-5 block text-[10px] text-slate-400">Availability 未开放</span></button>)}</div></div></div>
+        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="min-w-[920px]">
+            <div className="grid grid-cols-[64px_repeat(7,minmax(112px,1fr))] border-b border-slate-200 bg-slate-50/80">
+              <div className="border-r border-slate-200 px-2 py-3 text-center text-[10px] text-slate-400">时间</div>
+              {weekDays.map((date, index) => <div key={date.toISOString()} className="border-r border-slate-200 px-3 py-2 text-center"><p className="text-[11px] text-slate-500">{['周一', '周二', '周三', '周四', '周五', '周六', '周日'][index]}</p><p className="mt-0.5 text-sm font-semibold text-slate-800">{compactDate(date)}</p></div>)}
+            </div>
+            {hours.map((hour) => (
+              <div key={hour} className="grid grid-cols-[64px_repeat(7,minmax(112px,1fr))] border-b border-slate-100 last:border-b-0">
+                <div className="border-r border-slate-200 px-2 py-4 text-center text-[11px] text-slate-400">{String(hour).padStart(2, '0')}:00</div>
+                {weekDays.map((date) => {
+                  const appointments = result.records.filter((record) => {
+                    const scheduledAt = new Date(record.scheduledAt);
+                    if (Number.isNaN(scheduledAt.getTime())) return false;
+                    const scheduledHour = Math.max(9, Math.min(18, scheduledAt.getUTCHours()));
+                    return scheduledHour === hour
+                      && scheduledAt.getUTCFullYear() === date.getUTCFullYear()
+                      && scheduledAt.getUTCMonth() === date.getUTCMonth()
+                      && scheduledAt.getUTCDate() === date.getUTCDate();
+                  });
+                  return (
+                    <div key={`${date.toISOString()}-${hour}`} className="min-h-16 border-r border-slate-100 bg-white p-1.5">
+                      {appointments.map((record) => (
+                        <div key={record.appointmentId} className="rounded-md border-l-2 border-emerald-500 bg-emerald-50 px-2 py-1.5 text-[10px] leading-4 text-emerald-800">
+                          <p className="font-semibold">{statusLabels[record.status]}</p>
+                          <time dateTime={record.scheduledAt}>预约时间 {record.scheduledAt}</time>
+                          {operational ? <Link href={`/hospital/care/appointments/${encodeURIComponent(record.appointmentId)}`} className="mt-1 block font-semibold text-blue-700">查看 / 操作</Link> : null}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+            <div className="border-t border-slate-100 bg-amber-50/50 px-4 py-2 text-[11px] text-amber-700">空白区域仅表示当前 Reader 未返回预约；不代表可预约。Availability 能力未开放。</div>
+          </div>
+        </div>
       ) : result.records.length === 0 ? (
         <div className="rounded-[24px] border border-dashed border-slate-300 bg-white/80 px-6 py-10 text-center text-sm text-slate-600">
           当前页暂无预约记录

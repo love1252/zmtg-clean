@@ -50,48 +50,33 @@ export function KnowledgeDocumentMetadataReadonlyShell({
         </div>
       </div>
 
-      {result.records.length === 0 ? (
-        <div
-          data-knowledge-state="empty"
-          className="rounded-[24px] border border-dashed border-slate-300 bg-white/80 px-6 py-10 text-center"
-        >
-          <h2 className="text-base font-semibold text-slate-900">
-            暂无正式知识库资料
-          </h2>
-          <p className="mt-2 text-sm text-slate-600">
-            当前机构尚未发布可供查看的正式知识库资料。
-          </p>
-        </div>
-      ) : (
-        <ul
-          className="grid gap-3"
-          aria-label="正式知识库资料列表"
-        >
-          {result.records.map((record) => (
-            <li
-              key={record.documentId}
-              className="rounded-[24px] border border-white/90 bg-white/90 px-5 py-4 shadow-sm"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 className="font-semibold text-slate-950">
-                    {record.title}
-                  </h2>
-                  <p className="mt-1 text-sm text-slate-600">
-                    来源：{record.sourceLabel} · 版本 {record.version}
-                  </p>
-                </div>
-                <time
-                  className="text-xs text-slate-500"
-                  dateTime={record.publishedAt}
-                >
-                  发布于 {record.publishedAt}
-                </time>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        {result.records.length === 0 ? (
+          <div data-knowledge-state="empty" className="border border-dashed border-transparent px-6 py-14 text-center">
+            <h2 className="text-base font-semibold text-slate-900">暂无正式知识库资料</h2>
+            <p className="mt-2 text-sm text-slate-600">当前机构尚未发布可供查看的正式知识库资料。</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] border-collapse text-left" aria-label="正式知识库资料列表">
+              <thead className="bg-slate-50/80 text-[11px] font-medium text-slate-500">
+                <tr><th className="px-4 py-3">知识文档</th><th className="px-3 py-3">来源</th><th className="px-3 py-3">版本</th><th className="px-3 py-3">状态</th><th className="px-4 py-3">发布时间</th></tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm">
+                {result.records.map((record) => (
+                  <tr key={record.documentId} className="transition-colors hover:bg-blue-50/30">
+                    <td className="px-4 py-3"><div className="flex items-center gap-3"><span aria-hidden="true" className="grid h-8 w-8 place-items-center rounded-lg bg-blue-50 text-blue-700"><BookOpenText className="h-4 w-4" /></span><h2 className="font-semibold text-slate-900">{record.title}</h2></div></td>
+                    <td className="px-3 py-3 text-xs text-slate-600">来源：{record.sourceLabel} · 版本 {record.version}</td>
+                    <td className="px-3 py-3 text-xs text-slate-600">V{record.version}</td>
+                    <td className="px-3 py-3"><span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">已发布</span></td>
+                    <td className="px-4 py-3"><time className="text-xs text-slate-500" dateTime={record.publishedAt}>发布于 {record.publishedAt}</time></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       <nav
         aria-label="知识库资料分页"

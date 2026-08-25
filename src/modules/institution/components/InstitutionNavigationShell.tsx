@@ -12,6 +12,7 @@ import {
   Ellipsis,
   LayoutDashboard,
   MessagesSquare,
+  Sparkles,
   Settings2,
   UsersRound,
   X,
@@ -136,50 +137,30 @@ export function InstitutionNavigationShell({
         aria-label="机构端公共侧边栏"
         data-collapsed={isCollapsed ? 'true' : 'false'}
         className={cn(
-          'fixed inset-y-0 left-0 z-30 hidden flex-col overflow-hidden border-r border-white/10 bg-[var(--institution-nav)] text-slate-200 shadow-2xl shadow-slate-950/20 transition-[width] duration-200 md:flex',
+          'fixed inset-y-0 left-0 z-30 hidden flex-col overflow-hidden border-r border-white/10 bg-[var(--institution-nav)] text-slate-200 transition-[width] duration-200 md:flex',
           isCollapsed ? 'w-[var(--institution-sidebar-collapsed)]' : 'w-[var(--institution-sidebar-expanded)]',
         )}
       >
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(39,211,193,0.16),transparent_38%),linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[length:auto,32px_32px,32px_32px]" />
-
         <div
           className={cn(
             'relative flex h-[var(--institution-topbar)] shrink-0 items-center border-b border-white/10',
-            isCollapsed ? 'justify-center px-2' : 'gap-3 px-5',
+            isCollapsed ? 'justify-center px-2' : 'gap-3 px-[18px]',
           )}
         >
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-cyan-300 to-emerald-400 text-lg font-black text-slate-950 shadow-lg shadow-cyan-500/15">
-            智
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 text-white shadow-lg shadow-cyan-950/20">
+            <Sparkles aria-hidden="true" className="h-[18px] w-[18px]" />
           </div>
           {!isCollapsed ? (
             <div className="min-w-0">
-              <div className="truncate text-base font-semibold tracking-wide text-white">智美天工</div>
-              <div className="mt-0.5 truncate text-[11px] text-slate-400">机构运营工作空间</div>
+              <div className="truncate text-[18px] font-bold tracking-wide text-white">智美天工</div>
+              <div className="mt-0.5 truncate text-[10px] text-slate-400">机构工作台 · V1.1 APPROVED</div>
             </div>
           ) : null}
         </div>
 
-        <div
-          className={cn(
-            'relative flex h-12 shrink-0 items-center border-b border-white/10',
-            isCollapsed ? 'justify-center px-2' : 'justify-between px-4',
-          )}
-        >
-          {!isCollapsed ? <span className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">机构导航</span> : null}
-          <button
-            type="button"
-            aria-label={isCollapsed ? '展开机构端侧边栏' : '收起机构端侧边栏'}
-            aria-expanded={!isCollapsed}
-            onClick={() => setIsCollapsed((value) => !value)}
-            className="grid h-8 w-8 place-items-center rounded-xl text-slate-400 transition hover:bg-white/10 hover:text-cyan-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50"
-          >
-            {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-          </button>
-        </div>
-
         <nav
           aria-label="机构端桌面导航"
-          className={cn('relative space-y-1 overflow-y-auto py-3', isCollapsed ? 'px-2' : 'px-3')}
+          className={cn('relative flex-1 space-y-1 overflow-y-auto py-4', isCollapsed ? 'px-2' : 'px-2.5')}
         >
           {desktopSections.map((section) => {
             const Icon = sectionIcons[section.id];
@@ -193,15 +174,18 @@ export function InstitutionNavigationShell({
                 aria-label={section.label}
                 title={isCollapsed ? section.label : undefined}
                 className={cn(
-                  'flex h-10 items-center rounded-lg text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50',
-                  isCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
+                  'flex h-[50px] items-center rounded-xl border-l-2 text-[16px] font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50',
+                  isCollapsed ? 'justify-center px-0' : 'gap-3.5 px-3',
                   isActive
-                    ? 'bg-cyan-300/14 text-cyan-100 ring-1 ring-cyan-300/20'
-                    : 'text-slate-300 hover:bg-white/8 hover:text-white',
+                    ? 'border-cyan-300 bg-cyan-400/15 text-white'
+                    : 'border-transparent text-slate-200 hover:bg-white/[0.06] hover:text-white',
                 )}
               >
-                <Icon className="h-[18px] w-[18px] shrink-0" />
+                <Icon className="h-[21px] w-[21px] shrink-0" strokeWidth={1.8} />
                 {!isCollapsed ? <span className="truncate">{section.label}</span> : null}
+                {!isCollapsed && ['customers', 'care'].includes(section.id) ? (
+                  <ChevronRight aria-hidden="true" className="ml-auto h-4 w-4 text-slate-400" />
+                ) : null}
               </Link>
             );
           })}
@@ -210,17 +194,9 @@ export function InstitutionNavigationShell({
         {activePageTargets.length > 1 ? (
           <nav
             aria-label="机构端页面导航"
-            className={cn(
-              'relative min-h-0 flex-1 overflow-y-auto border-t border-white/10 py-3',
-              isCollapsed ? 'px-2' : 'px-3',
-            )}
+            className="sr-only"
           >
-            {!isCollapsed ? (
-              <p className="px-3 pb-2 text-[10px] font-semibold tracking-[0.14em] text-slate-500">
-                {activeSection?.label}页面
-              </p>
-            ) : null}
-            <div className="space-y-0.5">
+            <div>
               {activePageTargets.map((target) => {
                 const isCurrent = pathname === target.pathname;
                 return (
@@ -230,42 +206,36 @@ export function InstitutionNavigationShell({
                     aria-current={isCurrent ? 'page' : undefined}
                     aria-label={isCollapsed ? target.label : undefined}
                     title={isCollapsed ? target.label : undefined}
-                    className={cn(
-                      'flex min-h-9 items-center rounded-lg text-xs transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50',
-                      isCollapsed ? 'justify-center px-0' : 'gap-2.5 px-3',
-                      isCurrent
-                        ? 'bg-white/10 font-semibold text-cyan-100'
-                        : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100',
-                    )}
+                    className=""
                   >
-                    <span
-                      aria-hidden="true"
-                      className={cn(
-                        'h-1.5 w-1.5 shrink-0 rounded-full',
-                        isCurrent ? 'bg-cyan-300' : 'bg-slate-600',
-                      )}
-                    />
-                    {!isCollapsed ? <span className="truncate">{target.label}</span> : null}
+                    <span>{target.label}</span>
                   </Link>
                 );
               })}
             </div>
           </nav>
-        ) : (
-          <div className="min-h-0 flex-1" />
-        )}
+        ) : null}
 
         <div className={cn('relative border-t border-white/10', isCollapsed ? 'p-3' : 'p-4')}>
           <div
             aria-label={navigationVisibilityBoundary}
-            className={cn(
-              'rounded-2xl bg-white/[0.06] text-slate-400',
-              isCollapsed ? 'grid h-10 place-items-center text-xs font-bold' : 'px-3 py-2.5 text-xs leading-5',
-            )}
+            className="sr-only"
             title={navigationVisibilityBoundary}
           >
             {isCollapsed ? '界' : navigationVisibilityBoundary}
           </div>
+          <button
+            type="button"
+            aria-label={isCollapsed ? '展开机构端侧边栏' : '收起机构端侧边栏'}
+            aria-expanded={!isCollapsed}
+            onClick={() => setIsCollapsed((value) => !value)}
+            className={cn(
+              'flex h-9 items-center rounded-xl border border-white/10 text-slate-400 transition hover:bg-white/[0.06] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50',
+              isCollapsed ? 'w-full justify-center' : 'w-9 justify-center',
+            )}
+          >
+            {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          </button>
         </div>
       </aside>
 
