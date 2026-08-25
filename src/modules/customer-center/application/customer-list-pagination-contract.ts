@@ -1,0 +1,3 @@
+export const CUSTOMER_LIST_PAGE_SIZE_V1 = 20;
+export const CUSTOMER_LIST_MAX_PAGE_V1 = 100;
+export const CUSTOMER_LIST_MAX_OFFSET_V1 = 1980;

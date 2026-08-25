@@ -68,7 +68,11 @@ export default async function HospitalCapabilityOffRoute({
       workspaceScopeKey={workspaceScopeKey}
     >
       {genuineAllowed ? (
-        <InstitutionCapabilityOffPage pageLabel={route.pageLabel} section={route.section} />
+        <InstitutionCapabilityOffPage
+          pageLabel={route.pageLabel}
+          routeId={route.routeId}
+          section={route.section}
+        />
       ) : genuineBlockedWithNavigation ? (
         <InstitutionPageState
           kind="forbidden"

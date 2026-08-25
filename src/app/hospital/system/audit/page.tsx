@@ -144,6 +144,7 @@ export default async function HospitalSystemAuditPage() {
         AUDIT_CAPABILITY_OFF_ROUTE ? (
         <InstitutionCapabilityOffPage
           pageLabel={AUDIT_CAPABILITY_OFF_ROUTE.pageLabel}
+          routeId={AUDIT_CAPABILITY_OFF_ROUTE.routeId}
           section={AUDIT_CAPABILITY_OFF_ROUTE.section}
         />
       ) : (

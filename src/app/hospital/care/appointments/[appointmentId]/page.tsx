@@ -135,6 +135,7 @@ export default async function HospitalCareAppointmentDetailPage({
       ) : genuineAllowed && !capabilityOperational && CAPABILITY_OFF_ROUTE ? (
         <InstitutionCapabilityOffPage
           pageLabel={CAPABILITY_OFF_ROUTE.pageLabel}
+          routeId={CAPABILITY_OFF_ROUTE.routeId}
           section={CAPABILITY_OFF_ROUTE.section}
         />
       ) : (

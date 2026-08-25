@@ -1,9 +1,14 @@
 'use client';
 
 import Link from 'next/link';
+import { CalendarClock, Plus } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import type { FormalFollowUpDtoV1 } from '@/modules/care/application/formal-follow-up-view';
+import {
+  InstitutionV11PageHeader,
+  InstitutionV11Surface,
+} from '@/modules/institution-v11/components/InstitutionV11Ui';
 
 type Props = Readonly<{
   records: readonly FormalFollowUpDtoV1[];
@@ -88,6 +93,8 @@ export function CareFollowUpControlledShell({
                   ?? 'customer_service',
               ),
             };
+      const dueAtLocal = String(formData.get('dueAt') ?? '');
+      const dueAt = new Date(`${dueAtLocal}:00+08:00`).toISOString();
 
       const response = await fetch(
         '/api/v1/institution/followups',
@@ -108,10 +115,7 @@ export function CareFollowUpControlledShell({
               'manual_followup',
             actionCode:
               'manual_contact',
-            dueAt: String(
-              formData.get('dueAt')
-                ?? '',
-            ),
+            dueAt,
             assignment,
           }),
         },
@@ -183,17 +187,25 @@ export function CareFollowUpControlledShell({
 
   return (
     <main className="space-y-5">
-      <header className="rounded-3xl border border-slate-200 bg-white p-6">
-        <p className="text-xs font-semibold tracking-[0.16em] text-cyan-700">
-          CONTROLLED WRITE
-        </p>
-        <h1 className="mt-2 text-2xl font-bold text-slate-950">
-          人工随访任务
-        </h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
-          当前只开放正式机构范围内的人工联系任务：创建、认领、改派、状态流转、结构化完成与风险升级。真实消息发送和 HIS 操作仍关闭。
-        </p>
-      </header>
+      <h1 className="sr-only">人工随访任务</h1>
+      <InstitutionV11PageHeader
+        eyebrow="FOLLOW-UP MANAGEMENT"
+        title="随访管理"
+        description="正式机构范围内的人工联系任务支持受控创建、认领、改派、状态流转、结构化完成与风险升级；真实消息发送和 HIS 操作仍关闭。"
+        breadcrumbs={[{ label: '机构端', href: '/hospital' }, { label: '预约与随访' }, { label: '随访管理' }]}
+        state="LIVE"
+        actions={canCreate && selectedTaskId === null ? <a href="#followup-create" className="inline-flex h-9 items-center gap-2 rounded-lg border border-blue-700 bg-blue-700 px-3 text-sm font-semibold text-white"><Plus aria-hidden="true" className="h-4 w-4" />新建随访</a> : null}
+      />
+
+      <InstitutionV11Surface>
+        <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 px-3 py-2">
+          {['待执行', '进行中', '待人工', '已完成', '异常'].map((label, index) => <span key={label} className={`rounded-full px-3 py-1.5 text-xs ${index === 0 ? 'bg-blue-50 font-semibold text-blue-700' : 'text-slate-500'}`}>{label}</span>)}
+          <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] text-slate-500"><CalendarClock aria-hidden="true" className="h-3.5 w-3.5" />任务状态与消息状态分离</span>
+        </div>
+        <div className="grid gap-px bg-slate-100 sm:grid-cols-4">
+          {['任务状态：正式', '消息状态：未发送', '渠道匹配：按任务事实', '风险：按正式事件'].map((label) => <div key={label} className="bg-white px-4 py-3 text-xs text-slate-600">{label}</div>)}
+        </div>
+      </InstitutionV11Surface>
 
       {error ? (
         <div
@@ -207,6 +219,7 @@ export function CareFollowUpControlledShell({
       {canCreate
       && selectedTaskId === null ? (
         <form
+          id="followup-create"
           action={(formData) =>
             void createTask(formData)
           }
@@ -223,13 +236,15 @@ export function CareFollowUpControlledShell({
             className="rounded-xl border p-3"
           />
 
+          <label className="grid gap-1.5 text-xs text-slate-600">
+            计划时间（机构时区 Asia/Shanghai）
           <input
             required
             name="dueAt"
-            placeholder="计划时间，例如 2026-08-18T02:00:00.000Z"
-            pattern="\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z"
+            type="datetime-local"
             className="rounded-xl border p-3"
           />
+          </label>
 
           <select
             name="assignmentKind"

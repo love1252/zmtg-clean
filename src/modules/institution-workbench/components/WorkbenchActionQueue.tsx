@@ -4,9 +4,9 @@ import {
   CheckCircle2,
   CircleAlert,
   Clock3,
-  ListChecks,
   MessageSquareText,
 } from 'lucide-react';
+import Link from 'next/link';
 
 import type {
   WorkbenchActionProjection,
@@ -98,28 +98,29 @@ export function WorkbenchActionQueue({ projection }: WorkbenchActionQueueProps) 
     <section
       aria-labelledby="workbench-action-queue-heading"
       data-readiness={projection.sourceReadiness.care}
-      className="min-w-0 rounded-[28px] border border-white/90 bg-white/82 p-5 shadow-[0_20px_64px_rgba(32,61,104,0.09)] sm:p-6"
+      className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
     >
-      <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-4">
+      <div className="flex h-[52px] items-center justify-between gap-3 border-b border-slate-200 px-4">
         <div className="min-w-0">
-          <p className="text-xs font-semibold tracking-[0.12em] text-slate-400">按风险与时效排序</p>
-          <h2 id="workbench-action-queue-heading" className="mt-1 text-lg font-bold text-slate-950">
-            行动队列
-          </h2>
+          <h2 id="workbench-action-queue-heading" className="sr-only">行动队列</h2>
+          <p className="text-[15px] font-semibold text-slate-900">我的待处理</p>
         </div>
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-slate-950 text-white">
-          <ListChecks aria-hidden="true" className="h-[18px] w-[18px]" />
-        </span>
+        <Link href="/hospital/care/appointments" className="text-xs font-semibold text-blue-600">查看全部</Link>
+      </div>
+
+      <div className="flex h-11 items-center gap-7 border-b border-slate-100 px-4 text-xs text-slate-500">
+        <span className="flex h-full items-center border-b-2 border-blue-600 font-semibold text-blue-600">全部</span>
+        <span>会话</span><span>预约</span><span>随访</span><span>机会</span>
       </div>
 
       {hasDegradedSource && desktopActions.length > 0 ? (
-        <p role="status" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+        <p role="status" className="m-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
           部分行动数据当前不可用；仅显示可验证行动
         </p>
       ) : null}
 
       {desktopActions.length === 0 ? (
-        <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 px-5 py-10 text-center">
+        <div className="m-4 rounded-lg border border-dashed border-slate-300 bg-slate-50/80 px-5 py-10 text-center">
           {isConfirmedEmpty ? (
             <CheckCircle2 aria-hidden="true" className="mx-auto h-7 w-7 text-slate-300" />
           ) : (
@@ -131,7 +132,7 @@ export function WorkbenchActionQueue({ projection }: WorkbenchActionQueueProps) 
           <p className="mt-1 text-xs leading-5 text-slate-400">这里不会使用客户自由文本补齐任务。</p>
         </div>
       ) : (
-        <ol aria-label="行动队列" className="mt-2 min-w-0 divide-y divide-slate-100">
+        <ol aria-label="行动队列" className="min-w-0 divide-y divide-slate-100 px-4">
           {desktopActions.map((action, index) => {
             const isMobileAction = index < mobileActionCount;
             const kindLabel = actionKindLabel(action);
@@ -141,15 +142,15 @@ export function WorkbenchActionQueue({ projection }: WorkbenchActionQueueProps) 
               <li
                 key={action.key}
                 className={cn(
-                  'min-w-0 py-4 first:pt-3 last:pb-0',
+                  'min-w-0 py-2.5',
                   isMobileAction ? undefined : 'hidden md:block',
                 )}
                 data-testid={isMobileAction ? 'mobile-action' : undefined}
               >
-                <div className="group grid min-w-0 gap-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
+                <div className="group grid min-w-0 gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
                   <span
                     className={cn(
-                      'grid h-10 w-10 shrink-0 place-items-center rounded-2xl',
+                      'grid h-8 w-8 shrink-0 place-items-center rounded-lg',
                       action.kind === 'appointment'
                         ? 'bg-blue-50 text-blue-700'
                         : action.kind === 'followup'
@@ -186,7 +187,7 @@ export function WorkbenchActionQueue({ projection }: WorkbenchActionQueueProps) 
                   <a
                     aria-label={`查看${subjectLabel}的${kindLabel}详情`}
                     href={action.detailHref}
-                    className="inline-flex min-h-10 w-fit items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 sm:justify-self-end"
+                    className="inline-flex min-h-8 w-fit items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-blue-600 transition hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:justify-self-end"
                   >
                     查看详情
                     <ArrowRight aria-hidden="true" className="h-4 w-4" />
