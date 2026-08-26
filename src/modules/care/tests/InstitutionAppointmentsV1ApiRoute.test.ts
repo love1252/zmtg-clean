@@ -31,6 +31,8 @@ const ready = Object.freeze({
     Object.freeze({
       contractVersion: 'v1' as const,
       appointmentId: 'appointment-001',
+      customerDisplayName: '张女士',
+      project: '光子嫩肤复诊',
       scheduledAt: '2026-08-16T08:30:00.000Z',
       status: 'pending_confirmation' as const,
       updatedAt: '2026-08-16T08:00:00.000Z',
@@ -40,6 +42,19 @@ const ready = Object.freeze({
     page: 1,
     pageSize: 20 as const,
     hasMore: false,
+    total: 1,
+    pageCount: 1,
+  }),
+  summary: Object.freeze({
+    total: 1,
+    statusCounts: Object.freeze({
+      pending_confirmation: 1,
+      confirmed: 0,
+      arrived: 0,
+      completed: 0,
+      reschedule_requested: 0,
+      cancelled: 0,
+    }),
   }),
 });
 
@@ -64,7 +79,7 @@ beforeEach(() => {
 });
 
 describe('/api/v1/institution/appointments', () => {
-  it('GET returns the existing exact low-sensitive wire contract', async () => {
+  it('GET 返回当前机构预约列表所需的精确只读契约', async () => {
     const response = await GET(
       new Request(
         'http://localhost/api/v1/institution/appointments?status=pending_confirmation',
@@ -75,6 +90,7 @@ describe('/api/v1/institution/appointments', () => {
     await expect(response.json()).resolves.toEqual({
       records: ready.records,
       pageInfo: ready.pageInfo,
+      summary: ready.summary,
     });
   });
 

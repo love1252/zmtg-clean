@@ -2345,6 +2345,156 @@ export const customers = pgTable(
   }),
 );
 
+export const institutionExcelImportBatches = pgTable(
+  'institution_excel_import_batches',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    fileDigest: varchar('file_digest', { length: 64 }).notNull(),
+    fileNameDigest: varchar('file_name_digest', { length: 64 }).notNull(),
+    customerCount: integer('customer_count').notNull(),
+    appointmentCount: integer('appointment_count').notNull(),
+    treatmentCount: integer('treatment_count').notNull(),
+    consumptionCount: integer('consumption_count').notNull(),
+    createdBy: varchar('created_by', { length: 96 }).notNull(),
+    completedAt: timestamp('completed_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    scopeFk: foreignKey({
+      name: 'institution_excel_import_batches_scope_fk',
+      columns: [table.tenantId, table.institutionId],
+      foreignColumns: [institutionScopes.tenantId, institutionScopes.institutionId],
+    }),
+    scopeFileUnique: unique('institution_excel_import_batches_scope_file_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.fileDigest,
+    ),
+    scopeIdUnique: unique('institution_excel_import_batches_scope_id_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.id,
+    ),
+    scopeCompletedIdx: index('institution_excel_import_batches_scope_completed_idx').on(
+      table.tenantId,
+      table.institutionId,
+      table.completedAt,
+    ),
+    digestCheck: check(
+      'institution_excel_import_batches_digest_check',
+      sql`length(${table.fileDigest}) = 64 AND ${table.fileDigest} ~ '^[0-9a-f]{64}$' AND length(${table.fileNameDigest}) = 64 AND ${table.fileNameDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    countsCheck: check(
+      'institution_excel_import_batches_counts_check',
+      sql`${table.customerCount} > 0 AND ${table.appointmentCount} >= 0 AND ${table.treatmentCount} >= 0 AND ${table.consumptionCount} >= 0`,
+    ),
+  }),
+);
+
+export const institutionExcelImportRows = pgTable(
+  'institution_excel_import_rows',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    batchId: varchar('batch_id', { length: 64 }).notNull(),
+    sheetKind: varchar('sheet_kind', { length: 24 })
+      .$type<'customer' | 'appointment' | 'treatment' | 'consumption'>()
+      .notNull(),
+    rowNumber: integer('row_number').notNull(),
+    externalReferenceDigest: varchar('external_reference_digest', { length: 64 }).notNull(),
+    canonicalRecordId: varchar('canonical_record_id', { length: 64 }).notNull(),
+    protectedPayload: jsonb('protected_payload').$type<EncryptedSecretEnvelope>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    batchFk: foreignKey({
+      name: 'institution_excel_import_rows_scope_batch_fk',
+      columns: [table.tenantId, table.institutionId, table.batchId],
+      foreignColumns: [
+        institutionExcelImportBatches.tenantId,
+        institutionExcelImportBatches.institutionId,
+        institutionExcelImportBatches.id,
+      ],
+    }),
+    scopeBatchUnique: unique('institution_excel_import_rows_scope_batch_row_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.batchId,
+      table.sheetKind,
+      table.rowNumber,
+    ),
+    scopeReferenceUnique: unique('institution_excel_import_rows_scope_reference_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.sheetKind,
+      table.externalReferenceDigest,
+    ),
+    rowCheck: check(
+      'institution_excel_import_rows_row_check',
+      sql`${table.rowNumber} >= 5`,
+    ),
+    kindCheck: check(
+      'institution_excel_import_rows_kind_check',
+      sql`${table.sheetKind} IN ('customer', 'appointment', 'treatment', 'consumption')`,
+    ),
+    digestCheck: check(
+      'institution_excel_import_rows_digest_check',
+      sql`length(${table.externalReferenceDigest}) = 64 AND ${table.externalReferenceDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+  }),
+);
+
+export const customerSensitiveProfiles = pgTable(
+  'customer_sensitive_profiles',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    customerId: varchar('customer_id', { length: 64 }).notNull(),
+    phoneDigest: varchar('phone_digest', { length: 64 }),
+    protectedPhone: jsonb('protected_phone').$type<EncryptedSecretEnvelope>(),
+    nationalIdDigest: varchar('national_id_digest', { length: 64 }),
+    protectedNationalId: jsonb('protected_national_id').$type<EncryptedSecretEnvelope>(),
+    externalPatientIdDigest: varchar('external_patient_id_digest', { length: 64 }),
+    protectedExternalPatientId: jsonb('protected_external_patient_id').$type<EncryptedSecretEnvelope>(),
+    createdBy: varchar('created_by', { length: 96 }).notNull(),
+    updatedBy: varchar('updated_by', { length: 96 }).notNull(),
+    ...timestamps,
+  },
+  (table) => ({
+    customerFk: foreignKey({
+      name: 'customer_sensitive_profiles_scope_customer_fk',
+      columns: [table.tenantId, table.institutionId, table.customerId],
+      foreignColumns: [customers.tenantId, customers.institutionId, customers.id],
+    }),
+    scopeCustomerUnique: unique('customer_sensitive_profiles_scope_customer_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.customerId,
+    ),
+    scopePhoneDigestIdx: index('customer_sensitive_profiles_scope_phone_digest_idx').on(
+      table.tenantId,
+      table.institutionId,
+      table.phoneDigest,
+    ),
+    phoneShapeCheck: check(
+      'customer_sensitive_profiles_phone_shape_check',
+      sql`(${table.phoneDigest} IS NULL AND ${table.protectedPhone} IS NULL) OR (length(${table.phoneDigest}) = 64 AND ${table.phoneDigest} ~ '^[0-9a-f]{64}$' AND ${table.protectedPhone} IS NOT NULL)`,
+    ),
+    nationalIdShapeCheck: check(
+      'customer_sensitive_profiles_national_id_shape_check',
+      sql`(${table.nationalIdDigest} IS NULL AND ${table.protectedNationalId} IS NULL) OR (length(${table.nationalIdDigest}) = 64 AND ${table.nationalIdDigest} ~ '^[0-9a-f]{64}$' AND ${table.protectedNationalId} IS NOT NULL)`,
+    ),
+    externalPatientIdShapeCheck: check(
+      'customer_sensitive_profiles_external_patient_id_shape_check',
+      sql`(${table.externalPatientIdDigest} IS NULL AND ${table.protectedExternalPatientId} IS NULL) OR (length(${table.externalPatientIdDigest}) = 64 AND ${table.externalPatientIdDigest} ~ '^[0-9a-f]{64}$' AND ${table.protectedExternalPatientId} IS NOT NULL)`,
+    ),
+  }),
+);
+
 export const weComCustomerMappingStates = pgTable(
   'wecom_customer_mapping_states',
   {

@@ -94,7 +94,7 @@ export type CustomerControlledMutationResultV1 =
       code?: string;
     }>;
 
-type Authorization =
+export type InstitutionCustomerControlledAuthorizationV1 =
   | Readonly<{
       kind: 'allowed';
       actor: InstitutionCustomerWriteAuthorizationConsumptionV1;
@@ -147,7 +147,9 @@ function releasedCapability(
   );
 }
 
-async function authorize(requireCreate: boolean): Promise<Authorization> {
+export async function authorizeInstitutionCustomerControlledWriteV1(
+  requireCreate: boolean,
+): Promise<InstitutionCustomerControlledAuthorizationV1> {
   const resolution = await resolveInstitutionCustomerWriteAuthorizationV1();
 
   if (resolution.kind === 'forbidden') return AUTH_FORBIDDEN;
@@ -493,7 +495,7 @@ export async function readCurrentInstitutionCustomerControlledV1(
     return Object.freeze({ kind: 'not_found' as const });
   }
 
-  const authorization = await authorize(false).catch(() => AUTH_UNAVAILABLE);
+  const authorization = await authorizeInstitutionCustomerControlledWriteV1(false).catch(() => AUTH_UNAVAILABLE);
   if (authorization.kind !== 'allowed') {
     return Object.freeze({ kind: authorization.kind });
   }
@@ -519,7 +521,7 @@ export async function readCurrentInstitutionCustomerControlledV1(
 export async function createCurrentInstitutionCustomerControlledV1(
   value: unknown,
 ): Promise<CustomerControlledMutationResultV1> {
-  const authorization = await authorize(true).catch(() => AUTH_UNAVAILABLE);
+  const authorization = await authorizeInstitutionCustomerControlledWriteV1(true).catch(() => AUTH_UNAVAILABLE);
   if (authorization.kind !== 'allowed') {
     return Object.freeze({ kind: authorization.kind });
   }
@@ -627,7 +629,7 @@ export async function mutateCurrentInstitutionCustomerControlledV1(
     return Object.freeze({ kind: 'not_found' as const });
   }
 
-  const authorization = await authorize(false).catch(() => AUTH_UNAVAILABLE);
+  const authorization = await authorizeInstitutionCustomerControlledWriteV1(false).catch(() => AUTH_UNAVAILABLE);
   if (authorization.kind !== 'allowed') {
     return Object.freeze({ kind: authorization.kind });
   }

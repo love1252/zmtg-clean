@@ -231,6 +231,6 @@ describe('Analytics formal persistence', () => {
       breakpoints: true,
     });
 
-    expect(journal.entries).toHaveLength(51);
+    expect(journal.entries).toHaveLength(52);
   });
 });

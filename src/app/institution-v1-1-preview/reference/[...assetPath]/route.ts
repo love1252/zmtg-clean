@@ -18,7 +18,7 @@ export async function GET(
   return new Response(new Uint8Array(asset.bytes), {
     headers: {
       'Cache-Control': 'no-store',
-      'Content-Security-Policy': "default-src 'self' data: blob:; base-uri 'self'; connect-src 'none'; font-src 'self' data:; form-action 'self'; frame-ancestors 'self'; img-src 'self' data: blob:; object-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'",
+      'Content-Security-Policy': "default-src 'self' data: blob:; base-uri 'self'; connect-src 'self'; font-src 'self' data:; form-action 'self'; frame-ancestors 'self'; img-src 'self' data: blob:; object-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'",
       'Content-Type': asset.contentType,
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'SAMEORIGIN',

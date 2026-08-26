@@ -1,6 +1,6 @@
 import { isProxy } from 'node:util/types';
 
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 
 import {
   mintAttemptedInstitutionDenialAttributionForOrchestrationV1,
@@ -138,6 +138,36 @@ function readTrustedServerEpochMs(): number | null {
   }
 }
 
+async function readFormalServerSessionCookieHeaderV1(): Promise<string | null> {
+  try {
+    const cookieStore = await cookies();
+    const sessionCookie = snapshotExactPlainRecord(
+      cookieStore.get(FORMAL_SERVER_SESSION_COOKIE_V1),
+      SESSION_COOKIE_KEYS,
+    );
+    if (
+      sessionCookie &&
+      sessionCookie.name === FORMAL_SERVER_SESSION_COOKIE_V1 &&
+      typeof sessionCookie.value === 'string' &&
+      sessionCookie.value.length > 0
+    ) {
+      return `${FORMAL_SERVER_SESSION_COOKIE_V1}=${sessionCookie.value}`;
+    }
+  } catch {
+    // Next.js may expose request cookies with additional descriptors. The raw
+    // request header is validated by the same formal-session verifier below.
+  }
+
+  try {
+    const cookieHeader = (await headers()).get('cookie');
+    return typeof cookieHeader === 'string' && cookieHeader.length > 0
+      ? cookieHeader
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export function isInstitutionAuditWriterFormalScopeHandleV1(
   value: unknown,
 ): value is InstitutionAuditWriterFormalScopeHandleV1 {
@@ -177,23 +207,12 @@ export async function resolveInstitutionAuditWriterFormalScopeV1(): Promise<Inst
     const verificationEpochMs = readTrustedServerEpochMs();
     if (verificationEpochMs === null) return null;
 
-    const cookieStore = await cookies();
-    const sessionCookie = snapshotExactPlainRecord(
-      cookieStore.get(FORMAL_SERVER_SESSION_COOKIE_V1),
-      SESSION_COOKIE_KEYS,
-    );
-    if (
-      !sessionCookie ||
-      sessionCookie.name !== FORMAL_SERVER_SESSION_COOKIE_V1 ||
-      typeof sessionCookie.value !== 'string' ||
-      sessionCookie.value.length === 0
-    ) {
-      return null;
-    }
+    const cookieHeader = await readFormalServerSessionCookieHeaderV1();
+    if (!cookieHeader) return null;
 
     const verifiedResolution = snapshotExactPlainRecord(
       verifyFormalServerSessionCookieClaimsV1({
-        cookieHeader: `${FORMAL_SERVER_SESSION_COOKIE_V1}=${sessionCookie.value}`,
+        cookieHeader,
         sessionKeyRing:
           runtimeConfig.formalServerSessionKeyRing as FormalServerSessionKeyRingV1,
         now: () => new Date(verificationEpochMs),

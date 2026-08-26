@@ -26,6 +26,13 @@ export type CustomerListSourceQueryV1 = Readonly<{
   offset: number;
 }>;
 
+export type CustomerListSourceCountQueryV1 = Readonly<{
+  tenantId: string;
+  institutionId: string;
+  lifecycle: CustomerListLifecycleV1 | null;
+  priority: CustomerListPriorityV1 | null;
+}>;
+
 export type CustomerListSourceRowV1 = Readonly<{
   customerId: string;
   displayName: string;
@@ -40,4 +47,5 @@ export type CustomerListSourceV1 = Readonly<{
   list: (
     query: CustomerListSourceQueryV1,
   ) => Promise<readonly CustomerListSourceRowV1[]>;
+  count: (query: CustomerListSourceCountQueryV1) => Promise<number>;
 }>;

@@ -1,10 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronRight, Filter, Import, Plus, Search, SlidersHorizontal } from 'lucide-react';
+import { ChevronDown, ChevronRight, Filter, Import, Plus, Search, SlidersHorizontal } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-import { CUSTOMER_LIST_MAX_PAGE_V1 } from '@/modules/customer-center/application/customer-list-pagination-contract';
+import {
+  CUSTOMER_LIST_MAX_PAGE_V1,
+  CUSTOMER_LIST_PAGE_SIZES_V1,
+} from '@/modules/customer-center/application/customer-list-pagination-contract';
 import type { CustomerListReaderResultV1 } from '@/modules/customer-center/application/customer-list-reader';
 import type {
   CustomerListLifecycleV1,
@@ -37,10 +41,14 @@ const priorityLabels = Object.freeze({
 
 function pageHref(
   page: number,
+  pageSize: number,
   lifecycle: CustomerListLifecycleV1 | null,
   priority: CustomerListPriorityV1 | null,
 ) {
-  const params = new URLSearchParams({ page: String(page) });
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  });
   if (lifecycle) params.set('lifecycle', lifecycle);
   if (priority) params.set('priority', priority);
   return `/hospital/customers?${params.toString()}`;
@@ -57,8 +65,10 @@ export function CustomerListReadonlyShell({
   result: CustomerListReadyResultV1;
   operational: boolean;
 }>) {
+  const router = useRouter();
   const [drawer, setDrawer] = useState<'filter' | 'import' | null>(null);
   const [importStep, setImportStep] = useState(0);
+  const [tableExpanded, setTableExpanded] = useState(false);
   const importSteps = ['下载模板', '上传文件', '字段映射', '数据校验', '重复处理', '完成导入'] as const;
 
   return (
@@ -89,9 +99,9 @@ export function CustomerListReadonlyShell({
               <Search aria-hidden="true" className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
               <input disabled aria-label="搜索客户" placeholder="关键词查询尚未进入正式 Reader" className="h-9 w-full rounded-lg border border-slate-200 bg-slate-100 pl-9 pr-3 text-sm placeholder:text-slate-400" />
             </div>
-            <Link href="/hospital/customers" className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">全部</Link>
-            <Link href="/hospital/customers?lifecycle=consulting&page=1" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600">咨询中</Link>
-            <Link href="/hospital/customers?priority=high&page=1" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600">高优先级</Link>
+            <Link href={pageHref(1, result.pageInfo.pageSize, null, null)} className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">全部</Link>
+            <Link href={pageHref(1, result.pageInfo.pageSize, 'consulting', null)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600">咨询中</Link>
+            <Link href={pageHref(1, result.pageInfo.pageSize, null, 'high')} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600">高优先级</Link>
           </div>
           <div className="flex flex-wrap gap-2">
             <InstitutionV11Button icon={Filter} onClick={() => setDrawer('filter')}>高级筛选</InstitutionV11Button>
@@ -114,16 +124,16 @@ export function CustomerListReadonlyShell({
             <span className="py-3 text-slate-500">近期活跃</span>
             <span className="py-3 text-slate-500">待跟进</span>
           </div>
-          <span className="text-[11px] text-slate-400">共 {result.records.length} 条当前页记录</span>
+          <span className="text-[11px] text-slate-400">共 {result.pageInfo.total} 条 · 本页 {result.records.length} 条</span>
         </div>
         {result.records.length === 0 ? (
           <div className="border border-dashed border-transparent px-6 py-14 text-center text-sm text-slate-500">
             当前页暂无客户记录
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className={`${tableExpanded ? 'max-h-[72vh]' : 'max-h-[56vh]'} overflow-auto overscroll-contain`}>
             <table className="w-full min-w-[760px] border-collapse text-left" aria-label={operational ? '客户记录' : '客户只读记录'}>
-              <thead className="bg-slate-50/80 text-[11px] font-medium text-slate-500">
+              <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] font-medium text-slate-500 shadow-[inset_0_-1px_0_#e2e8f0]">
                 <tr>
                   <th className="w-12 px-4 py-3"><span className="sr-only">选择</span><span aria-hidden="true" className="block h-3.5 w-3.5 rounded border border-slate-300 bg-white" /></th>
                   <th className="px-3 py-3">客户</th>
@@ -157,6 +167,37 @@ export function CustomerListReadonlyShell({
             </table>
           </div>
         )}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-xs text-slate-500">
+          <span>
+            共 {result.pageInfo.total} 条 · 第 {result.pageInfo.page} / {result.pageInfo.pageCount} 页
+          </span>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <label className="inline-flex items-center gap-2">
+              每页显示
+              <select
+                aria-label="每页显示条数"
+                className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700"
+                value={result.pageInfo.pageSize}
+                onChange={(event) => {
+                  router.push(pageHref(1, Number(event.target.value), lifecycle, priority));
+                }}
+              >
+                {CUSTOMER_LIST_PAGE_SIZES_V1.map((pageSize) => (
+                  <option key={pageSize} value={pageSize}>{pageSize} 条</option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              aria-expanded={tableExpanded}
+              className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-slate-700"
+              onClick={() => setTableExpanded((expanded) => !expanded)}
+            >
+              <ChevronDown aria-hidden="true" className={`h-3.5 w-3.5 transition-transform ${tableExpanded ? 'rotate-180' : ''}`} />
+              {tableExpanded ? '收起表格' : '展开表格'}
+            </button>
+          </div>
+        </div>
       </section>
 
       <nav aria-label="客户列表分页" className="flex items-center justify-between gap-3">
@@ -164,6 +205,7 @@ export function CustomerListReadonlyShell({
           <Link
             href={pageHref(
               result.pageInfo.page - 1,
+              result.pageInfo.pageSize,
               lifecycle,
               priority,
             )}
@@ -174,12 +216,13 @@ export function CustomerListReadonlyShell({
         ) : (
           <span />
         )}
-        <span className="text-sm text-slate-500">第 {result.pageInfo.page} 页</span>
+        <span className="text-sm text-slate-500">第 {result.pageInfo.page} / {result.pageInfo.pageCount} 页</span>
         {result.pageInfo.hasMore &&
         result.pageInfo.page < CUSTOMER_LIST_MAX_PAGE_V1 ? (
           <Link
             href={pageHref(
               result.pageInfo.page + 1,
+              result.pageInfo.pageSize,
               lifecycle,
               priority,
             )}

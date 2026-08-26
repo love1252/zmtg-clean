@@ -1,5 +1,5 @@
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const requestOwners = vi.hoisted(() => new WeakSet<object>());
@@ -10,6 +10,11 @@ const mocks = vi.hoisted(() => ({
   resolveCapability: vi.fn(),
   resolveServerAuthorization: vi.fn(),
   canCreateCustomer: vi.fn(),
+  push: vi.fn(),
+}));
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mocks.push }),
 }));
 
 vi.mock('@/modules/institution/server/institution-server-runtime', () => ({
@@ -82,6 +87,8 @@ const ready = Object.freeze({
     page: 1,
     pageSize: 20 as const,
     hasMore: false,
+    total: 1,
+    pageCount: 1,
   }),
 });
 
@@ -207,5 +214,17 @@ describe('/hospital/customers controlled-write release page', () => {
     const params = mocks.readCustomers.mock.calls[0]?.[0] as URLSearchParams;
     expect(params.getAll('page')).toEqual(['1', '2']);
     expect(params.getAll('unknown')).toEqual(['value']);
+  });
+
+  it('页容量选择只导航到服务端 Reader 白名单 query', async () => {
+    render(await HospitalCustomersPage({}));
+
+    const pageSize = screen.getByRole('combobox', { name: '每页显示条数' });
+    expect(pageSize).toHaveValue('20');
+    fireEvent.change(pageSize, { target: { value: '50' } });
+
+    expect(mocks.push).toHaveBeenCalledWith(
+      '/hospital/customers?page=1&pageSize=50',
+    );
   });
 });

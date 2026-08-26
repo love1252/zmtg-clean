@@ -126,7 +126,8 @@ export function AppointmentListReadonlyShell({
                     <div key={`${date.toISOString()}-${hour}`} className="min-h-16 border-r border-slate-100 bg-white p-1.5">
                       {appointments.map((record) => (
                         <div key={record.appointmentId} className="rounded-md border-l-2 border-emerald-500 bg-emerald-50 px-2 py-1.5 text-[10px] leading-4 text-emerald-800">
-                          <p className="font-semibold">{statusLabels[record.status]}</p>
+                          <p className="font-semibold">{record.customerDisplayName} · {record.project}</p>
+                          <p>{statusLabels[record.status]}</p>
                           <time dateTime={record.scheduledAt}>预约时间 {record.scheduledAt}</time>
                           {operational ? <Link href={`/hospital/care/appointments/${encodeURIComponent(record.appointmentId)}`} className="mt-1 block font-semibold text-blue-700">查看 / 操作</Link> : null}
                         </div>
@@ -156,8 +157,9 @@ export function AppointmentListReadonlyShell({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="font-semibold text-slate-950">
-                    {statusLabels[record.status]}
+                    {record.customerDisplayName} · {record.project}
                   </p>
+                  <p className="mt-1 text-xs font-medium text-slate-500">{statusLabels[record.status]}</p>
                   <time className="mt-1 block text-sm text-slate-600" dateTime={record.scheduledAt}>
                     预约时间 {record.scheduledAt}
                   </time>

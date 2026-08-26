@@ -74,7 +74,11 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json(
-    { records: result.records, pageInfo: result.pageInfo },
+    {
+      records: result.records,
+      pageInfo: result.pageInfo,
+      summary: result.summary,
+    },
     { status: 200, headers: NO_STORE_HEADERS },
   );
 }
