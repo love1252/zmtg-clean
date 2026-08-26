@@ -30,7 +30,7 @@ const pair = Object.freeze({
   observedAt: '2026-08-16T08:00:00.000Z',
 });
 const database = Object.freeze({ database: 'db' });
-const source = Object.freeze({ list: vi.fn() });
+const source = Object.freeze({ list: vi.fn(), summarize: vi.fn() });
 
 beforeEach(() => {
   Object.values(mocks).forEach((mock) => mock.mockReset());
@@ -43,7 +43,24 @@ beforeEach(() => {
     Object.freeze({
       kind: 'ready',
       records: Object.freeze([]),
-      pageInfo: Object.freeze({ page: 1, pageSize: 20, hasMore: false }),
+      pageInfo: Object.freeze({
+        page: 1,
+        pageSize: 20,
+        hasMore: false,
+        total: 0,
+        pageCount: 0,
+      }),
+      summary: Object.freeze({
+        total: 0,
+        statusCounts: Object.freeze({
+          pending_confirmation: 0,
+          confirmed: 0,
+          arrived: 0,
+          completed: 0,
+          reschedule_requested: 0,
+          cancelled: 0,
+        }),
+      }),
     }),
   );
 });

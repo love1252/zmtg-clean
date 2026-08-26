@@ -96,7 +96,7 @@ describe('/hospital/institution-v1-1-approved', () => {
     expect(assetMocks.readApprovedPrototypeAsset).not.toHaveBeenCalled();
   });
 
-  it('仅向已授权的本地医生端会话返回无缓存、不可联网的 Approved 界面', async () => {
+  it('仅向已授权的本地机构端会话返回无缓存、仅可同源请求的 Approved 界面', async () => {
     gateMocks.isInstitutionV11HospitalSyncEnabled.mockReturnValue(true);
     authorizationMocks.resolveInstitutionServerAuthorizationV1.mockResolvedValue(
       authorizationMocks.authorization,
@@ -129,7 +129,10 @@ describe('/hospital/institution-v1-1-approved', () => {
       'text/html; charset=utf-8',
     );
     expect(response.headers.get('content-security-policy')).toContain(
-      "connect-src 'none'",
+      "connect-src 'self'",
+    );
+    expect(response.headers.get('content-security-policy')).not.toContain(
+      'https:',
     );
     expect(response.headers.get('content-security-policy')).toContain(
       "frame-ancestors 'self'",

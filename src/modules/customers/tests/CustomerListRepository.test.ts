@@ -27,6 +27,7 @@ const drizzleMocks = vi.hoisted(() => ({
   and: vi.fn((...conditions: unknown[]) => ({ operator: 'and', conditions })),
   asc: vi.fn((column: unknown) => ({ direction: 'asc', column })),
   desc: vi.fn((column: unknown) => ({ direction: 'desc', column })),
+  count: vi.fn((column: unknown) => ({ operator: 'count', column })),
   eq: vi.fn((column: unknown, value: unknown) => ({ operator: 'eq', column, value })),
 }));
 
@@ -35,13 +36,24 @@ vi.mock('drizzle-orm', async (importOriginal) => ({
   ...drizzleMocks,
 }));
 
-function createDatabase(rows: readonly unknown[] = [row]) {
+function createDatabase(
+  rows: readonly unknown[] = [row],
+  countRows: readonly unknown[] = [{ total: rows.length }],
+) {
+  let selectionKind: 'list' | 'count' = 'list';
   const offset = vi.fn(async () => rows);
   const limit = vi.fn(() => ({ offset }));
   const orderBy = vi.fn(() => ({ limit }));
-  const where = vi.fn(() => ({ orderBy }));
+  const where = vi.fn(() => selectionKind === 'count'
+    ? Promise.resolve(countRows)
+    : { orderBy });
   const from = vi.fn(() => ({ where }));
-  const select = vi.fn((_selection?: unknown) => ({ from }));
+  const select = vi.fn((selection?: Record<string, unknown>) => {
+    selectionKind = selection && Object.hasOwn(selection, 'total')
+      ? 'count'
+      : 'list';
+    return { from };
+  });
   return {
     database: { select } as unknown as TenantDatabase,
     select,
@@ -118,14 +130,36 @@ describe('Customers CUS-01 exact list repository', () => {
     expect(db.offset).toHaveBeenCalledWith(1980);
   });
 
+  it('count 使用同一 tenant + institution + filter 边界且只返回安全整数', async () => {
+    const db = createDatabase([], [{ total: 30 }]);
+    const repository = createCustomerListRepository(db.database);
+
+    await expect(repository.count({
+      tenantId: 'tenant-001',
+      institutionId: 'institution-001',
+      lifecycle: 'scheduled',
+      priority: 'observe',
+    })).resolves.toBe(30);
+    expect(drizzleMocks.and).toHaveBeenLastCalledWith(
+      { operator: 'eq', column: customers.tenantId, value: 'tenant-001' },
+      { operator: 'eq', column: customers.institutionId, value: 'institution-001' },
+      { operator: 'eq', column: customers.lifecycle, value: 'scheduled' },
+      { operator: 'eq', column: customers.priority, value: 'observe' },
+    );
+    expect(db.select).toHaveBeenCalledWith({
+      total: { operator: 'count', column: customers.id },
+    });
+  });
+
   it.each([
     { ...query, tenantId: '' },
     { ...query, institutionId: '' },
     { ...query, lifecycle: 'legacy' },
     { ...query, priority: 'watch' },
     { ...query, limit: 20 },
+    { ...query, limit: 31 },
     { ...query, offset: 1 },
-    { ...query, offset: 2000 },
+    { ...query, offset: 10_000 },
   ])('非法或无界 query 在 DB 前 fail-closed', async (invalid) => {
     const db = createDatabase();
     const repository = createCustomerListRepository(db.database);
@@ -133,6 +167,29 @@ describe('Customers CUS-01 exact list repository', () => {
       'invalid_customer_list_source_query',
     );
     expect(db.select).not.toHaveBeenCalled();
+  });
+
+  it('非法 count query 与异常 count 结果在低敏边界内拒绝', async () => {
+    const invalid = createDatabase();
+    await expect(
+      createCustomerListRepository(invalid.database).count({
+        tenantId: '',
+        institutionId: 'institution-001',
+        lifecycle: null,
+        priority: null,
+      }),
+    ).rejects.toThrow('invalid_customer_list_count_query');
+    expect(invalid.select).not.toHaveBeenCalled();
+
+    const unavailable = createDatabase([], [{ total: -1 }]);
+    await expect(
+      createCustomerListRepository(unavailable.database).count({
+        tenantId: 'tenant-001',
+        institutionId: 'institution-001',
+        lifecycle: null,
+        priority: null,
+      }),
+    ).rejects.toThrow('customer_list_count_unavailable');
   });
 
   it('null institution attribution 与异常 overflow fail-closed', async () => {

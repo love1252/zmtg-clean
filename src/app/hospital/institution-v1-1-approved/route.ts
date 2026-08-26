@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 const APPROVED_RUNTIME_CSP = [
   "default-src 'self' data: blob:",
   "base-uri 'self'",
-  "connect-src 'none'",
+  "connect-src 'self'",
   "font-src 'self' data:",
   "form-action 'none'",
   "frame-ancestors 'self'",

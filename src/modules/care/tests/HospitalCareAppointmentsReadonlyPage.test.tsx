@@ -76,18 +76,43 @@ const ready = Object.freeze({
     Object.freeze({
       contractVersion: 'v1' as const,
       appointmentId: 'appointment-001',
+      customerDisplayName: '张女士',
+      project: '光子嫩肤复诊',
       scheduledAt: '2026-08-16T08:30:00.000Z',
       status: 'pending_confirmation' as const,
       updatedAt: '2026-08-16T08:00:00.000Z',
     }),
   ]),
-  pageInfo: Object.freeze({ page: 1, pageSize: 20 as const, hasMore: false }),
+  pageInfo: Object.freeze({
+    page: 1,
+    pageSize: 20 as const,
+    hasMore: false,
+    total: 1,
+    pageCount: 1,
+  }),
+  summary: Object.freeze({
+    total: 1,
+    statusCounts: Object.freeze({
+      pending_confirmation: 1,
+      confirmed: 0,
+      arrived: 0,
+      completed: 0,
+      reschedule_requested: 0,
+      cancelled: 0,
+    }),
+  }),
 });
 
 function readyPage(page: number, hasMore: boolean) {
   return Object.freeze({
     ...ready,
-    pageInfo: Object.freeze({ page, pageSize: 20 as const, hasMore }),
+    pageInfo: Object.freeze({
+      page,
+      pageSize: 20 as const,
+      hasMore,
+      total: hasMore ? page * 20 + 1 : page * 20,
+      pageCount: hasMore ? page + 1 : page,
+    }),
   });
 }
 
@@ -312,7 +337,7 @@ describe('/hospital/care/appointments readonly release page', () => {
     expect(previous.get('status')).toBe('pending_confirmation');
   });
 
-  it('页面和 DTO view 不包含 legacy owner、mutation 或扩展业务字段', () => {
+  it('页面和 DTO view 不包含 legacy owner、mutation 或未授权敏感字段', () => {
     const pageSource = readFileSync(
       resolve(process.cwd(), 'src/app/hospital/care/appointments/page.tsx'),
       'utf8',
@@ -327,7 +352,7 @@ describe('/hospital/care/appointments readonly release page', () => {
     expect(pageSource).toContain('InstitutionNavigationShell');
     expect(pageSource).toContain('readCurrentInstitutionAppointmentsV1');
     expect(`${pageSource}\n${componentSource}`).not.toMatch(
-      /AppointmentCenterShell|tenant-business-client|createAppointment|updateAppointment|\?create=1|customerDisplayName|project|consultantUserId|note|treatment/iu,
+      /AppointmentCenterShell|tenant-business-client|createAppointment|updateAppointment|\?create=1|customerId|consultantUserId|note|phone|medical/iu,
     );
   });
 });

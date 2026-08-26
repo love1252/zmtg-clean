@@ -30,7 +30,13 @@ const ready = Object.freeze({
       updatedAt: '2026-08-18T12:00:00.000Z',
     }),
   ]),
-  pageInfo: Object.freeze({ page: 1, pageSize: 20 as const, hasMore: false }),
+  pageInfo: Object.freeze({
+    page: 1,
+    pageSize: 20 as const,
+    hasMore: false,
+    total: 1,
+    pageCount: 1,
+  }),
 });
 
 beforeEach(() => {

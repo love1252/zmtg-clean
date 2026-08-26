@@ -4,6 +4,8 @@ import {
   CUSTOMER_LIST_MAX_OFFSET_V1,
   CUSTOMER_LIST_MAX_PAGE_V1,
   CUSTOMER_LIST_PAGE_SIZE_V1,
+  CUSTOMER_LIST_PAGE_SIZES_V1,
+  type CustomerListPageSizeV1,
 } from '@/modules/customer-center/application/customer-list-pagination-contract';
 
 import {
@@ -19,6 +21,7 @@ export {
   CUSTOMER_LIST_MAX_OFFSET_V1,
   CUSTOMER_LIST_MAX_PAGE_V1,
   CUSTOMER_LIST_PAGE_SIZE_V1,
+  CUSTOMER_LIST_PAGE_SIZES_V1,
 } from '@/modules/customer-center/application/customer-list-pagination-contract';
 
 export type CustomerListItemV1 = Readonly<{
@@ -36,8 +39,10 @@ export type CustomerListReaderResultV1 =
       records: readonly CustomerListItemV1[];
       pageInfo: Readonly<{
         page: number;
-        pageSize: typeof CUSTOMER_LIST_PAGE_SIZE_V1;
+        pageSize: CustomerListPageSizeV1;
         hasMore: boolean;
+        total: number;
+        pageCount: number;
       }>;
     }>
   | Readonly<{ kind: 'invalid_query'; code: 'invalid_customer_query' }>
@@ -68,6 +73,7 @@ const SOURCE_ROW_KEYS = Object.freeze([
 ] as const);
 const ALLOWED_QUERY_KEYS = Object.freeze([
   'page',
+  'pageSize',
   'lifecycle',
   'priority',
 ] as const);
@@ -132,6 +138,7 @@ function isPriority(value: unknown): value is CustomerListPriorityV1 {
 
 function parseQuery(searchParams: URLSearchParams): Readonly<{
   page: number;
+  pageSize: CustomerListPageSizeV1;
   lifecycle: CustomerListLifecycleV1 | null;
   priority: CustomerListPriorityV1 | null;
 }> | null {
@@ -158,6 +165,14 @@ function parseQuery(searchParams: URLSearchParams): Readonly<{
       page > CUSTOMER_LIST_MAX_PAGE_V1
     ) return null;
 
+    const pageSizeValue = searchParams.get('pageSize');
+    const pageSize = pageSizeValue === null
+      ? CUSTOMER_LIST_PAGE_SIZE_V1
+      : Number(pageSizeValue);
+    if (
+      !CUSTOMER_LIST_PAGE_SIZES_V1.some((candidate) => candidate === pageSize)
+    ) return null;
+
     const lifecycleValue = searchParams.get('lifecycle');
     if (lifecycleValue !== null && !isLifecycle(lifecycleValue)) return null;
     const priorityValue = searchParams.get('priority');
@@ -165,6 +180,7 @@ function parseQuery(searchParams: URLSearchParams): Readonly<{
 
     return Object.freeze({
       page,
+      pageSize: pageSize as CustomerListPageSizeV1,
       lifecycle: lifecycleValue,
       priority: priorityValue,
     });
@@ -219,20 +235,35 @@ function makeReader(source: CustomerListSourceV1 | null): CustomerListReaderV1 {
 
       const query = parseQuery(input.searchParams);
       if (!query) return INVALID_QUERY;
-      if (!source || typeof source.list !== 'function' || isProxy(source.list)) {
+      if (
+        !source ||
+        typeof source.list !== 'function' ||
+        isProxy(source.list) ||
+        typeof source.count !== 'function' ||
+        isProxy(source.count)
+      ) {
         return UNAVAILABLE;
       }
 
       try {
-        const rows = await source.list({
-          tenantId: input.tenantId,
-          institutionId: input.institutionId,
+        const filter = Object.freeze({
+          tenantId: input.tenantId as string,
+          institutionId: input.institutionId as string,
           lifecycle: query.lifecycle,
           priority: query.priority,
-          limit: CUSTOMER_LIST_PAGE_SIZE_V1 + 1,
-          offset: (query.page - 1) * CUSTOMER_LIST_PAGE_SIZE_V1,
         });
-        if (!Array.isArray(rows) || rows.length > CUSTOMER_LIST_PAGE_SIZE_V1 + 1) {
+        const rows = await source.list({
+          ...filter,
+          limit: query.pageSize + 1,
+          offset: (query.page - 1) * query.pageSize,
+        });
+        const total = await source.count(filter);
+        if (
+          !Array.isArray(rows) ||
+          rows.length > query.pageSize + 1 ||
+          !Number.isSafeInteger(total) ||
+          total < 0
+        ) {
           return UNAVAILABLE;
         }
 
@@ -242,7 +273,7 @@ function makeReader(source: CustomerListSourceV1 | null): CustomerListReaderV1 {
         if (parsedRows.some((row) => row === null)) return UNAVAILABLE;
 
         const records = Object.freeze(
-          parsedRows.slice(0, CUSTOMER_LIST_PAGE_SIZE_V1).map((row) => {
+          parsedRows.slice(0, query.pageSize).map((row) => {
             if (!row) throw new Error('customer_list_row_unavailable');
             return Object.freeze({
               contractVersion: 'v1' as const,
@@ -254,14 +285,29 @@ function makeReader(source: CustomerListSourceV1 | null): CustomerListReaderV1 {
             });
           }),
         );
+        const offset = (query.page - 1) * query.pageSize;
+        const hasMore = rows.length > query.pageSize;
+        if (
+          (records.length > 0 && total < offset + records.length) ||
+          hasMore !== (total > offset + query.pageSize)
+        ) {
+          return UNAVAILABLE;
+        }
 
         return Object.freeze({
           kind: 'ready' as const,
           records,
           pageInfo: Object.freeze({
             page: query.page,
-            pageSize: CUSTOMER_LIST_PAGE_SIZE_V1,
-            hasMore: rows.length > CUSTOMER_LIST_PAGE_SIZE_V1,
+            pageSize: query.pageSize,
+            hasMore,
+            total,
+            pageCount: total === 0
+              ? 0
+              : Math.min(
+                  CUSTOMER_LIST_MAX_PAGE_V1,
+                  Math.ceil(total / query.pageSize),
+                ),
           }),
         });
       } catch {
@@ -280,7 +326,8 @@ export function createCustomerListReaderV1(input: Readonly<{
       record.source !== null &&
       typeof record.source === 'object' &&
       !isProxy(record.source) &&
-      typeof (record.source as CustomerListSourceV1).list === 'function'
+      typeof (record.source as CustomerListSourceV1).list === 'function' &&
+      typeof (record.source as CustomerListSourceV1).count === 'function'
       ? (record.source as CustomerListSourceV1)
       : null,
   );

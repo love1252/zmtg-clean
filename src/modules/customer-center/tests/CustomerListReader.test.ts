@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   createCustomerListReaderV1,
-  CUSTOMER_LIST_MAX_OFFSET_V1,
   CUSTOMER_LIST_MAX_PAGE_V1,
   CUSTOMER_LIST_PAGE_SIZE_V1,
 } from '@/modules/customer-center/application/customer-list-reader';
@@ -18,10 +17,14 @@ const baseRow = Object.freeze({
   institutionId: 'institution-001',
 });
 
-function createReader(rows: readonly unknown[] = [baseRow]) {
+function createReader(
+  rows: readonly unknown[] = [baseRow],
+  total = Math.min(rows.length, 20),
+) {
   const list = vi.fn(async () => rows);
-  const source = Object.freeze({ list }) as unknown as CustomerListSourceV1;
-  return { reader: createCustomerListReaderV1({ source }), list };
+  const count = vi.fn(async () => total);
+  const source = Object.freeze({ list, count }) as unknown as CustomerListSourceV1;
+  return { reader: createCustomerListReaderV1({ source }), list, count };
 }
 
 function read(
@@ -51,7 +54,13 @@ describe('Customers CUS-01 formal list Reader', () => {
           updatedAt: '2026-08-15T08:00:00.000Z',
         },
       ],
-      pageInfo: { page: 1, pageSize: 20, hasMore: false },
+      pageInfo: {
+        page: 1,
+        pageSize: 20,
+        hasMore: false,
+        total: 1,
+        pageCount: 1,
+      },
     });
     expect(list).toHaveBeenCalledWith({
       tenantId: 'tenant-001',
@@ -71,36 +80,46 @@ describe('Customers CUS-01 formal list Reader', () => {
       ...baseRow,
       customerId: `customer-${String(index).padStart(3, '0')}`,
     }));
-    const { reader, list } = createReader(rows);
+    const { reader, list } = createReader(rows, 2_001);
     const result = await read(reader, 'page=100');
 
     expect(result).toMatchObject({
       kind: 'ready',
-      pageInfo: { page: CUSTOMER_LIST_MAX_PAGE_V1, hasMore: true },
+      pageInfo: {
+        page: CUSTOMER_LIST_MAX_PAGE_V1,
+        pageCount: CUSTOMER_LIST_MAX_PAGE_V1,
+        hasMore: true,
+      },
     });
     if (result.kind !== 'ready') throw new Error('expected ready');
     expect(result.records).toHaveLength(CUSTOMER_LIST_PAGE_SIZE_V1);
     expect(list).toHaveBeenCalledWith(
       expect.objectContaining({
         limit: 21,
-        offset: CUSTOMER_LIST_MAX_OFFSET_V1,
+        offset: (CUSTOMER_LIST_MAX_PAGE_V1 - 1) * CUSTOMER_LIST_PAGE_SIZE_V1,
       }),
     );
   });
 
-  it('只接受 page、lifecycle、priority 且把合法 filters 下推', async () => {
-    const { reader, list } = createReader();
+  it('只接受白名单 pageSize 并把合法 filters 与 count 下推', async () => {
+    const { reader, list, count } = createReader([], 0);
 
     await expect(
-      read(reader, 'page=2&lifecycle=post_care&priority=observe'),
+      read(reader, 'page=2&pageSize=50&lifecycle=post_care&priority=observe'),
     ).resolves.toMatchObject({ kind: 'ready' });
     expect(list).toHaveBeenCalledWith({
       tenantId: 'tenant-001',
       institutionId: 'institution-001',
       lifecycle: 'post_care',
       priority: 'observe',
-      limit: 21,
-      offset: 20,
+      limit: 51,
+      offset: 50,
+    });
+    expect(count).toHaveBeenCalledWith({
+      tenantId: 'tenant-001',
+      institutionId: 'institution-001',
+      lifecycle: 'post_care',
+      priority: 'observe',
     });
   });
 
@@ -113,6 +132,8 @@ describe('Customers CUS-01 formal list Reader', () => {
     'search=customer',
     'ownerId=owner-001',
     'page=1&page=1',
+    'pageSize=25',
+    'pageSize=10&pageSize=20',
     'lifecycle=legacy',
     'priority=watch',
   ])('非法或未准入 query %s 返回统一 400 contract 且不读 source', async (query) => {
@@ -158,10 +179,24 @@ describe('Customers CUS-01 formal list Reader', () => {
       list: vi.fn(async () => {
         throw new Error('database secret');
       }),
+      count: vi.fn(async () => 1),
     });
     await expect(
       read(createCustomerListReaderV1({ source })),
     ).resolves.toEqual({ kind: 'unavailable' });
+  });
+
+  it('count 与 sentinel 不一致时整页 fail-closed', async () => {
+    const rows = Array.from({ length: 21 }, (_, index) => ({
+      ...baseRow,
+      customerId: `customer-${index}`,
+    }));
+    await expect(read(createReader(rows, 20).reader)).resolves.toEqual({
+      kind: 'unavailable',
+    });
+    await expect(read(createReader([baseRow], 0).reader)).resolves.toEqual({
+      kind: 'unavailable',
+    });
   });
 
   it('displayName 按 PostgreSQL 字符语义计算 varchar(120)，不按 UTF-16 code unit', async () => {
