@@ -9,6 +9,8 @@ import type { HomepageBrandConfig } from '@/modules/marketing/domain/homepageBra
 
 const isDevelopmentLoginEntryEnabled =
   process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_ZMTG_ENABLE_DEMO_AUTH === 'true';
+export const INSTITUTION_APPROVED_WORKSPACE_STORAGE_KEY =
+  'zmtg-prototype-v1-1-approved';
 
 export function InstitutionLoginClient({ config }: { config: HomepageBrandConfig }) {
   const [username, setUsername] = useState('');
@@ -43,9 +45,15 @@ export function InstitutionLoginClient({ config }: { config: HomepageBrandConfig
       }
 
       const tenantId = result?.data?.user?.tenantId;
-      if (tenantId && typeof window !== 'undefined') window.localStorage.setItem('zmtg_tenant_id', String(tenantId));
-
-      window.location.href = '/hospital';
+      if (typeof window !== 'undefined') {
+        if (tenantId) {
+          window.localStorage.setItem('zmtg_tenant_id', String(tenantId));
+        }
+        window.localStorage.removeItem(
+          INSTITUTION_APPROVED_WORKSPACE_STORAGE_KEY,
+        );
+        window.location.href = '/hospital';
+      }
     } catch (loginError) {
       console.error('[Auth] Institution login failed:', loginError);
       setError('登录失败，请稍后重试');

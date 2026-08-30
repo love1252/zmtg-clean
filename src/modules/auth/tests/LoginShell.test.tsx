@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  INSTITUTION_APPROVED_WORKSPACE_STORAGE_KEY,
   InstitutionLoginClient,
   PlatformLoginClient,
 } from '@/modules/auth/components/ConfiguredLoginPages';
@@ -11,6 +12,10 @@ import {
 
 describe('登录页外壳', () => {
   afterEach(() => {
+    window.localStorage.removeItem(
+      INSTITUTION_APPROVED_WORKSPACE_STORAGE_KEY,
+    );
+    window.localStorage.removeItem('zmtg_tenant_id');
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
   });
@@ -65,6 +70,10 @@ describe('登录页外壳', () => {
       json: async () => ({ code: 401, message: '用户名或密码错误' }),
     });
     vi.stubGlobal('fetch', fetchMock);
+    window.localStorage.setItem(
+      INSTITUTION_APPROVED_WORKSPACE_STORAGE_KEY,
+      '保留失败登录前的工作区',
+    );
 
     render(<InstitutionLoginClient config={defaultHomepageBrandConfig} />);
     fireEvent.change(screen.getByLabelText('用户名 / 手机号'), {
@@ -85,6 +94,54 @@ describe('登录页外壳', () => {
       password: 'institution-password',
       scope: 'institution',
     });
+    expect(
+      window.localStorage.getItem(
+        INSTITUTION_APPROVED_WORKSPACE_STORAGE_KEY,
+      ),
+    ).toBe('保留失败登录前的工作区');
+  });
+
+  it('机构登录成功后清除历史工作区并从工作台重新进入', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        code: 0,
+        data: { user: { tenantId: 'tenant-1' } },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    window.localStorage.setItem(
+      INSTITUTION_APPROVED_WORKSPACE_STORAGE_KEY,
+      JSON.stringify({
+        route: '/management',
+        tabs: [
+          { id: 'workbench', route: '/workbench', fixed: true },
+          { id: 'management', route: '/management', fixed: false },
+        ],
+      }),
+    );
+
+    render(<InstitutionLoginClient config={defaultHomepageBrandConfig} />);
+    fireEvent.change(screen.getByLabelText('用户名 / 手机号'), {
+      target: { value: 'institution-user' },
+    });
+    fireEvent.change(screen.getByLabelText('密码'), {
+      target: { value: 'institution-password' },
+    });
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: defaultHomepageBrandConfig.login.institution.submitLabel,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(
+        window.localStorage.getItem(
+          INSTITUTION_APPROVED_WORKSPACE_STORAGE_KEY,
+        ),
+      ).toBeNull();
+    });
+    expect(window.localStorage.getItem('zmtg_tenant_id')).toBe('tenant-1');
   });
 
   it('平台登录继续提交显式 platform scope', async () => {
