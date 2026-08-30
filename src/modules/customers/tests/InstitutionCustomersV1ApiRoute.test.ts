@@ -70,6 +70,33 @@ describe('/api/v1/institution/customers', () => {
     });
   });
 
+  it('GET forwards the formal customer filter query without expanding the response', async () => {
+    const response = await GET(
+      new Request(
+        'http://localhost/api/v1/institution/customers?page=2&pageSize=20&keyword=%E9%99%88%E9%9B%A8&gender=female&ageBand=30_39&createdFrom=2026-08-01&createdTo=2026-08-28&lifecycle=consulting&priority=high',
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.readCustomers).toHaveBeenCalledTimes(1);
+    const searchParams = mocks.readCustomers.mock.calls[0]?.[0] as URLSearchParams;
+    expect(Object.fromEntries(searchParams.entries())).toEqual({
+      page: '2',
+      pageSize: '20',
+      keyword: '陈雨',
+      gender: 'female',
+      ageBand: '30_39',
+      createdFrom: '2026-08-01',
+      createdTo: '2026-08-28',
+      lifecycle: 'consulting',
+      priority: 'high',
+    });
+    await expect(response.json()).resolves.toEqual({
+      records: ready.records,
+      pageInfo: ready.pageInfo,
+    });
+  });
+
   it('POST delegates controlled create and returns no-store 201', async () => {
     const body = {
       displayName: '客户乙',

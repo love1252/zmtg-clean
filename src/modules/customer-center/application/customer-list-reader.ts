@@ -9,8 +9,12 @@ import {
 } from '@/modules/customer-center/application/customer-list-pagination-contract';
 
 import {
+  CUSTOMER_LIST_AGE_BANDS_V1,
+  CUSTOMER_LIST_GENDERS_V1,
   CUSTOMER_LIST_LIFECYCLES_V1,
   CUSTOMER_LIST_PRIORITIES_V1,
+  type CustomerListAgeBandV1,
+  type CustomerListGenderV1,
   type CustomerListLifecycleV1,
   type CustomerListPriorityV1,
   type CustomerListSourceRowV1,
@@ -76,6 +80,11 @@ const ALLOWED_QUERY_KEYS = Object.freeze([
   'pageSize',
   'lifecycle',
   'priority',
+  'keyword',
+  'gender',
+  'ageBand',
+  'createdFrom',
+  'createdTo',
 ] as const);
 const allowedQueryKeys = new Set<string>(ALLOWED_QUERY_KEYS);
 const idPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/u;
@@ -136,11 +145,44 @@ function isPriority(value: unknown): value is CustomerListPriorityV1 {
   return CUSTOMER_LIST_PRIORITIES_V1.some((item) => item === value);
 }
 
+function isGender(value: unknown): value is CustomerListGenderV1 {
+  return CUSTOMER_LIST_GENDERS_V1.some((item) => item === value);
+}
+
+function isAgeBand(value: unknown): value is CustomerListAgeBandV1 {
+  return CUSTOMER_LIST_AGE_BANDS_V1.some((item) => item === value);
+}
+
+function isIsoDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false;
+  const instant = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(instant.getTime()) && instant.toISOString().slice(0, 10) === value;
+}
+
+function parseKeyword(value: string | null) {
+  if (value === null) return null;
+  const normalized = value.trim();
+  if (
+    normalized !== value ||
+    normalized.length === 0 ||
+    [...normalized].length > 80 ||
+    !/^[\p{L}\p{N}·.' -]+$/u.test(normalized) ||
+    /(?:^|\D)1[3-9]\d{9}(?:$|\D)/u.test(normalized) ||
+    /^\d{6,}$/u.test(normalized)
+  ) return undefined;
+  return normalized;
+}
+
 function parseQuery(searchParams: URLSearchParams): Readonly<{
   page: number;
   pageSize: CustomerListPageSizeV1;
   lifecycle: CustomerListLifecycleV1 | null;
   priority: CustomerListPriorityV1 | null;
+  keyword: string | null;
+  gender: CustomerListGenderV1 | null;
+  ageBand: CustomerListAgeBandV1 | null;
+  createdFrom: string | null;
+  createdTo: string | null;
 }> | null {
   try {
     if (
@@ -178,11 +220,33 @@ function parseQuery(searchParams: URLSearchParams): Readonly<{
     const priorityValue = searchParams.get('priority');
     if (priorityValue !== null && !isPriority(priorityValue)) return null;
 
+    const keyword = parseKeyword(searchParams.get('keyword'));
+    if (keyword === undefined) return null;
+
+    const genderValue = searchParams.get('gender');
+    if (genderValue !== null && !isGender(genderValue)) return null;
+
+    const ageBandValue = searchParams.get('ageBand');
+    if (ageBandValue !== null && !isAgeBand(ageBandValue)) return null;
+
+    const createdFrom = searchParams.get('createdFrom');
+    const createdTo = searchParams.get('createdTo');
+    if (
+      (createdFrom !== null && !isIsoDate(createdFrom)) ||
+      (createdTo !== null && !isIsoDate(createdTo)) ||
+      (createdFrom !== null && createdTo !== null && createdFrom > createdTo)
+    ) return null;
+
     return Object.freeze({
       page,
       pageSize: pageSize as CustomerListPageSizeV1,
       lifecycle: lifecycleValue,
       priority: priorityValue,
+      keyword,
+      gender: genderValue,
+      ageBand: ageBandValue,
+      createdFrom,
+      createdTo,
     });
   } catch {
     return null;
@@ -251,6 +315,11 @@ function makeReader(source: CustomerListSourceV1 | null): CustomerListReaderV1 {
           institutionId: input.institutionId as string,
           lifecycle: query.lifecycle,
           priority: query.priority,
+          keyword: query.keyword,
+          gender: query.gender,
+          ageBand: query.ageBand,
+          createdFrom: query.createdFrom,
+          createdTo: query.createdTo,
         });
         const rows = await source.list({
           ...filter,
