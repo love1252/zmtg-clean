@@ -5,10 +5,28 @@ import Link from 'next/link';
 import { ArrowRight, Eye, EyeOff, KeyRound, LockKeyhole, ShieldCheck, UserCog, UserRound } from 'lucide-react';
 
 import { LuxuryLoginShell } from '@/modules/auth/components/LuxuryLoginShell';
+import {
+  INSTITUTION_WORKSPACE_STORAGE_KEY_PREFIX_V2,
+  INSTITUTION_WORKSPACE_STORAGE_KEY_V1,
+} from '@/modules/institution-shell/components/institution-workspace-state';
 import type { HomepageBrandConfig } from '@/modules/marketing/domain/homepageBrandConfig';
 
 const isDevelopmentLoginEntryEnabled =
   process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_ZMTG_ENABLE_DEMO_AUTH === 'true';
+
+function clearInstitutionWorkspaceSessionState() {
+  try {
+    window.sessionStorage.removeItem(INSTITUTION_WORKSPACE_STORAGE_KEY_V1);
+    for (let index = window.sessionStorage.length - 1; index >= 0; index -= 1) {
+      const key = window.sessionStorage.key(index);
+      if (key?.startsWith(INSTITUTION_WORKSPACE_STORAGE_KEY_PREFIX_V2)) {
+        window.sessionStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // Workspace recovery is optional UI state; login must still complete.
+  }
+}
 
 export function InstitutionLoginClient({ config }: { config: HomepageBrandConfig }) {
   const [username, setUsername] = useState('');
@@ -43,9 +61,13 @@ export function InstitutionLoginClient({ config }: { config: HomepageBrandConfig
       }
 
       const tenantId = result?.data?.user?.tenantId;
-      if (tenantId && typeof window !== 'undefined') window.localStorage.setItem('zmtg_tenant_id', String(tenantId));
-
-      window.location.href = '/hospital';
+      if (typeof window !== 'undefined') {
+        if (tenantId) {
+          window.localStorage.setItem('zmtg_tenant_id', String(tenantId));
+        }
+        clearInstitutionWorkspaceSessionState();
+        window.location.href = '/hospital';
+      }
     } catch (loginError) {
       console.error('[Auth] Institution login failed:', loginError);
       setError('登录失败，请稍后重试');
