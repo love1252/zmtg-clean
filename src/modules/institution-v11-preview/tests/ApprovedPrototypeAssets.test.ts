@@ -105,6 +105,36 @@ describe('Approved prototype asset boundary', () => {
     expect(preparedHtml).toContain('[data-action]');
   });
 
+  it('收起侧栏时带子菜单的一级栏目进入默认路由，展开时仍切换子菜单', () => {
+    const legacyNavigation =
+      " const nav=e.target.closest('[data-nav]');if(nav){const n=DATA.nav.find(x=>x.id===nav.dataset.nav);if(n?.children){state.openNav=state.openNav===n.id?null:n.id;render()}else if(n)go(n.route);return}";
+    const preparedHtml = prepareApprovedPrototypeHtml([
+      '<!doctype html>',
+      '<html><head></head><body><script>',
+      "const DATA={nav:[{id:'customers',route:'/customers/list',children:[['/customers/list','客户列表']]},{id:'care',route:'/appointments',children:[['/appointments','预约管理']]}]};",
+      "const state={collapsed:true,openNav:null};const go=()=>{};const render=()=>{};",
+      "document.addEventListener('click',e=>{",
+      legacyNavigation,
+      '});',
+      '</script></body></html>',
+    ].join(''));
+
+    expect(preparedHtml).not.toContain(legacyNavigation);
+    expect(preparedHtml).toContain(
+      'if(state.collapsed){state.openNav=null;go(n.route)}',
+    );
+    expect(preparedHtml).toContain(
+      'else{state.openNav=state.openNav===n.id?null:n.id;render()}',
+    );
+    expect(preparedHtml).toContain("route:'/customers/list'");
+    expect(preparedHtml).toContain("route:'/appointments'");
+    expect(preparedHtml).toContain("state.workbenchPending='all'");
+    expect(preparedHtml).toContain("state.appointmentView='list'");
+    expect(preparedHtml).toContain("state.knowledgeTab='知识文档'");
+    expect(preparedHtml).toContain("state.analyticsTab='overview'");
+    expect(preparedHtml).toContain("state.managementTab='institution'");
+  });
+
   it('在正式 Approved 运行时细化工作台列表与响应式顶部栏', () => {
     const preparedHtml = prepareApprovedPrototypeHtml([
       '<!doctype html>',
@@ -212,16 +242,29 @@ describe('Approved prototype asset boundary', () => {
     );
   });
 
-  it('在 Approved 运行时展示 admin 并接通个人信息、账号安全和正式退出', () => {
+  it('在 Approved 运行时按授权作用域注入机构，并从同源会话补全当前账号', () => {
     const preparedHtml = prepareApprovedPrototypeHtml([
       '<!doctype html>',
       '<html><head></head><body>',
       '<main>Approved</main>',
       '</body></html>',
-    ].join(''));
+    ].join(''), {
+      tenantId: 'growth-tenant-chengxing',
+      institutionId: 'growth-inst-chengxing',
+      institutionName: '澄星医疗美容',
+    });
 
-    expect(preparedHtml).toContain("name:'admin'");
-    expect(preparedHtml).toContain("role:'机构管理员'");
+    expect(preparedHtml).toContain(
+      '"institutionName":"澄星医疗美容"',
+    );
+    expect(preparedHtml).toContain("fetch('/api/auth/session'");
+    expect(preparedHtml).toContain(
+      'user.tenantId!==approvedInstitutionContext.tenantId',
+    );
+    expect(preparedHtml).toContain(
+      'user.institutionId!==approvedInstitutionContext.institutionId',
+    );
+    expect(preparedHtml).not.toContain("institution:'上海美颜'");
     expect(preparedHtml).toContain("item.dataset.action='preview-personal-info'");
     expect(preparedHtml).toContain("item.dataset.action='preview-account-security'");
     expect(preparedHtml).toContain("item.dataset.action='preview-session-logout'");
@@ -229,8 +272,25 @@ describe('Approved prototype asset boundary', () => {
     expect(preparedHtml).toContain("fetch('/api/auth/logout'");
     expect(preparedHtml).toContain("method:'POST'");
     expect(preparedHtml).toContain("credentials:'same-origin'");
-    expect(preparedHtml).toContain("(window.top||window).location.assign('/login')");
+    expect(preparedHtml).toContain(
+      "window.parent.postMessage({type:'institution-v11:logout-complete'},window.location.origin)",
+    );
+    expect(preparedHtml).toContain("else window.location.assign('/login')");
     expect(preparedHtml).toContain('不展示手机号、Cookie、Token 或其他敏感信息');
+  });
+
+  it('对机构展示名称做 HTML-safe JSON 注入', () => {
+    const preparedHtml = prepareApprovedPrototypeHtml(
+      '<html><head></head><body></body></html>',
+      {
+        tenantId: 'tenant-1',
+        institutionId: 'institution-1',
+        institutionName: '</script><script>alert(1)</script>',
+      },
+    );
+
+    expect(preparedHtml).toContain('\\u003c/script\\u003e');
+    expect(preparedHtml).not.toContain('<script>alert(1)</script>');
   });
 
   it('补齐 Approved 原型中的分页、批量分群、会话附件、话术和方案编辑交互', () => {
@@ -278,11 +338,33 @@ describe('Approved prototype asset boundary', () => {
     expect(preparedHtml).toContain('未接入投影');
     expect(preparedHtml).toContain('手机号、微信、负责人和业务载荷均未读取');
     expect(preparedHtml).toContain(
-      '客户表格、分页与分群人数来自当前本地开发数据库的正式 Customer Reader',
+      '客户表格、分页、快捷筛选与高级筛选来自当前本地开发数据库的正式 Customer Reader',
     );
     expect(preparedHtml).toContain(
       '当前仅显示登录账号有权访问的 tenantId + institutionId 客户主档',
     );
+    expect(preparedHtml).toContain("query.set('keyword',activeFilters.keyword)");
+    expect(preparedHtml).toContain("query.set('gender',activeFilters.gender)");
+    expect(preparedHtml).toContain("query.set('ageBand',activeFilters.ageBand)");
+    expect(preparedHtml).toContain("query.set('createdFrom',activeFilters.createdFrom)");
+    expect(preparedHtml).toContain("data-action=\"preview-customer-quick\"");
+    expect(preparedHtml).toContain('快捷筛选');
+    expect(preparedHtml).toContain('保存视图尚无正式持久化契约');
+    expect(preparedHtml).toContain("[['female','女'],['male','男']]");
+    expect(preparedHtml).toContain('CUSTOMER_AGE_BAND_LABELS');
+    expect(preparedHtml).toContain("if(action==='apply-advanced-filter')");
+    expect(preparedHtml).toContain('#popover .layer{z-index:130}');
+    expect(preparedHtml).toContain("datePickerDraft.target==='customer-created-range'");
+    expect(preparedHtml).toContain(
+      'quick&&quick.dataset.customerFilterSignature!==filterSignature',
+    );
+    expect(preparedHtml).toContain(
+      'chips&&chips.dataset.customerFilterSignature!==filterSignature',
+    );
+    expect(preparedHtml).toContain(
+      "page.querySelectorAll('.filter-chips:not(.preview-customer-filter-chips)').forEach(element=>element.remove())",
+    );
+    expect(preparedHtml).toContain("'当前机构筛选结果'");
   });
 
   it('客户分群只展示正式 Reader 可证明的人数并联动服务端筛选', () => {
@@ -405,7 +487,7 @@ describe('Approved prototype asset boundary', () => {
       '不创建正式 Opportunity，不启用旧机会池',
     );
     expect(preparedHtml).toContain(
-      'fetch(customerListUrl(page,100,definition.lifecycle,priority)',
+      'fetch(customerListUrl(page,100,definition.lifecycle,priority,{})',
     );
     expect(preparedHtml).not.toContain(
       "fetch('/api/institution/opportunities'",
@@ -559,7 +641,19 @@ describe('Approved prototype asset boundary', () => {
     expect(preparedHtml).toContain('未展示原型静态记录');
     expect(preparedHtml).toContain('正在导入…');
     expect(preparedHtml).toContain('写入本地开发库');
-    expect(preparedHtml).toContain('失败整体回滚');
+    expect(preparedHtml).toContain('数据库事务已整体回滚');
+    expect(preparedHtml).toContain('重复不会自动合并');
+    expect(preparedHtml).toContain('查看重复匹配与字段合并规则');
+    expect(preparedHtml).toContain(
+      "if(action==='preview-import-duplicate-guide')",
+    );
+    expect(preparedHtml).toContain('当前正式导入器不提供逐行候选或自动合并');
+    expect(preparedHtml).toContain('手机号相同但姓名冲突时禁止自动合并');
+    expect(preparedHtml).toContain(
+      "button.title='当前正式导入器未开放自动合并或覆盖写入'",
+    );
+    expect(preparedHtml).not.toContain('28 条 · 可继续导入');
+    expect(preparedHtml).not.toContain('15 条 · 需要在重复处理步骤人工确认');
   });
 
   it('将全部日期入口统一为可交互的双月日期范围选择器', () => {

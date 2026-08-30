@@ -9,6 +9,11 @@ const query = Object.freeze({
   institutionId: 'institution-001',
   lifecycle: null,
   priority: null,
+  keyword: null,
+  gender: null,
+  ageBand: null,
+  createdFrom: null,
+  createdTo: null,
   limit: 21,
   offset: 0,
 });
@@ -29,6 +34,11 @@ const drizzleMocks = vi.hoisted(() => ({
   desc: vi.fn((column: unknown) => ({ direction: 'desc', column })),
   count: vi.fn((column: unknown) => ({ operator: 'count', column })),
   eq: vi.fn((column: unknown, value: unknown) => ({ operator: 'eq', column, value })),
+  gte: vi.fn((column: unknown, value: unknown) => ({ operator: 'gte', column, value })),
+  ilike: vi.fn((column: unknown, value: unknown) => ({ operator: 'ilike', column, value })),
+  inArray: vi.fn((column: unknown, value: unknown) => ({ operator: 'inArray', column, value })),
+  lte: vi.fn((column: unknown, value: unknown) => ({ operator: 'lte', column, value })),
+  or: vi.fn((...conditions: unknown[]) => ({ operator: 'or', conditions })),
 }));
 
 vi.mock('drizzle-orm', async (importOriginal) => ({
@@ -130,6 +140,37 @@ describe('Customers CUS-01 exact list repository', () => {
     expect(db.offset).toHaveBeenCalledWith(1980);
   });
 
+  it('姓名、性别、年龄段与创建日期只作为服务端 predicate，不进入低敏 DTO', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-28T08:00:00.000Z'));
+    const db = createDatabase();
+    const repository = createCustomerListRepository(db.database);
+
+    await repository.list({
+      ...query,
+      keyword: '客户甲',
+      gender: 'female',
+      ageBand: '30_39',
+      createdFrom: '2026-08-01',
+      createdTo: '2026-08-28',
+    });
+
+    expect(drizzleMocks.ilike).toHaveBeenCalledWith(customers.displayName, '%客户甲%');
+    expect(drizzleMocks.eq).toHaveBeenCalledWith(customers.gender, '女');
+    expect(drizzleMocks.gte).toHaveBeenCalledWith(customers.birthDate, '1986-08-29');
+    expect(drizzleMocks.lte).toHaveBeenCalledWith(customers.birthDate, '1996-08-28');
+    expect(drizzleMocks.inArray).toHaveBeenCalledWith(customers.birthDate, ['低敏年龄:30-39']);
+    expect(drizzleMocks.gte).toHaveBeenCalledWith(
+      customers.createdAt,
+      new Date('2026-08-01T00:00:00.000Z'),
+    );
+    expect(drizzleMocks.lte).toHaveBeenCalledWith(
+      customers.createdAt,
+      new Date('2026-08-28T23:59:59.999Z'),
+    );
+    vi.useRealTimers();
+  });
+
   it('count 使用同一 tenant + institution + filter 边界且只返回安全整数', async () => {
     const db = createDatabase([], [{ total: 30 }]);
     const repository = createCustomerListRepository(db.database);
@@ -139,6 +180,11 @@ describe('Customers CUS-01 exact list repository', () => {
       institutionId: 'institution-001',
       lifecycle: 'scheduled',
       priority: 'observe',
+      keyword: null,
+      gender: null,
+      ageBand: null,
+      createdFrom: null,
+      createdTo: null,
     })).resolves.toBe(30);
     expect(drizzleMocks.and).toHaveBeenLastCalledWith(
       { operator: 'eq', column: customers.tenantId, value: 'tenant-001' },
@@ -177,6 +223,11 @@ describe('Customers CUS-01 exact list repository', () => {
         institutionId: 'institution-001',
         lifecycle: null,
         priority: null,
+        keyword: null,
+        gender: null,
+        ageBand: null,
+        createdFrom: null,
+        createdTo: null,
       }),
     ).rejects.toThrow('invalid_customer_list_count_query');
     expect(invalid.select).not.toHaveBeenCalled();
@@ -188,6 +239,11 @@ describe('Customers CUS-01 exact list repository', () => {
         institutionId: 'institution-001',
         lifecycle: null,
         priority: null,
+        keyword: null,
+        gender: null,
+        ageBand: null,
+        createdFrom: null,
+        createdTo: null,
       }),
     ).rejects.toThrow('customer_list_count_unavailable');
   });

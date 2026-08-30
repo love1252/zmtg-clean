@@ -1,8 +1,6 @@
 import { readApprovedPrototypeAsset } from '@/modules/institution-v11-preview/server/approved-prototype-assets';
+import { resolveApprovedPrototypeRuntimeContextV1 } from '@/modules/institution-v11-preview/server/approved-prototype-runtime-context';
 import { isInstitutionV11HospitalSyncEnabled } from '@/modules/institution-v11-preview/server/visual-preview-gate';
-import { resolveInstitutionServerAuthorizationV1 } from '@/modules/institution/server/institution-server-runtime';
-import { isInstitutionRequestAuthorizationV1 } from '@/modules/security/server/institution-request-authorization';
-import { isInstitutionNavigationAuthorizationV1 } from '@/modules/security/server/institution-section-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,33 +21,16 @@ function notFoundResponse() {
   return new Response('Not found', { status: 404 });
 }
 
-async function canCurrentInstitutionEnterApprovedPrototypeV1() {
-  try {
-    const requestAuthorization = await resolveInstitutionServerAuthorizationV1();
-    if (!isInstitutionRequestAuthorizationV1(requestAuthorization)) return false;
-
-    const navigationAuthorization =
-      await requestAuthorization.authorizeCurrentInstitutionNavigationV1({
-        targetSectionId: 'workbench',
-      });
-
-    return (
-      isInstitutionNavigationAuthorizationV1(navigationAuthorization) &&
-      navigationAuthorization.targetSectionId === 'workbench' &&
-      navigationAuthorization.targetAccess === 'allowed'
-    );
-  } catch {
-    return false;
-  }
-}
-
 export async function GET() {
   if (!isInstitutionV11HospitalSyncEnabled()) return notFoundResponse();
-  if (!(await canCurrentInstitutionEnterApprovedPrototypeV1())) {
-    return notFoundResponse();
-  }
+  const runtimeContext = await resolveApprovedPrototypeRuntimeContextV1();
+  if (!runtimeContext) return notFoundResponse();
 
-  const asset = await readApprovedPrototypeAsset(['institution.html']);
+  const asset = await readApprovedPrototypeAsset(
+    ['institution.html'],
+    undefined,
+    runtimeContext,
+  );
   if (!asset) return notFoundResponse();
 
   return new Response(new Uint8Array(asset.bytes), {

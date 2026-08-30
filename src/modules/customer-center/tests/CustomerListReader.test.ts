@@ -67,6 +67,11 @@ describe('Customers CUS-01 formal list Reader', () => {
       institutionId: 'institution-001',
       lifecycle: null,
       priority: null,
+      keyword: null,
+      gender: null,
+      ageBand: null,
+      createdFrom: null,
+      createdTo: null,
       limit: 21,
       offset: 0,
     });
@@ -105,13 +110,18 @@ describe('Customers CUS-01 formal list Reader', () => {
     const { reader, list, count } = createReader([], 0);
 
     await expect(
-      read(reader, 'page=2&pageSize=50&lifecycle=post_care&priority=observe'),
+      read(reader, 'page=2&pageSize=50&lifecycle=post_care&priority=observe&keyword=客户甲&gender=female&ageBand=30_39&createdFrom=2026-08-01&createdTo=2026-08-15'),
     ).resolves.toMatchObject({ kind: 'ready' });
     expect(list).toHaveBeenCalledWith({
       tenantId: 'tenant-001',
       institutionId: 'institution-001',
       lifecycle: 'post_care',
       priority: 'observe',
+      keyword: '客户甲',
+      gender: 'female',
+      ageBand: '30_39',
+      createdFrom: '2026-08-01',
+      createdTo: '2026-08-15',
       limit: 51,
       offset: 50,
     });
@@ -120,6 +130,11 @@ describe('Customers CUS-01 formal list Reader', () => {
       institutionId: 'institution-001',
       lifecycle: 'post_care',
       priority: 'observe',
+      keyword: '客户甲',
+      gender: 'female',
+      ageBand: '30_39',
+      createdFrom: '2026-08-01',
+      createdTo: '2026-08-15',
     });
   });
 
@@ -136,6 +151,10 @@ describe('Customers CUS-01 formal list Reader', () => {
     'pageSize=10&pageSize=20',
     'lifecycle=legacy',
     'priority=watch',
+    'keyword=13800138000',
+    'gender=unknown',
+    'ageBand=18_35',
+    'createdFrom=2026-08-16&createdTo=2026-08-15',
   ])('非法或未准入 query %s 返回统一 400 contract 且不读 source', async (query) => {
     const { reader, list } = createReader();
 
