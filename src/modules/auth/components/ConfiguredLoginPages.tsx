@@ -14,7 +14,15 @@ import type { HomepageBrandConfig } from '@/modules/marketing/domain/homepageBra
 const isDevelopmentLoginEntryEnabled =
   process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_ZMTG_ENABLE_DEMO_AUTH === 'true';
 
-function clearInstitutionWorkspaceSessionState() {
+export const INSTITUTION_APPROVED_WORKSPACE_STORAGE_KEY =
+  'zmtg-prototype-v1-1-approved';
+
+function clearInstitutionWorkspaceState() {
+  try {
+    window.localStorage.removeItem(INSTITUTION_APPROVED_WORKSPACE_STORAGE_KEY);
+  } catch {
+    // Approved workspace recovery is optional UI state; login must still complete.
+  }
   try {
     window.sessionStorage.removeItem(INSTITUTION_WORKSPACE_STORAGE_KEY_V1);
     for (let index = window.sessionStorage.length - 1; index >= 0; index -= 1) {
@@ -65,7 +73,7 @@ export function InstitutionLoginClient({ config }: { config: HomepageBrandConfig
         if (tenantId) {
           window.localStorage.setItem('zmtg_tenant_id', String(tenantId));
         }
-        clearInstitutionWorkspaceSessionState();
+        clearInstitutionWorkspaceState();
         window.location.href = '/hospital';
       }
     } catch (loginError) {
