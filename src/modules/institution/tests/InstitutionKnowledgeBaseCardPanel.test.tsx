@@ -662,7 +662,7 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
     fireEvent.change(screen.getByLabelText('选择知识库上传文件'), { target: { files: [file] } });
     fireEvent.click(screen.getByRole('button', { name: '上传文档' }));
 
-    expect(await screen.findByText('上传成功，已触发文档解析，生成 2 个片段。')).toBeInTheDocument();
+    expect(await screen.findByText('文件解析完成，生成 2 个章节；请在正式上传流程中确认并发布。')).toBeInTheDocument();
     expect(globalThis.fetch).toHaveBeenCalledWith(
       '/api/institution/knowledge-management/upload',
       expect.objectContaining({ method: 'POST', body: expect.any(FormData) }),
@@ -701,7 +701,7 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
 
     expect(screen.getByText('已选择 护理.pdf，可上传并触发文档解析。')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '上传文档' }));
-    expect(await screen.findByText('上传成功，已触发文档解析，生成 2 个片段。')).toBeInTheDocument();
+    expect(await screen.findByText('文件解析完成，生成 2 个章节；请在正式上传流程中确认并发布。')).toBeInTheDocument();
     expect(globalThis.fetch).toHaveBeenCalledWith('/api/institution/knowledge-management/upload', expect.objectContaining({ method: 'POST', body: expect.any(FormData) }));
   });
 

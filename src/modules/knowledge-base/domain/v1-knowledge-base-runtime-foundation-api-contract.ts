@@ -1,4 +1,8 @@
-export type V1KnowledgeBaseRuntimeFoundationSourceKind = 'mock' | 'seed' | 'demo';
+export type V1KnowledgeBaseRuntimeFoundationSourceKind =
+  | 'mock'
+  | 'seed'
+  | 'demo'
+  | 'institution_upload';
 export type V1KnowledgeBaseRuntimeFoundationStatus =
   | 'disabled'
   | 'denied'

@@ -545,11 +545,15 @@ export function InstitutionKnowledgeBaseCardPanel() {
         return;
       }
 
-      const chunkCount = typeof payload?.chunkCount === 'number' ? payload.chunkCount : 0;
+      const sectionCount = typeof payload?.upload?.sectionCount === 'number'
+        ? payload.upload.sectionCount
+        : typeof payload?.chunkCount === 'number'
+          ? payload.chunkCount
+          : 0;
       setUploadFile(null);
       await loadKnowledgeItems();
       setUploadStatus('success');
-      setUploadMessage(`上传成功，已触发文档解析，生成 ${chunkCount} 个片段。`);
+      setUploadMessage(`文件解析完成，生成 ${sectionCount} 个章节；请在正式上传流程中确认并发布。`);
     } catch {
       setUploadStatus('error');
       setUploadMessage('上传失败，请稍后重试。');

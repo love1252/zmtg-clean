@@ -699,6 +699,26 @@ describe('Approved prototype asset boundary', () => {
     );
   });
 
+  it('将知识库上传替换为真实文件、解析预览、确认与发布闭环', () => {
+    const preparedHtml = prepareApprovedPrototypeHtml(
+      '<!doctype html><html><head></head><body><main>Approved</main></body></html>',
+    );
+
+    expect(preparedHtml).toContain('id="institution-knowledge-upload-file"');
+    expect(preparedHtml).toContain('aria-label="选择知识库上传文件"');
+    expect(preparedHtml).toContain("if(action==='upload-knowledge')");
+    expect(preparedHtml).toContain("method:'POST'");
+    expect(preparedHtml).toContain("method:'PATCH'");
+    expect(preparedHtml).toContain("method:'PUT'");
+    expect(preparedHtml).toContain('确认解析内容');
+    expect(preparedHtml).toContain('发布知识');
+    expect(preparedHtml).toContain('未确认草稿不会进入 AI 可读取的正式知识清单');
+    expect(preparedHtml).toContain('/api/v1/institution/knowledge-documents?page=1');
+    expect(preparedHtml).toContain("Number(record.version)");
+    expect(preparedHtml).not.toContain("Number(record.currentVersion)");
+    expect(preparedHtml).toContain('当前机构暂无已发布知识');
+  });
+
   it('从受控候选根读取 V1.1 Approved 原型包', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'zmtg-approved-'));
     temporaryRoots.push(root);
