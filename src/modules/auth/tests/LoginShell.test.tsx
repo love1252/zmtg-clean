@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  INSTITUTION_APPROVED_WORKSPACE_STORAGE_KEY,
   InstitutionLoginClient,
   PlatformLoginClient,
 } from '@/modules/auth/components/ConfiguredLoginPages';
@@ -19,7 +20,9 @@ const WORKSPACE_STORAGE_KEY_V2 =
 describe('登录页外壳', () => {
   afterEach(() => {
     window.sessionStorage.clear();
+    window.localStorage.removeItem(INSTITUTION_APPROVED_WORKSPACE_STORAGE_KEY);
     window.localStorage.removeItem('zmtg_tenant_id');
+    window.localStorage.removeItem('unrelated-local-state');
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
   });
@@ -78,6 +81,10 @@ describe('登录页外壳', () => {
       WORKSPACE_STORAGE_KEY_V2,
       '保留失败登录前的工作区',
     );
+    window.localStorage.setItem(
+      INSTITUTION_APPROVED_WORKSPACE_STORAGE_KEY,
+      '保留失败登录前的 Approved 工作区',
+    );
 
     render(<InstitutionLoginClient config={defaultHomepageBrandConfig} />);
     fireEvent.change(screen.getByLabelText('用户名 / 手机号'), {
@@ -101,6 +108,9 @@ describe('登录页外壳', () => {
     expect(
       window.sessionStorage.getItem(WORKSPACE_STORAGE_KEY_V2),
     ).toBe('保留失败登录前的工作区');
+    expect(
+      window.localStorage.getItem(INSTITUTION_APPROVED_WORKSPACE_STORAGE_KEY),
+    ).toBe('保留失败登录前的 Approved 工作区');
   });
 
   it('机构登录成功后清除历史工作区并从工作台重新进入', async () => {
@@ -127,6 +137,18 @@ describe('登录页外壳', () => {
       }),
     );
     window.sessionStorage.setItem('unrelated-session-state', '保留');
+    window.localStorage.setItem(
+      INSTITUTION_APPROVED_WORKSPACE_STORAGE_KEY,
+      JSON.stringify({
+        route: '/customers/segments',
+        tabs: [
+          { id: 'workbench', route: '/workbench', fixed: true },
+          { id: 'customers', route: '/customers/list', fixed: false },
+          { id: 'segments', route: '/customers/segments', fixed: false },
+        ],
+      }),
+    );
+    window.localStorage.setItem('unrelated-local-state', '保留');
 
     render(<InstitutionLoginClient config={defaultHomepageBrandConfig} />);
     fireEvent.change(screen.getByLabelText('用户名 / 手机号'), {
@@ -150,6 +172,10 @@ describe('登录页外壳', () => {
       window.sessionStorage.getItem(INSTITUTION_WORKSPACE_STORAGE_KEY_V1),
     ).toBeNull();
     expect(window.sessionStorage.getItem('unrelated-session-state')).toBe('保留');
+    expect(
+      window.localStorage.getItem(INSTITUTION_APPROVED_WORKSPACE_STORAGE_KEY),
+    ).toBeNull();
+    expect(window.localStorage.getItem('unrelated-local-state')).toBe('保留');
     expect(window.localStorage.getItem('zmtg_tenant_id')).toBe('tenant-1');
   });
 
