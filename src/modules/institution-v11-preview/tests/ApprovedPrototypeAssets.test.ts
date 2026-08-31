@@ -705,6 +705,7 @@ describe('Approved prototype asset boundary', () => {
     );
 
     expect(preparedHtml).toContain('id="institution-knowledge-upload-file"');
+    expect(preparedHtml).toContain('data-action="preview-knowledge-file-input"');
     expect(preparedHtml).toContain('aria-label="选择知识库上传文件"');
     expect(preparedHtml).toContain("if(action==='upload-knowledge')");
     expect(preparedHtml).toContain("method:'POST'");
