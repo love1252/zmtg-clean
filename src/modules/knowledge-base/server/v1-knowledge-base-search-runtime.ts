@@ -10,7 +10,11 @@ import {
   knowledgeDocuments,
 } from '@/server/db/schema';
 
-export type V1KnowledgeBaseSearchRuntimeSourceKind = 'mock' | 'seed' | 'demo';
+export type V1KnowledgeBaseSearchRuntimeSourceKind =
+  | 'mock'
+  | 'seed'
+  | 'demo'
+  | 'institution_upload';
 export type V1KnowledgeBaseSearchRuntimeScoreBand = 'high' | 'medium' | 'low';
 
 export type V1KnowledgeBaseSearchRuntimeCandidate =

@@ -382,7 +382,7 @@ export const hisConnectionCredentialCompensationDeadLetterReasonEnum = pgEnum(
 );
 export const knowledgeBaseRuntimeSourceKindEnum = pgEnum(
   'knowledge_base_runtime_source_kind',
-  ['mock', 'seed', 'demo'],
+  ['mock', 'seed', 'demo', 'institution_upload'],
 );
 export const knowledgeBaseRuntimeStatusEnum = pgEnum('knowledge_base_runtime_status', [
   'disabled',
@@ -398,7 +398,7 @@ export const knowledgeBaseRuntimeReadonlyStatusEnum = pgEnum(
 );
 export const knowledgeFormalProvenanceSourceEnum = pgEnum(
   'knowledge_formal_provenance_source',
-  ['formal_onboarding', 'approved_migration_manifest'],
+  ['formal_onboarding', 'approved_migration_manifest', 'institution_upload'],
 );
 export const knowledgeFormalPublicationStatusEnum = pgEnum(
   'knowledge_formal_publication_status',
@@ -2028,6 +2028,95 @@ export const knowledgeDocumentFileParseChunks = pgTable(
     tenantFileIdx: index('knowledge_file_parse_chunks_tenant_file_idx').on(
       table.tenantId,
       table.fileId,
+    ),
+  }),
+);
+
+export const institutionKnowledgeUploadDrafts = pgTable(
+  'institution_knowledge_upload_drafts',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    knowledgeDocumentId: varchar('knowledge_document_id', { length: 64 }).notNull(),
+    sourceId: varchar('source_id', { length: 64 }).notNull(),
+    fileId: varchar('file_id', { length: 64 }).notNull(),
+    state: varchar('state', { length: 24 }).notNull().default('parsed'),
+    title: varchar('title', { length: 200 }).notNull(),
+    category: varchar('category', { length: 160 }).notNull(),
+    fileDigest: varchar('file_digest', { length: 64 }).notNull(),
+    contentDigest: varchar('content_digest', { length: 64 }).notNull(),
+    parserType: varchar('parser_type', { length: 24 }).notNull(),
+    warningCodes: jsonb('warning_codes').$type<readonly string[]>().notNull().default([]),
+    revision: integer('revision').notNull().default(1),
+    createdBy: varchar('created_by', { length: 96 }).notNull(),
+    confirmedBy: varchar('confirmed_by', { length: 96 }),
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+    publishedBy: varchar('published_by', { length: 96 }),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    publishedVersion: integer('published_version'),
+    ...timestamps,
+  },
+  (table) => ({
+    scopeFk: foreignKey({
+      name: 'institution_knowledge_upload_drafts_scope_fk',
+      columns: [table.tenantId, table.institutionId],
+      foreignColumns: [institutionScopes.tenantId, institutionScopes.institutionId],
+    }),
+    documentFk: foreignKey({
+      name: 'institution_knowledge_upload_drafts_document_fk',
+      columns: [table.tenantId, table.knowledgeDocumentId],
+      foreignColumns: [knowledgeDocuments.tenantId, knowledgeDocuments.id],
+    }),
+    sourceFk: foreignKey({
+      name: 'institution_knowledge_upload_drafts_source_fk',
+      columns: [table.tenantId, table.sourceId],
+      foreignColumns: [knowledgeSources.tenantId, knowledgeSources.id],
+    }),
+    fileFk: foreignKey({
+      name: 'institution_knowledge_upload_drafts_file_fk',
+      columns: [table.tenantId, table.fileId],
+      foreignColumns: [knowledgeDocumentFiles.tenantId, knowledgeDocumentFiles.id],
+    }),
+    scopeIdUnique: unique('institution_knowledge_upload_drafts_scope_id_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.id,
+    ),
+    scopeDocumentUnique: unique(
+      'institution_knowledge_upload_drafts_scope_document_unique',
+    ).on(table.tenantId, table.institutionId, table.knowledgeDocumentId),
+    stateCheck: check(
+      'institution_knowledge_upload_drafts_state_check',
+      sql`${table.state} in ('parsed', 'confirmed', 'published')`,
+    ),
+    digestCheck: check(
+      'institution_knowledge_upload_drafts_digest_check',
+      sql`length(${table.fileDigest}) = 64 and length(${table.contentDigest}) = 64`,
+    ),
+    revisionCheck: check(
+      'institution_knowledge_upload_drafts_revision_check',
+      sql`${table.revision} > 0`,
+    ),
+    publicationShapeCheck: check(
+      'institution_knowledge_upload_drafts_publication_shape_check',
+      sql`(
+        ${table.state} <> 'published'
+        and ${table.publishedBy} is null
+        and ${table.publishedAt} is null
+        and ${table.publishedVersion} is null
+      ) or (
+        ${table.state} = 'published'
+        and ${table.publishedBy} is not null
+        and ${table.publishedAt} is not null
+        and ${table.publishedVersion} > 0
+      )`,
+    ),
+    scopeStateIdx: index('institution_knowledge_upload_drafts_scope_state_idx').on(
+      table.tenantId,
+      table.institutionId,
+      table.state,
+      table.updatedAt,
     ),
   }),
 );

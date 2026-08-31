@@ -1,160 +1,178 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const sideEffects = vi.hoisted(() => ({
-  getAccessContext: vi.fn(() => {
-    throw new Error('session must not be read');
+const runtime = vi.hoisted(() => ({
+  upload: vi.fn(),
+  read: vi.fn(),
+  confirm: vi.fn(),
+  publish: vi.fn(),
+}));
+
+vi.mock('@/server/orchestration/institution-knowledge-upload-runtime', () => ({
+  uploadCurrentInstitutionKnowledgeV1: runtime.upload,
+  readCurrentInstitutionKnowledgeUploadV1: runtime.read,
+  confirmCurrentInstitutionKnowledgeUploadV1: runtime.confirm,
+  publishCurrentInstitutionKnowledgeUploadV1: runtime.publish,
+}));
+
+vi.mock('@/modules/security/server/mutation-request-security', () => ({
+  validateSameOriginMutationRequest: vi.fn(() => ({ ok: true })),
+}));
+
+import {
+  GET,
+  PATCH,
+  POST,
+  PUT,
+} from '@/app/api/institution/knowledge-management/upload/route';
+
+const readyUpload = Object.freeze({
+  kind: 'ready' as const,
+  upload: Object.freeze({
+    uploadId: 'ku-1',
+    knowledgeId: 'kd-1',
+    fileName: '护理.md',
+    fileSize: 12,
+    mimeType: 'text/markdown',
+    parserType: 'markdown',
+    warningCodes: Object.freeze([]),
+    title: '护理',
+    category: '机构上传',
+    state: 'parsed' as const,
+    revision: 1,
+    sectionCount: 1,
+    sections: Object.freeze([{ index: 0, preview: '术后护理', charCount: 4 }]),
+    publishedVersion: null,
+    publishedAt: null,
   }),
-  getDatabase: vi.fn(() => {
-    throw new Error('database must not be opened');
-  }),
-  createPlatformRepository: vi.fn(() => {
-    throw new Error('platform repository must not be created');
-  }),
-  createInstitutionRepository: vi.fn(() => {
-    throw new Error('institution repository must not be created');
-  }),
-  createStorage: vi.fn(() => {
-    throw new Error('storage must not be created');
-  }),
-  uploadService: vi.fn(() => {
-    throw new Error('upload service must not run');
-  }),
-}));
-
-vi.mock('@/modules/security/server/access-context', () => ({
-  getDemoAccessContextFromRequest: sideEffects.getAccessContext,
-}));
-
-vi.mock('@/server/db/client', () => ({
-  getDatabase: sideEffects.getDatabase,
-}));
-
-vi.mock('@/modules/open-platform/server/platform-knowledge-management-repository', () => ({
-  createPlatformKnowledgeManagementRepository: sideEffects.createPlatformRepository,
-}));
-
-vi.mock('@/modules/institution/server/institution-knowledge-write-repository', () => ({
-  createInstitutionKnowledgeWriteRepository: sideEffects.createInstitutionRepository,
-}));
-
-vi.mock('@/modules/open-platform/server/platform-knowledge-file-storage', () => ({
-  createLocalPlatformKnowledgeFileStorage: sideEffects.createStorage,
-}));
-
-vi.mock('@/modules/institution/server/institution-knowledge-upload-service', () => ({
-  uploadAndParseInstitutionKnowledgeFileService: sideEffects.uploadService,
-}));
-
-import { POST as knowledgeUploadPost } from '@/app/api/institution/knowledge-management/upload/route';
-
-const expectedBody = Object.freeze({
-  code: 'capability_disabled',
-  error: '机构知识库上传能力暂未启用。',
 });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  runtime.upload.mockResolvedValue(readyUpload);
+  runtime.read.mockResolvedValue(readyUpload);
+  runtime.confirm.mockResolvedValue({
+    ...readyUpload,
+    upload: { ...readyUpload.upload, state: 'confirmed', revision: 2 },
+  });
+  runtime.publish.mockResolvedValue({
+    ...readyUpload,
+    upload: {
+      ...readyUpload.upload,
+      state: 'published',
+      revision: 3,
+      publishedVersion: 1,
+      publishedAt: '2026-08-31T00:00:00.000Z',
+    },
+  });
 });
 
-function expectNoUploadSideEffects() {
-  expect(sideEffects.getAccessContext).not.toHaveBeenCalled();
-  expect(sideEffects.getDatabase).not.toHaveBeenCalled();
-  expect(sideEffects.createPlatformRepository).not.toHaveBeenCalled();
-  expect(sideEffects.createInstitutionRepository).not.toHaveBeenCalled();
-  expect(sideEffects.createStorage).not.toHaveBeenCalled();
-  expect(sideEffects.uploadService).not.toHaveBeenCalled();
-}
-
-describe('机构知识库上传 API capability-off route', () => {
-  it('对不可读取的 Request 和 route params 仍固定返回无缓存 503', async () => {
-    const hostileRequest = new Proxy({} as Request, {
-      get() {
-        throw new Error('request must not be inspected');
-      },
-      ownKeys() {
-        throw new Error('request keys must not be inspected');
-      },
-    });
-    const hostileRouteContext = new Proxy({}, {
-      get() {
-        throw new Error('route params must not be inspected');
-      },
-    });
-
-    const response = await (
-      knowledgeUploadPost as unknown as (
-        request: Request,
-        context: unknown,
-      ) => Response | Promise<Response>
-    )(hostileRequest, hostileRouteContext);
-
-    expect(response.status).toBe(503);
-    expect(response.headers.get('cache-control')).toBe('no-store');
-    await expect(response.json()).resolves.toEqual(expectedBody);
-    expectNoUploadSideEffects();
-  });
-
-  it('不读取 formData、arrayBuffer、headers、URL 或 body，也不产生文件和记录', async () => {
-    const formData = vi.fn(() => {
-      throw new Error('formData must not be read');
-    });
-    const arrayBuffer = vi.fn(() => {
-      throw new Error('arrayBuffer must not be read');
-    });
-    const json = vi.fn(() => {
-      throw new Error('body must not be read');
-    });
+describe('机构知识库正式上传 API', () => {
+  it('接收支持文件并返回解析预览', async () => {
+    const content = new TextEncoder().encode('# 术后护理');
+    const file = {
+      name: '护理.md',
+      type: 'text/markdown',
+      size: content.byteLength,
+      arrayBuffer: async () => content.buffer,
+    };
+    const form = new FormData();
+    vi.spyOn(form, 'keys').mockReturnValue(['file'][Symbol.iterator]());
+    vi.spyOn(form, 'get').mockReturnValue(file as unknown as FormDataEntryValue);
     const request = {
-      formData,
-      arrayBuffer,
-      json,
-      headers: new Proxy({}, {
-        get() {
-          throw new Error('headers must not be read');
-        },
-      }),
-      url: 'http://localhost/api/institution/knowledge-management/upload?filename=private-record.pdf',
-      body: 'raw-private-treatment-record',
+      headers: new Headers({ 'content-type': 'multipart/form-data; boundary=test' }),
+      formData: async () => form,
     } as unknown as Request;
+    const response = await POST(request);
 
-    const response = await knowledgeUploadPost(request);
-
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(201);
     expect(response.headers.get('cache-control')).toBe('no-store');
-    const body = await response.json();
-    expect(body).toEqual(expectedBody);
-    expect(JSON.stringify(body)).not.toMatch(
-      /private-record|treatment|filename|storage|database|session|provider|token|secret/iu,
-    );
-    expect(formData).not.toHaveBeenCalled();
-    expect(arrayBuffer).not.toHaveBeenCalled();
-    expect(json).not.toHaveBeenCalled();
-    expectNoUploadSideEffects();
+    expect(runtime.upload).toHaveBeenCalledWith(expect.objectContaining({
+      fileName: '护理.md',
+      mimeType: 'text/markdown',
+      content: expect.any(Uint8Array),
+    }));
+    await expect(response.json()).resolves.toEqual(readyUpload);
   });
 
-  it('源码不保留旧认证、数据库、repository、storage 或上传服务链路', () => {
-    const implementation = readFileSync(
-      resolve(
-        process.cwd(),
-        'src/app/api/institution/knowledge-management/upload/route.ts',
-      ),
-      'utf8',
-    );
+  it('拒绝空文件或错误 multipart', async () => {
+    const response = await POST(new Request(
+      'http://localhost/api/institution/knowledge-management/upload',
+      { method: 'POST', body: 'not-a-file' },
+    ));
+    expect(response.status).toBe(400);
+    expect(runtime.upload).not.toHaveBeenCalled();
+  });
 
-    for (const forbidden of [
-      'getDemoAccessContextFromRequest',
-      'getDatabase',
-      'createPlatformKnowledgeManagementRepository',
-      'createInstitutionKnowledgeWriteRepository',
-      'createLocalPlatformKnowledgeFileStorage',
-      'uploadAndParseInstitutionKnowledgeFileService',
-      '_request.formData(',
-      '_request.arrayBuffer(',
-      '_request.json(',
-    ]) {
-      expect(implementation).not.toContain(forbidden);
-    }
+  it('按 uploadId 读取服务端预览', async () => {
+    const response = await GET(new Request(
+      'http://localhost/api/institution/knowledge-management/upload?uploadId=ku-1',
+    ));
+    expect(response.status).toBe(200);
+    expect(runtime.read).toHaveBeenCalledWith('ku-1');
+  });
+
+  it('确认标题与分类时传递乐观锁版本', async () => {
+    const response = await PATCH(new Request(
+      'http://localhost/api/institution/knowledge-management/upload',
+      {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          uploadId: 'ku-1',
+          expectedRevision: 1,
+          title: '正式护理知识',
+          category: '术后护理',
+        }),
+      },
+    ));
+    expect(response.status).toBe(200);
+    expect(runtime.confirm).toHaveBeenCalledWith({
+      uploadId: 'ku-1',
+      expectedRevision: 1,
+      title: '正式护理知识',
+      category: '术后护理',
+    });
+  });
+
+  it('发布确认草稿并返回正式版本', async () => {
+    const response = await PUT(new Request(
+      'http://localhost/api/institution/knowledge-management/upload',
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ uploadId: 'ku-1', expectedRevision: 2 }),
+      },
+    ));
+    expect(response.status).toBe(200);
+    expect(runtime.publish).toHaveBeenCalledWith({ uploadId: 'ku-1', expectedRevision: 2 });
+    await expect(response.json()).resolves.toMatchObject({
+      kind: 'ready',
+      upload: { state: 'published', publishedVersion: 1 },
+    });
+  });
+
+  it.each([
+    [{ kind: 'forbidden', code: 'forbidden' }, 403],
+    [{ kind: 'conflict', code: 'conflict' }, 409],
+    [{ kind: 'unavailable', code: 'unavailable' }, 503],
+  ] as const)('保留失败类型与 HTTP 状态 %#', async (result, status) => {
+    runtime.read.mockResolvedValueOnce(result);
+    const response = await GET(new Request(
+      'http://localhost/api/institution/knowledge-management/upload?uploadId=ku-1',
+    ));
+    expect(response.status).toBe(status);
+  });
+
+  it('运行时异常时返回稳定的不可用状态，不泄露内部错误', async () => {
+    runtime.read.mockRejectedValueOnce(new Error('database connection contains sensitive details'));
+    const response = await GET(new Request(
+      'http://localhost/api/institution/knowledge-management/upload?uploadId=ku-1',
+    ));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      kind: 'unavailable',
+      code: 'institution_knowledge_upload_runtime_unavailable',
+    });
   });
 });

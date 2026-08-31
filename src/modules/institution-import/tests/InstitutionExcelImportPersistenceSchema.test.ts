@@ -60,7 +60,7 @@ describe('机构本地 Excel 导入持久化边界', () => {
       resolve(process.cwd(), 'drizzle/meta/_journal.json'),
       'utf8',
     )) as { entries: Array<Record<string, unknown>> };
-    expect(journal.entries).toHaveLength(52);
+    expect(journal.entries).toHaveLength(53);
     expect(journal.entries[51]).toEqual({
       idx: 51,
       version: '7',

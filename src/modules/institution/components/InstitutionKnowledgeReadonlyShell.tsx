@@ -171,6 +171,7 @@ const sourceKindLabels: Record<InstitutionKnowledgeItemDto['sourceKind'], string
   demo: '演示',
   mock: '模拟',
   seed: '种子',
+  institution_upload: '机构上传',
 };
 
 const parseStatusLabels: Record<InstitutionKnowledgeFileRecord['parseStatus'], string> = {

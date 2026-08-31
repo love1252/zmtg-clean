@@ -170,6 +170,7 @@ function sourceCategory(sourceKind: V1KnowledgeBaseRuntimeFoundationSourceKind) 
     demo: '演示知识',
     mock: '模拟知识',
     seed: '种子知识',
+    institution_upload: '机构上传',
   };
 
   return labels[sourceKind];
