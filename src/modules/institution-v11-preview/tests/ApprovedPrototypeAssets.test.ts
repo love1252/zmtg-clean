@@ -715,6 +715,7 @@ describe('Approved prototype asset boundary', () => {
     expect(preparedHtml).toContain('未确认草稿不会进入 AI 可读取的正式知识清单');
     expect(preparedHtml).toContain('/api/v1/institution/knowledge-documents?page=1');
     expect(preparedHtml).toContain("document.querySelector('#page .preview-knowledge-runtime-card')");
+    expect(preparedHtml).toContain('card.dataset.previewKnowledgeSignature===signature');
     expect(preparedHtml).toContain("Number(record.version)");
     expect(preparedHtml).not.toContain("Number(record.currentVersion)");
     expect(preparedHtml).toContain('当前机构暂无已发布知识');
