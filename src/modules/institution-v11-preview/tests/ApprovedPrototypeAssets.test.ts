@@ -714,12 +714,46 @@ describe('Approved prototype asset boundary', () => {
     expect(preparedHtml).toContain('确认解析内容');
     expect(preparedHtml).toContain('发布知识');
     expect(preparedHtml).toContain('未确认草稿不会进入 AI 可读取的正式知识清单');
-    expect(preparedHtml).toContain('/api/v1/institution/knowledge-documents?page=1');
+    expect(preparedHtml).toContain('/api/v1/institution/knowledge-documents?page=');
     expect(preparedHtml).toContain("document.querySelector('#page .preview-knowledge-runtime-card')");
     expect(preparedHtml).toContain('card.dataset.previewKnowledgeSignature===signature');
     expect(preparedHtml).toContain("Number(record.version)");
     expect(preparedHtml).not.toContain("Number(record.currentVersion)");
     expect(preparedHtml).toContain('当前机构暂无已发布知识');
+  });
+
+  it('使用正式知识数据驱动类型分栏、动态分类和列表筛选', () => {
+    const preparedHtml = prepareApprovedPrototypeHtml(
+      '<!doctype html><html><head></head><body><main>Approved</main></body></html>',
+    );
+
+    expect(preparedHtml).toContain(
+      "const knowledgeCategories=()=>['全部知识',...new Set(",
+    );
+    expect(preparedHtml).toContain(
+      "state.knowledgeTab==='知识文档'?knowledgeDocumentRuntime.records.filter",
+    );
+    expect(preparedHtml).toContain(
+      "record.sourceLabel===state.knowledgeCategory",
+    );
+    expect(preparedHtml).toContain(
+      "const count=type==='知识文档'?knowledgeDocumentRuntime.records.length:0",
+    );
+    expect(preparedHtml).toContain(
+      "data-knowledge-category=\"'+esc(category)+'\"",
+    );
+    expect(preparedHtml).toContain(
+      'tree.dataset.previewKnowledgeCategorySignature===treeSignature',
+    );
+    expect(preparedHtml).toContain(
+      '该分栏已接入正式数据筛选，不再展示原型固定数量。',
+    );
+    expect(preparedHtml).toContain(
+      "payload?.pageInfo?.hasMore&&page<100",
+    );
+    expect(preparedHtml).toContain(
+      "当前显示 '+visibleRecords.length+' 条",
+    );
   });
 
   it('从受控候选根读取 V1.1 Approved 原型包', async () => {
