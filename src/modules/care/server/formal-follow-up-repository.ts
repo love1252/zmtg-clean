@@ -7,11 +7,13 @@ import type {
   FormalFollowUpCreateV1,
   FormalFollowUpEventV1,
   FormalFollowUpPageQueryV1,
-  FormalFollowUpStoreV1,
+  FormalFollowUpWorkbenchQueryV1,
+  FormalFollowUpWorkbenchStoreV1,
   FormalFollowUpTaskRecordV1,
   FormalFollowUpUpdateV1,
   FormalFollowUpVisibilityV1,
 } from '@/modules/care/ports/formal-follow-up-store';
+import { FORMAL_FOLLOW_UP_WORKBENCH_LIMIT_V1 } from '@/modules/care/ports/formal-follow-up-store';
 import type { TenantDatabase } from '@/server/db/client';
 import {
   careFormalFollowUpEvents,
@@ -108,7 +110,7 @@ function assignmentValues(
       };
 }
 
-function dueConditions(input: FormalFollowUpPageQueryV1) {
+function dueConditions(input: Pick<FormalFollowUpPageQueryV1, 'businessDate' | 'timeZone'>) {
   if (!input.businessDate || !input.timeZone) return null;
   const active = sql`${careFormalFollowUpTasks.state} not in ('completed', 'cancelled')`;
   const date = sql`(${careFormalFollowUpTasks.dueAt} at time zone ${input.timeZone})::date`;
@@ -121,8 +123,42 @@ function dueConditions(input: FormalFollowUpPageQueryV1) {
 
 export function createFormalFollowUpRepositoryV1(
   database: TenantDatabase,
-): FormalFollowUpStoreV1 {
+): FormalFollowUpWorkbenchStoreV1 {
   return Object.freeze({
+    async queryWorkbenchVisible(input: FormalFollowUpWorkbenchQueryV1) {
+      const buckets = dueConditions(input);
+      if (!buckets) throw new Error('follow_up_time_zone_unavailable');
+      const scope = visibility(input);
+      return database.transaction(async (transaction) => {
+        const summaries = await transaction.select({
+          overdue: sql<number>`count(*) filter (where ${buckets.overdue})`.mapWith(Number),
+          dueToday: sql<number>`count(*) filter (where ${buckets.due_today})`.mapWith(Number),
+        }).from(careFormalFollowUpTasks).where(scope);
+        const counts = summaries[0];
+        if (summaries.length !== 1 || !counts
+          || !Number.isSafeInteger(counts.overdue) || counts.overdue < 0
+          || !Number.isSafeInteger(counts.dueToday) || counts.dueToday < 0
+          || !Number.isSafeInteger(counts.overdue + counts.dueToday)) {
+          throw new Error('invalid_follow_up_workbench_summary');
+        }
+        // 全量统计不受候选上限影响；先过滤活跃到期任务，再按工作台优先级取前六条。
+        const rows = await transaction.select().from(careFormalFollowUpTasks)
+          .where(and(scope, or(buckets.overdue, buckets.due_today)))
+          .orderBy(
+            sql`case when ${careFormalFollowUpTasks.riskLevel} = 'high' then 0 else 1 end asc`,
+            asc(careFormalFollowUpTasks.dueAt),
+            sql`${careFormalFollowUpTasks.id} collate "C" asc`,
+          ).limit(FORMAL_FOLLOW_UP_WORKBENCH_LIMIT_V1);
+        if (rows.length !== Math.min(FORMAL_FOLLOW_UP_WORKBENCH_LIMIT_V1, counts.overdue + counts.dueToday)) {
+          throw new Error('invalid_follow_up_workbench_candidates');
+        }
+        return Object.freeze({
+          records: Object.freeze(rows.map(mapRow)),
+          counts: Object.freeze(counts),
+        });
+      }, { isolationLevel: 'repeatable read', accessMode: 'read only' });
+    },
+
     async queryVisible(input: FormalFollowUpPageQueryV1) {
       const buckets = dueConditions(input);
       if (input.query.dueBucket && !buckets) throw new Error('follow_up_time_zone_unavailable');

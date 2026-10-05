@@ -1,5 +1,6 @@
 import { buildFormalCareActionSourceV1 } from '@/modules/care/application/formal-care-action-source';
 import { createFormalFollowUpRepositoryV1 } from '@/modules/care/server/formal-follow-up-repository';
+import { projectFollowUpBusinessDate } from '@/modules/care/domain/follow-up-business-time';
 import { readInstitutionOperatingContextForCareV1 } from '@/modules/institution/server/institution-operating-context-reader';
 import { getDatabase } from '@/server/db/client';
 import { resolveInstitutionCapabilityAuthorityStatusV1 } from '@/server/orchestration/institution-capability-authority';
@@ -48,37 +49,38 @@ export async function readCurrentInstitutionCareActionSourceV1() {
     return null;
   }
 
-  const database = getDatabase();
-  const [tasks, context] = await Promise.all([
-    createFormalFollowUpRepositoryV1(
-      database,
-    ).listVisible({
+  try {
+    const database = getDatabase();
+    const context = await readInstitutionOperatingContextForCareV1(database, {
+      tenantId: actor.tenantId,
+      institutionId: actor.institutionId,
+    });
+    if (!context) return null;
+    const referenceTime = new Date(Date.now()).toISOString();
+    const businessDate = projectFollowUpBusinessDate({
+      instant: referenceTime,
+      timeZone: context.timeZone,
+      operatingContextVersion: context.version,
+    });
+    if (!businessDate) return null;
+    const snapshot = await createFormalFollowUpRepositoryV1(database).queryWorkbenchVisible({
       tenantId: actor.tenantId,
       institutionId: actor.institutionId,
       actorId: actor.accountId,
       actorRole: actor.role,
-      limit: 101,
-    }),
-    readInstitutionOperatingContextForCareV1(
-      database,
-      {
-        tenantId: actor.tenantId,
-        institutionId: actor.institutionId,
-      },
-    ),
-  ]);
-
-  if (!context || tasks.length > 101) {
+      businessDate: businessDate.date,
+      timeZone: businessDate.timeZone,
+    });
+    return buildFormalCareActionSourceV1({
+      tenantId: actor.tenantId,
+      institutionId: actor.institutionId,
+      tasks: snapshot.records,
+      counts: snapshot.counts,
+      referenceTime,
+      timeZone: businessDate.timeZone,
+      operatingContextVersion: businessDate.operatingContextVersion,
+    });
+  } catch {
     return null;
   }
-
-  return buildFormalCareActionSourceV1({
-    tenantId: actor.tenantId,
-    institutionId: actor.institutionId,
-    tasks,
-    referenceTime:
-      new Date(Date.now()).toISOString(),
-    timeZone: context.timeZone,
-    operatingContextVersion: context.version,
-  });
 }
