@@ -30,6 +30,12 @@ import {
   type FollowUpTaskState,
 } from '@/modules/care/domain/follow-up-task';
 import type { FormalFollowUpDtoV1 } from '@/modules/care/application/formal-follow-up-view';
+import {
+  parseFormalFollowUpListQueryV1,
+  type FormalFollowUpListSummaryV1,
+} from '@/modules/care/application/formal-follow-up-list-query';
+import { projectFollowUpBusinessDate } from '@/modules/care/domain/follow-up-business-time';
+import { readInstitutionOperatingContextForCareV1 } from '@/modules/institution/server/institution-operating-context-reader';
 import type {
   FormalFollowUpAssignmentV1,
   FormalFollowUpEventTypeV1,
@@ -60,9 +66,14 @@ export type FormalFollowUpListResultV1 =
       records: readonly FormalFollowUpDtoV1[];
       canCreate: boolean;
       hasMore: boolean;
+      pageInfo: Readonly<{ page: number; pageSize: number; total: number; pageCount: number; hasMore: boolean }>;
+      summary: FormalFollowUpListSummaryV1;
+      observedAt: string;
+      timeZone: string | null;
+      operatingContextVersion: string | null;
     }>
   | Readonly<{
-      kind: 'forbidden' | 'unavailable';
+      kind: 'forbidden' | 'unavailable' | 'invalid_query';
     }>;
 
 export type FormalFollowUpReadResultV1 =
@@ -661,9 +672,13 @@ async function auditChanged(
   ).recordAttributed(event);
 }
 
-export async function readCurrentInstitutionFormalFollowUpsV1(): Promise<
+export async function readCurrentInstitutionFormalFollowUpsV1(
+  searchParams: URLSearchParams = new URLSearchParams(),
+): Promise<
   FormalFollowUpListResultV1
 > {
+  const query = parseFormalFollowUpListQueryV1(searchParams);
+  if (!query) return Object.freeze({ kind: 'invalid_query' });
   const authorization =
     await authorize(false).catch(
       () => AUTH_UNAVAILABLE,
@@ -676,32 +691,50 @@ export async function readCurrentInstitutionFormalFollowUpsV1(): Promise<
   const actor = authorization.actor;
 
   try {
-    const records =
-      await createFormalFollowUpRepositoryV1(
-        getDatabase(),
-      ).listVisible({
+    const database = getDatabase();
+    const observedAt = new Date(Date.now()).toISOString();
+    const context = await readInstitutionOperatingContextForCareV1(database, {
+      tenantId: actor.tenantId,
+      institutionId: actor.institutionId,
+    }).catch(() => null);
+    const businessDate = context ? projectFollowUpBusinessDate({
+      instant: observedAt,
+      timeZone: context.timeZone,
+      operatingContextVersion: context.version,
+    }) : null;
+    if (query.dueBucket && !businessDate) return AUTH_UNAVAILABLE;
+    const { records, summary } =
+      await createFormalFollowUpRepositoryV1(database).queryVisible({
         tenantId: actor.tenantId,
         institutionId: actor.institutionId,
         actorId: actor.accountId,
         actorRole: actor.role,
-        limit: 101,
+        query,
+        businessDate: businessDate?.date ?? null,
+        timeZone: businessDate?.timeZone ?? null,
       });
 
-    if (records.length > 101) {
+    if (records.length > query.pageSize || records.some((record) =>
+      record.tenantId !== actor.tenantId || record.institutionId !== actor.institutionId)) {
       return Object.freeze({
         kind: 'unavailable' as const,
       });
     }
 
+    const pageCount = Math.ceil(summary.total / query.pageSize);
+    const hasMore = query.page < pageCount;
     return Object.freeze({
       kind: 'ready' as const,
       records: Object.freeze(
-        records
-          .slice(0, 100)
-          .map((record) => toDto(record, actor)),
+        records.map((record) => toDto(record, actor)),
       ),
       canCreate: isManagement(actor.role),
-      hasMore: records.length > 100,
+      hasMore,
+      pageInfo: Object.freeze({ page: query.page, pageSize: query.pageSize, total: summary.total, pageCount, hasMore }),
+      summary,
+      observedAt,
+      timeZone: businessDate?.timeZone ?? null,
+      operatingContextVersion: businessDate?.operatingContextVersion ?? null,
     });
   } catch {
     return Object.freeze({

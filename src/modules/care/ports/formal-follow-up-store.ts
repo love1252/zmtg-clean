@@ -1,5 +1,9 @@
 import type { FollowUpRolePoolRole } from '@/modules/care/domain/follow-up-assignment';
 import type {
+  FormalFollowUpListQueryV1,
+  FormalFollowUpListSummaryV1,
+} from '@/modules/care/application/formal-follow-up-list-query';
+import type {
   FollowUpCancellationReason,
   FollowUpCompletionCode,
   FollowUpRiskEscalationKind,
@@ -78,6 +82,17 @@ export type FormalFollowUpVisibilityV1 = Readonly<{
   actorRole: InstitutionRoleV1;
 }>;
 
+export type FormalFollowUpPageQueryV1 = FormalFollowUpVisibilityV1 & Readonly<{
+  query: FormalFollowUpListQueryV1;
+  businessDate: string | null;
+  timeZone: string | null;
+}>;
+
+export type FormalFollowUpPageV1 = Readonly<{
+  records: readonly FormalFollowUpTaskRecordV1[];
+  summary: FormalFollowUpListSummaryV1;
+}>;
+
 export type FormalFollowUpCreateV1 = Readonly<{
   tenantId: string;
   institutionId: string;
@@ -117,6 +132,7 @@ export type FormalFollowUpUpdateV1 = Readonly<{
 }>;
 
 export interface FormalFollowUpStoreV1 {
+  queryVisible(input: FormalFollowUpPageQueryV1): Promise<FormalFollowUpPageV1>;
   listVisible(
     input: FormalFollowUpVisibilityV1 & Readonly<{ limit: 101 }>,
   ): Promise<readonly FormalFollowUpTaskRecordV1[]>;

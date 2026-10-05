@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { parseFormalFollowUpListQueryV1 } from '@/modules/care/application/formal-follow-up-list-query';
 
 import {
   createCurrentInstitutionFormalFollowUpV1,
@@ -41,10 +42,11 @@ async function readJsonBody(
 }
 
 export async function GET(request: Request) {
+  let params: URLSearchParams;
   try {
-    const params =
+    params =
       new URL(request.url).searchParams;
-    if ([...params.keys()].length !== 0) {
+    if (!parseFormalFollowUpListQueryV1(params)) {
       return NextResponse.json(
         {
           code:
@@ -69,7 +71,13 @@ export async function GET(request: Request) {
   }
 
   const result =
-    await readCurrentInstitutionFormalFollowUpsV1();
+    await readCurrentInstitutionFormalFollowUpsV1(params);
+
+  if (result.kind === 'invalid_query') {
+    return NextResponse.json({ code: 'invalid_follow_up_query' }, {
+      status: 400, headers: NO_STORE_HEADERS,
+    });
+  }
 
   if (result.kind === 'forbidden') {
     return NextResponse.json(
