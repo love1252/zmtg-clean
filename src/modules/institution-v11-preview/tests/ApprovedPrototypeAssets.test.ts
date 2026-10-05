@@ -446,7 +446,7 @@ describe('Approved prototype asset boundary', () => {
 
     expect(preparedHtml).toContain('FOLLOW_UP_LIST_PAGE_SIZES=[10,20,50,100]');
     expect(preparedHtml).toContain(
-      "fetch('/api/v1/institution/followups'",
+      "return '/api/v1/institution/followups?'+params.toString()",
     );
     expect(preparedHtml).toContain('preview-followup-runtime-card');
     expect(preparedHtml).toContain('preview-followup-pagebtn');
@@ -461,10 +461,10 @@ describe('Approved prototype asset boundary', () => {
       "page.querySelector('.preview-followup-runtime-card')",
     );
     expect(preparedHtml).toContain(
-      '不展示任何原型演示统计',
+      '统计涵盖全部符合当前筛选的任务',
     );
     expect(preparedHtml).toContain(
-      '消息状态、渠道、项目和随访方案未进入该 API',
+      '客户名称或脱敏编号',
     );
   });
 
