@@ -3,7 +3,11 @@ import type {
   CareFollowUpActionItemV1,
 } from '@/modules/institution-contracts/v1/care-action';
 import { projectFollowUpBusinessDate } from '@/modules/care/domain/follow-up-business-time';
-import type { FormalFollowUpTaskRecordV1 } from '@/modules/care/ports/formal-follow-up-store';
+import {
+  FORMAL_FOLLOW_UP_WORKBENCH_LIMIT_V1,
+  type FormalFollowUpTaskRecordV1,
+  type FormalFollowUpWorkbenchSnapshotV1,
+} from '@/modules/care/ports/formal-follow-up-store';
 
 const ACTIVE_STATES = new Set([
   'pending',
@@ -16,6 +20,7 @@ export function buildFormalCareActionSourceV1(input: Readonly<{
   tenantId: string;
   institutionId: string;
   tasks: readonly FormalFollowUpTaskRecordV1[];
+  counts: FormalFollowUpWorkbenchSnapshotV1['counts'];
   referenceTime: string;
   timeZone: string;
   operatingContextVersion: string;
@@ -26,29 +31,37 @@ export function buildFormalCareActionSourceV1(input: Readonly<{
     operatingContextVersion: input.operatingContextVersion,
   });
 
-  if (!nowDate) {
-    return {
-      contractVersion: 'v1',
-      scope: {
-        tenantId: input.tenantId,
-        institutionId: input.institutionId,
-      },
+  const unavailable = (): CareActionSourceV1 => ({
+    contractVersion: 'v1',
+    scope: {
+      tenantId: input.tenantId,
+      institutionId: input.institutionId,
+    },
+    readiness: 'unavailable',
+    freshness: null,
+    partitions: [
+      'pending_confirmation_appointments',
+      'reschedule_requested_appointments',
+      'overdue_followups',
+      'today_due_followups',
+    ].map((key) => ({
+      key,
       readiness: 'unavailable',
       freshness: null,
-      partitions: [
-        'pending_confirmation_appointments',
-        'reschedule_requested_appointments',
-        'overdue_followups',
-        'today_due_followups',
-      ].map((key) => ({
-        key,
-        readiness: 'unavailable',
-        freshness: null,
-        failureCode: 'invalid_payload',
-      })) as CareActionSourceV1['partitions'],
-      data: null,
       failureCode: 'invalid_payload',
-    };
+    })) as CareActionSourceV1['partitions'],
+    data: null,
+    failureCode: 'invalid_payload',
+  });
+
+  const counts = input.counts;
+  if (!nowDate || !counts
+    || !Number.isSafeInteger(counts.overdue) || counts.overdue < 0
+    || !Number.isSafeInteger(counts.dueToday) || counts.dueToday < 0
+    || !Number.isSafeInteger(counts.overdue + counts.dueToday)
+    || !Array.isArray(input.tasks)
+    || input.tasks.length !== Math.min(FORMAL_FOLLOW_UP_WORKBENCH_LIMIT_V1, counts.overdue + counts.dueToday)) {
+    return unavailable();
   }
 
   const freshness = {
@@ -58,13 +71,18 @@ export function buildFormalCareActionSourceV1(input: Readonly<{
     ).toISOString(),
   };
 
-  const active = input.tasks.flatMap((task) => {
+  const active: { task: FormalFollowUpTaskRecordV1; dueDate: string }[] = [];
+  const ids = new Set<string>();
+  for (const task of input.tasks) {
     if (
       task.tenantId !== input.tenantId
       || task.institutionId !== input.institutionId
       || !ACTIVE_STATES.has(task.state)
+      || typeof task.taskId !== 'string' || task.taskId.length === 0
+      || ids.has(task.taskId)
+      || !Number.isSafeInteger(task.revision) || task.revision < 1
     ) {
-      return [];
+      return unavailable();
     }
 
     const due = projectFollowUpBusinessDate({
@@ -73,15 +91,16 @@ export function buildFormalCareActionSourceV1(input: Readonly<{
       operatingContextVersion: input.operatingContextVersion,
     });
 
-    return due ? [{ task, dueDate: due.date }] : [];
-  });
+    if (!due || due.date > nowDate.date) return unavailable();
+    ids.add(task.taskId);
+    active.push({ task, dueDate: due.date });
+  }
 
   const overdue = active.filter(({ dueDate }) => dueDate < nowDate.date);
   const today = active.filter(({ dueDate }) => dueDate === nowDate.date);
+  if (overdue.length > counts.overdue || today.length > counts.dueToday) return unavailable();
 
-  const actions: CareFollowUpActionItemV1[] = active
-    .filter(({ dueDate }) => dueDate <= nowDate.date)
-    .map(({ task, dueDate }) => {
+  const actions: CareFollowUpActionItemV1[] = active.map(({ task, dueDate }) => {
       const isOverdue = dueDate < nowDate.date;
 
       return {
@@ -154,13 +173,13 @@ export function buildFormalCareActionSourceV1(input: Readonly<{
       },
       {
         key: 'overdue_followups',
-        readiness: overdue.length === 0 ? 'empty' : 'ready',
+        readiness: counts.overdue === 0 ? 'empty' : 'ready',
         freshness,
         failureCode: null,
       },
       {
         key: 'today_due_followups',
-        readiness: today.length === 0 ? 'empty' : 'ready',
+        readiness: counts.dueToday === 0 ? 'empty' : 'ready',
         freshness,
         failureCode: null,
       },
@@ -169,13 +188,13 @@ export function buildFormalCareActionSourceV1(input: Readonly<{
       cards: [
         {
           key: 'overdue_followups',
-          count: overdue.length,
+          count: counts.overdue,
           canonicalHref:
             '/hospital/care/followups?bucket=overdue',
         },
         {
           key: 'today_due_followups',
-          count: today.length,
+          count: counts.dueToday,
           canonicalHref:
             '/hospital/care/followups?bucket=today',
         },

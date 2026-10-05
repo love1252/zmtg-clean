@@ -93,6 +93,18 @@ export type FormalFollowUpPageV1 = Readonly<{
   summary: FormalFollowUpListSummaryV1;
 }>;
 
+export const FORMAL_FOLLOW_UP_WORKBENCH_LIMIT_V1 = 6 as const;
+
+export type FormalFollowUpWorkbenchQueryV1 = FormalFollowUpVisibilityV1 & Readonly<{
+  businessDate: string;
+  timeZone: string;
+}>;
+
+export type FormalFollowUpWorkbenchSnapshotV1 = Readonly<{
+  records: readonly FormalFollowUpTaskRecordV1[];
+  counts: Readonly<{ overdue: number; dueToday: number }>;
+}>;
+
 export type FormalFollowUpCreateV1 = Readonly<{
   tenantId: string;
   institutionId: string;
@@ -160,4 +172,9 @@ export interface FormalFollowUpStoreV1 {
   updateWithEvent(
     input: FormalFollowUpUpdateV1,
   ): Promise<FormalFollowUpTaskRecordV1 | null>;
+}
+
+// 工作台扩展不改变既有列表与受控写入消费者的存储契约。
+export interface FormalFollowUpWorkbenchStoreV1 extends FormalFollowUpStoreV1 {
+  queryWorkbenchVisible(input: FormalFollowUpWorkbenchQueryV1): Promise<FormalFollowUpWorkbenchSnapshotV1>;
 }
