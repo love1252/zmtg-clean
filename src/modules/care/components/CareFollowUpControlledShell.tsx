@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import { CareFollowUpListControls } from '@/modules/care/components/CareFollowUpListControls';
+import { formalFollowUpListHrefV1, type FormalFollowUpListPageV1 } from '@/modules/care/application/formal-follow-up-list-navigation';
 import { CalendarClock, Plus } from 'lucide-react';
 import { useRef, useState } from 'react';
 
@@ -14,6 +16,7 @@ type Props = Readonly<{
   records: readonly FormalFollowUpDtoV1[];
   canCreate: boolean;
   selectedTaskId?: string | null;
+  list?: FormalFollowUpListPageV1;
 }>;
 
 async function patchTask(
@@ -42,6 +45,7 @@ export function CareFollowUpControlledShell({
   records,
   canCreate,
   selectedTaskId = null,
+  list,
 }: Props) {
   const [
     error,
@@ -185,28 +189,7 @@ export function CareFollowUpControlledShell({
     });
   }
 
-  return (
-    <main className="space-y-5">
-      <h1 className="sr-only">人工随访任务</h1>
-      <InstitutionV11PageHeader
-        eyebrow="FOLLOW-UP MANAGEMENT"
-        title="随访管理"
-        description="正式机构范围内的人工联系任务支持受控创建、认领、改派、状态流转、结构化完成与风险升级；真实消息发送和 HIS 操作仍关闭。"
-        breadcrumbs={[{ label: '机构端', href: '/hospital' }, { label: '预约与随访' }, { label: '随访管理' }]}
-        state="LIVE"
-        actions={canCreate && selectedTaskId === null ? <a href="#followup-create" className="inline-flex h-9 items-center gap-2 rounded-lg border border-blue-700 bg-blue-700 px-3 text-sm font-semibold text-white"><Plus aria-hidden="true" className="h-4 w-4" />新建随访</a> : null}
-      />
-
-      <InstitutionV11Surface>
-        <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 px-3 py-2">
-          {['待执行', '进行中', '待人工', '已完成', '异常'].map((label, index) => <span key={label} className={`rounded-full px-3 py-1.5 text-xs ${index === 0 ? 'bg-blue-50 font-semibold text-blue-700' : 'text-slate-500'}`}>{label}</span>)}
-          <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] text-slate-500"><CalendarClock aria-hidden="true" className="h-3.5 w-3.5" />任务状态与消息状态分离</span>
-        </div>
-        <div className="grid gap-px bg-slate-100 sm:grid-cols-4">
-          {['任务状态：正式', '消息状态：未发送', '渠道匹配：按任务事实', '风险：按正式事件'].map((label) => <div key={label} className="bg-white px-4 py-3 text-xs text-slate-600">{label}</div>)}
-        </div>
-      </InstitutionV11Surface>
-
+  const content = (<>
       {error ? (
         <div
           role="alert"
@@ -638,11 +621,42 @@ export function CareFollowUpControlledShell({
         ))}
       </section>
 
-      {visibleRecords.length === 0 ? (
+      {!list && visibleRecords.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
           当前正式机构范围内暂无人工随访任务。
         </div>
       ) : null}
+  </>);
+
+  return (
+    <main className="space-y-5">
+      <h1 className="sr-only">人工随访任务</h1>
+      <InstitutionV11PageHeader
+        eyebrow="FOLLOW-UP MANAGEMENT"
+        title="随访管理"
+        description="正式机构范围内的人工联系任务支持受控创建、认领、改派、状态流转、结构化完成与风险升级；真实消息发送和 HIS 操作仍关闭。"
+        breadcrumbs={[{ label: '机构端', href: '/hospital' }, { label: '预约与随访' }, { label: '随访管理' }]}
+        state="LIVE"
+        actions={canCreate && selectedTaskId === null ? <a href="#followup-create" className="inline-flex h-9 items-center gap-2 rounded-lg border border-blue-700 bg-blue-700 px-3 text-sm font-semibold text-white"><Plus aria-hidden="true" className="h-4 w-4" />新建随访</a> : null}
+      />
+
+      {!list || selectedTaskId !== null ? (
+      <InstitutionV11Surface>
+        <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 px-3 py-2">
+          {['待执行', '进行中', '待人工', '已完成', '异常'].map((label, index) => <span key={label} className={`rounded-full px-3 py-1.5 text-xs ${index === 0 ? 'bg-blue-50 font-semibold text-blue-700' : 'text-slate-500'}`}>{label}</span>)}
+          <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] text-slate-500"><CalendarClock aria-hidden="true" className="h-3.5 w-3.5" />任务状态与消息状态分离</span>
+        </div>
+        <div className="grid gap-px bg-slate-100 sm:grid-cols-4">
+          {['任务状态：正式', '消息状态：未发送', '渠道匹配：按任务事实', '风险：按正式事件'].map((label) => <div key={label} className="bg-white px-4 py-3 text-xs text-slate-600">{label}</div>)}
+        </div>
+      </InstitutionV11Surface>
+      ) : null}
+
+      {list && selectedTaskId === null ? (
+        <CareFollowUpListControls key={formalFollowUpListHrefV1(list.query)} list={list}>
+          {content}
+        </CareFollowUpListControls>
+      ) : content}
     </main>
   );
 }
