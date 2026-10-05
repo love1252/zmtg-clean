@@ -1,9 +1,12 @@
-import { and, asc, eq, or } from 'drizzle-orm';
+import { and, asc, count, eq, ilike, or, sql } from 'drizzle-orm';
 
 import type { FollowUpRolePoolRole } from '@/modules/care/domain/follow-up-assignment';
+import { FOLLOW_UP_DUE_BUCKETS } from '@/modules/care/domain/follow-up-due-bucket';
+import { FOLLOW_UP_TASK_STATES, isFollowUpTaskState } from '@/modules/care/domain/follow-up-task';
 import type {
   FormalFollowUpCreateV1,
   FormalFollowUpEventV1,
+  FormalFollowUpPageQueryV1,
   FormalFollowUpStoreV1,
   FormalFollowUpTaskRecordV1,
   FormalFollowUpUpdateV1,
@@ -105,10 +108,94 @@ function assignmentValues(
       };
 }
 
+function dueConditions(input: FormalFollowUpPageQueryV1) {
+  if (!input.businessDate || !input.timeZone) return null;
+  const active = sql`${careFormalFollowUpTasks.state} not in ('completed', 'cancelled')`;
+  const date = sql`(${careFormalFollowUpTasks.dueAt} at time zone ${input.timeZone})::date`;
+  return {
+    overdue: sql`${active} and ${date} < ${input.businessDate}::date`,
+    due_today: sql`${active} and ${date} = ${input.businessDate}::date`,
+    not_due: sql`${active} and ${date} > ${input.businessDate}::date`,
+  };
+}
+
 export function createFormalFollowUpRepositoryV1(
   database: TenantDatabase,
 ): FormalFollowUpStoreV1 {
   return Object.freeze({
+    async queryVisible(input: FormalFollowUpPageQueryV1) {
+      const buckets = dueConditions(input);
+      if (input.query.dueBucket && !buckets) throw new Error('follow_up_time_zone_unavailable');
+      const keyword = input.query.keyword?.replace(/[\\%_]/gu, '\\$&');
+      const filter = and(
+        visibility(input),
+        input.query.state ? eq(careFormalFollowUpTasks.state, input.query.state) : undefined,
+        input.query.dueBucket ? buckets![input.query.dueBucket] : undefined,
+        keyword ? or(
+          ilike(careFormalFollowUpTasks.customerDisplayName, `%${keyword}%`),
+          ilike(careFormalFollowUpTasks.customerMaskedReference, `%${keyword}%`),
+        ) : undefined,
+      );
+
+      // 分页与统计共享同一权限谓词及数据库快照，避免任务变更导致本次响应分母不一致。
+      return database.transaction(async (transaction) => {
+        const counts = await transaction.select({
+          state: careFormalFollowUpTasks.state,
+          total: count(),
+          overdue: buckets ? sql<number>`count(*) filter (where ${buckets.overdue})`.mapWith(Number) : sql<null>`null`,
+          due_today: buckets ? sql<number>`count(*) filter (where ${buckets.due_today})`.mapWith(Number) : sql<null>`null`,
+          not_due: buckets ? sql<number>`count(*) filter (where ${buckets.not_due})`.mapWith(Number) : sql<null>`null`,
+        }).from(careFormalFollowUpTasks).where(filter).groupBy(careFormalFollowUpTasks.state);
+
+        const stateCounts = { pending: 0, in_progress: 0, waiting_customer: 0, escalated: 0, completed: 0, cancelled: 0 };
+        const dueBucketCounts = buckets ? { overdue: 0, due_today: 0, not_due: 0 } : null;
+        const seen = new Set<string>();
+        let total = 0;
+        for (const row of counts) {
+          if (!isFollowUpTaskState(row.state) || seen.has(row.state)
+            || !Number.isSafeInteger(row.total) || row.total < 0) {
+            throw new Error('invalid_follow_up_summary');
+          }
+          seen.add(row.state);
+          stateCounts[row.state] = row.total;
+          total += row.total;
+          if (dueBucketCounts) {
+            let activeTotal = 0;
+            for (const bucket of FOLLOW_UP_DUE_BUCKETS) {
+              const value = row[bucket];
+              if (value === null || !Number.isSafeInteger(value) || value < 0) {
+                throw new Error('invalid_follow_up_summary');
+              }
+              dueBucketCounts[bucket] += value;
+              activeTotal += value;
+            }
+            if (activeTotal !== (row.state === 'completed' || row.state === 'cancelled' ? 0 : row.total)) {
+              throw new Error('invalid_follow_up_summary');
+            }
+          }
+        }
+        if (!Number.isSafeInteger(total) || counts.length > FOLLOW_UP_TASK_STATES.length) {
+          throw new Error('invalid_follow_up_summary');
+        }
+        const offset = (input.query.page - 1) * input.query.pageSize;
+        const rows = offset >= total ? [] : await transaction.select()
+          .from(careFormalFollowUpTasks).where(filter)
+          .orderBy(asc(careFormalFollowUpTasks.dueAt), asc(careFormalFollowUpTasks.id))
+          .limit(input.query.pageSize).offset(offset);
+        if (rows.length !== Math.min(input.query.pageSize, Math.max(0, total - offset))) {
+          throw new Error('invalid_follow_up_page');
+        }
+        return Object.freeze({
+          records: Object.freeze(rows.map(mapRow)),
+          summary: Object.freeze({
+            total,
+            stateCounts: Object.freeze(stateCounts),
+            dueBucketCounts: dueBucketCounts ? Object.freeze(dueBucketCounts) : null,
+          }),
+        });
+      }, { isolationLevel: 'repeatable read', accessMode: 'read only' });
+    },
+
     async listVisible(
       input: FormalFollowUpVisibilityV1 & Readonly<{ limit: 101 }>,
     ) {
