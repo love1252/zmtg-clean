@@ -1,3 +1,10 @@
+import {
+  FORMAL_FOLLOW_UP_LIST_PATH,
+  formalFollowUpListHrefV1,
+  formalFollowUpListParamsV1,
+  parseFormalFollowUpPageQueryV1,
+  type FollowUpPageSearchParams,
+} from '@/modules/care/application/formal-follow-up-list-navigation';
 import { CareFollowUpControlledShell } from '@/modules/care/components/CareFollowUpControlledShell';
 import {
   InstitutionCapabilityOffPage,
@@ -91,7 +98,9 @@ function resolveExactCapabilityState(
   return 'released';
 }
 
-export default async function HospitalCareFollowUpsPage() {
+export default async function HospitalCareFollowUpsPage({
+  searchParams,
+}: { searchParams?: Promise<FollowUpPageSearchParams> }) {
   let navigationAuthorization: unknown;
 
   try {
@@ -151,14 +160,16 @@ export default async function HospitalCareFollowUpsPage() {
     capabilityState = resolveExactCapabilityState(capabilityStatus);
   }
 
-  const result =
-    genuineAllowed
-    && capabilityState === 'released'
-      ? await readCurrentInstitutionFormalFollowUpsV1()
-          .catch(() => ({
-            kind: 'unavailable' as const,
-          }))
-      : null;
+  const mayRead = genuineAllowed && capabilityState === 'released';
+  const query = mayRead
+    ? parseFormalFollowUpPageQueryV1(await searchParams ?? {})
+    : null;
+  const result = mayRead
+    ? query
+      ? await readCurrentInstitutionFormalFollowUpsV1(formalFollowUpListParamsV1(query))
+          .catch(() => ({ kind: 'unavailable' as const }))
+      : { kind: 'invalid_query' as const }
+    : null;
 
   return (
     <InstitutionNavigationShell
@@ -169,10 +180,11 @@ export default async function HospitalCareFollowUpsPage() {
       availableNavigationTargets={availableNavigationTargets}
       workspaceScopeKey={workspaceScopeKey}
     >
-      {result?.kind === 'ready' ? (
+      {result?.kind === 'ready' && query ? (
         <CareFollowUpControlledShell
           records={result.records}
           canCreate={result.canCreate}
+          list={{ query, pageInfo: result.pageInfo, summary: result.summary }}
         />
       ) : genuineBlocked
         || result?.kind === 'forbidden' ? (
@@ -194,11 +206,22 @@ export default async function HospitalCareFollowUpsPage() {
             CAPABILITY_OFF_ROUTE.section
           }
         />
+      ) : result?.kind === 'invalid_query' ? (
+        <InstitutionPageState
+          kind="error"
+          title="随访查询条件无效"
+          description="请清除筛选后重新查询。"
+          action={<a href={FORMAL_FOLLOW_UP_LIST_PATH} className="underline">清除筛选</a>}
+        />
       ) : (
         <InstitutionPageState
           kind="unavailable"
           title="人工随访暂时不可用"
-          description="未获得可信的正式随访结果；真实发送和 HIS 操作保持关闭。"
+          description="暂未获得随访数据，请稍后重试。"
+          action={mayRead && query ? <div className="flex gap-4">
+            <a href={formalFollowUpListHrefV1(query)} className="underline">重试当前查询</a>
+            <a href={FORMAL_FOLLOW_UP_LIST_PATH} className="underline">清除筛选</a>
+          </div> : undefined}
         />
       )}
     </InstitutionNavigationShell>
