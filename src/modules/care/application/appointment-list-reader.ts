@@ -131,25 +131,12 @@ function isDateOnly(value: unknown): value is string {
   return date.toISOString().slice(0, 10) === value;
 }
 
-function currentShanghaiDate() {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date());
-  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${value.year}-${value.month}-${value.day}`;
-}
-
 function chinaDayStartUtc(value: string) {
   return new Date(`${value}T00:00:00.000+08:00`).toISOString();
 }
 
 function chinaDayAfterUtc(value: string) {
-  const [year, month, day] = value.split('-').map(Number);
-  const next = new Date(Date.UTC(year!, month! - 1, day + 1));
-  return new Date(`${next.toISOString().slice(0, 10)}T00:00:00.000+08:00`).toISOString();
+  return new Date(Date.parse(chinaDayStartUtc(value)) + 24 * 60 * 60 * 1000).toISOString();
 }
 
 function parseQuery(searchParams: URLSearchParams): Readonly<{
@@ -212,8 +199,7 @@ function parseQuery(searchParams: URLSearchParams): Readonly<{
       endDate !== null &&
       (!isDateOnly(startDate) ||
         !isDateOnly(endDate) ||
-        startDate > endDate ||
-        endDate > currentShanghaiDate())
+        startDate > endDate)
     ) return null;
 
     return Object.freeze({
