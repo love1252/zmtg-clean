@@ -2,6 +2,7 @@
 'use client';
 
 import Link from 'next/link';
+import { OpportunityConfirmationPanel } from '@/modules/opportunities/components/OpportunityConfirmationPanel';
 import { CustomerProfileSuggestionPanel } from './CustomerProfileSuggestionPanel';
 import { CalendarDays, MessageSquareText, Sparkles } from 'lucide-react';
 import { useState } from 'react';
@@ -16,9 +17,10 @@ import {
 } from '@/modules/institution-v11/components/InstitutionV11Ui';
 
 export function CustomerControlledDetailShell({
-  record,
+  record, initialTab = 'overview',
 }: Readonly<{
   record: CustomerControlledDtoV1;
+  initialTab?: 'overview' | 'profile' | 'opportunities';
 }>) {
   const [displayName, setDisplayName] = useState(record.displayName);
   const [lifecycle, setLifecycle] = useState(record.lifecycle);
@@ -27,10 +29,11 @@ export function CustomerControlledDetailShell({
   const [projectInterest, setProjectInterest] = useState(record.projectInterest);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState<string>(initialTab);
   const pageTabs = [
     { id: 'overview', label: '概览' },
     { id: 'profile', label: '客户画像' },
+    { id: 'opportunities', label: '经营机会' },
     { id: 'appointments', label: '预约与服务' },
     { id: 'followups', label: '随访记录' },
     { id: 'communications', label: '沟通记录' },
@@ -210,7 +213,7 @@ export function CustomerControlledDetailShell({
             ))}
           </div>
         </div>
-      ) : (
+      ) : activeTab === 'opportunities' ? <OpportunityConfirmationPanel customerId={record.customerId} /> : (
         <InstitutionV11Surface>
           <InstitutionV11EmptyState
             icon={activeTab === 'appointments' ? CalendarDays : activeTab === 'communications' ? MessageSquareText : Sparkles}

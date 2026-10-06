@@ -9,6 +9,7 @@ import {
   validOpportunitySource,
   type OpportunityCandidate,
   type OpportunityPriority,
+  type OpportunitySourceRow,
 } from '@/modules/opportunities/domain/opportunity-candidate';
 import { createOpportunityCandidateRepository } from '@/modules/opportunities/server/opportunity-candidate-repository';
 import { getDatabase } from '@/server/db/client';
@@ -37,10 +38,7 @@ export async function readCurrentInstitutionOpportunitiesV1(params: URLSearchPar
       const opportunityType = opportunityTypeForLifecycle(row.lifecycle)!;
       const definition = OPPORTUNITY_DEFINITIONS[opportunityType];
       const updatedAt = row.updatedAt.toISOString();
-      const sourceVersion = 'opp-src-v1:' + createHash('sha256').update(JSON.stringify([
-        OPPORTUNITY_RULE_VERSION, scope.tenantId, scope.institutionId,
-        row.customerId, row.lifecycle, row.priority, updatedAt,
-      ])).digest('hex');
+      const sourceVersion = opportunitySourceVersionV1(scope, row);
       return Object.freeze({
         contractVersion: 'v1', customerId: row.customerId, displayName: row.displayName,
         lifecycle: row.lifecycle, priority: row.priority as OpportunityPriority, updatedAt,
@@ -55,4 +53,11 @@ export async function readCurrentInstitutionOpportunitiesV1(params: URLSearchPar
   } catch {
     return Object.freeze({ kind: 'unavailable' as const });
   }
+}
+
+export function opportunitySourceVersionV1(scope: { tenantId: string; institutionId: string }, row: OpportunitySourceRow) {
+  return 'opp-src-v1:' + createHash('sha256').update(JSON.stringify([
+    OPPORTUNITY_RULE_VERSION, scope.tenantId, scope.institutionId,
+    row.customerId, row.lifecycle, row.priority, row.updatedAt.toISOString(),
+  ])).digest('hex');
 }

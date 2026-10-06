@@ -22,6 +22,7 @@ export type AuditReason =
   | 'customer_import_permission_checked'
   | 'message_delivery_permission_checked'
   | 'care_follow_up_created'
+  | 'opportunity_confirmed'
   | 'care_follow_up_claimed'
   | 'care_follow_up_reassigned'
   | 'care_follow_up_unclaimed'

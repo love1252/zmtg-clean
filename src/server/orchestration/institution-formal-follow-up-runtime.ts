@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import {
   createVerifiedInstitutionAttributedTenantAuditEventV1,
   type AuditReason,
+  type VerifiedInstitutionAuditAttributionHandleV1,
 } from '@/modules/audit/domain/audit-events';
 import { createAuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import { createAccessControlAuthoritativeMembershipFactReaderV1 } from '@/modules/access-control/application/authoritative-membership-reader';
@@ -29,6 +30,7 @@ import {
   type FollowUpTask,
   type FollowUpTaskState,
 } from '@/modules/care/domain/follow-up-task';
+import type { CustomerReferenceV1 } from '@/modules/institution-contracts/v1/customer';
 import type { FormalFollowUpDtoV1 } from '@/modules/care/application/formal-follow-up-view';
 import {
   parseFormalFollowUpListQueryV1,
@@ -633,17 +635,8 @@ async function auditChanged(
   action: 'create' | 'update',
   reason: AuditReason,
   occurredAt: string,
+  attribution: VerifiedInstitutionAuditAttributionHandleV1,
 ) {
-  const attribution =
-    await resolveInstitutionAuditWriterVerifiedAttributionV1({
-      tenantId: actor.tenantId,
-      institutionId: actor.institutionId,
-    });
-  if (!attribution) {
-    throw new Error(
-      'care_follow_up_audit_attribution_unavailable',
-    );
-  }
 
   const event =
     createVerifiedInstitutionAttributedTenantAuditEventV1({
@@ -791,6 +784,130 @@ export async function readCurrentInstitutionFormalFollowUpV1(
   }
 }
 
+export type FormalFollowUpCreateCommandV1 = NonNullable<ReturnType<typeof parseCreate>>;
+export async function resolveFormalFollowUpCreateAssignmentV1(actor: InstitutionCareWriteAuthorizationConsumptionV1, input: FormalFollowUpCreateCommandV1['assignment']): Promise<FormalFollowUpAssignmentV1 | null> {
+  if (input.kind === 'role_pool') return { kind: 'role_pool', role: input.role };
+  const member = await targetMember(actor, input.userId).catch(() => null);
+  return member ? { kind: 'user', userId: member.userId, displayName: member.displayName, claimedFromRolePool: null } : null;
+}
+
+export async function createFormalFollowUpInTransactionV1(
+  transactionDb: TenantDatabase,
+  actor: InstitutionCareWriteAuthorizationConsumptionV1,
+  input: FormalFollowUpCreateCommandV1,
+  customer: CustomerReferenceV1,
+  assignment: FormalFollowUpAssignmentV1,
+  attribution: VerifiedInstitutionAuditAttributionHandleV1,
+): Promise<FormalFollowUpMutationResultV1> {
+  if (!isManagement(actor.role) || customer.customerId !== input.customerId) throw new Error('invalid_follow_up_context');
+  const digest = requestDigest(input);
+  const now = new Date(Date.now()).toISOString();
+  const store =
+    createFormalFollowUpRepositoryV1(
+      transactionDb,
+    );
+
+  const existing =
+    await store.getByIdempotency({
+      tenantId: actor.tenantId,
+      institutionId: actor.institutionId,
+      idempotencyKey: input.idempotencyKey,
+    });
+
+  if (existing) {
+    return existing.requestDigest === digest
+      ? Object.freeze({
+          kind: 'ready' as const,
+          record: toDto(existing, actor),
+          idempotent: true as const,
+        })
+      : Object.freeze({
+          kind: 'conflict' as const,
+          code: 'idempotency_conflict',
+        });
+  }
+
+  const taskId = randomUUID();
+  const created =
+    await store.createWithEvent(
+      {
+        tenantId: actor.tenantId,
+        institutionId: actor.institutionId,
+        taskId,
+        customerId: customer.customerId,
+        customerDisplayName:
+          customer.displayName,
+        customerMaskedReference:
+          customer.maskedReference,
+        stageCode: input.stageCode,
+        actionCode: input.actionCode,
+        dueAt: input.dueAt,
+        assignment,
+        idempotencyKey: input.idempotencyKey,
+        requestDigest: digest,
+        actorId: actor.accountId,
+        occurredAt: now,
+      },
+      {
+        eventId: randomUUID(),
+        eventType: 'created',
+        actorId: actor.accountId,
+        actorRole: actor.role,
+        fromState: null,
+        toState: 'pending',
+        reasonCode: 'care_follow_up_created',
+        occurredAt: now,
+      },
+    );
+
+  if (!created) {
+    const concurrent =
+      await store.getByIdempotency({
+        tenantId: actor.tenantId,
+        institutionId: actor.institutionId,
+        idempotencyKey: input.idempotencyKey,
+      });
+
+    if (
+      concurrent
+      && concurrent.requestDigest === digest
+    ) {
+      return Object.freeze({
+        kind: 'ready' as const,
+        record: toDto(concurrent, actor),
+        idempotent: true as const,
+      });
+    }
+
+    return Object.freeze({
+      kind: 'conflict' as const,
+      code: 'create_conflict',
+    });
+  }
+
+  await auditChanged(
+    transactionDb,
+    actor,
+    created.taskId,
+    'create',
+    'care_follow_up_created',
+    now,
+    attribution,
+  );
+
+  return Object.freeze({
+    kind: 'ready' as const,
+    record: toDto(created, actor),
+  });
+}
+
+export async function readFormalFollowUpForAuthorizedActorV1(database: TenantDatabase, actor: InstitutionCareWriteAuthorizationConsumptionV1, taskId: string) {
+  const record = await createFormalFollowUpRepositoryV1(database).getVisible({ ...actor, actorId: actor.accountId, actorRole: actor.role, taskId });
+  return record ? toDto(record, actor) : null;
+}
+
+export { authorize as authorizeInstitutionFormalFollowUpV1, parseCreate as parseFormalFollowUpCreateV1 };
+
 export async function createCurrentInstitutionFormalFollowUpV1(
   value: unknown,
 ): Promise<FormalFollowUpMutationResultV1> {
@@ -834,144 +951,17 @@ export async function createCurrentInstitutionFormalFollowUpV1(
     });
   }
 
-  let assignment: FormalFollowUpAssignmentV1;
-  if (input.assignment.kind === 'role_pool') {
-    assignment = {
-      kind: 'role_pool',
-      role: input.assignment.role,
-    };
-  } else {
-    const member = await targetMember(
-      actor,
-      input.assignment.userId,
-    ).catch(() => null);
-
-    if (!member) {
-      return Object.freeze({
-        kind: 'invalid' as const,
-        code: 'invalid_assignee',
-      });
-    }
-
-    assignment = {
-      kind: 'user',
-      userId: member.userId,
-      displayName: member.displayName,
-      claimedFromRolePool: null,
-    };
-  }
-
-  const digest = requestDigest(input);
-  const now = new Date(Date.now()).toISOString();
-
+  const assignment = await resolveFormalFollowUpCreateAssignmentV1(actor, input.assignment);
+  if (!assignment) return { kind: 'invalid', code: 'invalid_assignee' };
   try {
-    return await database.transaction(
-      async (transactionDatabase) => {
-        const transactionDb =
-          transactionDatabase as unknown as TenantDatabase;
-        const store =
-          createFormalFollowUpRepositoryV1(
-            transactionDb,
-          );
-
-        const existing =
-          await store.getByIdempotency({
-            tenantId: actor.tenantId,
-            institutionId: actor.institutionId,
-            idempotencyKey: input.idempotencyKey,
-          });
-
-        if (existing) {
-          return existing.requestDigest === digest
-            ? Object.freeze({
-                kind: 'ready' as const,
-                record: toDto(existing, actor),
-                idempotent: true as const,
-              })
-            : Object.freeze({
-                kind: 'conflict' as const,
-                code: 'idempotency_conflict',
-              });
-        }
-
-        const taskId = randomUUID();
-        const created =
-          await store.createWithEvent(
-            {
-              tenantId: actor.tenantId,
-              institutionId: actor.institutionId,
-              taskId,
-              customerId: customer.customerId,
-              customerDisplayName:
-                customer.displayName,
-              customerMaskedReference:
-                customer.maskedReference,
-              stageCode: input.stageCode,
-              actionCode: input.actionCode,
-              dueAt: input.dueAt,
-              assignment,
-              idempotencyKey: input.idempotencyKey,
-              requestDigest: digest,
-              actorId: actor.accountId,
-              occurredAt: now,
-            },
-            {
-              eventId: randomUUID(),
-              eventType: 'created',
-              actorId: actor.accountId,
-              actorRole: actor.role,
-              fromState: null,
-              toState: 'pending',
-              reasonCode: 'care_follow_up_created',
-              occurredAt: now,
-            },
-          );
-
-        if (!created) {
-          const concurrent =
-            await store.getByIdempotency({
-              tenantId: actor.tenantId,
-              institutionId: actor.institutionId,
-              idempotencyKey: input.idempotencyKey,
-            });
-
-          if (
-            concurrent
-            && concurrent.requestDigest === digest
-          ) {
-            return Object.freeze({
-              kind: 'ready' as const,
-              record: toDto(concurrent, actor),
-              idempotent: true as const,
-            });
-          }
-
-          return Object.freeze({
-            kind: 'conflict' as const,
-            code: 'create_conflict',
-          });
-        }
-
-        await auditChanged(
-          transactionDb,
-          actor,
-          created.taskId,
-          'create',
-          'care_follow_up_created',
-          now,
-        );
-
-        return Object.freeze({
-          kind: 'ready' as const,
-          record: toDto(created, actor),
-        });
-      },
-    );
-  } catch {
-    return Object.freeze({
-      kind: 'unavailable' as const,
-    });
-  }
+    const existing = await createFormalFollowUpRepositoryV1(database).getByIdempotency({ tenantId: actor.tenantId, institutionId: actor.institutionId, idempotencyKey: input.idempotencyKey });
+    if (existing) return existing.requestDigest === requestDigest(input)
+      ? { kind: 'ready', record: toDto(existing, actor), idempotent: true }
+      : { kind: 'conflict', code: 'idempotency_conflict' };
+    const attribution = await resolveInstitutionAuditWriterVerifiedAttributionV1(actor);
+    if (!attribution) return AUTH_UNAVAILABLE;
+    return await database.transaction(tx => createFormalFollowUpInTransactionV1(tx as unknown as TenantDatabase, actor, input, customer, assignment, attribution));
+  } catch { return AUTH_UNAVAILABLE; }
 }
 
 export async function mutateCurrentInstitutionFormalFollowUpV1(
@@ -1006,6 +996,8 @@ export async function mutateCurrentInstitutionFormalFollowUpV1(
   const database = getDatabase();
 
   try {
+    const attribution = await resolveInstitutionAuditWriterVerifiedAttributionV1(actor);
+    if (!attribution) return AUTH_UNAVAILABLE;
     return await database.transaction(
       async (transactionDatabase) => {
         const transactionDb =
@@ -1618,6 +1610,7 @@ export async function mutateCurrentInstitutionFormalFollowUpV1(
           'update',
           auditReason,
           occurredAt,
+          attribution,
         );
 
         return Object.freeze({

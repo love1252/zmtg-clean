@@ -481,10 +481,10 @@ describe('Approved prototype asset boundary', () => {
     expect(preparedHtml).toContain("label:'复购机会'");
     expect(preparedHtml).toContain("label:'沉默唤醒'");
     expect(preparedHtml).toContain(
-      '根据当前机构客户主档生命周期生成可审计的只读机会候选',
+      '根据客户生命周期筛选机会',
     );
     expect(preparedHtml).toContain(
-      '不创建正式 Opportunity，不启用旧机会池',
+      '进入客户详情核对证据、确认随访并查看执行结果',
     );
     expect(preparedHtml).toContain(
       "fetch('/api/v1/institution/opportunities?'+query.toString()",
@@ -505,7 +505,7 @@ describe('Approved prototype asset boundary', () => {
     );
     expect(preparedHtml).toContain('每页显示');
     expect(preparedHtml).toContain('经营机会候选暂不可用，请重新加载。');
-    expect(preparedHtml).toContain('当前未启用机会 Writer');
+    expect(preparedHtml).toContain('核对机会与执行结果');
   });
 
   it('预约指标、状态、日期与列表使用正式 Appointment Reader 并提供安全分页', () => {
