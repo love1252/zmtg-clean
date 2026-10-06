@@ -19,11 +19,12 @@ import { createCustomerSensitiveProfileRepositoryV1 } from '@/modules/customers/
 import { createAnalyticsConsumptionFactWriterV1 } from '@/modules/institution-analytics/server/analytics-consumption-fact-writer';
 import { createInstitutionExcelImportRepositoryV1 } from '@/modules/institution-import/server/institution-excel-import-repository';
 import {
+  INSTITUTION_EXCEL_IMPORT_MAX_ROWS,
   parseInstitutionExcelImportWorkbookV1,
   type InstitutionExcelImportWorkbookV1,
 } from '@/modules/institution-import/server/institution-excel-workbook-parser';
 import { checkTenantQuotaForUsage } from '@/modules/institution/server/tenant-quota-enforcement';
-import { encryptSecret } from '@/modules/security/server/secretEncryption';
+import { decryptSecret, encryptSecret } from '@/modules/security/server/secretEncryption';
 import { getDatabase, type TenantDatabase } from '@/server/db/client';
 import { resolveInstitutionAuditWriterVerifiedAttributionV1 } from '@/server/orchestration/institution-audit-writer-scope';
 import {
@@ -81,12 +82,65 @@ export type InstitutionExcelImportHistoryResultV1 =
   | Readonly<{
       kind: 'ready';
       records: readonly Readonly<{
+        batchId: string;
         completedAt: string;
         summary: InstitutionExcelImportSummaryV1;
       }>[];
     }>
   | Readonly<{
       kind: 'forbidden' | 'unavailable';
+      code: string;
+    }>;
+
+export const INSTITUTION_EXCEL_IMPORT_DETAIL_PAGE_SIZES = [10, 20, 50, 100] as const;
+
+export type InstitutionExcelImportDetailSheetV1 =
+  | 'customer'
+  | 'appointment'
+  | 'treatment'
+  | 'consumption';
+
+export type InstitutionExcelImportDetailRecordV1 = Readonly<{
+  rowNumber: number;
+  canonicalReference: string;
+  displayName?: string;
+  maskedPhone?: string;
+  gender?: string;
+  source?: string;
+  acquisitionSource?: string;
+  owner?: string;
+  createdAt?: string;
+  customerReference?: string;
+  occurredAt?: string;
+  project?: string;
+  practitioner?: string;
+  resource?: string;
+  department?: string;
+  status?: string;
+  amountMinor?: number;
+  currency?: string;
+  eventType?: string;
+}>;
+
+export type InstitutionExcelImportDetailResultV1 =
+  | Readonly<{
+      kind: 'ready';
+      batchId: string;
+      completedAt: string;
+      summary: InstitutionExcelImportSummaryV1;
+      sheet: InstitutionExcelImportDetailSheetV1;
+      records: readonly InstitutionExcelImportDetailRecordV1[];
+      pageInfo: Readonly<{
+        page: number;
+        pageSize: number;
+        total: number;
+        pageCount: number;
+        hasPrevious: boolean;
+        hasNext: boolean;
+      }>;
+    }>
+  | Readonly<{
+      kind: 'invalid' | 'forbidden' | 'not_found' | 'unavailable';
       code: string;
     }>;
 
@@ -125,12 +179,112 @@ function summary(workbook: InstitutionExcelImportWorkbookV1): InstitutionExcelIm
   return Object.freeze(result);
 }
 
+function historySummary(record: Readonly<{
+  customerCount: number;
+  appointmentCount: number;
+  treatmentCount: number;
+  consumptionCount: number;
+}>): InstitutionExcelImportSummaryV1 {
+  const counts = [record.customerCount, record.appointmentCount, record.treatmentCount, record.consumptionCount];
+  if (counts.some(count => !Number.isSafeInteger(count) || count < 0)
+    || record.customerCount < 1
+    || counts.reduce((total, count) => total + count, 0) > INSTITUTION_EXCEL_IMPORT_MAX_ROWS) {
+    throw new Error('invalid_import_batch_evidence');
+  }
+  return Object.freeze({
+    customers: record.customerCount,
+    appointments: record.appointmentCount,
+    treatments: record.treatmentCount,
+    consumptions: record.consumptionCount,
+    totalRows:
+      record.customerCount + record.appointmentCount
+      + record.treatmentCount + record.consumptionCount,
+  });
+}
+
 function maskPhone(phone: string) {
   return phone.length === 11 ? `${phone.slice(0, 3)}****${phone.slice(-4)}` : '已保护';
 }
 
 function maskReference(value: string) {
   return value ? `***${value.slice(-4)}` : '';
+}
+
+function safeDetailString(value: unknown, maxLength = 160) {
+  return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
+}
+
+function readProtectedImportRow(payload: Parameters<typeof decryptSecret>[0]) {
+  const parsed: unknown = JSON.parse(decryptSecret(payload));
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('invalid_import_row_evidence');
+  }
+  return parsed as Readonly<Record<string, unknown>>;
+}
+
+function detailRecord(
+  sheet: InstitutionExcelImportDetailSheetV1,
+  row: Readonly<{
+    rowNumber: number;
+    canonicalRecordId: string;
+    protectedPayload: Parameters<typeof decryptSecret>[0];
+  }>,
+): InstitutionExcelImportDetailRecordV1 {
+  const evidence = readProtectedImportRow(row.protectedPayload);
+  if (evidence.rowNumber !== row.rowNumber || typeof row.canonicalRecordId !== 'string' || !row.canonicalRecordId) {
+    throw new Error('invalid_import_row_evidence');
+  }
+  const canonicalReference = maskReference(row.canonicalRecordId);
+  if (sheet === 'customer') {
+    return Object.freeze({
+      rowNumber: row.rowNumber,
+      canonicalReference,
+      displayName: safeDetailString(evidence.displayName, 120),
+      maskedPhone: maskPhone(safeDetailString(evidence.phone, 32)),
+      gender: safeDetailString(evidence.gender, 20),
+      source: safeDetailString(evidence.source, 80),
+      acquisitionSource: safeDetailString(evidence.acquisitionSource, 80),
+      owner: safeDetailString(evidence.owner, 96),
+      createdAt: safeDetailString(evidence.createdAt, 40),
+    });
+  }
+  const base = {
+    rowNumber: row.rowNumber,
+    canonicalReference,
+    customerReference: maskReference(safeDetailString(evidence.customerExternalReference, 96)),
+    project: safeDetailString(evidence.project, 160),
+    source: safeDetailString(evidence.source, 80),
+    status: safeDetailString(evidence.status, 40),
+  };
+  if (sheet === 'appointment') {
+    return Object.freeze({
+      ...base,
+      occurredAt: safeDetailString(evidence.scheduledAt, 40),
+      practitioner: safeDetailString(evidence.consultant, 96),
+      resource: safeDetailString(evidence.resource, 160),
+    });
+  }
+  if (sheet === 'treatment') {
+    return Object.freeze({
+      ...base,
+      occurredAt: safeDetailString(evidence.treatmentAt, 40),
+      practitioner: safeDetailString(evidence.doctor, 96),
+      department: safeDetailString(evidence.department, 160),
+    });
+  }
+  if (typeof evidence.amountMinor !== 'number' || !Number.isSafeInteger(evidence.amountMinor)
+    || evidence.amountMinor < 1 || typeof evidence.currency !== 'string'
+    || !/^[A-Z]{3}$/u.test(evidence.currency)) {
+    throw new Error('invalid_import_row_evidence');
+  }
+  const amountMinor = evidence.amountMinor;
+  return Object.freeze({
+    ...base,
+    occurredAt: safeDetailString(evidence.eventAt, 40),
+    amountMinor,
+    currency: safeDetailString(evidence.currency, 8),
+    eventType: safeDetailString(evidence.eventType, 40),
+  });
 }
 
 function joinNotes(values: readonly [string, string][]) {
@@ -218,20 +372,99 @@ export async function listCurrentInstitutionExcelImportHistoryV1(): Promise<Inst
     return Object.freeze({
       kind: 'ready' as const,
       records: Object.freeze(records.map((record) => Object.freeze({
+        batchId: record.id,
         completedAt: record.completedAt.toISOString(),
-        summary: Object.freeze({
-          customers: record.customerCount,
-          appointments: record.appointmentCount,
-          treatments: record.treatmentCount,
-          consumptions: record.consumptionCount,
-          totalRows:
-            record.customerCount + record.appointmentCount
-            + record.treatmentCount + record.consumptionCount,
-        }),
+        summary: historySummary(record),
       }))),
     });
   } catch {
     return Object.freeze({ kind: 'unavailable', code: 'customer_import_unavailable' });
+  }
+}
+
+export async function getCurrentInstitutionExcelImportDetailV1(input: Readonly<{
+  batchId: string;
+  sheet: InstitutionExcelImportDetailSheetV1;
+  page: number;
+  pageSize: number;
+}>): Promise<InstitutionExcelImportDetailResultV1> {
+  if (
+    !/^imp-b-[0-9a-f]{48}$/u.test(input.batchId)
+    || !(['customer', 'appointment', 'treatment', 'consumption'] as const).includes(input.sheet)
+    || !Number.isInteger(input.page)
+    || input.page < 1
+    || input.page > 500
+    || !INSTITUTION_EXCEL_IMPORT_DETAIL_PAGE_SIZES.includes(
+      input.pageSize as (typeof INSTITUTION_EXCEL_IMPORT_DETAIL_PAGE_SIZES)[number],
+    )
+  ) {
+    return Object.freeze({ kind: 'invalid', code: 'invalid_customer_import_detail_query' });
+  }
+
+  const authorization = await authorizeImport();
+  if (authorization === 'forbidden') {
+    return Object.freeze({ kind: 'forbidden', code: 'customer_import_forbidden' });
+  }
+  if (!authorization) {
+    return Object.freeze({ kind: 'unavailable', code: 'customer_import_local_only' });
+  }
+
+  try {
+    const repository = createInstitutionExcelImportRepositoryV1(getDatabase());
+    const scope = {
+      tenantId: authorization.actor.tenantId,
+      institutionId: authorization.actor.institutionId,
+      batchId: input.batchId,
+    };
+    const batch = await repository.findCompletedBatch(scope);
+    if (!batch) {
+      return Object.freeze({ kind: 'not_found', code: 'customer_import_batch_not_found' });
+    }
+    if (batch.id !== input.batchId || !(batch.completedAt instanceof Date)
+      || !Number.isFinite(batch.completedAt.getTime())) {
+      throw new Error('invalid_import_batch_evidence');
+    }
+    const totals = historySummary(batch);
+    const totalBySheet = {
+      customer: totals.customers,
+      appointment: totals.appointments,
+      treatment: totals.treatments,
+      consumption: totals.consumptions,
+    } as const;
+    const total = totalBySheet[input.sheet];
+    const rows = await repository.listBatchRows({
+      ...scope,
+      sheetKind: input.sheet,
+      limit: input.pageSize,
+      offset: (input.page - 1) * input.pageSize,
+    });
+    const pageCount = total > 0 ? Math.ceil(total / input.pageSize) : 0;
+    const expectedRows = Math.min(input.pageSize, Math.max(0, total - (input.page - 1) * input.pageSize));
+    if (!Array.isArray(rows) || rows.length !== expectedRows || rows.some((row, index) =>
+      row.tenantId !== scope.tenantId || row.institutionId !== scope.institutionId
+      || row.batchId !== scope.batchId || row.sheetKind !== input.sheet
+      || !Number.isSafeInteger(row.rowNumber) || row.rowNumber < 5
+      || (index > 0 && row.rowNumber <= rows[index - 1].rowNumber))) {
+      throw new Error('invalid_import_row_evidence');
+    }
+    return Object.freeze({
+      kind: 'ready' as const,
+      batchId: batch.id,
+      completedAt: batch.completedAt.toISOString(),
+      summary: totals,
+      sheet: input.sheet,
+      records: Object.freeze(rows.map((row) => detailRecord(input.sheet, row))),
+      pageInfo: Object.freeze({
+        page: input.page,
+        pageSize: input.pageSize,
+        total,
+        pageCount,
+        hasPrevious: input.page > 1,
+        hasNext: input.page < pageCount,
+      }),
+    });
+  } catch {
+    return Object.freeze({ kind: 'unavailable', code: 'customer_import_detail_unavailable' });
   }
 }
 

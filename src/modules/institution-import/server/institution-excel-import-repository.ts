@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 
 import type { TenantDatabase } from '@/server/db/client';
 import {
@@ -35,6 +35,7 @@ export type InstitutionExcelImportRowRecordV1 = Readonly<{
 }>;
 
 export type InstitutionExcelImportHistoryRecordV1 = Readonly<{
+  id: string;
   completedAt: Date;
   customerCount: number;
   appointmentCount: number;
@@ -67,6 +68,7 @@ export function createInstitutionExcelImportRepositoryV1(database: TenantDatabas
     }>): Promise<readonly InstitutionExcelImportHistoryRecordV1[]> {
       return database
         .select({
+          id: institutionExcelImportBatches.id,
           completedAt: institutionExcelImportBatches.completedAt,
           customerCount: institutionExcelImportBatches.customerCount,
           appointmentCount: institutionExcelImportBatches.appointmentCount,
@@ -80,6 +82,60 @@ export function createInstitutionExcelImportRepositoryV1(database: TenantDatabas
         ))
         .orderBy(desc(institutionExcelImportBatches.completedAt))
         .limit(Math.min(Math.max(input.limit, 1), 20));
+    },
+    async findCompletedBatch(input: Readonly<{
+      tenantId: string;
+      institutionId: string;
+      batchId: string;
+    }>): Promise<InstitutionExcelImportHistoryRecordV1 | null> {
+      const [record] = await database
+        .select({
+          id: institutionExcelImportBatches.id,
+          completedAt: institutionExcelImportBatches.completedAt,
+          customerCount: institutionExcelImportBatches.customerCount,
+          appointmentCount: institutionExcelImportBatches.appointmentCount,
+          treatmentCount: institutionExcelImportBatches.treatmentCount,
+          consumptionCount: institutionExcelImportBatches.consumptionCount,
+        })
+        .from(institutionExcelImportBatches)
+        .where(and(
+          eq(institutionExcelImportBatches.tenantId, input.tenantId),
+          eq(institutionExcelImportBatches.institutionId, input.institutionId),
+          eq(institutionExcelImportBatches.id, input.batchId),
+        ))
+        .limit(1);
+      return record ?? null;
+    },
+    async listBatchRows(input: Readonly<{
+      tenantId: string;
+      institutionId: string;
+      batchId: string;
+      sheetKind: InstitutionExcelImportRowRecordV1['sheetKind'];
+      limit: number;
+      offset: number;
+    }>): Promise<readonly InstitutionExcelImportRowRecordV1[]> {
+      return database
+        .select({
+          id: institutionExcelImportRows.id,
+          tenantId: institutionExcelImportRows.tenantId,
+          institutionId: institutionExcelImportRows.institutionId,
+          batchId: institutionExcelImportRows.batchId,
+          sheetKind: institutionExcelImportRows.sheetKind,
+          rowNumber: institutionExcelImportRows.rowNumber,
+          externalReferenceDigest: institutionExcelImportRows.externalReferenceDigest,
+          canonicalRecordId: institutionExcelImportRows.canonicalRecordId,
+          protectedPayload: institutionExcelImportRows.protectedPayload,
+        })
+        .from(institutionExcelImportRows)
+        .where(and(
+          eq(institutionExcelImportRows.tenantId, input.tenantId),
+          eq(institutionExcelImportRows.institutionId, input.institutionId),
+          eq(institutionExcelImportRows.batchId, input.batchId),
+          eq(institutionExcelImportRows.sheetKind, input.sheetKind),
+        ))
+        .orderBy(asc(institutionExcelImportRows.rowNumber))
+        .limit(Math.min(Math.max(input.limit, 1), 100))
+        .offset(Math.max(input.offset, 0));
     },
     async createBatch(input: InstitutionExcelImportBatchRecordV1): Promise<void> {
       await database.insert(institutionExcelImportBatches).values(input);

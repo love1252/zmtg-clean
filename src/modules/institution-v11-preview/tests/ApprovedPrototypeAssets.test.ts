@@ -637,6 +637,20 @@ describe('Approved prototype asset boundary', () => {
     expect(preparedHtml).toContain("requestCustomerImport('PUT')");
     expect(preparedHtml).toContain("fetch('/api/institution/customers/import',{method:'GET'");
     expect(preparedHtml).toContain("if(action==='import-log')");
+    expect(preparedHtml).toContain('closeCustomerImportMenu()');
+    expect(preparedHtml).toContain('选择一个导入批次查看明细');
+    expect(preparedHtml).toContain('preview-import-history-action');
+    expect(preparedHtml).toContain('preview-import-history-row');
+    expect(preparedHtml).toContain(
+      "if(action==='preview-import-history-detail')",
+    );
+    expect(preparedHtml).toContain(
+      "if(action==='preview-import-detail-sheet')",
+    );
+    expect(preparedHtml).toContain('CUSTOMER_IMPORT_DETAIL_PAGE_SIZES=[10,20,50,100]');
+    expect(preparedHtml).toContain('data-import-detail-page-size');
+    expect(preparedHtml).toContain('preview-import-detail-scroll');
+    expect(preparedHtml).toContain('身份证号、外部患者 ID、订单号、HIS ID 和备注不在明细页展示');
     expect(preparedHtml).toContain('暂无真实导入记录');
     expect(preparedHtml).toContain('未展示原型静态记录');
     expect(preparedHtml).toContain('正在导入…');
