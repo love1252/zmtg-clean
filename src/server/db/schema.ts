@@ -4855,3 +4855,77 @@ export const conversationMessageResults = pgTable(
     ),
   }),
 );
+
+export const customerProfileSuggestions = pgTable('customer_profile_suggestions', {
+  id: varchar('id', { length: 64 }).notNull(),
+  tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+  institutionId: varchar('institution_id', { length: 64 }).notNull(),
+  customerId: varchar('customer_id', { length: 64 }).notNull(),
+  fieldName: varchar('field_name', { length: 24 }).notNull(),
+  beforeValue: varchar('before_value', { length: 160 }).notNull(),
+  proposedValue: varchar('proposed_value', { length: 120 }).notNull(),
+  sourceAppointmentId: varchar('source_appointment_id', { length: 64 }).notNull(),
+  sourceProject: varchar('source_project', { length: 120 }).notNull(),
+  sourceStatus: varchar('source_status', { length: 24 }).notNull(),
+  sourceScheduledAt: timestamp('source_scheduled_at', { withTimezone: true }).notNull(),
+  sourceUpdatedAt: timestamp('source_updated_at', { withTimezone: true }).notNull(),
+  sourceVersion: varchar('source_version', { length: 64 }).notNull(),
+  customerUpdatedAt: timestamp('customer_updated_at', { withTimezone: true }).notNull(),
+  ruleVersion: varchar('rule_version', { length: 64 }).notNull(),
+  fingerprint: varchar('fingerprint', { length: 64 }).notNull(),
+  state: varchar('state', { length: 24 }).$type<'pending' | 'applied' | 'rejected' | 'expired'>().notNull().default('pending'),
+  revision: integer('revision').notNull().default(1),
+  createdBy: varchar('created_by', { length: 96 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  creationAuditEventId: varchar('creation_audit_event_id', { length: 96 }).notNull(),
+  decidedBy: varchar('decided_by', { length: 96 }),
+  decidedRole: authRoleEnum('decided_role'),
+  decidedAt: timestamp('decided_at', { withTimezone: true }),
+  decisionAuditEventId: varchar('decision_audit_event_id', { length: 96 }),
+  reasonCode: varchar('reason_code', { length: 32 }),
+  appliedCustomerUpdatedAt: timestamp('applied_customer_updated_at', { withTimezone: true }),
+}, table => ({
+  pk: primaryKey({ name: 'customer_profile_suggestions_pk', columns: [table.tenantId, table.institutionId, table.id] }),
+  customerFk: foreignKey({ name: 'customer_profile_suggestions_customer_fk', columns: [table.tenantId, table.institutionId, table.customerId], foreignColumns: [customers.tenantId, customers.institutionId, customers.id] }),
+  appointmentFk: foreignKey({ name: 'customer_profile_suggestions_appointment_fk', columns: [table.tenantId, table.sourceAppointmentId], foreignColumns: [appointments.tenantId, appointments.id] }),
+  fingerprintUnique: unique('customer_profile_suggestions_fingerprint_unique').on(table.tenantId, table.institutionId, table.fingerprint),
+  customerIdx: index('customer_profile_suggestions_customer_idx').on(table.tenantId, table.institutionId, table.customerId, table.state, table.createdAt),
+  sourceIdx: index('customer_profile_suggestions_source_idx').on(table.tenantId, table.sourceAppointmentId),
+  ruleCheck: check('customer_profile_suggestions_rule_check', sql`${table.fieldName} = 'projectInterest' AND ${table.beforeValue} = '' AND length(trim(${table.proposedValue})) > 0 AND ${table.proposedValue} = ${table.sourceProject} AND ${table.sourceStatus} = 'confirmed' AND ${table.ruleVersion} = 'appointment-project.v1' AND ${table.sourceVersion} ~ '^[0-9a-f]{64}$' AND ${table.fingerprint} ~ '^[0-9a-f]{64}$' AND ${table.expiresAt} > ${table.createdAt}`),
+  stateCheck: check('customer_profile_suggestions_state_check', sql`(
+    ${table.state} = 'pending' AND ${table.revision} = 1 AND ${table.decidedBy} IS NULL AND ${table.decidedRole} IS NULL AND ${table.decidedAt} IS NULL AND ${table.decisionAuditEventId} IS NULL AND ${table.reasonCode} IS NULL AND ${table.appliedCustomerUpdatedAt} IS NULL
+  ) OR (
+    ${table.state} IN ('applied','rejected','expired') AND ${table.revision} = 2 AND ${table.decidedBy} IS NOT NULL AND ${table.decidedRole} IS NOT NULL AND ${table.decidedAt} IS NOT NULL AND ${table.decidedAt} >= ${table.createdAt} AND ${table.decisionAuditEventId} IS NOT NULL AND ${table.reasonCode} IS NOT NULL
+    AND ((${table.state} = 'applied' AND ${table.appliedCustomerUpdatedAt} IS NOT NULL AND ${table.appliedCustomerUpdatedAt} > ${table.customerUpdatedAt}) OR (${table.state} <> 'applied' AND ${table.appliedCustomerUpdatedAt} IS NULL))
+  )`),
+}));
+
+export const institutionOpportunityConfirmations = pgTable('institution_opportunity_confirmations', {
+  id: varchar('id', { length: 64 }).notNull(),
+  tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+  institutionId: varchar('institution_id', { length: 64 }).notNull(),
+  customerId: varchar('customer_id', { length: 64 }).notNull(),
+  opportunityType: varchar('opportunity_type', { length: 24 }).$type<'revisit' | 'repurchase' | 'reactivation'>().notNull(),
+  ruleVersion: varchar('rule_version', { length: 64 }).notNull(),
+  sourceVersion: varchar('source_version', { length: 80 }).notNull(),
+  sourceUpdatedAt: timestamp('source_updated_at', { withTimezone: true }).notNull(),
+  sourceLifecycle: customerLifecycleEnum('source_lifecycle').notNull(),
+  sourcePriority: customerPriorityEnum('source_priority').notNull(),
+  idempotencyKey: varchar('idempotency_key', { length: 128 }).notNull(),
+  requestDigest: varchar('request_digest', { length: 64 }).notNull(),
+  confirmedBy: varchar('confirmed_by', { length: 96 }).notNull(),
+  confirmedRole: authRoleEnum('confirmed_role').notNull(),
+  confirmedAt: timestamp('confirmed_at', { withTimezone: true }).notNull(),
+  followUpTaskId: varchar('follow_up_task_id', { length: 64 }).notNull(),
+  auditEventId: varchar('audit_event_id', { length: 96 }).notNull(),
+}, table => ({
+  pk: primaryKey({ name: 'institution_opportunity_confirmations_pk', columns: [table.tenantId, table.institutionId, table.id] }),
+  customerFk: foreignKey({ name: 'opportunity_confirmations_customer_fk', columns: [table.tenantId, table.institutionId, table.customerId], foreignColumns: [customers.tenantId, customers.institutionId, customers.id] }),
+  taskFk: foreignKey({ name: 'opportunity_confirmations_task_fk', columns: [table.tenantId, table.institutionId, table.followUpTaskId], foreignColumns: [careFormalFollowUpTasks.tenantId, careFormalFollowUpTasks.institutionId, careFormalFollowUpTasks.id] }),
+  keyUnique: unique('opportunity_confirmations_key_unique').on(table.tenantId, table.institutionId, table.idempotencyKey),
+  candidateUnique: unique('opportunity_confirmations_candidate_unique').on(table.tenantId, table.institutionId, table.customerId, table.opportunityType),
+  taskUnique: unique('opportunity_confirmations_task_unique').on(table.tenantId, table.institutionId, table.followUpTaskId),
+  historyIdx: index('opportunity_confirmations_history_idx').on(table.tenantId, table.institutionId, table.customerId, table.confirmedAt),
+  ruleCheck: check('opportunity_confirmations_rule_check', sql`${table.ruleVersion} = 'customer-lifecycle.v1' AND ${table.sourceVersion} ~ '^opp-src-v1:[0-9a-f]{64}$' AND ${table.requestDigest} ~ '^[0-9a-f]{64}$' AND ${table.confirmedRole} IN ('tenant_admin','tenant_operator') AND ((${table.opportunityType} = 'revisit' AND ${table.sourceLifecycle} = 'post_care') OR (${table.opportunityType} = 'repurchase' AND ${table.sourceLifecycle} = 'repurchase_window') OR (${table.opportunityType} = 'reactivation' AND ${table.sourceLifecycle} = 'silent_reactivation'))`),
+}));
