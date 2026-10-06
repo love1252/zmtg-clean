@@ -18,7 +18,7 @@ UI 对读取与写响应做严格校验；客户切换或卸载后的旧响应�
 
 - 真实 PostgreSQL：画像 20 项、机会 21 项，共 41 项通过。覆盖真实锁、事务、唯一约束、跨机构／跨客户、机构运营权限、普通员工任务可见性、来源变化、并发同键／不同键、跨客户键冲突、审计失败回滚，以及正式领取→执行→完成和取消回显。
 - 机会新接口和真实 React 组件：18 项通过；相关模块回归发现旧候选文案断言，已更新为人工确认入口并单独通过 25 项资源测试。
-- 隔离验证命令：`ZMTG_THIRD_BATCH_ISOLATED_TEST=1 pnpm test --config scripts/verify/third-batch-postgres.config.ts`。使用本任务新建空 PostgreSQL 和合成业务数据，授权及审计归属模拟，业务 SQL 与约束实际执行。
+- 隔离验证命令：`ZMTG_THIRD_BATCH_ISOLATED_TEST=1 pnpm run test --config scripts/verify/third-batch-postgres.config.ts`。使用本任务新建空 PostgreSQL 和合成业务数据，授权及审计归属模拟，业务 SQL 与约束实际执行。
 - 浏览器实际组件验收：核对来源、设置时间与任务池、勾选确认、创建结果与任务链接。接口使用合成响应；数据库闭环由上述集成测试独立覆盖，不声称通过真实会话或生产验收。
 - 截图位于仓库外 `zmtg-clean-archives/2026-10-06-third-batch-closure/opportunity-ready.png` 和 `opportunity-confirmed.png`。
 - 类型检查、改动文件 ESLint、构建和差异检查已通过；最终完整测试与增量架构检查随收口补记。
@@ -30,3 +30,18 @@ UI 对读取与写响应做严格校验；客户切换或卸载后的旧响应�
 本批完成既定首版三项：已知来源证据、明确规则生成画像补充建议及人工决定、经营机会确认与正式随访结果。通用数据去重、逐字段全量血缘、模型推断、沟通洞察、套餐推荐与成交归因不在本首版交付范围。
 
 回退先停用新增入口/API，保留确认、任务、建议及审计，不删除已经人工确认的业务事实。正式环境使用前仍需单独安排迁移与上线验收。历史完整 schema 导出存在无关的 tenant_members 外键目标唯一性问题，本次只对相关既有表基线和新增 0053 做隔离验证，未宣称历史全链迁移通过。
+
+## 从空隔离库复现
+
+使用本任务专用新建容器，已有同名容器或端口冲突时停止，不复用已有业务实例。以下命令不会读取项目环境文件：
+
+```sh
+docker --context colima run --rm -d --name zmtg-third-batch-test-20261006 -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=zmtg_third_batch_isolated_test -p 127.0.0.1:55486:5432 postgres:16.14-alpine
+docker --context colima exec zmtg-third-batch-test-20261006 pg_isready -U postgres
+env -u DATABASE_URL -u ZMTG_SECRET_ENCRYPTION_KEY ZMTG_THIRD_BATCH_ISOLATED_TEST=1 pnpm exec tsx scripts/verify/third-batch-postgres-setup.ts
+pnpm exec tsx scripts/verify/third-batch-isolated-postgres.ts postgresql://postgres@127.0.0.1:55486/zmtg_third_batch_isolated_test
+env -u DATABASE_URL -u ZMTG_SECRET_ENCRYPTION_KEY ZMTG_THIRD_BATCH_ISOLATED_TEST=1 pnpm run test --config scripts/verify/third-batch-postgres.config.ts
+docker --context colima stop zmtg-third-batch-test-20261006
+```
+
+准备脚本拒绝非空库；冻结 SQL fixture 来自既有七张相关表，仅用于合成测试，不代替生产迁移。已从第二个新建空实例重新执行准备、19项结构验证和运行时闭环，证明无需仓库外临时基线文件即可复现。Docker context 可按本机配置选择，专用端口与数据库名不能更改以绕过目标校验。

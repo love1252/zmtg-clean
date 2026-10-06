@@ -13,7 +13,7 @@ GET 只读取；POST 生成；PATCH 决定。双重校验原有客户与预约�
 ## 验证
 
 - 新接口与真实 React 组件：19 项通过，覆盖请求限制、状态码、来源选择、人工接受、结果未知后的重新加载、损坏 DTO、换客户和卸载后迟到响应。
-- 新建隔离 PostgreSQL：20 项通过，覆盖微秒版本兼容、生成与应用、拒绝、过期、来源／客户变更、双授权、跨客户／机构、并发生成、并发同向决定、并发接受／拒绝，以及审计失败整体回滚。执行命令为 `ZMTG_THIRD_BATCH_ISOLATED_TEST=1 pnpm test --config scripts/verify/third-batch-postgres.config.ts`，事先须按结构说明准备本任务空隔离实例。
+- 新建隔离 PostgreSQL：20 项通过，覆盖微秒版本兼容、生成与应用、拒绝、过期、来源／客户变更、双授权、跨客户／机构、并发生成、并发同向决定、并发接受／拒绝，以及审计失败整体回滚。执行命令为 `ZMTG_THIRD_BATCH_ISOLATED_TEST=1 pnpm run test --config scripts/verify/third-batch-postgres.config.ts`，事先须按结构说明准备本任务空隔离实例。
 - 客户、客户中心、V1.1、审计回归：38 个文件、396 项通过。类型检查、局部 ESLint 与差异检查通过。
 - 浏览器使用当前实际 React 组件、合成接口和隔离页面，验证选预约→生成→查看证据→接受→主档刷新及历史保留。截图保存于仓库外 `zmtg-clean-archives/2026-10-06-third-batch-closure/profile-pending.png` 和 `profile-applied.png`。
 - 身份与审计归属在隔离集成测试中模拟，业务仓库、锁、事务、约束和审计入库实际使用 PostgreSQL；不声称完成真实会话或生产验收。
