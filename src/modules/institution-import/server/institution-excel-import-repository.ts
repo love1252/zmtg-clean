@@ -2,6 +2,7 @@ import { and, asc, desc, eq } from 'drizzle-orm';
 
 import type { TenantDatabase } from '@/server/db/client';
 import {
+  customers,
   institutionExcelImportBatches,
   institutionExcelImportRows,
 } from '@/server/db/schema';
@@ -45,6 +46,44 @@ export type InstitutionExcelImportHistoryRecordV1 = Readonly<{
 
 export function createInstitutionExcelImportRepositoryV1(database: TenantDatabase) {
   return Object.freeze({
+    async readCustomerSourceSnapshot(input: Readonly<{
+      tenantId: string;
+      institutionId: string;
+      customerId: string;
+    }>) {
+      return database.transaction(async (transaction) => {
+        const [customer] = await transaction.select({ id: customers.id, updatedAt: customers.updatedAt })
+          .from(customers)
+          .where(and(
+            eq(customers.tenantId, input.tenantId),
+            eq(customers.institutionId, input.institutionId),
+            eq(customers.id, input.customerId),
+          ))
+          .limit(1);
+        if (!customer) return { customer: null, rows: [] };
+        const rows = await transaction.select({
+          batchId: institutionExcelImportRows.batchId,
+          rowNumber: institutionExcelImportRows.rowNumber,
+          matchedBatchId: institutionExcelImportBatches.id,
+          completedAt: institutionExcelImportBatches.completedAt,
+        })
+          .from(institutionExcelImportRows)
+          .leftJoin(institutionExcelImportBatches, and(
+            eq(institutionExcelImportBatches.tenantId, input.tenantId),
+            eq(institutionExcelImportBatches.institutionId, input.institutionId),
+            eq(institutionExcelImportBatches.id, institutionExcelImportRows.batchId),
+          ))
+          .where(and(
+            eq(institutionExcelImportRows.tenantId, input.tenantId),
+            eq(institutionExcelImportRows.institutionId, input.institutionId),
+            eq(institutionExcelImportRows.sheetKind, 'customer'),
+            eq(institutionExcelImportRows.canonicalRecordId, input.customerId),
+          ))
+          .orderBy(asc(institutionExcelImportRows.batchId), asc(institutionExcelImportRows.rowNumber))
+          .limit(2);
+        return { customer, rows };
+      }, { isolationLevel: 'repeatable read', accessMode: 'read only' });
+    },
     async hasCompletedFile(input: Readonly<{
       tenantId: string;
       institutionId: string;

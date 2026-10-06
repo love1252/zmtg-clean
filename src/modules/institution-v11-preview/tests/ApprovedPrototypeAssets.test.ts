@@ -468,7 +468,7 @@ describe('Approved prototype asset boundary', () => {
     );
   });
 
-  it('经营机会使用正式客户 Reader 的只读投影并支持分页与独立滚动', () => {
+  it('经营机会使用服务端只读候选查询并支持分页与独立滚动', () => {
     const preparedHtml = prepareApprovedPrototypeHtml([
       '<!doctype html>',
       '<html><head></head><body>',
@@ -481,13 +481,13 @@ describe('Approved prototype asset boundary', () => {
     expect(preparedHtml).toContain("label:'复购机会'");
     expect(preparedHtml).toContain("label:'沉默唤醒'");
     expect(preparedHtml).toContain(
-      '根据当前机构客户主档生命周期生成可审计的只读机会候选',
+      '根据客户生命周期筛选机会',
     );
     expect(preparedHtml).toContain(
-      '不创建正式 Opportunity，不启用旧机会池',
+      '进入客户详情核对证据、确认随访并查看执行结果',
     );
     expect(preparedHtml).toContain(
-      'fetch(customerListUrl(page,100,definition.lifecycle,priority,{})',
+      "fetch('/api/v1/institution/opportunities?'+query.toString()",
     );
     expect(preparedHtml).not.toContain(
       "fetch('/api/institution/opportunities'",
@@ -504,8 +504,8 @@ describe('Approved prototype asset boundary', () => {
       '.preview-opportunity-runtime-card{overflow:hidden!important}',
     );
     expect(preparedHtml).toContain('每页显示');
-    expect(preparedHtml).toContain('未回退到旧机会池或原型 Demo');
-    expect(preparedHtml).toContain('当前未启用机会 Writer');
+    expect(preparedHtml).toContain('经营机会候选暂不可用，请重新加载。');
+    expect(preparedHtml).toContain('核对机会与执行结果');
   });
 
   it('预约指标、状态、日期与列表使用正式 Appointment Reader 并提供安全分页', () => {

@@ -2694,6 +2694,51 @@ describe('机构业务页面壳', () => {
     expect(serializedBody).not.toContain('consultationTranscript');
   });
 
+  it('智能随访初始草稿空列表迟到时不会覆盖已创建草稿', async () => {
+    const initialDrafts = deferredResponse();
+    const fetchMock = mockInstitutionFetch({
+      '/api/institution/followups': [jsonResponse({ records: [treatmentSummaryFollowUpRecord] })],
+      '/api/institution/followup-message-drafts': [jsonResponse({
+        record: {
+          draftId: 'draft_created_before_initial_list',
+          followUpTaskId: 'fu_treatment_summary_source',
+          customerId: 'cust_wang_repurchase',
+          customerDisplayName: '陈女士',
+          channelType: 'manual',
+          status: 'draft',
+          safePreview: '人工核对恢复情况。',
+          draftContent: '人工核对恢复情况。',
+          editedContent: null,
+          approvedAt: null,
+          markedSentAt: null,
+          safeReasonCode: 'fallback_generated',
+          createdAt: '2026-07-06T08:00:00.000Z',
+          updatedAt: '2026-07-06T08:00:00.000Z',
+        },
+      }, { status: 201 })],
+    });
+    vi.stubGlobal('fetch', vi.fn((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
+      fetchPath(input) === '/api/institution/followup-message-drafts?taskId=fu_treatment_summary_source'
+        ? initialDrafts.promise
+        : fetchMock(input, init)));
+    render(<SmartFollowUpShell />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '生成草稿' }));
+    expect(await screen.findByText('草稿待确认')).toBeInTheDocument();
+
+    await act(async () => {
+      initialDrafts.resolve(jsonResponse({ records: [] }));
+      await initialDrafts.promise;
+    });
+
+    expect(screen.getByText('草稿待确认')).toBeInTheDocument();
+    expect(screen.getByLabelText('草稿内容')).toHaveValue('人工核对恢复情况。');
+    expect(screen.queryByRole('button', { name: '生成草稿' })).not.toBeInTheDocument();
+    expect(mutationBody(fetchMock, '/api/institution/followup-message-drafts', 'POST')).toEqual({
+      followUpTaskId: 'fu_treatment_summary_source',
+    });
+  });
+
   it('智能随访展示消息草稿状态、人工边界并提交草稿白名单 payload', async () => {
     const fetchMock = mockInstitutionFetch({
       '/api/institution/followups': [jsonResponse({ records: [treatmentSummaryFollowUpRecord] })],

@@ -55,9 +55,10 @@ function operational(status: CapabilityStatusV1 | null): boolean {
 }
 
 export default async function HospitalCustomerDetailPage({
-  params,
+  params, searchParams,
 }: Readonly<{
   params: Promise<{ customerId: string }>;
+  searchParams?: Promise<{ tab?: string | string[] }>;
 }>) {
   let navigationAuthorization: unknown;
 
@@ -93,6 +94,8 @@ export default async function HospitalCustomerDetailPage({
   const capabilityOperational = operational(capabilityStatus);
 
   const { customerId } = await params;
+  const tab = (await searchParams)?.tab;
+  const initialTab = tab === 'profile' || tab === 'opportunities' ? tab : 'overview';
   const result =
     genuineAllowed && capabilityOperational
       ? await readCurrentInstitutionCustomerControlledV1(customerId).catch(() => ({
@@ -108,7 +111,7 @@ export default async function HospitalCustomerDetailPage({
       workspaceScopeKey={workspaceScopeKey}
     >
       {result?.kind === 'ready' ? (
-        <CustomerControlledDetailShell record={result.record} />
+        <CustomerControlledDetailShell key={`${customerId}:${initialTab}`} record={result.record} initialTab={initialTab} />
       ) : genuineBlocked || result?.kind === 'forbidden' ? (
         <InstitutionPageState
           kind="forbidden"

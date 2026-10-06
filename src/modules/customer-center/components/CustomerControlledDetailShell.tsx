@@ -2,7 +2,9 @@
 'use client';
 
 import Link from 'next/link';
-import { Bot, CalendarDays, MessageSquareText, Sparkles } from 'lucide-react';
+import { OpportunityConfirmationPanel } from '@/modules/opportunities/components/OpportunityConfirmationPanel';
+import { CustomerProfileSuggestionPanel } from './CustomerProfileSuggestionPanel';
+import { CalendarDays, MessageSquareText, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 
 import type { CustomerControlledDtoV1 } from '@/modules/customers/application/customer-controlled-view';
@@ -15,9 +17,10 @@ import {
 } from '@/modules/institution-v11/components/InstitutionV11Ui';
 
 export function CustomerControlledDetailShell({
-  record,
+  record, initialTab = 'overview',
 }: Readonly<{
   record: CustomerControlledDtoV1;
+  initialTab?: 'overview' | 'profile' | 'opportunities';
 }>) {
   const [displayName, setDisplayName] = useState(record.displayName);
   const [lifecycle, setLifecycle] = useState(record.lifecycle);
@@ -26,10 +29,11 @@ export function CustomerControlledDetailShell({
   const [projectInterest, setProjectInterest] = useState(record.projectInterest);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState<string>(initialTab);
   const pageTabs = [
     { id: 'overview', label: '概览' },
     { id: 'profile', label: '客户画像' },
+    { id: 'opportunities', label: '经营机会' },
     { id: 'appointments', label: '预约与服务' },
     { id: 'followups', label: '随访记录' },
     { id: 'communications', label: '沟通记录' },
@@ -198,20 +202,18 @@ export function CustomerControlledDetailShell({
         </div>
       </div> : activeTab === 'profile' ? (
         <div className="space-y-4">
-          <InstitutionV11CapabilityBanner title="AI 能力与 Evidence 契约未开放" description="客户事实、AI 推断和经营建议严格分区；当前不生成画像、套餐或经营建议。" state="CAPABILITY_OFF" source="Customer Canonical Owner / AI Evidence" />
+          <CustomerProfileSuggestionPanel customerId={record.customerId} onApplied={() => window.location.reload()} />
+          <InstitutionV11CapabilityBanner title="其他画像能力暂未开放" description="上方项目意向建议由明确规则生成并经人工决定；沟通洞察和套餐建议仍待接入。" state="CAPABILITY_OFF" source="客户资料与预约事实" />
           <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
             {[
-              { title: '画像概览', Icon: Bot, description: 'AI Provider 未配置' },
               { title: '沟通洞察', Icon: MessageSquareText, description: '会话 Evidence 未开放' },
-              { title: '经营建议', Icon: Sparkles, description: '策略模型未开放' },
               { title: '套餐建议', Icon: Sparkles, description: '消费与套餐事实未开放' },
-              { title: '证据来源', Icon: Bot, description: 'Evidence 契约未开放' },
             ].map(({ title, Icon, description }) => (
               <InstitutionV11Surface key={title} title={title}><InstitutionV11EmptyState icon={Icon} title={description} description="页面结构已还原，不会使用演示内容冒充正式能力。" /></InstitutionV11Surface>
             ))}
           </div>
         </div>
-      ) : (
+      ) : activeTab === 'opportunities' ? <OpportunityConfirmationPanel customerId={record.customerId} /> : (
         <InstitutionV11Surface>
           <InstitutionV11EmptyState
             icon={activeTab === 'appointments' ? CalendarDays : activeTab === 'communications' ? MessageSquareText : Sparkles}
