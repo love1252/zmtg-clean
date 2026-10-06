@@ -5286,9 +5286,15 @@ describe('S43 Membership legacy adoption physical constraint', () => {
     };
     const frozenEntries = journal.entries.slice(0, 46);
 
-    expect(journal.entries).toHaveLength(53);
+    expect(journal.entries[53]).toEqual({
+      idx: 53, version: '7', when: 1791263431786,
+      tag: '0053_third_batch_human_decisions', breakpoints: true,
+    });
+    expect(journal.entries[53]?.when).toBeGreaterThan(journal.entries[52]?.when ?? 0);
+
+    expect(journal.entries).toHaveLength(54);
     expect(journal.entries.map((entry) => entry.idx)).toEqual(
-      Array.from({ length: 53 }, (_, index) => index),
+      Array.from({ length: 54 }, (_, index) => index),
     );
     expect(
       createHash('sha256').update(JSON.stringify(frozenEntries)).digest('hex'),
