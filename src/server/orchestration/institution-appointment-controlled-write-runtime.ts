@@ -770,3 +770,5 @@ export async function mutateCurrentInstitutionAppointmentControlledV1(
     });
   }
 }
+
+export { authorize as authorizeInstitutionAppointmentControlledV1 };

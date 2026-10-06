@@ -1,0 +1,53 @@
+# OPPORTUNITY-CONFIRM-01：经营机会人工确认与执行结果
+
+2026-10-06，Asia/Shanghai。用户授权第三批全部开发，包括两张表、离线迁移与隔离测试。分支 `codex/third-batch-opportunity-confirmation-20261006` 基于画像提交 `8db9b928`；主线为 `f19a42a8`。未执行真实数据库迁移、外部业务调用、正式发布或合并。
+
+## 交付行为
+
+客户详情新增“经营机会”；V1.1 候选抽屉进入该标签，客户抽屉直接进入画像标签。来源仍是当前机构客户主档生命周期，覆盖复诊、复购、沉默唤醒三类。候选按明确规则生成，工作人员核对来源、指定截止时间和角色任务池、勾选确认后才创建正式随访。历史记录读取正式任务的当前状态及完成／取消原因；不把完成随访表述为成交，不自动发消息或变更客户生命周期。
+
+`GET /api/v1/institution/opportunities/confirmations?customerId=...` 只读；同路径 POST 确认。客户与随访双授权必须具有相同账号、角色、租户和机构；创建另需已发布的随访创建能力，且仅机构管理员和机构运营可确认。普通员工的历史记录经过原随访对象可见性过滤。响应不返回负责人账号、反馈正文、请求摘要或幂等键。
+
+锁定当前客户后重验类型、来源摘要及已有确认。确认、正式任务、created 事件、随访创建审计和机会确认审计在同一事务。相同幂等键与请求重放原结果，改变请求冲突；不同键也不能重复确认同一客户的同类机会。跨客户并发占用同一键时，败方整笔回滚后重读胜出记录。普通客户更新时间变化不产生新一轮机会；首版没有撤销确认或重新开轮次。
+
+沿用正式随访的创建解析、分配校验、状态机与审计，仅提取可接收事务连接的创建核心。审计归属在事务前解析，避免单连接池自等待；手工创建入口保留幂等快查。原有改派个人的成员查询仍是既有实现，本任务未扩展改派功能。
+
+UI 对读取与写响应做严格校验；客户切换或卸载后的旧响应失效。未知提交结果冻结原请求并保留原键重试；重新加载历史发现已确认则关闭重试入口。刷新任何来源后必须重新勾选核对，防止沿用旧证据确认。
+
+## 验证
+
+- 真实 PostgreSQL：画像 20 项、机会 21 项，共 41 项通过。覆盖真实锁、事务、唯一约束、跨机构／跨客户、机构运营权限、普通员工任务可见性、来源变化、并发同键／不同键、跨客户键冲突、审计失败回滚，以及正式领取→执行→完成和取消回显。
+- 机会新接口和真实 React 组件：18 项通过；相关模块回归发现旧候选文案断言，已更新为人工确认入口并单独通过 25 项资源测试；最终全仓 611 个测试文件、8,025 项全部通过。
+- 隔离验证命令：`ZMTG_THIRD_BATCH_ISOLATED_TEST=1 pnpm run test --config scripts/verify/third-batch-postgres.config.ts`。使用本任务新建空 PostgreSQL 和合成业务数据，授权及审计归属模拟，业务 SQL 与约束实际执行。
+- 浏览器实际组件验收：核对来源、设置时间与任务池、勾选确认、创建结果与任务链接。接口使用合成响应；数据库闭环由上述集成测试独立覆盖，不声称通过真实会话或生产验收。
+- 截图位于仓库外 `zmtg-clean-archives/2026-10-06-third-batch-closure/opportunity-ready.png` 和 `opportunity-confirmed.png`。
+- 全仓 ESLint、类型检查、最终构建和差异检查均通过。业务改动提交 `c049f5ce` 相对画像基线的增量架构检查已通过；补充隔离准备脚本后的 `1fde67e4` 相对画像基线 `baaa1c3a` 也通过增量架构检查，未发现新增违规。
+
+## 依赖、范围与回滚
+
+依赖顺序为来源证据→机会候选→0053 存储→画像→机会确认；治理变更独立。此次超过 5 个核心文件是同一事务闭环需要契约、仓库、编排、共享随访核心、API 和 UI 同步，另含客户详情及既有 V1.1 入口接线，无依赖升级和后台任务。
+
+本批完成既定首版三项：已知来源证据、明确规则生成画像补充建议及人工决定、经营机会确认与正式随访结果。通用数据去重、逐字段全量血缘、模型推断、沟通洞察、套餐推荐与成交归因不在本首版交付范围。
+
+回退先停用新增入口/API，保留确认、任务、建议及审计，不删除已经人工确认的业务事实。正式环境使用前仍需单独安排迁移与上线验收。历史完整 schema 导出存在无关的 tenant_members 外键目标唯一性问题，本次只对相关既有表基线和新增 0053 做隔离验证，未宣称历史全链迁移通过。
+
+## 从空隔离库复现
+
+使用本任务专用新建容器，已有同名容器或端口冲突时停止，不复用已有业务实例。以下命令不会读取项目环境文件：
+
+```sh
+docker --context colima run --rm -d --name zmtg-third-batch-test-20261006 -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=zmtg_third_batch_isolated_test -p 127.0.0.1:55486:5432 postgres:16.14-alpine
+docker --context colima exec zmtg-third-batch-test-20261006 pg_isready -U postgres
+env -u DATABASE_URL -u ZMTG_SECRET_ENCRYPTION_KEY ZMTG_THIRD_BATCH_ISOLATED_TEST=1 pnpm exec tsx scripts/verify/third-batch-postgres-setup.ts
+pnpm exec tsx scripts/verify/third-batch-isolated-postgres.ts postgresql://postgres@127.0.0.1:55486/zmtg_third_batch_isolated_test
+env -u DATABASE_URL -u ZMTG_SECRET_ENCRYPTION_KEY ZMTG_THIRD_BATCH_ISOLATED_TEST=1 pnpm run test --config scripts/verify/third-batch-postgres.config.ts
+docker --context colima stop zmtg-third-batch-test-20261006
+```
+
+准备脚本拒绝非空库；冻结 SQL fixture 来自既有七张相关表，仅用于合成测试，不代替生产迁移。已从第二个新建空实例重新执行准备、19项结构验证和运行时闭环，证明无需仓库外临时基线文件即可复现。Docker context 可按本机配置选择，专用端口与数据库名不能更改以绕过目标校验。
+
+## 开发收口
+
+全仓 611 个文件、8,025 项测试通过；隔离 PostgreSQL 19 项结构检查与 41 项运行时测试通过。全仓 ESLint、类型检查、构建、增量架构检查及浏览器合成交互验收通过。准备脚本重复执行验证为非空库拒绝。临时测试容器与页面服务已清理。
+
+所有功能修改已提交并推送；PR #1287 依赖 #1286→#1285→#1283→#1282，治理独立为 #1284。收口时 GitHub 新一轮门禁尚在运行，保持草稿；未合并、未推进真实迁移或部署。主工作区 main 与 origin/main 均为 `f19a42a8`，工作树干净。
