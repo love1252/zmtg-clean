@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Loader2,
@@ -276,6 +276,7 @@ export function SmartFollowUpShell() {
   const [enrollmentErrorState, setEnrollmentErrorState] = useState<InstitutionPageStateProps | null>(null);
   const [taskErrors, setTaskErrors] = useState<Record<string, string>>({});
   const [draftsByTaskId, setDraftsByTaskId] = useState<Record<string, FollowUpMessageDraftDto[]>>({});
+  const draftRevisionsByTaskId = useRef(new Map<string, number>());
   const [draftEdits, setDraftEdits] = useState<Record<string, string>>({});
   const [draftErrors, setDraftErrors] = useState<Record<string, string>>({});
   const [controlledReachOutByDraftId, setControlledReachOutByDraftId] = useState<Record<string, WeComControlledReachOutPreflight>>({});
@@ -397,13 +398,20 @@ export function SmartFollowUpShell() {
 
       const entries = await Promise.all(
         tasks.map(async (task) => {
+          const revision = draftRevisionsByTaskId.current.get(task.id) ?? 0;
           const result = await listFollowUpMessageDrafts(task.id);
-          return [task.id, result.ok ? result.records : []] as const;
+          return [task.id, result.ok ? result.records : [], revision] as const;
         }),
       );
 
       if (!isActive) return;
-      setDraftsByTaskId(Object.fromEntries(entries));
+      // 读取开始后已成功更新的草稿，不被迟到的旧列表覆盖。
+      setDraftsByTaskId((current) => Object.fromEntries(entries.map(([taskId, records, revision]) => [
+        taskId,
+        (draftRevisionsByTaskId.current.get(taskId) ?? 0) === revision
+          ? records
+          : current[taskId] ?? [],
+      ])));
     }
 
     void loadDraftsForTasks();
@@ -482,6 +490,7 @@ export function SmartFollowUpShell() {
   }
 
   function replaceDraft(taskId: string, draft: FollowUpMessageDraftDto) {
+    draftRevisionsByTaskId.current.set(taskId, (draftRevisionsByTaskId.current.get(taskId) ?? 0) + 1);
     setDraftsByTaskId((current) => ({
       ...current,
       [taskId]: [draft, ...(current[taskId] ?? []).filter((item) => item.draftId !== draft.draftId)],
