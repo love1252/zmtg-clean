@@ -94,6 +94,27 @@ export type InstitutionExcelImportHistoryResultV1 =
 
 export const INSTITUTION_EXCEL_IMPORT_DETAIL_PAGE_SIZES = [10, 20, 50, 100] as const;
 
+export type CustomerSourceEvidenceResultV1 =
+  | Readonly<{
+      kind: 'ready';
+      contractVersion: 'customer-source-evidence.v1';
+      customerId: string;
+      customerUpdatedAt: string;
+      observedAt: string;
+      evidence:
+        | Readonly<{
+            status: 'recorded';
+            importRecord: Readonly<{
+              batchId: string;
+              sheetKind: 'customer';
+              rowNumber: number;
+              completedAt: string;
+            }>;
+          }>
+        | Readonly<{ status: 'not_recorded' | 'ambiguous'; importRecord: null }>;
+    }>
+  | Readonly<{ kind: 'forbidden' | 'not_found' | 'unavailable'; code: string }>;
+
 export type InstitutionExcelImportDetailSheetV1 =
   | 'customer'
   | 'appointment'
@@ -379,6 +400,62 @@ export async function listCurrentInstitutionExcelImportHistoryV1(): Promise<Inst
     });
   } catch {
     return Object.freeze({ kind: 'unavailable', code: 'customer_import_unavailable' });
+  }
+}
+
+export async function readCurrentInstitutionCustomerSourceEvidenceV1(
+  customerId: string,
+): Promise<CustomerSourceEvidenceResultV1> {
+  if (typeof customerId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/u.test(customerId)) {
+    return Object.freeze({ kind: 'not_found', code: 'customer_source_not_found' });
+  }
+  const authorization = await authorizeImport();
+  if (authorization === 'forbidden') {
+    return Object.freeze({ kind: 'forbidden', code: 'customer_source_forbidden' });
+  }
+  if (!authorization) {
+    return Object.freeze({ kind: 'unavailable', code: 'customer_source_unavailable' });
+  }
+  try {
+    const snapshot = await createInstitutionExcelImportRepositoryV1(getDatabase()).readCustomerSourceSnapshot({
+      tenantId: authorization.actor.tenantId,
+      institutionId: authorization.actor.institutionId,
+      customerId,
+    });
+    if (!snapshot.customer) {
+      return Object.freeze({ kind: 'not_found', code: 'customer_source_not_found' });
+    }
+    const { customer, rows } = snapshot;
+    const validDate = (value: unknown): value is Date => value instanceof Date && Number.isFinite(value.getTime());
+    if (customer.id !== customerId || !validDate(customer.updatedAt)
+      || !Array.isArray(rows) || rows.length > 2
+      || rows.some(row => !/^imp-b-[0-9a-f]{48}$/u.test(row.batchId)
+        || row.matchedBatchId !== row.batchId || !validDate(row.completedAt)
+        || !Number.isSafeInteger(row.rowNumber) || row.rowNumber < 5)) {
+      throw new Error('invalid_customer_source_metadata');
+    }
+    const row = rows[0];
+    const evidence: Extract<CustomerSourceEvidenceResultV1, { kind: 'ready' }>['evidence'] = rows.length === 1
+      ? Object.freeze({
+          status: 'recorded',
+          importRecord: Object.freeze({
+            batchId: row.batchId,
+            sheetKind: 'customer',
+            rowNumber: row.rowNumber,
+            completedAt: row.completedAt!.toISOString(),
+          }),
+        })
+      : Object.freeze({ status: rows.length === 0 ? 'not_recorded' : 'ambiguous', importRecord: null });
+    return Object.freeze({
+      kind: 'ready',
+      contractVersion: 'customer-source-evidence.v1',
+      customerId,
+      customerUpdatedAt: customer.updatedAt.toISOString(),
+      observedAt: new Date().toISOString(),
+      evidence,
+    });
+  } catch {
+    return Object.freeze({ kind: 'unavailable', code: 'customer_source_unavailable' });
   }
 }
 
