@@ -44,7 +44,7 @@ describe('机构知识上传与正式发布持久化边界', () => {
       resolve(process.cwd(), 'drizzle/meta/_journal.json'),
       'utf8',
     )) as { entries: Array<Record<string, unknown>> };
-    expect(journal.entries).toHaveLength(53);
+    expect(journal.entries).toHaveLength(54);
     expect(journal.entries[51]?.tag).toBe('0051_institution_local_excel_import');
     expect(journal.entries[52]).toEqual({
       idx: 52,
