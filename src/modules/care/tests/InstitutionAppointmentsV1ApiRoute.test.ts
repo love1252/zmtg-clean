@@ -79,6 +79,16 @@ beforeEach(() => {
 });
 
 describe('/api/v1/institution/appointments', () => {
+  it('未来预约查询完整传递日期、分页及筛选条件，只读取列表', async () => {
+    const query = 'startDate=2026-12-31&endDate=2027-01-02&page=2&pageSize=50&status=confirmed';
+    const response = await GET(new Request(`http://localhost/api/v1/institution/appointments?${query}`));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(mocks.readAppointments).toHaveBeenCalledTimes(1);
+    expect(mocks.readAppointments.mock.calls[0]?.[0].toString()).toBe(query);
+    expect(mocks.createAppointment).not.toHaveBeenCalled();
+  });
+
   it('GET 返回当前机构预约列表所需的精确只读契约', async () => {
     const response = await GET(
       new Request(

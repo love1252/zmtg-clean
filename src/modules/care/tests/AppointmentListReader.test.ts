@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   APPOINTMENT_LIST_MAX_OFFSET_V1,
@@ -52,6 +52,31 @@ function read(
 }
 
 describe('Care appointment formal list Reader', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it.each([
+    ['2026-10-07', '2026-10-07', '2026-10-06T16:00:00.000Z', '2026-10-07T16:00:00.000Z'],
+    ['2026-10-31', '2026-11-01', '2026-10-30T16:00:00.000Z', '2026-11-01T16:00:00.000Z'],
+    ['2026-12-31', '2027-01-02', '2026-12-30T16:00:00.000Z', '2027-01-02T16:00:00.000Z'],
+    ['2028-02-28', '2028-03-01', '2028-02-27T16:00:00.000Z', '2028-03-01T16:00:00.000Z'],
+    ['2020-01-01', '2999-01-02', '2019-12-31T16:00:00.000Z', '2999-01-02T16:00:00.000Z'],
+    ['9999-12-31', '9999-12-31', '9999-12-30T16:00:00.000Z', '9999-12-31T16:00:00.000Z'],
+  ])('预约范围 %s 至 %s 支持未来日期并对列表和汇总使用相同上海日界线', async (startDate, endDate, scheduledFrom, scheduledBefore) => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-06T15:59:59.999Z'));
+    const { reader, list, summarize } = createReader([{ ...baseRow, scheduledAt: `${startDate}T02:00:00.000Z` }]);
+
+    await expect(read(reader, new URLSearchParams({ startDate, endDate }).toString())).resolves.toMatchObject({
+      kind: 'ready',
+      records: [{ scheduledAt: `${startDate}T02:00:00.000Z` }],
+      pageInfo: { total: 1 },
+      summary: { total: 1 },
+    });
+    const bounds = { tenantId: 'tenant-001', institutionId: 'institution-001', scheduledFrom, scheduledBefore };
+    expect(list).toHaveBeenCalledWith(expect.objectContaining(bounds));
+    expect(summarize).toHaveBeenCalledWith(expect.objectContaining(bounds));
+  });
+
   it('发布预约列表所需 exact 7-field v1 DTO，attribution pair 仅下推 source', async () => {
     const { reader, list, summarize } = createReader();
     const result = await read(reader);
@@ -228,7 +253,9 @@ describe('Care appointment formal list Reader', () => {
     'endDate=2026-08-16',
     'startDate=2026-08-17&endDate=2026-08-16',
     'startDate=2026-02-30&endDate=2026-03-01',
-    'startDate=2999-01-01&endDate=2999-01-02',
+    'startDate=2027-02-29&endDate=2027-03-01',
+    'startDate=10000-01-01&endDate=10000-01-01',
+    'startDate=2026-10-07&startDate=2026-10-08&endDate=2026-10-09',
     'q=',
     'q=%20appointment',
     `q=${'a'.repeat(81)}`,

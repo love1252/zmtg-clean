@@ -691,16 +691,16 @@ describe('Approved prototype asset boundary', () => {
     expect(preparedHtml).toContain("action:'preview-date-apply'");
     expect(preparedHtml).toContain("state.dateSelection[datePickerDraft.target]");
     expect(preparedHtml).toContain("button.setAttribute('aria-haspopup','dialog')");
-    expect(preparedHtml).toContain("const future=iso>today");
+    expect(preparedHtml).toContain("const future=!dateAllowsFuture(datePickerDraft.target)&&iso>today");
     expect(preparedHtml).toContain('disabled aria-disabled="true"');
     expect(preparedHtml).toContain('尚未到达，不可选择');
     expect(preparedHtml).toContain('尚未到达的日期不可选择');
     expect(preparedHtml).toContain('.preview-date-day.future');
     expect(preparedHtml).toContain("if(range==='month')start=new Date");
     expect(preparedHtml).toContain('delete state.dateSelection[target]');
-    expect(preparedHtml).toContain("target==='appointment-range'?'选择已到日期'");
+    expect(preparedHtml).toContain("target==='appointment-range'?'选择预约日期'");
     expect(preparedHtml).toContain(
-      "if(stored.start>today||stored.end>today)delete state.dateSelection[target]",
+      "if(!dateAllowsFuture(target)&&(stored.start>today||stored.end>today))delete state.dateSelection[target]",
     );
     expect(preparedHtml).toContain(
       "if(datePickerDraft.target==='appointment-range')",
