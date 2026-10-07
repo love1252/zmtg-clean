@@ -13,6 +13,8 @@ node scripts/verify/daily-usable-environment.mjs build "$DAILY_USABLE_STATE"
 node scripts/verify/daily-usable-environment.mjs serve "$DAILY_USABLE_STATE"
 # 另一个终端执行；serve 保持运行。
 node scripts/verify/daily-usable-environment.mjs verify "$DAILY_USABLE_STATE"
+# 集成日常业务可用版后，增加单客户随访、来源证据和日周日历验收。
+node scripts/verify/daily-usable-environment.mjs verify-integrated "$DAILY_USABLE_STATE"
 node --test scripts/verify/daily-usable-environment.test.mjs
 ```
 
@@ -45,4 +47,6 @@ node scripts/verify/daily-usable-environment.mjs stop "$DAILY_USABLE_STATE"
 - 69 项真实 HTTP／会话／机构权限检查通过，4 项环境安全单元测试通过。
 - ESLint、TypeScript 类型检查通过；对已初始化任务库再次执行 `setup`，按预期拒绝非空库。
 
-每次 `verify` 的脱敏检查记录写入环境记录同目录 `verification.json`。成功日志不输出 Cookie、数据库连接串或临时密钥。业务流程会改变夹具数据；完成任务处理后如需重跑固定数量断言，应使用新环境，不能调整生产断言来适配已修改的夹具。
+每次 `verify` 的脱敏检查记录写入环境记录同目录 `verification.json`；`verify-integrated` 在实际检查成功后写入 `verification-integrated.json`，保留与上述基线证据的区别。集成模式额外校验客户随访 7 页共 135 条无遗漏、正式来源证据及跨机构拒绝，并读取正式日周页面的服务端 HTML 验证完整日历；浏览器交互另行验收。
+
+成功日志不输出 Cookie、数据库连接串或临时密钥。业务流程会改变夹具数据；完成任务处理后如需重跑固定数量断言，应使用新环境，不能调整生产断言来适配已修改的夹具。

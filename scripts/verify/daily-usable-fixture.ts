@@ -131,7 +131,7 @@ async function setup(state: DailyUsableEnvironment, directory: string) {
   } finally { await client.end(); }
 }
 
-async function verify(state: DailyUsableEnvironment, directory: string) {
+async function verify(state: DailyUsableEnvironment, directory: string, integrated: boolean) {
   const base = `http://127.0.0.1:${state.appPort}`;
   const checks: { name: string; passed: true }[] = [];
   const check = (name: string, value: unknown) => { assert(value, name); checks.push({ name, passed: true }); };
@@ -178,8 +178,49 @@ async function verify(state: DailyUsableEnvironment, directory: string) {
       check(`${account.key} 跨机构客户详情拒绝`, [403, 404].includes(cross.status));
       const invalid = await fetch(`${base}/api/v1/institution/followups?pageSize=101`, { headers });
       check(`${account.key} 无效分页被拒绝`, invalid.status === 400);
+      if (integrated) {
+        const customerId = `daily-customer-${account.suffix}`;
+        const expected = account.role === 'customer_service' ? 0 : account.suffix === 'a' ? 135 : 3;
+        const relatedUrl = `${base}/api/v1/institution/customers/${customerId}/followups`;
+        const related = await fetch(`${relatedUrl}?page=1&pageSize=20`, { headers });
+        const relatedBody = await related.json();
+        check(`${account.key} 客户关联随访总数与权限一致`, related.status === 200 && relatedBody.customerId === customerId
+          && relatedBody.pageInfo.total === expected && relatedBody.summary.total === expected && relatedBody.records.length === Math.min(20, expected));
+        if (expected > 100) {
+          const ids = new Set<string>();
+          for (let pageNumber = 1; pageNumber <= 7; pageNumber += 1) {
+            const pageResponse = await fetch(`${relatedUrl}?page=${pageNumber}&pageSize=20`, { headers });
+            const page = await pageResponse.json();
+            assert.equal(pageResponse.status, 200, '关联随访分页请求成功');
+            for (const task of page.records) {
+              assert.equal(task.customer.customerId, customerId, '关联随访不得混入其他客户');
+              assert(!ids.has(task.taskId), '关联随访分页不得重复'); ids.add(task.taskId);
+            }
+          }
+          check(`${account.key} 单客户 7 页 135 条随访无重复无遗漏`, ids.size === 135);
+        }
+        const crossRelated = await fetch(`${base}/api/v1/institution/customers/${wrongCustomer}/followups`, { headers });
+        check(`${account.key} 跨机构关联随访被拒绝`, [403, 404].includes(crossRelated.status));
+        const evidence = await fetch(`${base}/api/v1/institution/customers/${customerId}/source-evidence`, { headers });
+        const evidenceBody = await evidence.json();
+        check(`${account.key} 生产模式来源证据可只读访问`, evidence.status === 200 && evidenceBody.customerId === customerId
+          && evidenceBody.evidence.status === 'not_recorded' && evidenceBody.evidence.importRecord === null);
+        const crossEvidence = await fetch(`${base}/api/v1/institution/customers/${wrongCustomer}/source-evidence`, { headers });
+        check(`${account.key} 跨机构来源证据被拒绝`, [403, 404].includes(crossEvidence.status));
+        if (account.key === 'admin') {
+          const fixture = JSON.parse(await readFile(path.join(directory, 'synthetic-accounts.json'), 'utf8'));
+          const date = new Date(Date.parse(fixture.tomorrow) + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+          for (const view of ['day', 'week']) {
+            const calendar = await fetch(`${base}/hospital/care/appointments?view=${view}&date=${date}`, { headers, redirect: 'manual' });
+            const html = await calendar.text();
+            check(`${view} 正式页面返回日历`, calendar.status === 200 && html.includes('aria-label="预约日历（上海时区）"'));
+            const text = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, '');
+            check(`${view} 日历完整显示 135 条预约`, text.includes('当前日期范围共 135 条预约，已完整展示。') && text.includes('合成预约项目 135'));
+          }
+        }
+      }
     }
-    await writeFile(path.join(directory, 'verification.json'), JSON.stringify({ checkedAt: new Date().toISOString(),
+    await writeFile(path.join(directory, integrated ? 'verification-integrated.json' : 'verification.json'), JSON.stringify({ checkedAt: new Date().toISOString(),
       basis: '真实 Next HTTP + PostgreSQL + 正式登录；仅合成数据。不是远程测试服或生产验收。', checks,
     }, null, 2), { mode: 0o600 });
     console.log(`真实会话与机构权限验收通过：${checks.length} 项。`);
@@ -188,11 +229,11 @@ async function verify(state: DailyUsableEnvironment, directory: string) {
 
 async function main() {
   const [command, file] = process.argv.slice(2);
-  assert(file && ['setup', 'verify'].includes(command), '缺少任务环境参数');
+  assert(file && ['setup', 'verify', 'verify-integrated'].includes(command), '缺少任务环境参数');
   const state = await readState(file);
   await verifyContainer(state);
   if (command === 'setup') await setup(state, path.dirname(file));
-  else await verify(state, path.dirname(file));
+  else await verify(state, path.dirname(file), command === 'verify-integrated');
 }
 void main().catch(error => {
   const failure = error?.cause ?? error;

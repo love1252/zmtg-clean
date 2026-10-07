@@ -158,8 +158,8 @@ async function createEnvironment(appPort) {
 async function main() {
   const [command, input, projectInput] = process.argv.slice(2);
   if (command === 'create') return createEnvironment(Number(input ?? 52717));
-  if (!input || !['setup', 'verify', 'serve', 'build', 'stop'].includes(command)) {
-    throw new Error('用法：create [应用端口]；setup|verify|build|serve|stop <environment.json> [隔离项目目录]');
+  if (!input || !['setup', 'verify', 'verify-integrated', 'serve', 'build', 'stop'].includes(command)) {
+    throw new Error('用法：create [应用端口]；setup|verify|verify-integrated|build|serve|stop <environment.json> [隔离项目目录]');
   }
   const state = await readState(input);
   await verifyContainer(state);
@@ -169,7 +169,7 @@ async function main() {
   }
   const project = path.resolve(projectInput ?? root);
   await assertNoProjectEnvironment(project);
-  if (command === 'setup' || command === 'verify') {
+  if (command === 'setup' || command === 'verify' || command === 'verify-integrated') {
     return runNode(['--import', 'tsx', path.join(root, 'scripts/verify/daily-usable-fixture.ts'), command, path.resolve(input)],
       taskEnvironment(state), root);
   }
