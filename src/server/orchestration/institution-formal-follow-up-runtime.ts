@@ -1,5 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 
+import { parseFollowUpManualFeedback } from '@/modules/care/domain/follow-up-completion-result';
+import { authorizeInstitutionCustomerControlledWriteV1 } from './institution-customer-controlled-write-runtime';
+
 import {
   createVerifiedInstitutionAttributedTenantAuditEventV1,
   type AuditReason,
@@ -246,6 +249,7 @@ function permissions(
 function toDto(
   record: FormalFollowUpTaskRecordV1,
   actor: InstitutionCareWriteAuthorizationConsumptionV1,
+  includeFeedback = false,
 ): FormalFollowUpDtoV1 {
   return Object.freeze({
     taskId: record.taskId,
@@ -262,6 +266,8 @@ function toDto(
     riskLevel: record.riskLevel,
     riskKind: record.riskKind,
     completionCode: record.completionCode,
+    ...(includeFeedback ? { completionFeedback: record.state === 'completed' && record.completionFeedback !== null
+      ? parseFollowUpManualFeedback({ kind: 'manual_low_sensitivity', summary: record.completionFeedback }) : null } : {}),
     cancellationReason: record.cancellationReason,
     assignment:
       record.assignment.kind === 'role_pool'
@@ -667,9 +673,24 @@ async function auditChanged(
 
 export async function readCurrentInstitutionFormalFollowUpsV1(
   searchParams: URLSearchParams = new URLSearchParams(),
-): Promise<
-  FormalFollowUpListResultV1
-> {
+): Promise<FormalFollowUpListResultV1> {
+  const result = await readFormalFollowUps(searchParams);
+  return result.kind === 'not_found' ? AUTH_UNAVAILABLE : result;
+}
+
+export async function readCurrentInstitutionCustomerFormalFollowUpsV1(
+  customerId: string,
+  searchParams: URLSearchParams = new URLSearchParams(),
+) {
+  if (!stableIdPattern.test(customerId)) return { kind: 'not_found' as const };
+  const result = await readFormalFollowUps(searchParams, customerId);
+  return result.kind === 'ready' ? { ...result, customerId, canCreate: false } : result;
+}
+
+async function readFormalFollowUps(
+  searchParams: URLSearchParams,
+  customerId?: string,
+): Promise<FormalFollowUpListResultV1 | Readonly<{ kind: 'not_found' }>> {
   const query = parseFormalFollowUpListQueryV1(searchParams);
   if (!query) return Object.freeze({ kind: 'invalid_query' });
   const authorization =
@@ -685,6 +706,18 @@ export async function readCurrentInstitutionFormalFollowUpsV1(
 
   try {
     const database = getDatabase();
+    if (customerId !== undefined) {
+      const customerAuthorization = await authorizeInstitutionCustomerControlledWriteV1(false);
+      if (customerAuthorization.kind !== 'allowed') return customerAuthorization;
+      if (customerAuthorization.actor.accountId !== actor.accountId
+        || customerAuthorization.actor.tenantId !== actor.tenantId
+        || customerAuthorization.actor.institutionId !== actor.institutionId
+        || customerAuthorization.actor.role !== actor.role) return AUTH_FORBIDDEN;
+      const customer = await createCustomerReferenceRepositoryV1(database).resolve({
+        tenantId: actor.tenantId, institutionId: actor.institutionId, customerId,
+      });
+      if (!customer || customer.customerId !== customerId) return { kind: 'not_found' };
+    }
     const observedAt = new Date(Date.now()).toISOString();
     const context = await readInstitutionOperatingContextForCareV1(database, {
       tenantId: actor.tenantId,
@@ -703,12 +736,14 @@ export async function readCurrentInstitutionFormalFollowUpsV1(
         actorId: actor.accountId,
         actorRole: actor.role,
         query,
+        ...(customerId === undefined ? {} : { customerId }),
         businessDate: businessDate?.date ?? null,
         timeZone: businessDate?.timeZone ?? null,
       });
 
     if (records.length > query.pageSize || records.some((record) =>
-      record.tenantId !== actor.tenantId || record.institutionId !== actor.institutionId)) {
+      record.tenantId !== actor.tenantId || record.institutionId !== actor.institutionId
+      || (customerId !== undefined && record.customerId !== customerId))) {
       return Object.freeze({
         kind: 'unavailable' as const,
       });
@@ -719,7 +754,7 @@ export async function readCurrentInstitutionFormalFollowUpsV1(
     return Object.freeze({
       kind: 'ready' as const,
       records: Object.freeze(
-        records.map((record) => toDto(record, actor)),
+        records.map((record) => toDto(record, actor, customerId !== undefined)),
       ),
       canCreate: isManagement(actor.role),
       hasMore,
@@ -771,7 +806,7 @@ export async function readCurrentInstitutionFormalFollowUpV1(
     return record
       ? Object.freeze({
           kind: 'ready' as const,
-          record: toDto(record, actor),
+          record: toDto(record, actor, true),
           canCreate: isManagement(actor.role),
         })
       : Object.freeze({

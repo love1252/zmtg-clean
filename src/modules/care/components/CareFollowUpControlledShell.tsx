@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { CareFollowUpCompletionForm, completionLabel } from './CareFollowUpCompletionForm';
 import { CareFollowUpListControls } from '@/modules/care/components/CareFollowUpListControls';
 import { formalFollowUpListHrefV1, type FormalFollowUpListPageV1 } from '@/modules/care/application/formal-follow-up-list-navigation';
 import { CalendarClock, Plus } from 'lucide-react';
@@ -17,6 +18,7 @@ type Props = Readonly<{
   canCreate: boolean;
   selectedTaskId?: string | null;
   list?: FormalFollowUpListPageV1;
+  returnHref?: string;
 }>;
 
 async function patchTask(
@@ -35,9 +37,7 @@ async function patchTask(
   );
 
   if (!response.ok) {
-    throw new Error(
-      'follow_up_mutation_failed',
-    );
+    throw Object.assign(new Error('follow_up_mutation_failed'), { status: response.status });
   }
 }
 
@@ -46,11 +46,15 @@ export function CareFollowUpControlledShell({
   canCreate,
   selectedTaskId = null,
   list,
+  returnHref = '/hospital/care/followups',
 }: Props) {
   const [
     error,
     setError,
   ] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [blocked, setBlocked] = useState(false);
+  const mutationLock = useRef(false);
   const idempotencyKeyRef =
     useRef<string | null>(null);
 
@@ -67,6 +71,9 @@ export function CareFollowUpControlledShell({
   async function createTask(
     formData: FormData,
   ) {
+    if (mutationLock.current || blocked) return;
+    mutationLock.current = true;
+    setBusy(true);
     setError(null);
 
     try {
@@ -126,16 +133,18 @@ export function CareFollowUpControlledShell({
       );
 
       if (!response.ok) {
-        throw new Error(
-          'follow_up_create_failed',
-        );
+        throw Object.assign(new Error('follow_up_create_failed'), { status: response.status });
       }
 
       window.location.reload();
-    } catch {
+    } catch (failure) {
+      if (failure instanceof Error && 'status' in failure && [401, 403, 409].includes(Number(failure.status))) setBlocked(true);
       setError(
-        '创建随访任务失败，请检查客户、UTC 计划时间、分配对象与当前权限。',
+        '创建随访任务失败，请检查客户、机构计划时间、分配对象与当前权限后重试。',
       );
+    } finally {
+      mutationLock.current = false;
+      setBusy(false);
     }
   }
 
@@ -143,15 +152,22 @@ export function CareFollowUpControlledShell({
     taskId: string,
     body: unknown,
   ) {
+    if (mutationLock.current || blocked) return;
+    mutationLock.current = true;
+    setBusy(true);
     setError(null);
 
     try {
       await patchTask(taskId, body);
       window.location.reload();
-    } catch {
+    } catch (failure) {
+      if (failure instanceof Error && 'status' in failure && [401, 403, 409].includes(Number(failure.status))) setBlocked(true);
       setError(
         '随访操作未完成，可能已由其他操作更新，请刷新后重试。',
       );
+    } finally {
+      mutationLock.current = false;
+      setBusy(false);
     }
   }
 
@@ -196,9 +212,12 @@ export function CareFollowUpControlledShell({
           className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"
         >
           {error}
+          <button type="button" onClick={() => window.location.reload()} className="ml-3 underline">刷新当前任务</button>
         </div>
       ) : null}
 
+      {busy && <p role="status">正在保存随访操作…</p>}
+      <fieldset disabled={busy || blocked} className="min-w-0 space-y-4">
       {canCreate
       && selectedTaskId === null ? (
         <form
@@ -401,26 +420,7 @@ export function CareFollowUpControlledShell({
                     等待客户
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void run(
-                        record.taskId,
-                        {
-                          command:
-                            'complete',
-                          expectedRevision:
-                            record.revision,
-                          code:
-                            'contact_completed',
-                          feedback: null,
-                        },
-                      )
-                    }
-                    className="rounded-lg border px-3 py-2 text-sm"
-                  >
-                    结构化完成
-                  </button>
+
                 </>
               ) : null}
 
@@ -448,26 +448,7 @@ export function CareFollowUpControlledShell({
                     恢复处理
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void run(
-                        record.taskId,
-                        {
-                          command:
-                            'complete',
-                          expectedRevision:
-                            record.revision,
-                          code:
-                            'no_response_closed',
-                          feedback: null,
-                        },
-                      )
-                    }
-                    className="rounded-lg border px-3 py-2 text-sm"
-                  >
-                    无响应关闭
-                  </button>
+
                 </>
               ) : null}
 
@@ -547,22 +528,32 @@ export function CareFollowUpControlledShell({
               {selectedTaskId === null ? (
                 <Link
                   href={
-                    `/hospital/care/followups/${encodeURIComponent(record.taskId)}`
+                    `/hospital/care/followups/${encodeURIComponent(record.taskId)}?returnTo=${encodeURIComponent(list ? formalFollowUpListHrefV1(list.query) : returnHref)}`
                   }
                   className="rounded-lg border px-3 py-2 text-sm"
                 >
                   详情
                 </Link>
               ) : (
-                <Link
-                  href="/hospital/care/followups"
+                <a
+                  href={returnHref}
                   className="rounded-lg border px-3 py-2 text-sm"
                 >
                   返回列表
-                </Link>
+                </a>
               )}
+              <Link href="/hospital" prefetch={false} onNavigate={event => { event.preventDefault(); window.location.assign('/hospital'); }} className="rounded-lg border px-3 py-2 text-sm">返回工作台</Link>
+              <a href={`/hospital/customers/${encodeURIComponent(record.customer.customerId)}?tab=followups`} className="rounded-lg border px-3 py-2 text-sm">客户随访记录</a>
             </div>
 
+            {record.permissions.canOperate && ['in_progress', 'waiting_customer'].includes(record.state) && <CareFollowUpCompletionForm onComplete={async result => {
+              await run(record.taskId, { command: 'complete', expectedRevision: record.revision, ...result });
+            }} />}
+            {record.state === 'completed' && record.completionCode && <section aria-label="已记录随访结果" className="mt-4 space-y-2 rounded-xl bg-slate-50 p-4 text-sm">
+              <p>完成结果：{completionLabel(record.completionCode)}</p>
+              <p>低敏摘要：{record.completionFeedback === undefined ? '进入详情查看' : record.completionFeedback?.summary ?? '未填写'}</p>
+              <p>更新时间：{record.updatedAt}</p>
+            </section>}
             {record.permissions.canReassign ? (
               <form
                 action={(formData) =>
@@ -626,6 +617,7 @@ export function CareFollowUpControlledShell({
           当前正式机构范围内暂无人工随访任务。
         </div>
       ) : null}
+      </fieldset>
   </>);
 
   return (

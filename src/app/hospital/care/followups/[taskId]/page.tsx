@@ -1,3 +1,4 @@
+import { safeFollowUpReturnHrefV1 } from '@/modules/care/application/formal-follow-up-list-navigation';
 import { CareFollowUpControlledShell } from '@/modules/care/components/CareFollowUpControlledShell';
 import { InstitutionNavigationShell } from '@/modules/institution/components/InstitutionNavigationShell';
 import { InstitutionPageState } from '@/modules/institution/components/InstitutionPageState';
@@ -13,9 +14,10 @@ import { readCurrentInstitutionFormalFollowUpV1 } from '@/server/orchestration/i
 export const dynamic = 'force-dynamic';
 
 export default async function HospitalCareFollowUpDetailPage({
-  params,
+  params, searchParams,
 }: Readonly<{
   params: Promise<{ taskId: string }>;
+  searchParams?: Promise<{ returnTo?: string | string[] }>;
 }>) {
   const { taskId } = await params;
   let navigationAuthorization: unknown;
@@ -87,6 +89,7 @@ export default async function HospitalCareFollowUpDetailPage({
         <CareFollowUpControlledShell
           records={[result.record]}
           canCreate={result.canCreate}
+          returnHref={safeFollowUpReturnHrefV1((await searchParams)?.returnTo)}
           selectedTaskId={
             result.record.taskId
           }

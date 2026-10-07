@@ -47,3 +47,20 @@ export function formalFollowUpListParamsV1(query: FormalFollowUpListQueryV1): UR
 export function formalFollowUpListHrefV1(query: FormalFollowUpListQueryV1): string {
   return `${FORMAL_FOLLOW_UP_LIST_PATH}?${formalFollowUpListParamsV1(query)}`;
 }
+
+export function safeFollowUpReturnHrefV1(value: string | string[] | undefined): string {
+  if (typeof value !== 'string') return FORMAL_FOLLOW_UP_LIST_PATH;
+  try {
+    const url = new URL(value, 'https://local.invalid');
+    if (url.origin !== 'https://local.invalid' || url.hash) return FORMAL_FOLLOW_UP_LIST_PATH;
+    if (url.pathname === FORMAL_FOLLOW_UP_LIST_PATH) {
+      const values: FollowUpPageSearchParams = {};
+      for (const key of url.searchParams.keys()) values[key] = url.searchParams.getAll(key);
+      const query = parseFormalFollowUpPageQueryV1(values);
+      return query ? formalFollowUpListHrefV1(query) : FORMAL_FOLLOW_UP_LIST_PATH;
+    }
+    if (/^\/hospital\/customers\/[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/u.test(url.pathname)
+      && url.search === '?tab=followups') return url.pathname + url.search;
+  } catch { /* 返回固定站内列表，拒绝不可信重定向。 */ }
+  return FORMAL_FOLLOW_UP_LIST_PATH;
+}

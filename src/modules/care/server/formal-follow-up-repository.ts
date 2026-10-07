@@ -165,6 +165,7 @@ export function createFormalFollowUpRepositoryV1(
       const keyword = input.query.keyword?.replace(/[\\%_]/gu, '\\$&');
       const filter = and(
         visibility(input),
+        input.customerId === undefined ? undefined : eq(careFormalFollowUpTasks.customerId, input.customerId),
         input.query.state ? eq(careFormalFollowUpTasks.state, input.query.state) : undefined,
         input.query.dueBucket ? buckets![input.query.dueBucket] : undefined,
         keyword ? or(

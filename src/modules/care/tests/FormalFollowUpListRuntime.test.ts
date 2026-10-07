@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   authorization: vi.fn(), consume: vi.fn(), capability: vi.fn(), database: vi.fn(),
-  repository: vi.fn(), query: vi.fn(), context: vi.fn(),
+  repository: vi.fn(), query: vi.fn(), context: vi.fn(), customerAuthorization: vi.fn(), customer: vi.fn(), getVisible: vi.fn(),
 }));
 vi.mock('@/server/orchestration/institution-care-write-authorization', () => ({
   resolveInstitutionCareWriteAuthorizationV1: mocks.authorization,
@@ -19,8 +19,11 @@ vi.mock('@/modules/institution/server/institution-operating-context-reader', () 
   readInstitutionOperatingContextForCareV1: mocks.context,
 }));
 
+vi.mock('@/server/orchestration/institution-customer-controlled-write-runtime', () => ({ authorizeInstitutionCustomerControlledWriteV1: mocks.customerAuthorization }));
+vi.mock('@/modules/customer-center/server/customer-reference-repository', () => ({ createCustomerReferenceRepositoryV1: () => ({ resolve: mocks.customer }) }));
+
 import type { FormalFollowUpPageQueryV1, FormalFollowUpTaskRecordV1 } from '@/modules/care/ports/formal-follow-up-store';
-import { readCurrentInstitutionFormalFollowUpsV1 } from '@/server/orchestration/institution-formal-follow-up-runtime';
+import { readCurrentInstitutionFormalFollowUpsV1, readCurrentInstitutionCustomerFormalFollowUpsV1, readCurrentInstitutionFormalFollowUpV1 } from '@/server/orchestration/institution-formal-follow-up-runtime';
 
 const actor = {
   tenantId: 'tenant-a', institutionId: 'institution-a', accountId: 'staff-a', role: 'consultant',
@@ -56,7 +59,9 @@ beforeEach(() => {
   mocks.consume.mockReturnValue(actor);
   mocks.capability.mockResolvedValue(capability);
   mocks.database.mockReturnValue({ database: 'isolated-mock' });
-  mocks.repository.mockReturnValue({ queryVisible: mocks.query });
+  mocks.repository.mockReturnValue({ queryVisible: mocks.query, getVisible: mocks.getVisible });
+  mocks.customerAuthorization.mockResolvedValue({ kind: 'allowed', actor });
+  mocks.customer.mockResolvedValue({ customerId: 'customer-a' });
   mocks.context.mockResolvedValue({ timeZone: 'Asia/Shanghai', version: '1' });
   mocks.query.mockImplementation(async (input: FormalFollowUpPageQueryV1) => {
     const offset = (input.query.page - 1) * input.query.pageSize;
@@ -184,5 +189,59 @@ describe('正式随访分页编排', () => {
   it('仓库返回其他机构记录时失败关闭', async () => {
     mocks.query.mockResolvedValue({ records: [{ ...records[0], institutionId: 'other' }], summary: { total: 1 } });
     expect(await readCurrentInstitutionFormalFollowUpsV1()).toEqual({ kind: 'unavailable' });
+  });
+});
+
+
+describe('客户精确关联随访与完成摘要回显', () => {
+  it('155 条客户任务完整分页，客户范围不依赖机构前 100 条或名称匹配', async () => {
+    const fixtures = [
+      ...Array.from({ length: 155 }, (_, index) => ({ ...records[index], customerId: 'customer-a', customerDisplayName: '同名客户', state: 'completed', completionCode: 'contact_completed', completionFeedback: '已告知后续安排' })),
+      { ...records[0], taskId: 'other-customer-task', customerId: 'customer-b', customerDisplayName: '同名客户' },
+    ];
+    mocks.query.mockImplementation(async (input: FormalFollowUpPageQueryV1) => {
+      const visible = fixtures.filter(record => record.customerId === input.customerId);
+      const offset = (input.query.page - 1) * input.query.pageSize;
+      return { records: visible.slice(offset, offset + input.query.pageSize), summary: { total: visible.length } };
+    });
+    const first = await readCurrentInstitutionCustomerFormalFollowUpsV1('customer-a');
+    const second = await readCurrentInstitutionCustomerFormalFollowUpsV1('customer-a', new URLSearchParams('page=2'));
+    expect(first).toMatchObject({ kind: 'ready', customerId: 'customer-a', canCreate: false, pageInfo: { total: 155, pageCount: 2 } });
+    expect(second).toMatchObject({ kind: 'ready', pageInfo: { page: 2, total: 155, hasMore: false } });
+    if (first.kind !== 'ready' || second.kind !== 'ready') throw new Error('预期读取成功');
+    expect(first.records).toHaveLength(100);
+    expect(second.records).toHaveLength(55);
+    expect(new Set([...first.records, ...second.records].map(record => record.taskId)).size).toBe(155);
+    expect(first.records[0]?.completionFeedback).toEqual({ kind: 'manual_low_sensitivity', summary: '已告知后续安排' });
+    expect(JSON.stringify([first, second])).not.toContain('other-customer-task');
+    expect(mocks.customer).toHaveBeenCalledWith({ tenantId: 'tenant-a', institutionId: 'institution-a', customerId: 'customer-a' });
+    expect(mocks.query.mock.calls[0]?.[0]).toMatchObject({ actorId: 'staff-a', customerId: 'customer-a' });
+  });
+  it.each(['customerId=other', 'tenantId=other', 'q=a&q=b'])('拒绝通过参数扩大客户范围 %s', async query => {
+    expect(await readCurrentInstitutionCustomerFormalFollowUpsV1('customer-a', new URLSearchParams(query))).toEqual({ kind: 'invalid_query' });
+    expect(mocks.query).not.toHaveBeenCalled();
+  });
+  it('客户不可见时不读取任务；身份错配不复用另一账号权限', async () => {
+    mocks.customer.mockResolvedValue(null);
+    expect(await readCurrentInstitutionCustomerFormalFollowUpsV1('customer-a')).toEqual({ kind: 'not_found' });
+    expect(mocks.query).not.toHaveBeenCalled();
+    mocks.customerAuthorization.mockResolvedValue({ kind: 'allowed', actor: { ...actor, institutionId: 'other' } });
+    expect(await readCurrentInstitutionCustomerFormalFollowUpsV1('customer-a')).toEqual({ kind: 'forbidden' });
+    expect(mocks.query).not.toHaveBeenCalled();
+  });
+  it('仓库返回同机构另一客户的记录时失败关闭', async () => {
+    expect(await readCurrentInstitutionCustomerFormalFollowUpsV1('customer-a')).toEqual({ kind: 'unavailable' });
+  });
+  it.each(['手机号 13800138000', '病历已经填写', 'a'.repeat(241)])('历史摘要仍通过低敏校验：%s', async summary => {
+    mocks.getVisible.mockResolvedValue({ ...records[0], state: 'completed', completionCode: 'contact_completed', completionFeedback: summary });
+    const result = await readCurrentInstitutionFormalFollowUpV1('task-0');
+    expect(result).toMatchObject({ kind: 'ready', record: { completionCode: 'contact_completed', completionFeedback: null } });
+    expect(JSON.stringify(result)).not.toContain(summary);
+  });
+  it('详情回显合法摘要但不暴露任务内部标识', async () => {
+    mocks.getVisible.mockResolvedValue({ ...records[0], state: 'completed', completionCode: 'customer_declined', completionFeedback: '暂不需要联系' });
+    const result = await readCurrentInstitutionFormalFollowUpV1('task-0');
+    expect(result).toMatchObject({ kind: 'ready', record: { completionCode: 'customer_declined', completionFeedback: { kind: 'manual_low_sensitivity', summary: '暂不需要联系' } } });
+    expect(JSON.stringify(result)).not.toContain('private-key');
   });
 });
