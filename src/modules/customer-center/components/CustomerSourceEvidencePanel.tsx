@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react';
 
-type Evidence = { status: 'not_recorded' | 'ambiguous' } | {
+type Evidence = { status: 'not_recorded' } | { status: 'ambiguous' } | {
   status: 'recorded'; batchId: string; rowNumber: number; completedAt: string;
 };
-type State = { kind: 'loading' | 'error'; customerId: string } | { kind: 'ready'; customerId: string; evidence: Evidence };
+type State = { kind: 'loading'; customerId: string } | { kind: 'error'; customerId: string } | { kind: 'ready'; customerId: string; evidence: Evidence };
 
 function parse(value: unknown, customerId: string): Evidence | null {
   if (!value || typeof value !== 'object') return null;

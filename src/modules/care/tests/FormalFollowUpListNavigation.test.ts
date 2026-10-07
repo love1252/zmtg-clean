@@ -27,7 +27,8 @@ describe('正式随访页面查询', () => {
 it('任务返回保留列表筛选或客户页，拒绝外部与未知路径', () => {
   expect(safeFollowUpReturnHrefV1('/hospital/care/followups?page=6&pageSize=20&state=pending')).toBe('/hospital/care/followups?page=6&pageSize=20&state=pending');
   expect(safeFollowUpReturnHrefV1('/hospital/customers/customer-a?tab=followups')).toBe('/hospital/customers/customer-a?tab=followups');
-  for (const input of ['https://evil.test/hospital/care/followups', '//evil.test', '/hospital/care/followups?tenantId=x', '/api/delete', '/hospital/customers/c?tab=profile']) {
+  expect(safeFollowUpReturnHrefV1('/hospital')).toBe('/hospital');
+  for (const input of ['https://evil.test/hospital/care/followups', '//evil.test', '/hospital?tenantId=x', '/hospital#unknown', 'https://local.invalid/hospital', '/hospital/care/followups?tenantId=x', '/api/delete', '/hospital/customers/c?tab=profile']) {
     expect(safeFollowUpReturnHrefV1(input)).toBe('/hospital/care/followups');
   }
 });

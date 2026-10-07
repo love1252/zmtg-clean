@@ -201,3 +201,8 @@ it('完成历史回显与站内返回入口使用正式事实', () => {
   expect(screen.getByRole('link', { name: '返回工作台' })).toHaveAttribute('href', '/hospital');
   expect(screen.queryByRole('button', { name: '确认完成' })).not.toBeInTheDocument();
 });
+it('从工作台进入时只提供准确的工作台返回入口', () => {
+  render(<CareFollowUpControlledShell records={[record()]} canCreate={false} selectedTaskId="task-1" returnHref="/hospital" />);
+  expect(screen.getAllByRole('link', { name: '返回工作台' })).toHaveLength(1);
+  expect(screen.queryByRole('link', { name: '返回列表' })).not.toBeInTheDocument();
+});

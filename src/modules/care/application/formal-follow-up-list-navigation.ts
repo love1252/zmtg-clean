@@ -50,6 +50,7 @@ export function formalFollowUpListHrefV1(query: FormalFollowUpListQueryV1): stri
 
 export function safeFollowUpReturnHrefV1(value: string | string[] | undefined): string {
   if (typeof value !== 'string') return FORMAL_FOLLOW_UP_LIST_PATH;
+  if (value === '/hospital') return value;
   try {
     const url = new URL(value, 'https://local.invalid');
     if (url.origin !== 'https://local.invalid' || url.hash) return FORMAL_FOLLOW_UP_LIST_PATH;

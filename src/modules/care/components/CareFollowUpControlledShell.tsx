@@ -534,14 +534,14 @@ export function CareFollowUpControlledShell({
                 >
                   详情
                 </Link>
-              ) : (
+              ) : returnHref !== '/hospital' ? (
                 <a
                   href={returnHref}
                   className="rounded-lg border px-3 py-2 text-sm"
                 >
-                  返回列表
+                  {returnHref.startsWith('/hospital/customers/') ? '返回客户随访' : '返回列表'}
                 </a>
-              )}
+              ) : null}
               <Link href="/hospital" prefetch={false} onNavigate={event => { event.preventDefault(); window.location.assign('/hospital'); }} className="rounded-lg border px-3 py-2 text-sm">返回工作台</Link>
               <a href={`/hospital/customers/${encodeURIComponent(record.customer.customerId)}?tab=followups`} className="rounded-lg border px-3 py-2 text-sm">客户随访记录</a>
             </div>
