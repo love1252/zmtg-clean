@@ -37,6 +37,25 @@ function actionTime(action: WorkbenchActionRowViewModel): string {
   }
 }
 
+const shanghaiTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai',
+  year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+});
+
+function readableActionTime(value: string): string {
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime())) return '时间待核实';
+  const parts = Object.fromEntries(shanghaiTimeFormatter.formatToParts(parsed).map((part) => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
+}
+
+function actionDetailHref(action: WorkbenchActionRowViewModel): string {
+  return action.kind === 'followup'
+    ? `${action.detailHref}?returnTo=${encodeURIComponent('/hospital')}`
+    : action.detailHref;
+}
+
 function actionKindLabel(action: WorkbenchActionRowViewModel): string {
   switch (action.kind) {
     case 'appointment':
@@ -81,7 +100,7 @@ function hasConfirmedEmptySources(
 }
 
 /**
- * 只消费已聚合的工作台行动投影；不读取来源、不会重新排序或构造业务链接。
+ * 只消费已聚合的工作台行动投影，不读取来源或重新排序；随访详情附带固定站内返回路径。
  * 移动端从桌面安全前缀派生，以保证其始终是桌面队列的前缀。
  */
 export function WorkbenchActionQueue({ projection }: WorkbenchActionQueueProps) {
@@ -105,13 +124,14 @@ export function WorkbenchActionQueue({ projection }: WorkbenchActionQueueProps) 
           <h2 id="workbench-action-queue-heading" className="sr-only">行动队列</h2>
           <p className="text-[15px] font-semibold text-slate-900">我的待处理</p>
         </div>
-        <Link href="/hospital/care/appointments" className="text-xs font-semibold text-blue-600">查看全部</Link>
       </div>
 
-      <div className="flex h-11 items-center gap-7 border-b border-slate-100 px-4 text-xs text-slate-500">
-        <span className="flex h-full items-center border-b-2 border-blue-600 font-semibold text-blue-600">全部</span>
-        <span>会话</span><span>预约</span><span>随访</span><span>机会</span>
-      </div>
+      <nav aria-label="按类型查看全部" className="flex h-11 items-center gap-7 border-b border-slate-100 px-4 text-xs text-slate-500">
+        <span className="font-semibold text-slate-700">行动概览</span>
+        <Link href="/hospital/conversations" className="font-semibold text-blue-600 hover:underline">会话</Link>
+        <Link href="/hospital/care/appointments" className="font-semibold text-blue-600 hover:underline">预约</Link>
+        <Link href="/hospital/care/followups" className="font-semibold text-blue-600 hover:underline">随访</Link>
+      </nav>
 
       {hasDegradedSource && desktopActions.length > 0 ? (
         <p role="status" className="m-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
@@ -177,7 +197,7 @@ export function WorkbenchActionQueue({ projection }: WorkbenchActionQueueProps) 
                       <Clock3 aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
                       <span className="shrink-0">{actionTimeLabel(action)}</span>
                       <span aria-hidden="true">·</span>
-                      <span className="min-w-0 truncate">{actionTime(action)}</span>
+                      <time dateTime={actionTime(action)} title="上海时区" className="min-w-0 truncate">{readableActionTime(actionTime(action))}</time>
                     </p>
                     {action.safeSummary === null ? null : (
                       <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">{action.safeSummary}</p>
@@ -186,7 +206,7 @@ export function WorkbenchActionQueue({ projection }: WorkbenchActionQueueProps) 
 
                   <a
                     aria-label={`查看${subjectLabel}的${kindLabel}详情`}
-                    href={action.detailHref}
+                    href={actionDetailHref(action)}
                     className="inline-flex min-h-8 w-fit items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-blue-600 transition hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:justify-self-end"
                   >
                     查看详情
