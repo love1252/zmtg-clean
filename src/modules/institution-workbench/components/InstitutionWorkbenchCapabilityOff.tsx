@@ -1,4 +1,5 @@
 import { InstitutionWorkbenchShell } from '@/modules/institution-workbench/components/InstitutionWorkbenchShell';
+import type { WorkbenchAppointmentResultV1 } from '@/modules/care/application/workbench-appointment-view';
 import type { WorkbenchActionProjection } from '@/modules/institution-workbench/domain/workbench-action-view-models';
 import type { WorkbenchCapabilityProjection } from '@/modules/institution-workbench/domain/workbench-capability-view-models';
 import type { WorkbenchLifecycleProjection } from '@/modules/institution-workbench/domain/workbench-lifecycle-view-models';
@@ -96,10 +97,12 @@ export function InstitutionWorkbenchCapabilityOff({
   genuineAllowed = false,
   capabilityProjection = null,
   actionProjection = null,
+  appointments = null,
 }: Readonly<{
   genuineAllowed?: boolean;
   capabilityProjection?: WorkbenchCapabilityProjection | null;
   actionProjection?: WorkbenchActionProjection | null;
+  appointments?: WorkbenchAppointmentResultV1 | null;
 }>) {
   if (
     genuineAllowed &&
@@ -127,6 +130,7 @@ export function InstitutionWorkbenchCapabilityOff({
           }
           lifecycleProjection={capabilityOffLifecycleProjection}
           capabilityProjection={capabilityProjection}
+          appointments={appointments}
         />
       </div>
     );

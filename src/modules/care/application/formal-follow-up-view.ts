@@ -1,3 +1,4 @@
+import type { FollowUpManualFeedback } from '@/modules/care/domain/follow-up-completion-result';
 import type { FollowUpRolePoolRole } from '@/modules/care/domain/follow-up-assignment';
 import type {
   FollowUpCancellationReason,
@@ -25,6 +26,8 @@ export type FormalFollowUpDtoV1 = Readonly<{
   riskLevel: 'none' | 'high';
   riskKind: FollowUpRiskEscalationKind | null;
   completionCode: FollowUpCompletionCode | null;
+  /** 仅任务详情和客户关联记录回显已经过低敏校验的完成摘要。 */
+  completionFeedback?: FollowUpManualFeedback | null;
   cancellationReason: FollowUpCancellationReason | null;
   assignment:
     | Readonly<{

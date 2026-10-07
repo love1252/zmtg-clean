@@ -84,6 +84,7 @@ export type FormalFollowUpVisibilityV1 = Readonly<{
 
 export type FormalFollowUpPageQueryV1 = FormalFollowUpVisibilityV1 & Readonly<{
   query: FormalFollowUpListQueryV1;
+  customerId?: string;
   businessDate: string | null;
   timeZone: string | null;
 }>;

@@ -1,8 +1,11 @@
 
 'use client';
 
+import { CustomerSourceEvidencePanel } from './CustomerSourceEvidencePanel';
+
 import Link from 'next/link';
 import { OpportunityConfirmationPanel } from '@/modules/opportunities/components/OpportunityConfirmationPanel';
+import { CustomerFollowUpPanel } from './CustomerFollowUpPanel';
 import { CustomerProfileSuggestionPanel } from './CustomerProfileSuggestionPanel';
 import { CalendarDays, MessageSquareText, Sparkles } from 'lucide-react';
 import { useState } from 'react';
@@ -20,7 +23,7 @@ export function CustomerControlledDetailShell({
   record, initialTab = 'overview',
 }: Readonly<{
   record: CustomerControlledDtoV1;
-  initialTab?: 'overview' | 'profile' | 'opportunities';
+  initialTab?: 'overview' | 'profile' | 'opportunities' | 'followups';
 }>) {
   const [displayName, setDisplayName] = useState(record.displayName);
   const [lifecycle, setLifecycle] = useState(record.lifecycle);
@@ -200,6 +203,7 @@ export function CustomerControlledDetailShell({
             返回客户列表
           </Link>
         </div>
+        <CustomerSourceEvidencePanel customerId={record.customerId} />
       </div> : activeTab === 'profile' ? (
         <div className="space-y-4">
           <CustomerProfileSuggestionPanel customerId={record.customerId} onApplied={() => window.location.reload()} />
@@ -213,7 +217,7 @@ export function CustomerControlledDetailShell({
             ))}
           </div>
         </div>
-      ) : activeTab === 'opportunities' ? <OpportunityConfirmationPanel customerId={record.customerId} /> : (
+      ) : activeTab === 'opportunities' ? <OpportunityConfirmationPanel customerId={record.customerId} /> : activeTab === 'followups' ? <CustomerFollowUpPanel customerId={record.customerId} /> : (
         <InstitutionV11Surface>
           <InstitutionV11EmptyState
             icon={activeTab === 'appointments' ? CalendarDays : activeTab === 'communications' ? MessageSquareText : Sparkles}

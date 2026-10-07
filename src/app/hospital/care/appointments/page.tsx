@@ -1,4 +1,7 @@
 
+import { appointmentCalendarRange, appointmentShanghaiDate } from '@/modules/care/application/appointment-calendar-contract';
+import { readCurrentInstitutionAppointmentCalendarV1 } from '@/server/orchestration/institution-appointment-calendar-reader';
+import Link from 'next/link';
 import { AppointmentCreateControlledShell } from '@/modules/care/components/AppointmentCreateControlledShell';
 import { AppointmentListReadonlyShell } from '@/modules/care/components/AppointmentListReadonlyShell';
 import type { AppointmentListStatusV1 } from '@/modules/care/ports/appointment-list-source';
@@ -102,6 +105,10 @@ export default async function HospitalCareAppointmentsPage({
 }: Readonly<{ searchParams?: Promise<SearchParamsInput> }>) {
   let resolvedSearchParams: URLSearchParams | null = null;
   let createRequested = false;
+  let view: 'list' | 'day' | 'week' = 'list';
+  const today = appointmentShanghaiDate();
+  let date = today;
+  let invalidView = false;
 
   try {
     resolvedSearchParams = toUrlSearchParams(await searchParams);
@@ -112,6 +119,24 @@ export default async function HospitalCareAppointmentsPage({
     ) {
       createRequested = true;
       resolvedSearchParams.delete('create');
+    }
+    const views = resolvedSearchParams.getAll('view');
+    const dates = resolvedSearchParams.getAll('date');
+    if (views.length > 1 || dates.length > 1 || (views.length && !['list', 'day', 'week'].includes(views[0]))) invalidView = true;
+    else {
+      view = (views[0] ?? 'list') as typeof view;
+      resolvedSearchParams.delete('view');
+      if (view === 'list') invalidView = dates.length > 0;
+      else {
+        date = dates[0] ?? today;
+        const range = appointmentCalendarRange(date, view);
+        if (!range || ['startDate', 'endDate', 'page', 'pageSize'].some((key) => resolvedSearchParams!.has(key))) invalidView = true;
+        else {
+          resolvedSearchParams.delete('date');
+          resolvedSearchParams.set('startDate', range.startDate);
+          resolvedSearchParams.set('endDate', range.endDate);
+        }
+      }
     }
   } catch {
     resolvedSearchParams = null;
@@ -156,9 +181,9 @@ export default async function HospitalCareAppointmentsPage({
 
   const result =
     genuineAllowed && released && resolvedSearchParams
-      ? await readCurrentInstitutionAppointmentsV1(resolvedSearchParams).catch(() => ({
-          kind: 'unavailable' as const,
-        }))
+      ? invalidView ? { kind: 'invalid_query' as const, code: 'invalid_appointment_query' as const }
+        : await (view === 'list' ? readCurrentInstitutionAppointmentsV1(resolvedSearchParams)
+          : readCurrentInstitutionAppointmentCalendarV1(resolvedSearchParams)).catch(() => ({ kind: 'unavailable' as const }))
       : null;
 
   const canCreate =
@@ -168,7 +193,7 @@ export default async function HospitalCareAppointmentsPage({
       : false;
 
   const status =
-    result?.kind === 'ready'
+    (result?.kind === 'ready' || result?.kind === 'too_many')
       ? (resolvedSearchParams?.get('status') as AppointmentListStatusV1 | null)
       : null;
 
@@ -179,14 +204,22 @@ export default async function HospitalCareAppointmentsPage({
       availableNavigationTargets={availableNavigationTargets}
       workspaceScopeKey={workspaceScopeKey}
     >
-      {result?.kind === 'ready' ? (
+      {result?.kind === 'ready' || result?.kind === 'too_many' ? (
         <div className="space-y-5">
           <AppointmentCreateControlledShell
             canCreate={canCreate}
             open={createRequested}
           />
           <AppointmentListReadonlyShell
+            key={`${view}:${resolvedSearchParams?.toString()}`}
             result={result}
+            view={view}
+            date={view === 'list' ? resolvedSearchParams?.get('startDate') ?? today : date}
+            today={today}
+            startDate={resolvedSearchParams?.get('startDate') ?? ''}
+            endDate={resolvedSearchParams?.get('endDate') ?? ''}
+            keyword={resolvedSearchParams?.get('q') ?? ''}
+            pageSize={resolvedSearchParams?.get('pageSize') ?? undefined}
             status={status}
             operational={
               capabilityState === 'operational_released'
@@ -209,7 +242,7 @@ export default async function HospitalCareAppointmentsPage({
         <InstitutionPageState
           kind="error"
           title="预约查询条件无效"
-          description="请检查分页或状态筛选条件后重试。"
+          description="请检查日期范围、分页或状态筛选条件后重试。"
         />
       ) : (
         <InstitutionPageState
@@ -218,6 +251,12 @@ export default async function HospitalCareAppointmentsPage({
           description="当前未获得可信的预约管理结果；预约数据和写操作保持 fail-closed。"
         />
       )}
+      {genuineAllowed && released && result?.kind !== 'ready' && result?.kind !== 'too_many' && result?.kind !== 'forbidden' ? (
+        <div className="mt-4 flex gap-4 text-sm text-blue-700">
+          <a href={(() => { const params = new URLSearchParams(resolvedSearchParams ?? undefined); if (view !== 'list') { params.delete('startDate'); params.delete('endDate'); params.set('view', view); params.set('date', date); } return `/hospital/care/appointments?${params}`; })()}>重试当前查询</a>
+          <Link href="/hospital/care/appointments">清除筛选返回预约列表</Link>
+        </div>
+      ) : null}
     </InstitutionNavigationShell>
   );
 }

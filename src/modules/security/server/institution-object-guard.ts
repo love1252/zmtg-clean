@@ -426,8 +426,8 @@ async function authorize(
     return rejected('object_unavailable');
   }
 
-  const now = readNow(deps.now);
-  if (!now) return rejected('scope_unavailable');
+  const startedAt = readNow(deps.now);
+  if (!startedAt) return rejected('scope_unavailable');
 
   let rawScope: unknown;
   try {
@@ -439,13 +439,16 @@ async function authorize(
     return rejected('scope_unavailable');
   }
 
+  // 作用域由异步身份/成员查询产生，必须在查询完成后校验其时间。
+  const scopeCheckedAt = readNow(deps.now);
+  if (!scopeCheckedAt || scopeCheckedAt.epochMs < startedAt.epochMs) return rejected('scope_unavailable');
   const scopeDecidedAt = instant(rawScope.decidedAt);
   const scopeValidUntil = instant(rawScope.validUntil);
   if (
     !scopeDecidedAt ||
     !scopeValidUntil ||
-    now.epochMs < scopeDecidedAt.epochMs ||
-    now.epochMs >= scopeValidUntil.epochMs
+    scopeCheckedAt.epochMs < scopeDecidedAt.epochMs ||
+    scopeCheckedAt.epochMs >= scopeValidUntil.epochMs
   ) {
     return rejected('scope_unavailable');
   }
@@ -476,12 +479,15 @@ async function authorize(
   }
   if (fact.status !== 'active') return rejected('object_denied');
 
+  const objectCheckedAt = readNow(deps.now);
+  if (!objectCheckedAt || objectCheckedAt.epochMs < scopeCheckedAt.epochMs
+    || objectCheckedAt.epochMs >= scopeValidUntil.epochMs) return rejected('scope_unavailable');
   const observedAt = instant(fact.observedAt);
-  if (!observedAt || observedAt.epochMs > now.epochMs) {
+  if (!observedAt || observedAt.epochMs > objectCheckedAt.epochMs) {
     return rejected('object_invalid');
   }
   const objectValidUntil = observedAt.epochMs + OBJECT_FACT_FRESHNESS_MS;
-  if (now.epochMs >= objectValidUntil) return rejected('object_stale');
+  if (objectCheckedAt.epochMs >= objectValidUntil) return rejected('object_stale');
 
   let policy;
   try {
@@ -499,17 +505,19 @@ async function authorize(
       : rejected('policy_unavailable');
   }
 
-  const validUntil = Math.min(
-    scopeValidUntil.epochMs,
-    objectValidUntil,
-  );
-  if (validUntil <= now.epochMs) return rejected('object_stale');
+  // 不延长任何 TTL；签发前重读最终时刻，拒绝过程中到期或时钟回退。
+  const decisionTime = readNow(deps.now);
+  if (!decisionTime || decisionTime.epochMs < objectCheckedAt.epochMs
+    || decisionTime.epochMs < scopeDecidedAt.epochMs
+    || decisionTime.epochMs >= scopeValidUntil.epochMs) return rejected('scope_unavailable');
+  const validUntil = Math.min(scopeValidUntil.epochMs, objectValidUntil);
+  if (validUntil <= decisionTime.epochMs) return rejected('object_stale');
 
   return mintAllow({
     objectType: input.objectType,
     action: input.action,
     objectRevision: fact.revision,
-    decidedAt: now.raw,
+    decidedAt: decisionTime.raw,
     validUntil: new Date(validUntil).toISOString(),
   });
 }

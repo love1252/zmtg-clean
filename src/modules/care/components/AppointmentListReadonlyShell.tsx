@@ -1,218 +1,149 @@
 'use client';
 
 import Link from 'next/link';
-import { CalendarDays, PanelRightOpen, Plus } from 'lucide-react';
-import { useState } from 'react';
-
+import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   APPOINTMENT_LIST_MAX_PAGE_V1,
   type AppointmentListReaderResultV1,
 } from '@/modules/care/application/appointment-list-pagination-contract';
-import type { AppointmentListStatusV1 } from '@/modules/care/ports/appointment-list-source';
 import {
-  InstitutionV11Button,
-  InstitutionV11DateRangeControl,
-  InstitutionV11Drawer,
-  InstitutionV11PageHeader,
-} from '@/modules/institution-v11/components/InstitutionV11Ui';
+  appointmentCalendarRange,
+  appointmentShanghaiTime,
+  isAppointmentDate,
+  shiftAppointmentDate,
+  type AppointmentCalendarResultV1,
+} from '@/modules/care/application/appointment-calendar-contract';
+import { APPOINTMENT_LIST_STATUSES_V1, type AppointmentListStatusV1 } from '@/modules/care/ports/appointment-list-source';
+import { InstitutionV11PageHeader } from '@/modules/institution-v11/components/InstitutionV11Ui';
 
-type AppointmentListReadyResultV1 = Extract<
-  AppointmentListReaderResultV1,
-  { kind: 'ready' }
->;
-
-const statusLabels = Object.freeze({
-  pending_confirmation: '待确认',
-  confirmed: '已确认',
-  arrived: '已到店',
-  completed: '已完成',
-  reschedule_requested: '申请改期',
-  cancelled: '已取消',
-} as const satisfies Readonly<Record<AppointmentListStatusV1, string>>);
-
-function pageHref(page: number, status: AppointmentListStatusV1 | null) {
-  const params = new URLSearchParams({ page: String(page) });
-  if (status) params.set('status', status);
-  return `/hospital/care/appointments?${params.toString()}`;
-}
-
-function appointmentCreateHref() {
-  const params = new URLSearchParams({ create: '1' });
-  return `/hospital/care/appointments?${params.toString()}`;
-}
-
-function startOfWeekUtc(value: string | undefined) {
-  const parsed = value ? new Date(value) : new Date();
-  const safeDate = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
-  const start = new Date(Date.UTC(
-    safeDate.getUTCFullYear(),
-    safeDate.getUTCMonth(),
-    safeDate.getUTCDate(),
-  ));
-  const weekdayOffset = (start.getUTCDay() + 6) % 7;
-  start.setUTCDate(start.getUTCDate() - weekdayOffset);
-  return start;
-}
-
-function compactDate(value: Date) {
-  return `${String(value.getUTCMonth() + 1).padStart(2, '0')}/${String(value.getUTCDate()).padStart(2, '0')}`;
-}
+type ReadyList = Extract<AppointmentListReaderResultV1, { kind: 'ready' }>;
+type CalendarView = Extract<AppointmentCalendarResultV1, { kind: 'ready' | 'too_many' }>;
+const statusLabels: Readonly<Record<AppointmentListStatusV1, string>> = {
+  pending_confirmation: '待确认', confirmed: '已确认', arrived: '已到店',
+  completed: '已完成', reschedule_requested: '申请改期', cancelled: '已取消',
+};
+const fieldClass = 'h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm disabled:bg-slate-100';
+const linkClass = 'rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700';
 
 export function AppointmentListReadonlyShell({
-  result,
-  status,
-  operational,
+  result, status, operational, view = 'list', startDate = '', endDate = '', keyword = '',
+  date = '', today = '', pageSize,
 }: Readonly<{
-  result: AppointmentListReadyResultV1;
+  result: ReadyList | CalendarView;
   status: AppointmentListStatusV1 | null;
   operational: boolean;
+  view?: 'list' | 'day' | 'week';
+  startDate?: string; endDate?: string; keyword?: string; date?: string; today?: string; pageSize?: string;
 }>) {
-  const [view, setView] = useState<'list' | 'calendar'>('calendar');
-  const [availabilityOpen, setAvailabilityOpen] = useState(false);
-  const weekStart = startOfWeekUtc(result.records[0]?.scheduledAt);
-  const weekDays = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(weekStart);
-    date.setUTCDate(weekStart.getUTCDate() + index);
-    return date;
-  });
-  const hours = Array.from({ length: 10 }, (_, index) => index + 9);
+  const [start, setStart] = useState(startDate);
+  const [end, setEnd] = useState(endDate);
+  const [anchor, setAnchor] = useState(date || startDate || today);
+  const [selectedStatus, setSelectedStatus] = useState(status ?? '');
+  const [search, setSearch] = useState(keyword);
+  const router = useRouter();
+  const [busy, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const calendar = view !== 'list';
+  const range = calendar ? appointmentCalendarRange(date || startDate || today, view) : null;
+  const records = result.kind === 'ready' ? result.records : [];
+  const listResult = result.kind === 'ready' && 'pageInfo' in result ? result : null;
+  function href(updates: Record<string, string | null> = {}) {
+    const params = new URLSearchParams();
+    if (status) params.set('status', status);
+    if (keyword) params.set('q', keyword);
+    if (calendar) { params.set('view', view); params.set('date', date || startDate || today); }
+    else {
+      if (startDate) params.set('startDate', startDate);
+      if (endDate) params.set('endDate', endDate);
+      if (pageSize) params.set('pageSize', pageSize);
+    }
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === null) params.delete(key); else params.set(key, value);
+    }
+    return `/hospital/care/appointments${params.size ? `?${params}` : ''}`;
+  }
+  function viewHref(next: 'list' | 'day' | 'week') {
+    return href(next === 'list'
+      ? { view: null, date: null, startDate: (range?.startDate ?? startDate) || null, endDate: (range?.endDate ?? endDate) || null }
+      : { view: next, date: date || startDate || today, startDate: null, endDate: null, pageSize: null });
+  }
+  const days = range ? Array.from({ length: view === 'day' ? 1 : 7 }, (_, index) => shiftAppointmentDate(range.startDate, index)!) : [];
+  const slots = new Map<string, typeof records>();
+  for (const record of records) {
+    const key = appointmentShanghaiTime(record.scheduledAt).slice(0, 13);
+    slots.set(key, [...(slots.get(key) ?? []), record]);
+  }
+  const previous = range && shiftAppointmentDate(date || range.startDate, view === 'day' ? -1 : -7);
+  const next = range && shiftAppointmentDate(date || range.startDate, view === 'day' ? 1 : 7);
+  const createHref = href({ create: '1' });
   return (
-    <section className="space-y-5" aria-labelledby="appointment-list-title">
+    <section className="space-y-5" aria-labelledby="appointment-list-title" aria-busy={busy}>
       <div id="appointment-list-title">
         <span className="sr-only">{operational ? 'CONTROLLED WRITE' : 'READ ONLY'}</span>
-        <InstitutionV11PageHeader
-          eyebrow="APPOINTMENT MANAGEMENT"
-          title="预约管理"
-          description={operational
-            ? `当前页展示 ${result.records.length} 条低敏预约记录；所有创建、修改与取消仍走现有命令。`
-            : `当前页展示 ${result.records.length} 条低敏预约记录，仅供查看。`}
+        <InstitutionV11PageHeader eyebrow="APPOINTMENT MANAGEMENT" title="预约管理"
+          description="按上海时区查询预约；支持未来日期。日历查询所选完整日期范围，空白时段不代表可预约。"
           breadcrumbs={[{ label: '机构端', href: '/hospital' }, { label: '预约与随访' }, { label: '预约管理' }]}
           state={operational ? 'LIVE' : 'READ_ONLY'}
-          actions={(
-            <>
-              <InstitutionV11DateRangeControl label={`${compactDate(weekDays[0])} - ${compactDate(weekDays[6])}`} />
-              <Link href={operational ? appointmentCreateHref() : '/hospital/care/appointments'} aria-disabled={!operational} className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-semibold ${operational ? 'border-blue-700 bg-blue-700 text-white' : 'pointer-events-none border-slate-200 bg-slate-100 text-slate-400'}`}><Plus aria-hidden="true" className="h-4 w-4" />创建预约</Link>
-            </>
-          )}
-        />
+          actions={operational ? <Link href={createHref} className={linkClass}>创建预约</Link> : null} />
       </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex gap-1"><button type="button" onClick={() => setView('list')} className={`rounded-lg px-3 py-1.5 text-xs ${view === 'list' ? 'bg-blue-50 font-semibold text-blue-700' : 'text-slate-500'}`}>列表视图</button><button type="button" onClick={() => setView('calendar')} className={`rounded-lg px-3 py-1.5 text-xs ${view === 'calendar' ? 'bg-blue-50 font-semibold text-blue-700' : 'text-slate-500'}`}>日历视图</button><span className="mx-1 h-8 w-px bg-slate-200" /><button type="button" className="rounded-lg px-3 py-1.5 text-xs text-slate-500">日</button><button type="button" className="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-700">周</button></div>
-        <InstitutionV11Button icon={PanelRightOpen} onClick={() => setAvailabilityOpen(true)}>空闲时间查询</InstitutionV11Button>
-      </div>
-
-      {view === 'calendar' ? (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="min-w-[920px]">
-            <div className="grid grid-cols-[64px_repeat(7,minmax(112px,1fr))] border-b border-slate-200 bg-slate-50/80">
-              <div className="border-r border-slate-200 px-2 py-3 text-center text-[10px] text-slate-400">时间</div>
-              {weekDays.map((date, index) => <div key={date.toISOString()} className="border-r border-slate-200 px-3 py-2 text-center"><p className="text-[11px] text-slate-500">{['周一', '周二', '周三', '周四', '周五', '周六', '周日'][index]}</p><p className="mt-0.5 text-sm font-semibold text-slate-800">{compactDate(date)}</p></div>)}
-            </div>
-            {hours.map((hour) => (
-              <div key={hour} className="grid grid-cols-[64px_repeat(7,minmax(112px,1fr))] border-b border-slate-100 last:border-b-0">
-                <div className="border-r border-slate-200 px-2 py-4 text-center text-[11px] text-slate-400">{String(hour).padStart(2, '0')}:00</div>
-                {weekDays.map((date) => {
-                  const appointments = result.records.filter((record) => {
-                    const scheduledAt = new Date(record.scheduledAt);
-                    if (Number.isNaN(scheduledAt.getTime())) return false;
-                    const scheduledHour = Math.max(9, Math.min(18, scheduledAt.getUTCHours()));
-                    return scheduledHour === hour
-                      && scheduledAt.getUTCFullYear() === date.getUTCFullYear()
-                      && scheduledAt.getUTCMonth() === date.getUTCMonth()
-                      && scheduledAt.getUTCDate() === date.getUTCDate();
-                  });
-                  return (
-                    <div key={`${date.toISOString()}-${hour}`} className="min-h-16 border-r border-slate-100 bg-white p-1.5">
-                      {appointments.map((record) => (
-                        <div key={record.appointmentId} className="rounded-md border-l-2 border-emerald-500 bg-emerald-50 px-2 py-1.5 text-[10px] leading-4 text-emerald-800">
-                          <p className="font-semibold">{record.customerDisplayName} · {record.project}</p>
-                          <p>{statusLabels[record.status]}</p>
-                          <time dateTime={record.scheduledAt}>预约时间 {record.scheduledAt}</time>
-                          {operational ? <Link href={`/hospital/care/appointments/${encodeURIComponent(record.appointmentId)}`} className="mt-1 block font-semibold text-blue-700">查看 / 操作</Link> : null}
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-            <div className="border-t border-slate-100 bg-amber-50/50 px-4 py-2 text-[11px] text-amber-700">空白区域仅表示当前 Reader 未返回预约；不代表可预约。Availability 能力未开放。</div>
-          </div>
-        </div>
-      ) : result.records.length === 0 ? (
-        <div className="rounded-[24px] border border-dashed border-slate-300 bg-white/80 px-6 py-10 text-center text-sm text-slate-600">
-          当前页暂无预约记录
-        </div>
-      ) : (
-        <ul
-          className="grid gap-3"
-          aria-label={operational ? '预约记录' : '预约只读记录'}
-        >
-          {result.records.map((record) => (
-            <li
-              key={record.appointmentId}
-              className="rounded-[24px] border border-white/90 bg-white/90 px-5 py-4 shadow-sm"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="font-semibold text-slate-950">
-                    {record.customerDisplayName} · {record.project}
-                  </p>
-                  <p className="mt-1 text-xs font-medium text-slate-500">{statusLabels[record.status]}</p>
-                  <time className="mt-1 block text-sm text-slate-600" dateTime={record.scheduledAt}>
-                    预约时间 {record.scheduledAt}
-                  </time>
-                </div>
-                <div className="flex flex-col items-end gap-2">
-                  <time className="text-xs text-slate-500" dateTime={record.updatedAt}>
-                    更新于 {record.updatedAt}
-                  </time>
-                  {operational ? (
-                    <Link
-                      href={`/hospital/care/appointments/${encodeURIComponent(
-                        record.appointmentId,
-                      )}`}
-                      className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-800"
-                    >
-                      查看 / 操作
-                    </Link>
-                  ) : null}
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <nav aria-label="预约列表分页" className="flex items-center justify-between gap-3">
-        {result.pageInfo.page > 1 ? (
-          <Link
-            href={pageHref(result.pageInfo.page - 1, status)}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
-          >
-            上一页
-          </Link>
-        ) : (
-          <span />
-        )}
-        <span className="text-sm text-slate-500">第 {result.pageInfo.page} 页</span>
-        {result.pageInfo.hasMore &&
-        result.pageInfo.page < APPOINTMENT_LIST_MAX_PAGE_V1 ? (
-          <Link
-            href={pageHref(result.pageInfo.page + 1, status)}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
-          >
-            下一页
-          </Link>
-        ) : (
-          <span />
-        )}
+      <nav className="flex flex-wrap gap-2" aria-label="预约视图">
+        {(['list', 'day', 'week'] as const).map((mode) => <Link key={mode} href={viewHref(mode)} aria-current={view === mode ? 'page' : undefined} className={linkClass}>{mode === 'list' ? '列表视图' : mode === 'day' ? '日视图' : '周视图'}</Link>)}
       </nav>
-
-      <InstitutionV11Drawer open={availabilityOpen} onClose={() => setAvailabilityOpen(false)} title="空闲时间查询" description="项目、医生、治疗室与设备条件已经还原；不会生成假空闲时段。" footer={<div className="flex justify-end"><InstitutionV11Button onClick={() => setAvailabilityOpen(false)}>关闭</InstitutionV11Button></div>}>
-        <div className="grid gap-4"><label className="grid gap-1.5 text-xs text-slate-600">项目<span className="flex h-9 items-center rounded-lg border border-slate-200 bg-slate-100 px-3 text-slate-400">正式 Availability Reader 未开放</span></label><label className="grid gap-1.5 text-xs text-slate-600">医生 / 治疗室 / 设备<span className="flex h-9 items-center rounded-lg border border-slate-200 bg-slate-100 px-3 text-slate-400">当前不支持</span></label><div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center"><CalendarDays aria-hidden="true" className="mx-auto h-6 w-6 text-slate-400" /><h3 className="mt-2 text-sm font-semibold text-slate-900">Availability 能力未开放</h3><p className="mt-1 text-xs text-slate-500">时间槽全部置灰并显示真实禁用原因。</p></div></div>
-      </InstitutionV11Drawer>
+      <form action="/hospital/care/appointments" method="get" className="flex flex-wrap items-end gap-3 rounded-xl border bg-white p-4"
+        onSubmit={(event) => {
+          const valid = calendar ? isAppointmentDate(anchor) : (!start && !end) || (isAppointmentDate(start) && isAppointmentDate(end) && start <= end);
+          if (!valid) { event.preventDefault(); setError('请选择有效的开始和结束日期，结束日期不得早于开始日期。'); return; }
+          event.preventDefault();
+          setError(null);
+          const params = new URLSearchParams();
+          if (calendar) { params.set('view', view); params.set('date', anchor); }
+          else {
+            if (start && end) { params.set('startDate', start); params.set('endDate', end); }
+            if (pageSize) params.set('pageSize', pageSize);
+          }
+          if (selectedStatus) params.set('status', selectedStatus);
+          if (search.trim()) params.set('q', search.trim());
+          startTransition(() => router.push(`/hospital/care/appointments?${params}`));
+        }}>
+        {calendar ? <><input type="hidden" name="view" value={view} /><label className="grid gap-1 text-sm">{view === 'day' ? '预约日期' : '所在周日期'}<input type="date" name="date" value={anchor} min="0100-01-01" max="9999-12-31" onChange={(event) => setAnchor(event.target.value)} disabled={busy} required className={fieldClass} /></label></> : <>
+          <label className="grid gap-1 text-sm">开始日期<input type="date" name={start ? 'startDate' : undefined} value={start} min="0100-01-01" max="9999-12-31" onChange={(event) => setStart(event.target.value)} disabled={busy} className={fieldClass} /></label>
+          <label className="grid gap-1 text-sm">结束日期<input type="date" name={end ? 'endDate' : undefined} value={end} min="0100-01-01" max="9999-12-31" onChange={(event) => setEnd(event.target.value)} disabled={busy} className={fieldClass} /></label>
+          {pageSize ? <input type="hidden" name="pageSize" value={pageSize} /> : null}
+        </>}
+        <label className="grid gap-1 text-sm">预约状态<select name={selectedStatus ? 'status' : undefined} value={selectedStatus} onChange={(event) => setSelectedStatus(event.target.value)} disabled={busy} className={fieldClass}><option value="">全部状态</option>{APPOINTMENT_LIST_STATUSES_V1.map((value) => <option key={value} value={value}>{statusLabels[value]}</option>)}</select></label>
+        <label className="grid gap-1 text-sm">客户或项目<input name={search.trim() ? 'q' : undefined} value={search} maxLength={80} onChange={(event) => setSearch(event.target.value.trimStart())} onBlur={() => setSearch(search.trim())} disabled={busy} className={fieldClass} /></label>
+        <button type="submit" disabled={busy} className={linkClass}>{busy ? '正在查询…' : '应用筛选'}</button>
+        <Link href="/hospital/care/appointments" className={linkClass}>清除筛选</Link>
+      </form>
+      {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
+      {busy ? <p role="status">正在查询预约，请稍候…</p> : null}
+      {calendar && range ? <div className="flex flex-wrap items-center gap-3" aria-label="日历日期导航">
+        {previous && appointmentCalendarRange(previous, view) ? <Link href={href({ date: previous })} className={linkClass}>{view === 'day' ? '前一天' : '前一周'}</Link> : <span>已到日期起点</span>}
+        <Link href={href({ date: today })} className={linkClass}>今天</Link>
+        {next && appointmentCalendarRange(next, view) ? <Link href={href({ date: next })} className={linkClass}>{view === 'day' ? '后一天' : '后一周'}</Link> : <span>已到日期终点</span>}
+        <p className="text-sm">{range.startDate} — {range.endDate}（上海时区）</p>
+      </div> : null}
+      {result.kind === 'too_many' ? <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-5">当前范围超过 {result.limit} 条预约，未展示不完整日历。请切换日视图或按状态、客户／项目缩小范围。</div> : calendar && range ? <>
+        <p role="status" className="text-sm text-slate-600">{records.length ? `当前日期范围共 ${records.length} 条预约，已完整展示。` : '当前日期范围暂无预约。'}</p>
+        <div className="overflow-auto rounded-xl border bg-white" tabIndex={0} aria-label="预约日历（上海时区）"><table className="w-full table-fixed text-xs" style={{ minWidth: days.length === 1 ? 320 : 980 }}>
+          <thead><tr><th scope="col" className="w-16 p-3">时间</th>{days.map((day) => <th key={day} scope="col" className="border-l p-3">{day}<br />{['周日', '周一', '周二', '周三', '周四', '周五', '周六'][new Date(`${day}T00:00:00Z`).getUTCDay()]}</th>)}</tr></thead>
+          <tbody>{Array.from({ length: 24 }, (_, hour) => <tr key={hour}><th scope="row" className="border-t p-2 align-top">{String(hour).padStart(2, '0')}:00</th>{days.map((day) => <td key={day} className="h-14 border-l border-t p-1 align-top" aria-label={`${day} ${String(hour).padStart(2, '0')}:00`}>
+            {(slots.get(`${day} ${String(hour).padStart(2, '0')}`) ?? []).map((record) => <article key={record.appointmentId} className="mb-1 rounded bg-blue-50 p-2 text-blue-950"><p className="font-semibold">{record.customerDisplayName} · {record.project}</p><p>{statusLabels[record.status]}</p><time dateTime={record.scheduledAt}>预约时间 {appointmentShanghaiTime(record.scheduledAt)}</time>{operational ? <Link href={`/hospital/care/appointments/${encodeURIComponent(record.appointmentId)}`} className="mt-1 block underline">查看 / 操作</Link> : null}</article>)}
+          </td>)}</tr>)}</tbody>
+        </table></div>
+      </> : records.length === 0 ? <p role="status" className="rounded-xl border border-dashed p-8 text-center">当前页暂无预约记录</p> : <ul className="grid gap-3" aria-label={operational ? '预约记录' : '预约只读记录'}>{records.map((record) => <li key={record.appointmentId} className="rounded-xl border bg-white p-5">
+        <p className="font-semibold">{record.customerDisplayName} · {record.project}</p><p className="text-sm text-slate-500">{statusLabels[record.status]}</p>
+        <time dateTime={record.scheduledAt} className="block text-sm">预约时间 {appointmentShanghaiTime(record.scheduledAt)}</time>
+        <time dateTime={record.updatedAt} className="block text-xs text-slate-500">更新于 {appointmentShanghaiTime(record.updatedAt)}</time>
+        {operational ? <Link href={`/hospital/care/appointments/${encodeURIComponent(record.appointmentId)}`} className="mt-2 inline-block underline">查看 / 操作</Link> : null}
+      </li>)}</ul>}
+      {!calendar && listResult ? <nav aria-label="预约列表分页" className="flex items-center justify-between gap-3">
+        {listResult.pageInfo.page > 1 ? <Link href={href({ page: String(listResult.pageInfo.page - 1) })} className={linkClass}>上一页</Link> : <span />}
+        <span className="text-sm">第 {listResult.pageInfo.page} 页 · 共 {listResult.pageInfo.total} 条</span>
+        {listResult.pageInfo.hasMore && listResult.pageInfo.page < APPOINTMENT_LIST_MAX_PAGE_V1 ? <Link href={href({ page: String(listResult.pageInfo.page + 1) })} className={linkClass}>下一页</Link> : null}
+        {listResult.pageInfo.hasMore && listResult.pageInfo.page >= APPOINTMENT_LIST_MAX_PAGE_V1 ? <p role="status">已到分页上限，请缩小日期范围或增加筛选条件。</p> : null}
+      </nav> : null}
     </section>
   );
 }

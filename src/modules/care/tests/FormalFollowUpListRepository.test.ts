@@ -182,3 +182,20 @@ describe('正式随访分页仓库', () => {
       .rejects.toThrow('invalid_follow_up_page');
   });
 });
+
+
+it('精确 customerId 与机构、成员范围共用列表及统计谓词，两个同名客户不混查', async () => {
+  const db = databaseFixture([row(1)]);
+  const repo = createFormalFollowUpRepositoryV1(db.database);
+  for (const customerId of ['customer-a', 'customer-b']) {
+    await repo.queryVisible({ ...input, customerId });
+    const where = compile(db.pageWhere.mock.calls.at(-1)![0]);
+    expect(where.sql).toContain('"customer_id" =');
+    expect(where.params).toContain(customerId);
+    expect(where.params).toContain('tenant-a');
+    expect(where.params).toContain('institution-a');
+    expect(where.params).toContain('staff-a');
+    expect(where.sql).not.toContain('ilike');
+    expect(db.summaryWhere.mock.calls.at(-1)?.[0]).toBe(db.pageWhere.mock.calls.at(-1)?.[0]);
+  }
+});

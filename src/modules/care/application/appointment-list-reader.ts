@@ -139,7 +139,7 @@ function chinaDayAfterUtc(value: string) {
   return new Date(Date.parse(chinaDayStartUtc(value)) + 24 * 60 * 60 * 1000).toISOString();
 }
 
-function parseQuery(searchParams: URLSearchParams): Readonly<{
+export function parseAppointmentListQueryV1(searchParams: URLSearchParams): Readonly<{
   page: number;
   pageSize: AppointmentListPageSizeV1;
   status: AppointmentListStatusV1 | null;
@@ -239,7 +239,7 @@ function parseSummaryRow(
   });
 }
 
-function parseSourceRow(
+export function parseAppointmentSourceRowV1(
   value: unknown,
   tenantId: string,
   institutionId: string,
@@ -286,7 +286,7 @@ function makeReader(source: AppointmentListSourceV1 | null): AppointmentListRead
         !(input.searchParams instanceof URLSearchParams)
       ) return UNAVAILABLE;
 
-      const query = parseQuery(input.searchParams);
+      const query = parseAppointmentListQueryV1(input.searchParams);
       if (!query) return INVALID_QUERY;
       if (
         !source ||
@@ -323,7 +323,7 @@ function makeReader(source: AppointmentListSourceV1 | null): AppointmentListRead
         ) return UNAVAILABLE;
 
         const parsedRows = rows.map((row) =>
-          parseSourceRow(
+          parseAppointmentSourceRowV1(
             row,
             input.tenantId as string,
             input.institutionId as string,

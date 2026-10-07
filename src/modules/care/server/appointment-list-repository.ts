@@ -2,6 +2,8 @@ import { and, asc, count, eq, gte, ilike, lt, or } from 'drizzle-orm';
 
 import {
   APPOINTMENT_LIST_STATUSES_V1,
+  APPOINTMENT_CALENDAR_LIMIT_V1,
+  type AppointmentCalendarSourceV1,
   type AppointmentListSourceQueryV1,
   type AppointmentListSourceSummaryQueryV1,
   type AppointmentListSourceV1,
@@ -84,52 +86,62 @@ function conditionsFor(
 }
 
 export function createAppointmentListRepository(
-  database: TenantDatabase,
-): AppointmentListSourceV1 {
+  database: Pick<TenantDatabase, 'select'>,
+): AppointmentListSourceV1 & AppointmentCalendarSourceV1 {
+  async function listRows(query: AppointmentListSourceQueryV1) {
+    const rows = await database
+      .select({
+        appointmentId: appointments.id,
+        customerDisplayName: appointments.customerDisplayName,
+        project: appointments.project,
+        scheduledAt: appointments.scheduledAt,
+        status: appointments.status,
+        updatedAt: appointments.updatedAt,
+        tenantId: appointments.tenantId,
+        institutionId: appointments.institutionId,
+      })
+      .from(appointments)
+      .where(and(...conditionsFor(query)))
+      .orderBy(asc(appointments.scheduledAt), asc(appointments.id))
+      .limit(query.limit)
+      .offset(query.offset);
+
+    if (rows.length > query.limit) {
+      throw new Error('appointment_list_source_overflow');
+    }
+
+    return Object.freeze(
+      rows.map((row) => {
+        if (!row.institutionId) {
+          throw new Error('appointment_institution_attribution_missing');
+        }
+        return Object.freeze({
+          appointmentId: row.appointmentId,
+          customerDisplayName: row.customerDisplayName,
+          project: row.project,
+          scheduledAt: row.scheduledAt.toISOString(),
+          status: row.status,
+          updatedAt: row.updatedAt.toISOString(),
+          tenantId: row.tenantId,
+          institutionId: row.institutionId,
+        });
+      }),
+    );
+  }
   return Object.freeze({
     async list(query: AppointmentListSourceQueryV1) {
-      if (!isQuery(query)) {
-        throw new Error('invalid_appointment_list_source_query');
-      }
-
-      const rows = await database
-        .select({
-          appointmentId: appointments.id,
-          customerDisplayName: appointments.customerDisplayName,
-          project: appointments.project,
-          scheduledAt: appointments.scheduledAt,
-          status: appointments.status,
-          updatedAt: appointments.updatedAt,
-          tenantId: appointments.tenantId,
-          institutionId: appointments.institutionId,
-        })
-        .from(appointments)
-        .where(and(...conditionsFor(query)))
-        .orderBy(asc(appointments.scheduledAt), asc(appointments.id))
-        .limit(query.limit)
-        .offset(query.offset);
-
-      if (rows.length > query.limit) {
-        throw new Error('appointment_list_source_overflow');
-      }
-
-      return Object.freeze(
-        rows.map((row) => {
-          if (!row.institutionId) {
-            throw new Error('appointment_institution_attribution_missing');
-          }
-          return Object.freeze({
-            appointmentId: row.appointmentId,
-            customerDisplayName: row.customerDisplayName,
-            project: row.project,
-            scheduledAt: row.scheduledAt.toISOString(),
-            status: row.status,
-            updatedAt: row.updatedAt.toISOString(),
-            tenantId: row.tenantId,
-            institutionId: row.institutionId,
-          });
-        }),
-      );
+      if (!isQuery(query)) throw new Error('invalid_appointment_list_source_query');
+      return listRows(query);
+    },
+    async listCalendar(query: AppointmentListSourceQueryV1) {
+      if (
+        !isFilter(query) ||
+        (query.status !== null && !APPOINTMENT_LIST_STATUSES_V1.some((item) => item === query.status)) ||
+        query.scheduledFrom === null || query.scheduledBefore === null ||
+        Date.parse(query.scheduledBefore) - Date.parse(query.scheduledFrom) > 7 * 86400000 ||
+        query.offset !== 0 || query.limit !== APPOINTMENT_CALENDAR_LIMIT_V1 + 1
+      ) throw new Error('invalid_appointment_calendar_source_query');
+      return listRows(query);
     },
     async summarize(query: AppointmentListSourceSummaryQueryV1) {
       if (!isFilter(query)) {

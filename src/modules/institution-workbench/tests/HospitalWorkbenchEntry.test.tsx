@@ -357,6 +357,7 @@ function operationalWorkbenchCapabilityStatus(): CapabilityStatusV1 {
 
 describe('WB-ENTRY-02A server-owned 工作台入口', () => {
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -638,6 +639,7 @@ describe('BASE-WIRE-01 /hospital server navigation authorization', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -705,6 +707,18 @@ describe('BASE-WIRE-01 /hospital server navigation authorization', () => {
     ).toHaveBeenCalledTimes(1);
   });
 
+  it.each(['development', 'production'])('%s 使用相同正式入口，不自动进入预览 iframe', async mode => {
+    vi.stubEnv('NODE_ENV', mode);
+    vi.spyOn(Date, 'now').mockReturnValue(NOW.getTime());
+    serverRuntimeMocks.resolveInstitutionServerAuthorizationV1.mockResolvedValueOnce(authorizationFixture('tenant_admin').authorization);
+    capabilityAuthorityMocks.resolveInstitutionCapabilityAuthorityStatusV1.mockResolvedValueOnce(readonlyWorkbenchCapabilityStatus());
+    const { container } = render(await HospitalPage());
+    expect(screen.getByRole('heading', { name: '工作台', level: 1 })).toBeInTheDocument();
+    expect(screen.getByText('工作台仅供查看')).toBeInTheDocument();
+    expect(container.querySelector('iframe')).toBeNull();
+    expect(screen.getByRole('button', { name: '刷新工作台' })).toBeEnabled();
+  });
+
   it('renders exactly one readonly page_workbench pilot when navigation and authority status both succeed', async () => {
     const created = authorizationFixture('tenant_admin');
     vi.spyOn(Date, 'now').mockReturnValue(NOW.getTime());
@@ -733,7 +747,7 @@ describe('BASE-WIRE-01 /hospital server navigation authorization', () => {
         level: 2,
       }),
     ).not.toBeInTheDocument();
-    expect(within(main).queryAllByRole('button')).toHaveLength(0);
+    expect(within(main).queryAllByRole('button')).toEqual([within(main).getByRole('button', { name: '刷新工作台' })]);
     expect(within(main).queryAllByRole('link')).toHaveLength(0);
     expect(
       capabilityAuthorityMocks.resolveInstitutionCapabilityAuthorityStatusV1,
@@ -769,7 +783,7 @@ describe('BASE-WIRE-01 /hospital server navigation authorization', () => {
       }),
     ).not.toBeInTheDocument();
     expect(within(main).queryAllByRole('link')).toHaveLength(0);
-    expect(within(main).queryAllByRole('button')).toHaveLength(0);
+    expect(within(main).queryAllByRole('button')).toEqual([within(main).getByRole('button', { name: '刷新工作台' })]);
   });
 
 
@@ -831,7 +845,7 @@ describe('BASE-WIRE-01 /hospital server navigation authorization', () => {
     if (visibleSummary) expect(screen.getByText(visibleSummary)).toBeInTheDocument();
     else expect(screen.queryByText('审计与安全仅供查看')).not.toBeInTheDocument();
     expect(screen.queryByText('系统概览仅供查看')).not.toBeInTheDocument();
-    expect(within(main).queryAllByRole('button')).toHaveLength(0);
+    expect(within(main).queryAllByRole('button')).toEqual([within(main).getByRole('button', { name: '刷新工作台' })]);
     expect(within(main).queryAllByRole('link')).toHaveLength(0);
   });
 

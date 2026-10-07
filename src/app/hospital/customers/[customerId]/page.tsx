@@ -95,7 +95,7 @@ export default async function HospitalCustomerDetailPage({
 
   const { customerId } = await params;
   const tab = (await searchParams)?.tab;
-  const initialTab = tab === 'profile' || tab === 'opportunities' ? tab : 'overview';
+  const initialTab = tab === 'profile' || tab === 'opportunities' || tab === 'followups' ? tab : 'overview';
   const result =
     genuineAllowed && capabilityOperational
       ? await readCurrentInstitutionCustomerControlledV1(customerId).catch(() => ({
