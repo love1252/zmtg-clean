@@ -10,7 +10,7 @@ const result: Extract<WorkbenchAppointmentResultV1, { kind: 'ready' }> = {
 };
 describe('工作台预约安排', () => {
   it('展示全量计数、上海时间、明确的子集提示和一致的下钻条件', () => {
-    render(<WorkbenchAppointmentSchedule result={result} />);
+    render(<WorkbenchAppointmentSchedule result={result} canOpenDetails />);
     const today = screen.getByRole('region', { name: '今日安排' });
     expect(within(today).getByText('151 项')).toBeInTheDocument();
     expect(within(today).getByRole('link', { name: '查看全部' })).toHaveAttribute('href', '/hospital/care/appointments?startDate=2026-10-07&endDate=2026-10-07');
@@ -18,6 +18,12 @@ describe('工作台预约安排', () => {
     expect(within(today).getByText(/10\/07 09:00/)).toBeInTheDocument();
     expect(within(today).getByText(/显示最早的 1 项，共 151 项/)).toBeInTheDocument();
     expect(within(screen.getByRole('region', { name: '改期申请' })).getByRole('link', { name: '查看全部' })).toHaveAttribute('href', '/hospital/care/appointments?status=reschedule_requested');
+  });
+  it('只读能力仍展示事实和列表入口，不引导进入受控操作详情', () => {
+    render(<WorkbenchAppointmentSchedule result={result} />);
+    expect(screen.getByText('合成客户 · 复诊')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /合成客户/ })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: '查看全部' })).toHaveLength(3);
   });
   it.each(['unavailable', 'forbidden'] as const)('%s 不呈现零条或虚假空日程', kind => {
     render(<WorkbenchAppointmentSchedule result={{ kind }} />);

@@ -339,7 +339,7 @@ export function InstitutionWorkbenchShell({
         </div>
       </section>
 
-      {appointments ? <WorkbenchAppointmentSchedule result={appointments} /> : null}
+      {appointments ? <WorkbenchAppointmentSchedule result={appointments} canOpenDetails={capabilityProjection.status === 'projected' && capabilityProjection.summaries.some(summary => summary.key === 'page_care_appointments' && summary.decision === 'operational')} /> : null}
 
       {hasVisibleProjection ? null : (
         <>
