@@ -55,3 +55,11 @@ export type AppointmentListSourceV1 = Readonly<{
     query: AppointmentListSourceSummaryQueryV1,
   ) => Promise<readonly AppointmentListSourceSummaryRowV1[]>;
 }>;
+
+// 日历使用一次有界查询；不拼接列表页，避免遗漏或跨页重复。
+export const APPOINTMENT_CALENDAR_LIMIT_V1 = 2000;
+export type AppointmentCalendarSourceV1 = Readonly<{
+  listCalendar: (
+    query: AppointmentListSourceQueryV1,
+  ) => Promise<readonly AppointmentListSourceRowV1[]>;
+}>;

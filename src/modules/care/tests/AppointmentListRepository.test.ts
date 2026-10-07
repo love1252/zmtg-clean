@@ -331,3 +331,31 @@ describe('Care appointment exact list repository', () => {
     expect(source).not.toMatch(/\.select\(\s*\)|\.insert\(|\.update\(|\.delete\(|transaction|raw\s*sql/iu);
   });
 });
+
+
+describe('正式预约日历 repository', () => {
+  const calendarQuery = { ...query, scheduledFrom: '2026-10-06T16:00:00.000Z', scheduledBefore: '2026-10-13T16:00:00.000Z', limit: 2001, offset: 0 };
+  it('单次查询完整日期范围、正式机构边界与有界哨兵，不走列表分页', async () => {
+    const db = createDatabase(Array.from({ length: 151 }, (_, index) => ({ ...row, appointmentId: `appointment-${index}` })));
+    const result = await createAppointmentListRepository(db.database).listCalendar(calendarQuery);
+    expect(result).toHaveLength(151);
+    expect(db.select).toHaveBeenCalledOnce();
+    expect(db.limit).toHaveBeenCalledWith(2001);
+    expect(db.offset).toHaveBeenCalledWith(0);
+    expect(drizzleMocks.and).toHaveBeenLastCalledWith(
+      { operator: 'eq', column: appointments.tenantId, value: 'tenant-001' },
+      { operator: 'eq', column: appointments.institutionId, value: 'institution-001' },
+      { operator: 'gte', column: appointments.scheduledAt, value: new Date(calendarQuery.scheduledFrom) },
+      { operator: 'lt', column: appointments.scheduledAt, value: new Date(calendarQuery.scheduledBefore) },
+    );
+  });
+  it.each([
+    { ...calendarQuery, institutionId: '' }, { ...calendarQuery, scheduledFrom: null },
+    { ...calendarQuery, scheduledBefore: '2026-10-14T16:00:00.000Z' },
+    { ...calendarQuery, limit: 2000 }, { ...calendarQuery, offset: 100 }, { ...calendarQuery, status: 'unknown' },
+  ])('拒绝无界范围或错误范围/状态且不查询 DB', async (invalid) => {
+    const db = createDatabase();
+    await expect(createAppointmentListRepository(db.database).listCalendar(invalid as never)).rejects.toThrow('invalid_appointment_calendar_source_query');
+    expect(db.select).not.toHaveBeenCalled();
+  });
+});

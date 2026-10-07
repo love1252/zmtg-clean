@@ -9,10 +9,15 @@ const navigationOwners = vi.hoisted(() => new WeakSet<object>());
 const mocks = vi.hoisted(() => ({
   authorizeNavigation: vi.fn(),
   readAppointments: vi.fn(),
+  readCalendar: vi.fn(),
+  push: vi.fn(),
   resolveCapability: vi.fn(),
   resolveServerAuthorization: vi.fn(),
   canCreateAppointment: vi.fn(),
 }));
+
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
+vi.mock('@/server/orchestration/institution-appointment-calendar-reader', () => ({ readCurrentInstitutionAppointmentCalendarV1: mocks.readCalendar }));
 
 vi.mock('@/modules/institution/server/institution-server-runtime', () => ({
   resolveInstitutionServerAuthorizationV1: mocks.resolveServerAuthorization,
@@ -197,7 +202,7 @@ describe('/hospital/care/appointments readonly release page', () => {
       }),
     );
     expect(screen.getByRole('heading', { name: '预约管理' })).toBeInTheDocument();
-    expect(screen.getByText('待确认')).toBeInTheDocument();
+    expect(screen.getAllByText('待确认')).toHaveLength(2);
     expect(screen.getByText(/预约时间 2026-08-16/u)).toBeInTheDocument();
     expect(screen.getByText('READ ONLY')).toBeInTheDocument();
     expect(
@@ -354,5 +359,60 @@ describe('/hospital/care/appointments readonly release page', () => {
     expect(`${pageSource}\n${componentSource}`).not.toMatch(
       /AppointmentCenterShell|tenant-business-client|createAppointment|updateAppointment|\?create=1|customerId|consultantUserId|note|phone|medical/iu,
     );
+  });
+});
+
+
+describe('正式预约日期与日历接线', () => {
+  it('列表未来日期、关键词、容量和状态翻页保留，清除回默认', async () => {
+    mocks.readAppointments.mockResolvedValueOnce(readyPage(2, true));
+    render(await HospitalCareAppointmentsPage({ searchParams: Promise.resolve({
+      page: '2', pageSize: '50', status: 'confirmed', q: '复诊', startDate: '2026-12-30', endDate: '2027-01-03',
+    }) }));
+    expect(Object.fromEntries(linkSearchParams('下一页'))).toEqual({
+      page: '3', pageSize: '50', status: 'confirmed', q: '复诊', startDate: '2026-12-30', endDate: '2027-01-03',
+    });
+    expect(screen.getByLabelText('开始日期')).toHaveValue('2026-12-30');
+    expect(screen.getByRole('link', { name: '清除筛选' })).toHaveAttribute('href', '/hospital/care/appointments');
+    expect(screen.getByRole('link', { name: '周视图' })).toHaveAttribute('href', '/hospital/care/appointments?status=confirmed&q=%E5%A4%8D%E8%AF%8A&view=week&date=2026-12-30');
+  });
+
+  it('所选跨年周交给独立日历 Reader，完整范围不是当前列表页', async () => {
+    mocks.readCalendar.mockResolvedValueOnce({ kind: 'ready', records: [], range: { startDate: '2026-12-28', endDate: '2027-01-03' } });
+    render(await HospitalCareAppointmentsPage({ searchParams: Promise.resolve({ view: 'week', date: '2027-01-01', status: 'confirmed' }) }));
+    expect(mocks.readAppointments).not.toHaveBeenCalled();
+    expect(Object.fromEntries(mocks.readCalendar.mock.calls[0][0])).toEqual({ status: 'confirmed', startDate: '2026-12-28', endDate: '2027-01-03' });
+    expect(screen.getByText('当前日期范围暂无预约。')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: '预约列表分页' })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { view: 'week', date: '2026-02-30' },
+    { view: ['day', 'week'], date: '2026-10-07' },
+    { view: 'week', date: ['2026-10-07', '2026-10-08'] },
+    { view: 'week', page: '2' },
+    { view: 'day', startDate: '2026-10-07', endDate: '2026-10-07' },
+  ])('非法/混合视图参数不查询数据库 %o', async (searchParams) => {
+    render(await HospitalCareAppointmentsPage({ searchParams: Promise.resolve(searchParams) }));
+    expect(screen.getByText('预约查询条件无效')).toBeInTheDocument();
+    expect(mocks.readCalendar).not.toHaveBeenCalled();
+    expect(mocks.readAppointments).not.toHaveBeenCalled();
+  });
+
+  it('日历未授权或能力未开放时不读取业务数据', async () => {
+    mocks.authorizeNavigation.mockResolvedValueOnce(navigation('blocked'));
+    render(await HospitalCareAppointmentsPage({ searchParams: Promise.resolve({ view: 'week', date: '2026-10-07' }) }));
+    expect(mocks.readCalendar).not.toHaveBeenCalled();
+    expect(mocks.readAppointments).not.toHaveBeenCalled();
+    expect(screen.getByText('当前账号不可访问预约管理')).toBeInTheDocument();
+  });
+
+  it('翻页失败清除旧记录，提供保留当前日期/状态的重试入口', async () => {
+    mocks.readAppointments.mockResolvedValueOnce({ kind: 'unavailable' });
+    render(await HospitalCareAppointmentsPage({ searchParams: Promise.resolve({ page: '2', status: 'confirmed', startDate: '2026-10-07', endDate: '2026-10-10' }) }));
+    expect(screen.getByText('预约管理暂时不可用')).toBeInTheDocument();
+    expect(screen.queryByText('张女士 · 光子嫩肤复诊')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '重试当前查询' })).toHaveAttribute('href', '/hospital/care/appointments?page=2&status=confirmed&startDate=2026-10-07&endDate=2026-10-10');
+    expect(screen.queryByRole('button', { name: '应用筛选' })).not.toBeInTheDocument();
   });
 });
