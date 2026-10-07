@@ -109,7 +109,7 @@ async function setup(state: DailyUsableEnvironment, directory: string) {
         id: `daily-appointment-${suffix}-${String(index + 1).padStart(3, '0')}`,
         tenantId: `daily-tenant-${suffix}`, institutionId: `daily-institution-${suffix}`, customerId: `daily-customer-${suffix}`,
         customerDisplayName: `合成客户 ${suffix}`, project: `合成预约项目 ${index + 1}`, scheduledAt: tomorrow,
-        consultantUserId: suffix === 'a' ? 'daily-user-consultant' : 'daily-user-other', status: 'confirmed' as const, note: '隔离测试数据',
+        consultantUserId: suffix === 'a' ? 'daily-user-consultant' : 'daily-user-other', status: 'pending_confirmation' as const, note: '隔离测试数据',
       })));
       await database.insert(schema.careFormalFollowUpTasks).values(Array.from({ length: count }, (_, index) => ({
         id: `daily-task-${suffix}-${String(index + 1).padStart(3, '0')}`,
@@ -179,6 +179,13 @@ async function verify(state: DailyUsableEnvironment, directory: string, integrat
       const invalid = await fetch(`${base}/api/v1/institution/followups?pageSize=101`, { headers });
       check(`${account.key} 无效分页被拒绝`, invalid.status === 400);
       if (integrated) {
+        const workbench = await fetch(`${base}/hospital`, { headers, redirect: 'manual' });
+        const workbenchHtml = await workbench.text();
+        const pendingSection = workbenchHtml.match(/<section\b[^>]*aria-label="待确认预约"[^>]*>([\s\S]*?)<\/section>/)?.[1] ?? '';
+        const pendingText = pendingSection.replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, '');
+        const expectedPending = account.suffix === 'a' ? 135 : 3;
+        check(`${account.key} 工作台待确认预约显示全量 ${expectedPending} 项`, workbench.status === 200
+          && pendingText.includes(`待确认预约 ${expectedPending} 项`) && pendingSection.includes('status=pending_confirmation'));
         const customerId = `daily-customer-${account.suffix}`;
         const expected = account.role === 'customer_service' ? 0 : account.suffix === 'a' ? 135 : 3;
         const relatedUrl = `${base}/api/v1/institution/customers/${customerId}/followups`;
