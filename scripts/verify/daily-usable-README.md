@@ -15,7 +15,7 @@ node scripts/verify/daily-usable-environment.mjs serve "$DAILY_USABLE_STATE"
 node scripts/verify/daily-usable-environment.mjs verify "$DAILY_USABLE_STATE"
 # 集成日常业务可用版后，增加单客户随访、来源证据和日周日历验收。
 node scripts/verify/daily-usable-environment.mjs verify-integrated "$DAILY_USABLE_STATE"
-node --test scripts/verify/daily-usable-environment.test.mjs
+pnpm test scripts/verify/daily-usable-environment.test.mjs
 ```
 
 `build` 与 `serve` 的第三个参数可指定另一个无真实环境配置的隔离工作树，供集成修改后复验。源码与依赖由所选工作树提供，数据库和临时密钥仍来自本任务专用环境记录。

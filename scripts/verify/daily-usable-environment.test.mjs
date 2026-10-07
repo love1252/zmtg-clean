@@ -1,8 +1,10 @@
+// @vitest-environment node
+
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { assertNoProjectEnvironment, assertState, cleanEnvironment, readState } from './daily-usable-environment.mjs';
 
 function sample() {
