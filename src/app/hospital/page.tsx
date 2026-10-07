@@ -1,13 +1,8 @@
 
-import { redirect } from 'next/navigation';
-
 import { InstitutionNavigationShell } from '@/modules/institution/components/InstitutionNavigationShell';
 import { resolveInstitutionShellAuthorizationV1 } from '@/modules/institution-shell/server/institution-shell-authorization';
-import { InstitutionV11ApprovedPrototypeFrame } from '@/modules/institution-v11-preview/components/InstitutionV11ApprovedPrototypeFrame';
-import {
-  isInstitutionV11HospitalSyncEnabled,
-  resolveInstitutionV11HospitalEntryMode,
-} from '@/modules/institution-v11-preview/server/visual-preview-gate';
+import { readCurrentInstitutionWorkbenchAppointmentsV1 } from '@/server/orchestration/institution-workbench-appointments';
+import type { WorkbenchAppointmentResultV1 } from '@/modules/care/application/workbench-appointment-view';
 import { resolveInstitutionServerAuthorizationV1 } from '@/modules/institution/server/institution-server-runtime';
 import { InstitutionWorkbenchCapabilityOff } from '@/modules/institution-workbench/components/InstitutionWorkbenchCapabilityOff';
 import { buildWorkbenchActionProjection } from '@/modules/institution-workbench/domain/workbench-action-aggregation';
@@ -28,6 +23,7 @@ import {
 import { canCurrentInstitutionCreateFormalCustomerV1 } from '@/server/orchestration/institution-customer-create-availability';
 
 const TARGET_SECTION_ID = 'workbench' as const;
+export const dynamic = 'force-dynamic';
 const TARGET_CAPABILITY_KEY = 'page_workbench' as const;
 const GOVERNED_WORKBENCH_PAGE_KEYS = Object.freeze([
   'page_workbench',
@@ -205,15 +201,6 @@ export default async function HospitalPage() {
   }
 
   const genuineAllowed = exactNavigationAuthorization?.targetAccess === 'allowed';
-  const approvedEntryMode = resolveInstitutionV11HospitalEntryMode({
-    syncEnabled: isInstitutionV11HospitalSyncEnabled(),
-    genuineAllowed,
-  });
-  if (approvedEntryMode === 'approved') {
-    return <InstitutionV11ApprovedPrototypeFrame />;
-  }
-  if (approvedEntryMode === 'login') redirect('/login');
-
   const {
     availableSectionIds,
     availableNavigationTargets,
@@ -279,6 +266,14 @@ export default async function HospitalPage() {
         summary.safeSummary === '随访任务可用',
     );
 
+  let appointments: WorkbenchAppointmentResultV1 | null = null;
+  const appointmentsReleased = capabilityProjection?.status === 'projected' && capabilityProjection.summaries.some(
+    summary => summary.key === 'page_care_appointments' && (summary.decision === 'operational' || summary.decision === 'read_only'),
+  );
+  if (genuineAllowed && appointmentsReleased) {
+    appointments = await readCurrentInstitutionWorkbenchAppointmentsV1().catch(() => ({ kind: 'unavailable' as const }));
+  }
+
   if (genuineAllowed && followupsOperational) {
     try {
       const care = await readCurrentInstitutionCareActionSourceV1();
@@ -312,6 +307,7 @@ export default async function HospitalPage() {
         genuineAllowed={genuineAllowed}
         capabilityProjection={capabilityProjection}
         actionProjection={actionProjection}
+        appointments={appointments}
       />
     </InstitutionNavigationShell>
   );

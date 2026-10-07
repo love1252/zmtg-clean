@@ -17,6 +17,9 @@ import {
 } from 'lucide-react';
 
 import { WorkbenchActionQueue } from '@/modules/institution-workbench/components/WorkbenchActionQueue';
+import { WorkbenchAppointmentSchedule } from './WorkbenchAppointmentSchedule';
+import { WorkbenchRefreshControl } from './WorkbenchRefreshControl';
+import type { WorkbenchAppointmentResultV1 } from '@/modules/care/application/workbench-appointment-view';
 import type {
   WorkbenchActionProjection,
   WorkbenchCareCardViewModel,
@@ -37,6 +40,7 @@ export type InstitutionWorkbenchShellProps = Readonly<{
   actionProjection: WorkbenchActionProjection;
   lifecycleProjection: WorkbenchLifecycleProjection;
   capabilityProjection: WorkbenchCapabilityProjection;
+  appointments?: WorkbenchAppointmentResultV1 | null;
 }>;
 
 const careCardIcons = {
@@ -294,6 +298,7 @@ export function InstitutionWorkbenchShell({
   actionProjection,
   lifecycleProjection,
   capabilityProjection,
+  appointments = null,
 }: InstitutionWorkbenchShellProps) {
   const lifecycleItems = orderedLifecycleItems(lifecycleProjection);
   const hasVisibleProjection =
@@ -317,7 +322,7 @@ export function InstitutionWorkbenchShell({
         {hasVisibleProjection ? (
           <div className="flex shrink-0 items-center gap-2">
             <span className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700"><CalendarDays className="h-4 w-4" />今天</span>
-            <span className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700"><Clock3 className="h-4 w-4" />数据已核验</span>
+            <WorkbenchRefreshControl />
           </div>
         ) : null}
       </div>
@@ -327,12 +332,14 @@ export function InstitutionWorkbenchShell({
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
           <InstitutionV11UnavailableValue label="今日新增客户" source="Customer Reader 未提供今日聚合" icon={UsersRound} />
           <InstitutionV11UnavailableValue label="待处理会话" source="Conversation Queue 未提供安全计数" icon={Activity} />
-          <InstitutionV11UnavailableValue label="今日预约" source="Appointment Reader 未提供今日聚合" icon={CalendarCheck2} />
+          {appointments?.kind === 'ready' ? <a href={`/hospital/care/appointments?startDate=${appointments.businessDate}&endDate=${appointments.businessDate}`} className="rounded-xl border border-slate-200 bg-white p-4"><span className="text-sm text-slate-500">今日预约</span><strong className="mt-2 block text-2xl text-slate-900">{appointments.today.total}</strong></a> : <InstitutionV11UnavailableValue label="今日预约" source="当前未取得完整预约聚合" icon={CalendarCheck2} />}
           <InstitutionV11UnavailableValue label="待执行随访" source="Follow-up Projection 未提供统一计数" icon={CalendarClock} />
           <InstitutionV11UnavailableValue label="经营机会" source="Opportunity Domain 未开放" icon={Sparkles} />
           <InstitutionV11UnavailableValue label="异常事项" source="统一异常 Reader 未开放" icon={CircleAlert} />
         </div>
       </section>
+
+      {appointments ? <WorkbenchAppointmentSchedule result={appointments} /> : null}
 
       {hasVisibleProjection ? null : (
         <>

@@ -1,6 +1,8 @@
 
 'use client';
 
+import { CustomerSourceEvidencePanel } from './CustomerSourceEvidencePanel';
+
 import Link from 'next/link';
 import { OpportunityConfirmationPanel } from '@/modules/opportunities/components/OpportunityConfirmationPanel';
 import { CustomerFollowUpPanel } from './CustomerFollowUpPanel';
@@ -201,6 +203,7 @@ export function CustomerControlledDetailShell({
             返回客户列表
           </Link>
         </div>
+        <CustomerSourceEvidencePanel customerId={record.customerId} />
       </div> : activeTab === 'profile' ? (
         <div className="space-y-4">
           <CustomerProfileSuggestionPanel customerId={record.customerId} onApplied={() => window.location.reload()} />

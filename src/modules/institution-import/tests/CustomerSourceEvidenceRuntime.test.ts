@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  authorize: vi.fn(), getDatabase: vi.fn(), snapshot: vi.fn(), decrypt: vi.fn(), encrypt: vi.fn(),
+  authorize: vi.fn(), readAuthorize: vi.fn(), consume: vi.fn(), getDatabase: vi.fn(), snapshot: vi.fn(), decrypt: vi.fn(), encrypt: vi.fn(),
 }));
 vi.mock('@/server/orchestration/institution-customer-controlled-write-runtime', () => ({ authorizeInstitutionCustomerControlledWriteV1: mocks.authorize }));
+vi.mock('@/server/orchestration/institution-customer-read-authorization', () => ({ resolveInstitutionCustomerReadAuthorizationV1: mocks.readAuthorize, consumeInstitutionCustomerReadAuthorizationV1: mocks.consume }));
 vi.mock('@/server/db/client', () => ({ getDatabase: mocks.getDatabase }));
 vi.mock('@/modules/institution-import/server/institution-excel-import-repository', () => ({ createInstitutionExcelImportRepositoryV1: () => ({ readCustomerSourceSnapshot: mocks.snapshot }) }));
 vi.mock('@/modules/security/server/secretEncryption', () => ({ decryptSecret: mocks.decrypt, encryptSecret: mocks.encrypt }));
@@ -20,20 +21,21 @@ beforeEach(() => {
   vi.stubEnv('NODE_ENV', 'development');
   vi.stubEnv('DATABASE_URL', 'postgresql://localhost:5432/isolated');
   mocks.getDatabase.mockReturnValue({});
-  mocks.authorize.mockResolvedValue({ kind: 'allowed', actor: { ...scope, role: 'tenant_admin' } });
+  mocks.readAuthorize.mockResolvedValue({ kind: 'allowed', authorization: {} });
+  mocks.consume.mockReturnValue(scope);
   mocks.snapshot.mockResolvedValue({ customer, rows: [row] });
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); });
 
 describe('客户来源证据编排', () => {
-  it.each(['tenant_admin', 'tenant_operator'])('保持%s门禁，不按客户前缀或最近批次判断来源', async role => {
-    mocks.authorize.mockResolvedValue({ kind: 'allowed', actor: { ...scope, role } });
+  it('使用当前客户只读授权，不按客户前缀或最近批次判断来源', async () => {
     expect(await read(customer.id)).toEqual({
       kind: 'ready', contractVersion: 'customer-source-evidence.v1', customerId: customer.id,
       customerUpdatedAt: customer.updatedAt.toISOString(), observedAt: '2026-10-06T05:00:00.000Z',
       evidence: { status: 'recorded', importRecord: { batchId, sheetKind: 'customer', rowNumber: 5, completedAt: row.completedAt.toISOString() } },
     });
-    expect(mocks.authorize).toHaveBeenCalledWith(true);
+    expect(mocks.readAuthorize).toHaveBeenCalledOnce();
+    expect(mocks.authorize).not.toHaveBeenCalled();
     expect(mocks.snapshot).toHaveBeenCalledWith({ ...scope, customerId: customer.id });
     expect(mocks.decrypt).not.toHaveBeenCalled(); expect(mocks.encrypt).not.toHaveBeenCalled();
   });
@@ -62,24 +64,25 @@ describe('客户来源证据编排', () => {
     mocks.snapshot.mockResolvedValueOnce({ customer, rows: [row, row, row] });
     expect(await read(customer.id)).toMatchObject({ kind: 'unavailable' });
   });
-  it.each(['consultant', 'customer_service'])('禁止普通角色%s读取', async role => {
-    mocks.authorize.mockResolvedValue({ kind: 'allowed', actor: { ...scope, role } });
-    expect(await read(customer.id)).toMatchObject({ kind: 'forbidden' });
+  it('拒绝失效或重复消费的只读授权句柄', async () => {
+    mocks.consume.mockReturnValue(null);
+    expect(await read(customer.id)).toMatchObject({ kind: 'unavailable' });
     expect(mocks.getDatabase).not.toHaveBeenCalled(); expect(mocks.snapshot).not.toHaveBeenCalled();
   });
   it.each(['forbidden', 'unavailable'])('保持授权%s语义', async kind => {
-    mocks.authorize.mockResolvedValue({ kind });
+    mocks.readAuthorize.mockResolvedValue({ kind });
     expect(await read(customer.id)).toMatchObject({ kind });
-    expect(mocks.getDatabase).not.toHaveBeenCalled();
+    expect(mocks.getDatabase).not.toHaveBeenCalled(); expect(mocks.authorize).not.toHaveBeenCalled();
   });
-  it.each(['production', 'remote'])('环境%s拒绝且不查询业务对象', async mode => {
+  it.each(['production', 'remote'])('环境%s按只读授权读取，不继承导入写入环境限制', async mode => {
     if (mode === 'production') vi.stubEnv('NODE_ENV', 'production');
     else vi.stubEnv('DATABASE_URL', 'postgresql://example.invalid:5432/isolated');
-    expect(await read(customer.id)).toMatchObject({ kind: 'unavailable' });
-    expect(mocks.authorize).not.toHaveBeenCalled(); expect(mocks.getDatabase).not.toHaveBeenCalled();
+    expect(await read(customer.id)).toMatchObject({ kind: 'ready' });
+    expect(mocks.readAuthorize).toHaveBeenCalledOnce(); expect(mocks.authorize).not.toHaveBeenCalled();
+    expect(mocks.snapshot).toHaveBeenCalledWith({ ...scope, customerId: customer.id });
   });
   it.each(['', '../other', 'a'.repeat(97)])('非法客户标识不读取 %s', async id => {
     expect(await read(id)).toMatchObject({ kind: 'not_found' });
-    expect(mocks.authorize).not.toHaveBeenCalled(); expect(mocks.snapshot).not.toHaveBeenCalled();
+    expect(mocks.readAuthorize).not.toHaveBeenCalled(); expect(mocks.snapshot).not.toHaveBeenCalled();
   });
 });

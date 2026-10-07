@@ -27,6 +27,7 @@ import { checkTenantQuotaForUsage } from '@/modules/institution/server/tenant-qu
 import { decryptSecret, encryptSecret } from '@/modules/security/server/secretEncryption';
 import { getDatabase, type TenantDatabase } from '@/server/db/client';
 import { resolveInstitutionAuditWriterVerifiedAttributionV1 } from '@/server/orchestration/institution-audit-writer-scope';
+import { consumeInstitutionCustomerReadAuthorizationV1, resolveInstitutionCustomerReadAuthorizationV1 } from '@/server/orchestration/institution-customer-read-authorization';
 import {
   authorizeInstitutionCustomerControlledWriteV1,
   type InstitutionCustomerControlledAuthorizationV1,
@@ -409,17 +410,19 @@ export async function readCurrentInstitutionCustomerSourceEvidenceV1(
   if (typeof customerId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/u.test(customerId)) {
     return Object.freeze({ kind: 'not_found', code: 'customer_source_not_found' });
   }
-  const authorization = await authorizeImport();
-  if (authorization === 'forbidden') {
+  const authorization = await resolveInstitutionCustomerReadAuthorizationV1().catch(() => ({ kind: 'unavailable' as const }));
+  if (authorization.kind === 'forbidden') {
     return Object.freeze({ kind: 'forbidden', code: 'customer_source_forbidden' });
   }
-  if (!authorization) {
+  if (authorization.kind !== 'allowed') {
     return Object.freeze({ kind: 'unavailable', code: 'customer_source_unavailable' });
   }
+  const scope = consumeInstitutionCustomerReadAuthorizationV1(authorization.authorization);
+  if (!scope) return Object.freeze({ kind: 'unavailable', code: 'customer_source_unavailable' });
   try {
     const snapshot = await createInstitutionExcelImportRepositoryV1(getDatabase()).readCustomerSourceSnapshot({
-      tenantId: authorization.actor.tenantId,
-      institutionId: authorization.actor.institutionId,
+      tenantId: scope.tenantId,
+      institutionId: scope.institutionId,
       customerId,
     });
     if (!snapshot.customer) {
