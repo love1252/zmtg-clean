@@ -60,8 +60,13 @@ export function safeFollowUpReturnHrefV1(value: string | string[] | undefined): 
       const query = parseFormalFollowUpPageQueryV1(values);
       return query ? formalFollowUpListHrefV1(query) : FORMAL_FOLLOW_UP_LIST_PATH;
     }
-    if (/^\/hospital\/customers\/[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/u.test(url.pathname)
-      && url.search === '?tab=followups') return url.pathname + url.search;
+    const customerPath = /^\/hospital\/customers\/([^/]+)$/u.exec(url.pathname);
+    if (customerPath && url.search === '?tab=followups') {
+      const customerId = decodeURIComponent(customerPath[1]);
+      if (/^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/u.test(customerId)) {
+        return `/hospital/customers/${encodeURIComponent(customerId)}${url.search}`;
+      }
+    }
   } catch { /* 返回固定站内列表，拒绝不可信重定向。 */ }
   return FORMAL_FOLLOW_UP_LIST_PATH;
 }
